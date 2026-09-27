@@ -275,6 +275,12 @@ const SETTING_ROWS: SettingRow[] = [
     impact: 'light',
   },
   {
+    setting: 'hudChrome.options.frameRateCap',
+    where: [GFX, 'hudChrome.options.gfxSectionSystem'],
+    body: 'guide.settingsPage.rowFrameRateCap',
+    impact: 'heavy',
+  },
+  {
     setting: 'hudChrome.options.interfaceMode',
     where: [GFX, 'hudChrome.options.gfxSectionSystem'],
     body: 'guide.settingsPage.rowInterfaceMode',
@@ -315,6 +321,7 @@ const INTERFACE_TABS: InterfaceTabBlock[] = [
       { setting: 'hud.options.tooltipScale', body: 'guide.settingsPage.ifTooltipScale' },
       { setting: 'hud.options.frostedPanels', body: 'guide.settingsPage.rowFrostedPanels' },
       { setting: 'hud.options.highContrastText', body: 'guide.settingsPage.ifHighContrastText' },
+      { setting: 'hud.options.colorblindMode', body: 'guide.settingsPage.ifColorblindMode' },
       {
         setting: 'hudChrome.options.highContrastBackground',
         body: 'guide.settingsPage.ifHighContrastBackground',
@@ -362,12 +369,32 @@ const INTERFACE_TABS: InterfaceTabBlock[] = [
       { setting: 'hudChrome.partyFrames.sort', body: 'guide.settingsPage.ifPartySort' },
       { setting: 'hudChrome.partyFrames.showAuras', body: 'guide.settingsPage.ifPartyShowAuras' },
       {
+        setting: 'hudChrome.options.playerHealthText',
+        body: 'guide.settingsPage.ifPlayerHealthText',
+      },
+      {
+        setting: 'hudChrome.options.targetHealthText',
+        body: 'guide.settingsPage.ifTargetHealthText',
+      },
+      {
         setting: 'hudChrome.options.aurasOnPlayerFrame',
         body: 'guide.settingsPage.ifAurasOnPlayerFrame',
       },
       {
+        setting: 'hudChrome.options.auraBarBelowFrame',
+        body: 'guide.settingsPage.ifAuraBarBelowFrame',
+      },
+      {
+        setting: 'hudChrome.options.targetAurasBelowFrame',
+        body: 'guide.settingsPage.ifTargetAurasBelowFrame',
+      },
+      {
         setting: 'hudChrome.options.alwaysShowAllBuffs',
         body: 'guide.settingsPage.ifAlwaysShowAllBuffs',
+      },
+      {
+        setting: 'hudChrome.options.showAuraCaster',
+        body: 'guide.settingsPage.ifShowAuraCaster',
       },
       {
         setting: 'hudChrome.options.showTargetOfTarget',
@@ -384,6 +411,7 @@ const INTERFACE_TABS: InterfaceTabBlock[] = [
       { setting: 'hud.options.chatOpacity', body: 'guide.settingsPage.ifChatOpacity' },
       { setting: 'hud.options.compactChat', body: 'guide.settingsPage.ifCompactChat' },
       { setting: 'hudChrome.chatTimestamps.show', body: 'guide.settingsPage.ifChatTimestamps' },
+      { setting: 'hud.options.filterProfanity', body: 'guide.settingsPage.ifFilterProfanity' },
     ],
   },
   {
@@ -527,7 +555,9 @@ export const settings: GuidePage = {
         )}
         ${section(
           'guide.settingsPage.keybindsHeading',
-          p('guide.settingsPage.keybindsBody') + p('guide.settingsPage.keybindsMouseBody'),
+          p('guide.settingsPage.keybindsBody') +
+            p('guide.settingsPage.keybindsMouseBody') +
+            p('guide.settingsPage.keybindsWheelBody'),
         )}
         ${section('guide.settingsPage.audioTitle', p('guide.settingsPage.audioBody') + p('guide.settingsPage.autolootBody'))}
         ${callout(

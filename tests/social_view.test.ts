@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { defaultGuildRankLadder } from '../src/sim/guild_ranks';
 import type { PlayerClass } from '../src/sim/types';
+import { guildRankLabel } from '../src/ui/guild_ranks_view';
 import {
   blockRows,
   friendRows,
   type GuildRosterItem,
-  guildDisplayedRole,
+  guildRosterChip,
   guildRosterItems,
+  guildRosterView,
   guildView,
   ignoreRows,
   myPledgeView,
@@ -116,6 +119,26 @@ describe('socialStructSig', () => {
       guild: { ...(SOCIAL.guild as GuildInfo), rank: 'member' },
     };
     expect(socialStructSig('friends', demoted, null)).not.toBe(base);
+  });
+
+  it('changes when the roster cap or the next page price changes (the footer button reads them)', () => {
+    const base = socialStructSig('guild', SOCIAL, null);
+    const guild = SOCIAL.guild as GuildInfo;
+    const bought: SocialInfo = {
+      ...SOCIAL,
+      guild: { ...guild, memberCap: (guild.memberCap ?? 100) + 20 },
+    };
+    expect(socialStructSig('guild', bought, null)).not.toBe(base);
+    const repriced: SocialInfo = {
+      ...SOCIAL,
+      guild: { ...guild, nextRosterPrice: (guild.nextRosterPrice ?? 0) + 1 },
+    };
+    expect(socialStructSig('guild', repriced, null)).not.toBe(base);
+    // The ladder's end (nothing left to buy) is its own structure too.
+    const maxed: SocialInfo = { ...SOCIAL, guild: { ...guild, nextRosterPrice: null } };
+    expect(socialStructSig('guild', maxed, null)).not.toBe(
+      socialStructSig('guild', repriced, null),
+    );
   });
 
   it('changes when the open-pledge count changes (the Pledges tab label carries it)', () => {
@@ -305,39 +328,63 @@ describe('tenureTier', () => {
   });
 });
 
-describe('guildDisplayedRole (the one role chip per roster row)', () => {
+describe('guildRosterChip (the one role chip per roster row)', () => {
   const DAY = 24 * 60 * 60 * 1000;
   const NOW = Date.UTC(2026, 7, 1); // any fixed clock; the helpers are pure
-  const roleAt = (rank: string, joinedAgoMs: number | null) =>
-    guildDisplayedRole(rank, tenureTier(joinedAgoMs === null ? null : NOW - joinedAgoMs, NOW));
+  const ladder = defaultGuildRankLadder();
+  const chipAt = (rank: string, joinedAgoMs: number | null) =>
+    guildRosterChip(
+      guildRankLabel(ladder, rank),
+      tenureTier(joinedAgoMs === null ? null : NOW - joinedAgoMs, NOW),
+    );
+  const rankChip = (rank: 'leader' | 'officer' | 'member') => ({
+    kind: 'rank',
+    label: { kind: 'default', rank },
+  });
 
   it('a member shows the tenure tier AS the role across the locked boundaries', () => {
-    expect(roleAt('member', 6 * DAY + 23 * 60 * 60 * 1000)).toBe('recruit'); // 6d23h
-    expect(roleAt('member', 7 * DAY)).toBe('member'); // exactly 7d drops Recruit
-    expect(roleAt('member', 29 * DAY)).toBe('member');
-    expect(roleAt('member', 30 * DAY)).toBe('veteran'); // exactly 30d gains Veteran
+    expect(chipAt('member', 6 * DAY + 23 * 60 * 60 * 1000)).toEqual({
+      kind: 'tenure',
+      tier: 'recruit',
+    }); // 6d23h
+    expect(chipAt('member', 7 * DAY)).toEqual(rankChip('member')); // exactly 7d drops Recruit
+    expect(chipAt('member', 29 * DAY)).toEqual(rankChip('member'));
+    expect(chipAt('member', 30 * DAY)).toEqual({ kind: 'tenure', tier: 'veteran' }); // 30d
   });
 
   it('a member with an unknown joinedAt shows the plain member role', () => {
-    expect(roleAt('member', null)).toBe('member');
-    expect(guildDisplayedRole('member', null)).toBe('member');
+    expect(chipAt('member', null)).toEqual(rankChip('member'));
   });
 
   it('officers and the leader pass their rank through and NEVER a tenure role', () => {
     // Regression teeth: an officer/leader must keep the rank label even when
     // their tenure would resolve to a tier (fresh recruit or long veteran).
     for (const rank of ['leader', 'officer'] as const) {
-      expect(roleAt(rank, 3 * DAY)).toBe(rank);
-      expect(roleAt(rank, 400 * DAY)).toBe(rank);
-      expect(roleAt(rank, null)).toBe(rank);
-      expect(guildDisplayedRole(rank, 'recruit')).toBe(rank);
-      expect(guildDisplayedRole(rank, 'veteran')).toBe(rank);
+      expect(chipAt(rank, 3 * DAY)).toEqual(rankChip(rank));
+      expect(chipAt(rank, 400 * DAY)).toEqual(rankChip(rank));
+      expect(chipAt(rank, null)).toEqual(rankChip(rank));
     }
   });
 
-  it('an unrecognized rank falls back to the member arm (rankLabel parity)', () => {
-    expect(guildDisplayedRole('somefuturerank', 'recruit')).toBe('recruit');
-    expect(guildDisplayedRole('somefuturerank', null)).toBe('member');
+  it('an id the ladder does not know falls back to the member arm (fail closed)', () => {
+    expect(chipAt('somefuturerank', 3 * DAY)).toEqual({ kind: 'tenure', tier: 'recruit' });
+    expect(chipAt('somefuturerank', null)).toEqual(rankChip('member'));
+  });
+
+  it('a guild-titled rank shows its title, even at the joining rank, and never a tenure role', () => {
+    const titled = [
+      { id: 'leader', name: 'Warlord', perms: [] },
+      { id: 'r1', name: '', perms: [] },
+      { id: 'member', name: 'Initiate', perms: [] },
+    ];
+    expect(guildRosterChip(guildRankLabel(titled, 'member'), 'recruit')).toEqual({
+      kind: 'rank',
+      label: { kind: 'custom', name: 'Initiate' },
+    });
+    expect(guildRosterChip(guildRankLabel(titled, 'r1'), 'veteran')).toEqual({
+      kind: 'rank',
+      label: { kind: 'numbered', n: 1 },
+    });
   });
 });
 
@@ -510,7 +557,12 @@ describe('pledgePanelView (the officer Pledges tab)', () => {
     guild: {
       ...(SOCIAL.guild as GuildInfo),
       rank,
-      pledgeSettings: { enabled: false, minLevel: 20, note: 'serious guild' },
+      pledgeSettings: {
+        enabled: false,
+        minLevel: 20,
+        note: 'serious guild',
+        newPlayerFriendly: false,
+      },
       pledges: [
         { id: 21, name: 'Hopeful', cls: 'mage', level: 12, realm: 'Test', sinceMs: 5 },
         { id: 22, name: 'Eager', cls: 'rogue', level: 30, realm: 'Test', sinceMs: 9 },
@@ -522,7 +574,12 @@ describe('pledgePanelView (the officer Pledges tab)', () => {
     for (const rank of ['leader', 'officer'] as const) {
       const panel = pledgePanelView(withPledges(rank));
       expect(panel).not.toBeNull();
-      expect(panel?.settings).toEqual({ enabled: false, minLevel: 20, note: 'serious guild' });
+      expect(panel?.settings).toEqual({
+        enabled: false,
+        minLevel: 20,
+        note: 'serious guild',
+        newPlayerFriendly: false,
+      });
       expect(panel?.rows.map((r) => r.name)).toEqual(['Hopeful', 'Eager']);
       expect(panel?.rows[0]).toEqual({ name: 'Hopeful', cls: 'mage', level: 12, sinceMs: 5 });
     }
@@ -589,5 +646,147 @@ describe('ClientWorld-vs-Sim parity', () => {
     expect(friendRows(sim.social)).toEqual(friendRows(cli.social));
     expect(guildView(sim.social, 'Me')).toEqual(guildView(cli.social, 'Me'));
     expect(raidView(sim.party, 1)).toEqual(raidView(cli.party, 1));
+  });
+});
+
+describe('guild roster expansion (docs/prd/guild-roster-expansion.md)', () => {
+  const withRoster = (
+    rank: 'leader' | 'officer' | 'member',
+    roster: { memberCap?: number; nextRosterPrice?: number | null },
+  ): SocialInfo => ({
+    ...SOCIAL,
+    guild: { ...(SOCIAL.guild as GuildInfo), rank, ...roster },
+  });
+
+  it('passes the cap and the next price through, and only the leader may buy', () => {
+    const leader = guildView(
+      withRoster('leader', { memberCap: 120, nextRosterPrice: 1_200_000 }),
+      'Me',
+    ).guild!;
+    expect(leader.memberCap).toBe(120);
+    expect(leader.nextRosterPrice).toBe(1_200_000);
+    expect(leader.canExpandRoster).toBe(true);
+    for (const rank of ['officer', 'member'] as const) {
+      const view = guildView(withRoster(rank, { memberCap: 120, nextRosterPrice: 1_200_000 }), 'Me')
+        .guild!;
+      expect(view.memberCap, rank).toBe(120);
+      expect(view.canExpandRoster, rank).toBe(false);
+    }
+  });
+
+  it('a complete ladder (null price) leaves the leader nothing to buy', () => {
+    const view = guildView(withRoster('leader', { memberCap: 1000, nextRosterPrice: null }), 'Me')
+      .guild!;
+    expect(view.nextRosterPrice).toBeNull();
+    expect(view.canExpandRoster).toBe(false);
+  });
+
+  it('a frame from an older server (no roster fields) falls back to the base roster', () => {
+    // SOCIAL carries neither field: the pre-expansion mirror shape.
+    const view = guildView(SOCIAL, 'Me').guild!;
+    expect(view.memberCap).toBe(100);
+    expect(view.nextRosterPrice).toBeNull();
+    expect(view.canExpandRoster).toBe(false);
+  });
+});
+
+describe('guildRosterView (the footer read, no row mapping)', () => {
+  it('matches guildView for every rank and is null for a guildless viewer', () => {
+    for (const rank of ['leader', 'officer', 'member'] as const) {
+      const social: SocialInfo = {
+        ...SOCIAL,
+        guild: { ...(SOCIAL.guild as GuildInfo), rank, memberCap: 140, nextRosterPrice: 2_000_000 },
+      };
+      const full = guildView(social, 'Me').guild!;
+      expect(guildRosterView(social), rank).toEqual({
+        memberCap: full.memberCap,
+        nextRosterPrice: full.nextRosterPrice,
+        canExpandRoster: full.canExpandRoster,
+      });
+      expect(guildRosterView(social)?.canExpandRoster, rank).toBe(rank === 'leader');
+    }
+    expect(guildRosterView({ ...SOCIAL, guild: null })).toBeNull();
+    expect(guildRosterView(null)).toBeNull();
+  });
+});
+
+describe('guild custom ranks in the guild-tab view (docs/prd/guild-custom-ranks.md)', () => {
+  // Leader Me, a Council officer allowed to promote and remove, a Scribe that
+  // holds only the billboard, and a titled joining rank.
+  const RANKS = [
+    { id: 'leader', name: '', perms: [] },
+    { id: 'officer', name: 'Council', perms: ['promote', 'remove'] as const },
+    { id: 'r1', name: 'Scribe', perms: ['motd', 'invite'] as const },
+    { id: 'member', name: 'Initiate', perms: [] },
+  ].map((r) => ({ ...r, perms: [...r.perms] }));
+  const ladderSocial = (viewerRank: string): SocialInfo => ({
+    ...SOCIAL,
+    guild: {
+      ...(SOCIAL.guild as GuildInfo),
+      rank: viewerRank,
+      ranks: RANKS,
+      members: [
+        guildMember({ name: 'Me', rank: 'leader' }),
+        guildMember({ name: 'Off', rank: 'officer' }),
+        guildMember({ name: 'Scr', rank: 'r1' }),
+        guildMember({ name: 'Grunt', rank: 'member' }),
+      ],
+    },
+  });
+  const rowsBy = (s: SocialInfo, me: string) =>
+    Object.fromEntries((guildView(s, me).guild?.rows ?? []).map((r) => [r.name, r]));
+
+  it('a promoting officer gets promote/demote/kick only on ranks below it, naming the target rank', () => {
+    const rows = rowsBy(ladderSocial('officer'), 'Off');
+    expect(rows.Grunt.canPromote).toBe(true);
+    expect(rows.Grunt.promoteLabel).toEqual({ kind: 'custom', name: 'Scribe' });
+    expect(rows.Grunt.canDemote).toBe(false); // already the joining rank
+    expect(rows.Scr.canPromote).toBe(false); // Scribe -> Council would be its own rank
+    expect(rows.Scr.canDemote).toBe(true);
+    expect(rows.Scr.demoteLabel).toEqual({ kind: 'custom', name: 'Initiate' });
+    expect([rows.Grunt.canKick, rows.Scr.canKick, rows.Me.canKick]).toEqual([true, true, false]);
+    expect(rows.Me.canPromote || rows.Me.canDemote || rows.Me.canTransfer).toBe(false);
+  });
+
+  it('labels every row and the head from the ladder', () => {
+    const view = guildView(ladderSocial('r1'), 'Scr').guild!;
+    expect(view.rankLabel).toEqual({ kind: 'custom', name: 'Scribe' });
+    expect(view.rows.map((r) => r.rankLabel)).toEqual([
+      { kind: 'default', rank: 'leader' },
+      { kind: 'custom', name: 'Council' },
+      { kind: 'custom', name: 'Scribe' },
+      { kind: 'custom', name: 'Initiate' },
+    ]);
+  });
+
+  it('billboard, invite row and the Pledges tab follow the viewer permissions', () => {
+    const scribe = guildView(ladderSocial('r1'), 'Scr').guild!;
+    expect([scribe.canEditMotd, scribe.canInvite]).toEqual([true, true]);
+    expect(pledgePanelView(ladderSocial('r1'))).not.toBeNull();
+    const council = guildView(ladderSocial('officer'), 'Off').guild!;
+    expect([council.canEditMotd, council.canInvite]).toEqual([false, false]);
+    expect(pledgePanelView(ladderSocial('officer'))).toBeNull();
+  });
+
+  it('a ladder edit that flips the viewer recruit permission changes the struct signature', () => {
+    const before = ladderSocial('officer');
+    const after: SocialInfo = {
+      ...before,
+      guild: {
+        ...(before.guild as GuildInfo),
+        ranks: RANKS.map((r) => (r.id === 'officer' ? { ...r, perms: [...r.perms, 'invite'] } : r)),
+      },
+    };
+    expect(socialStructSig('guild', before, null)).not.toBe(socialStructSig('guild', after, null));
+  });
+
+  it('with no ladder on the frame (an older server) the default rules hold exactly', () => {
+    const rows = rowsBy(SOCIAL, 'Me');
+    expect([rows.Off.canPromote, rows.Off.canDemote, rows.Off.canKick]).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(rows.Grunt.promoteLabel).toEqual({ kind: 'default', rank: 'officer' });
   });
 });

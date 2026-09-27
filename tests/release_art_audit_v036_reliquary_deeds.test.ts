@@ -190,26 +190,67 @@ describe('v0.36 release-audit Reliquary deed art', () => {
     }
   });
 
-  it('closes the exhaustive live deed debt ledger at 271 painted deeds', () => {
+  it('keeps the historical audit sealed while the current ledger reaches 288 painted deeds', () => {
     // The audit's own claim is historical: the 271 deeds live at the v0.36
-    // audit are ALL painted. Deeds appended after it (the walk-in castle
-    // visit pair, the bank socket ladder pair, the Proving Shore graduation,
-    // the Crucible raid block, and the seven Realm Racers placing deeds) ride
-    // the DEED_ART_PENDING ledger until their art lands, each wave
-    // commissioned in docs/achievements/icon-brief.md and none yet ingested;
-    // the audit holds exactly when the pending set and the artless set are
-    // the same post-audit appends and every other deed is painted.
+    // audit are ALL painted, the six Masterwrought jewelcrafting and
+    // inscription milestone deeds (phases 05 and 06) each shipped their
+    // crest in the change that authored them, and the farming phase
+    // committed the prog_farming_100 crest. The later Masterwrought art wave
+    // paints ten more live rows and records the replacement separately, while
+    // the historical v0.36 evidence remains untouched. The release-owned
+    // additions, the personal hammer quest and the seven Realm Racers placing
+    // deeds remain on the current pending ledger.
     expect([...DEED_ART_PENDING]).toEqual([
       'exp_the_last_keep',
       'exp_dawnhold_castle',
+      // The release's bank socket ladder pair (Bank Storage phase 06),
+      // appended at the v0.41.0 release-batch sync in DEED_ORDER position.
       'soc_strongbox_outfitter',
       'soc_four_bags_deep',
+      // The release's Proving Shore graduation deed, appended at the
+      // release/v0.41.0 sync behind this branch's tail (DEED_ORDER position).
       'prog_ready_for_an_adventure',
+      // The release's Crucible of the Last Spring raid block (five 'dungeon'
+      // deeds), appended at the v0.41.0 Crucible sync behind this branch's
+      // tail (DEED_ORDER position); each rides the deed_cat_dungeon crest
+      // until its commissioned art lands (docs/achievements/icon-brief.md).
       'dgn_ignivar',
       'dgn_ignivar_heroic',
       'dgn_varkhul',
       'dgn_varkhul_heroic',
       'dgn_varkhul_flawless',
+      // The personal hammer quest ships with the explicit category-crest fallback.
+      'hid_forgebreaker',
+      'exp_arcane_calligraphy',
+      'exp_arcane_calligraphy_gold',
+      'exp_forge_helper',
+      'exp_last_barricade',
+      'exp_borrowed_face',
+      'exp_windrider_slalom',
+      'exp_duskweave_dispatches',
+      'exp_wisp_maze',
+      // The faction standing ladder (feature/world-quests, wq-reputation merge):
+      // the three Trusted and three Champion deeds plus the all-factions
+      // Champion ride their category crest until commissioned art lands
+      // (docs/achievements/icon-brief.md). RE-PINNED on the quests integration
+      // branch; the source branch had appended them to DEED_ART_PENDING
+      // without extending this ledger.
+      'prog_rift_watch_trusted',
+      'prog_church_order_trusted',
+      'prog_automatons_trusted',
+      'prog_rift_watch_champion',
+      'prog_church_order_champion',
+      'prog_automatons_champion',
+      'prog_faction_champion_all',
+      // The Clue Scroll casket deeds (feature/clue-scrolls) ride their
+      // category crest the same way.
+      'exp_clue_first_casket',
+      'exp_clue_ten_caskets',
+      // The release's Eastbrook ferry round trip rides the deed_cat_exploration crest
+      // until its commissioned art lands (docs/design/deeds.md, Icons).
+      'exp_harbor_to_harbor',
+      // The seven Realm Racers placing deeds ride their category crest until
+      // their commissioned art lands (docs/achievements/icon-brief.md).
       'pvp_rr_first_race',
       'pvp_rr_first_win',
       'pvp_rr_wins_10',
@@ -218,8 +259,20 @@ describe('v0.36 release-audit Reliquary deed art', () => {
       'pvp_rr_clean_race',
       'pvp_rr_comeback',
     ]);
-    expect(DEED_ORDER).toHaveLength(288);
-    expect(DEED_IMAGE_IDS.size).toBe(271);
+    // RE-PINNED at this merge of release/v0.42.0 into feature/masterwrought:
+    // 300 live (counted directly off the resolved src/sim/content/deeds.ts
+    // DEEDS table, matching the same pin in tests/deed_icons.test.ts and
+    // tests/deed_i18n.test.ts) - 11 explicitly pending = 289 painted.
+    // 308 at the release/v0.43.0 merge: plus the eight world-quest deeds.
+    // 317 on the quests integration branch: plus the seven faction standing
+    // deeds and the two Clue Scroll casket deeds, all nine on the pending
+    // ledger above, so the painted count holds at 289.
+    // 318 with the release's ferry round trip, the pending ledger's last row,
+    // so the painted count still holds at 289.
+    // 325 with the seven Realm Racers placing deeds, all seven on the pending
+    // ledger above, so the painted count still holds at 289.
+    expect(DEED_ORDER).toHaveLength(325);
+    expect(DEED_IMAGE_IDS.size).toBe(289);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     expect(sorted(DEED_IMAGE_IDS)).toEqual(
       sorted(DEED_ORDER.filter((id) => !DEED_ART_PENDING.has(id))),

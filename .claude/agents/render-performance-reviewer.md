@@ -77,11 +77,42 @@ Answer each question OF THE DIFF with a path and stable symbol, never a guess.
    pins in `tests/ability_material_prewarm_sweep.test.ts`,
    `tests/renderer_compile_gate.test.ts`, `tests/prewarm_policy.test.ts`, and
    `tests/entity_gate_stand_in.test.ts`.
+   The escape shapes a fleet capture has already caught, each one named because the rule
+   above was on the page and still missed them: a module-scope material cache (a
+   `Map<string, Material>` filled on first call) that no manifest entry registers; a
+   `customProgramCacheKey` with a runtime-varying segment (a distance cap, a tier), where
+   every value is a distinct program and only the first one was prewarmed; a kit or loader
+   conversion whose `material.name` can come out empty (`props.ts` names `${kit}:${surface}`);
+   a builder that returns a group of bare `new THREE.*Material(` meshes to a caller that
+   `scene.add`s it after boot; a gate whose `attach-watchdog` or `gate-timeout` reveals the
+   group ungated, so the programs link at the reveal; a material minted per cast or per wave
+   and disposed when the effect ends (three refcounts programs AND shader stages: the last
+   dispose frees both, so the next identical cast relinks; the fix is a never-disposed anchor
+   or pool staged by the manifest, `groundFireAoeMaterials` in `ignivar_fire_vfx.ts` is the
+   shape); a per-instance material pool kept in class fields, which the lazy-cache sweep
+   (`tests/ability_material_prewarm_sweep.test.ts`) cannot see, so it needs a stand-in
+   registered by hand (`buildRingOfFrostStandIn`); an encounter visual attached by a sync
+   loop when the boss is already active at arrival, before the interior's encounter prewarm
+   has run (the forge meter in `varkhul_forge_beam_visual.ts` takes the compile gate for
+   this). Every new material must carry a
+   `name` (module and role): three names a program after `material.name`, and the fleet
+   `live-program` label is that name or a raw cache key nobody can map back to a file. An
+   unnamed new material is SHOULD-FIX. All of this is verified by READING the diff: trace
+   each new material to its manifest twin or gate in the code and name both. Never require a
+   measurement run from the author; the `hunt-live-programs` skill and its
+   `scripts/live_program_hunt.mjs` report are the tool for a fleet capture that already shows
+   live programs, not a PR entry bar.
 2. **Are lights, contexts, queues, and frame work safe?** A post-boot directional, hemisphere,
    spot, or rect-area light can invalidate visible programs; re-grading the constructor's one
-   sun/hemi pair through `interior_light_rig.ts` is the sanctioned shape. Point lights ride the
-   pad budget (`point_light_budget.ts`, `reparentStrandedLightsToScene`), and a root a reveal
-   gate has shown is never hidden again. A secondary context must link with `compileAsync`,
+   sun/hemi pair through `interior_light_rig.ts` is the sanctioned shape. Every point light in
+   the world scene is a carrier source: marked with `markPointLightSource` and in a registry
+   the budget ranks (`point_light_budget.ts`, `fire_light_registry.ts`, the renderer's
+   registration seam), so three gathers only the carriers of `point_light_carriers.ts`. A light
+   three gathers itself moves the count and sits behind a black carrier where the lit programs'
+   point loop has already stopped, so it never shines. The pins are
+   `tests/point_light_carriers.test.ts` (the producer allowlist) and
+   `tests/glb_punctual_lights.test.ts` (no glTF lights in shipped GLBs). A root a reveal gate
+   has shown is never hidden again. A secondary context must link with `compileAsync`,
    upload with `uploadTexturesInSlices` (`texture_prewarm.ts`) before its first draw, set
    `debug.checkShaderErrors = shaderDebugRequested()` on the renderer it just built ahead of
    that renderer's first `render()`, and carry a teardown story (`trackWebGLContext`,
@@ -151,13 +182,27 @@ Answer each question OF THE DIFF with a path and stable symbol, never a guess.
 7. **Can telemetry survive both local and fleet paths?** New fields must be finite, null-safe when
    the browser or source is unavailable, and bounded in count, depth, string length, and bytes.
    Trace producer -> `PerfSnapshot`/`perfStats()` -> `payloadFromSnapshot()` -> `rawSummary` ->
-   `server/perf_report.ts` sanitization and `compactRawSummary()` fallback. Keep local raw traces
+   `server/perf_report.ts` sanitization and the `perf_report_shed.ts` byte-cap shed ladder
+   (`raw_summary.dropped` names the shed rungs). Keep local raw traces
    (`?perf`, `window.__game.perf.report()`, raw scenario/capture JSON) distinct from fleet-visible
    fields. Loopback-only `devTrace` must not leak to ordinary reports. A compact or truncated
    report must preserve the diagnostic that motivated the field, or explicitly document that it
    is local-only. Check null behavior, malformed input, caps, and unknown-field dropping in
    `tests/perf_reporter.test.ts` and `tests/perf_report.test.ts`.
-8. **Is the result visible without overclaiming?** Use static contract tests for invariants, a
+8. **Does any material buy a second scene pass?** A material with `transmission > 0` (a
+   `MeshPhysicalMaterial`, which GLTFLoader mints for a glTF material carrying
+   `KHR_materials_transmission`) makes three render the whole opaque scene a SECOND time per
+   frame into a viewport-sized HalfFloat target with mipmaps (`renderTransmissionPass`), for
+   as long as the object is on screen: a 4 s first frame and a doubled draw cost on an
+   integrated GPU, and no prewarm can touch it (measured 2026-08-28 on the water elemental).
+   Flag any `transmission`, `transmissionMap`, `thickness`, `attenuationColor` or
+   `KHR_materials_transmission` / `KHR_materials_volume` reaching the renderer: a procedural
+   `new THREE.MeshPhysicalMaterial(` that sets them, an exporter or pipeline step that
+   preserves the extension, a GLB that ships it. The loader neutralizes parsed GLBs
+   (`assets/transmission_neutralize.ts`) and `tests/transmission_neutralize.test.ts` lists the
+   shipped models that carry the extension; a new one must be listed there on purpose, and a
+   procedural transmissive material is BLOCKING (translucency is alpha blending here).
+9. **Is the result visible without overclaiming?** Use static contract tests for invariants, a
    browser trace for stage attribution, and headed normal-vsync evidence for perceptual claims.
    A zero `live-program` count can mean a warm cache, no reached content, missing probe coverage,
    or no draw; it is never by itself proof of no hitch, no link, no memory growth, or no resource
@@ -165,6 +210,38 @@ Answer each question OF THE DIFF with a path and stable symbol, never a guess.
    Report `gpuPrepEventsSnapshot()` rings and counters, compile lifecycle, queue costs, memory
    phase snapshots, context loss, page errors, and provenance together when the diff touches
    them. Mark absent real-browser evidence VERIFY.
+
+10. **Does new or changed GLSL stay cheap to compile on ANGLE D3D11?** On Windows every program
+   is optimized by fxc once per session, and the shape of the text sets the price. Scope: any
+   diff that adds or edits GLSL (a `ShaderMaterial` string, an `onBeforeCompile` injection, a
+   `THREE.ShaderChunk` override, a post pass, a JS-templated shader). First weigh the REACH: a
+   chunk override or a hook on a shared material lands in every program that includes it, so
+   a small shape there costs more than a large one in a single material. Then check the
+   MEASURED shapes in `docs/perf/shader-compile-cost.md`, and only those:
+
+   - the same heavy code inlined N times (an unrolled loop, a JS-templated repeat, a helper
+     called at N sites): fxc compiles every copy; a real loop without an implicit-gradient
+     read in its body links far cheaper and is not re-unrolled, and a `break` in it is free;
+   - a loop that replaces unrolled copies must end at the live count (packed slots with a
+     break at the first empty one, or a uniform bound), because idle iterations cost GPU
+     time on weak GPUs; its GPU time needs an HD 530 class measurement, not only a link time;
+   - many branches (`if`, early `return`, a ternary ANGLE unfolds into flow, a selector chain
+     repeated in every read): prefer reading once before one split and blending with
+     `mix` or `step`;
+   - chains of dependent texture reads (a parallax walk): each extra dependent step has a
+     measured price;
+   - a new variant axis (a `#define`, a templated value, a `customProgramCacheKey` token):
+     every value is one more full link, including two values that compile the same text.
+
+   The doc's "suspected" list (implicit-gradient `texture()` reads inside
+   data-dependent flow, noise octaves, sampler-array indexing, compile-warning retries,
+   draw-time recompiles) is NOT a rule: ask for a measurement instead of flagging it.
+   Explicit-gradient `textureGrad` reads are a measured shape when the derivatives are
+   taken before the split. A cost claim needs the doc's protocol: link times on ANGLE D3D11
+   with the driver shader cache disabled, before and after in one run; Linux GL gives
+   ordering only. Severity: SHOULD-FIX for a measured shape added to a wide-reach program
+   without a link measurement, or for a loop conversion without the run-time check; NOTE
+   for a single-material shader.
 
 ## Report
 
@@ -178,7 +255,8 @@ instead of suppressing a finding.
   `[SEVERITY] (confidence: high|med|low) file:line - the observed work or missing evidence ->
   the broken contract -> the concrete check or smallest correction.`
   Severity: **BLOCKING** for unprepared live GPU work, a visible key change without a gated swap,
-  a post-boot light/context/resource leak, a false or incomparable performance claim, or telemetry
+  a transmissive material reaching the renderer (the second scene pass), a post-boot
+  light/context/resource leak, a false or incomparable performance claim, or telemetry
   that can crash, exfiltrate, or silently drop the safety signal; **SHOULD-FIX** for an uncovered
   variant or stage, weak memory route, missing lifecycle arm, unbounded/null-unsafe telemetry, or
   missing test; **NOTE** for clarity or a follow-up.

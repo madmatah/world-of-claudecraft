@@ -10,12 +10,18 @@ export interface PrewarmResumeUnitPiece {
   /** `${unit.id}:${index}`: the same kind prefix as the unit, so the budget
    *  prices it under the unit's family. */
   id: string;
+  /** The one root this piece links, for a lane that warms it ahead of the
+   *  link (shader_warm_lane.ts). */
+  root?: object;
   run: () => Promise<void>;
 }
 
 export interface PrewarmResumeUnit {
   id: string;
   run: () => void | Promise<void>;
+  /** Explicitly tail-free upload or reflection work. Unknown units retain the
+   * asynchronous compile-tail cap; this flag never changes queue priority. */
+  synchronous?: boolean;
   /** The same work cut ONE ROOT PER PIECE, for a lane that runs while the
    *  world is live. A batch unit's `run` launches its roots together (the
    *  boot shape: their driver links overlap under the curtain), but live that
@@ -294,6 +300,7 @@ export function buildPrewarmCompileUnits<T extends object>(
         },
         pieces: roots.map((root, index) => ({
           id: `${id}:${index}`,
+          root,
           run: async () => {
             await compile(root);
           },

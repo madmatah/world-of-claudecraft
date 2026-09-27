@@ -142,6 +142,10 @@ export const table: ReliquaryLocaleTable = {
     name: 'Oorlogsvoeringwapenkamer',
     desc: 'Sieraden en wapens van Oorlogsvoering, gekocht met zwaarbevochten eer.',
   },
+  conquerors_vanguard_gallery: {
+    name: 'Voorhoedegalerij',
+    desc: 'De specialisatiesets en wapens van Oorlogsvoering seizoen 2, gekocht met eer.',
+  },
   horizons_vault_of_ages: {
     name: 'Schatkamer der Eeuwen',
     desc: 'Vervallen schatten uit een vervlogen tijd. Deze relieken zijn niet langer te winnen; de schatkamer eert de veteranen die ze bewaren.',
@@ -151,19 +155,33 @@ export const table: ReliquaryLocaleTable = {
     desc: 'De persoonlijke Riftbanden, geslagen voor elke kampioen in de groep die de eerste voltooiing van een gerangschikte Rift wint. Een personage kan alleen het zijne bezitten.',
   },
   conquerors_ignivar: {
-    name: 'Crucible of the Last Spring',
-    desc: 'Epische buit van Ignivar, Herald of the Last Flame.',
+    name: 'Smeltkroes van de Laatste Bron',
+    desc: 'Epische buit van Ignivar, Heraut van de Laatste Vlam.',
   },
   conquerors_ignivar_heroic: {
-    name: 'Heroïsch: Crucible of the Last Spring',
-    desc: 'Alleen heroïsch verkrijgbare wapens van Ignivar, Herald of the Last Flame.',
+    name: 'Heroïsch: Smeltkroes van de Laatste Bron',
+    desc: 'Alleen heroïsche wapens en de raidtrinkets van Ignivar, Heraut van de Laatste Vlam.',
   },
   conquerors_varkhul: {
-    name: 'The Inner Crucible',
-    desc: 'Epische buit van Varkhul, Forgefather of the Last Flame.',
+    name: 'De Binnenste Smeltkroes',
+    desc: 'Epische buit van Varkhul, Smidvader van de Laatste Vlam.',
   },
   conquerors_varkhul_heroic: {
-    name: 'Heroïsch: The Inner Crucible',
-    desc: 'Alleen heroïsch verkrijgbare schilden en wapens van Varkhul, Forgefather of the Last Flame.',
+    name: 'Heroïsch: De Binnenste Smeltkroes',
+    desc: 'Alleen heroïsche schilden en wapens en de raidtrinkets van Varkhul, Smidvader van de Laatste Vlam.',
+  },
+  conquerors_set_bramblehide: {
+    name: "Roots' Doornhuid",
+    desc: 'De volledige leren uitrustingsfamilie Roots’ Doornhuid.',
+  },
+  professions_crucible: {
+    desc: 'Elf in raids vervaardigde collecties, elk met een borststuk, riem en paar laarzen. Handleidingen en formules zijn kennis, geen relieken.',
+
+    name: 'Smeltkroesvakmanschap',
+  },
+
+  professions_forgebreaker: {
+    name: 'Smederijbreker',
+    desc: 'De stem van de Laatste Bron, bevrijd uit de smidse en gedragen in een hamer die je zelf hebt gemaakt.',
   },
 };

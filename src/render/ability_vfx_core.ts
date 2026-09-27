@@ -1,3 +1,4 @@
+import type { PhysicalChoreography } from './ability_vfx/physical_choreography_core';
 // Pure planning core for the per-ability spell VFX system: turns an authored
 // AbilityVfxSpec (src/render/ability_vfx_specs.ts) plus the render-budget vfx
 // quality dial into a concrete draw plan the thin painter (ability_vfx.ts)
@@ -58,6 +59,38 @@ export type AbilityVfxArchetype =
   | 'cc'
   | 'dash';
 
+/** Self-cast completion cues with a full ceremony or targeted utility read.
+ * Pure DoTs keep their aura effects; an authored rig gesture is routed separately. */
+export function claimsSelfCastVfx(
+  archetype: string | undefined,
+  targeted: boolean,
+  hasFullSpec: boolean,
+  hasSpirit: boolean,
+): boolean {
+  if (!hasFullSpec) return false;
+  const ceremonial =
+    hasSpirit ||
+    archetype === 'buff' ||
+    archetype === 'summon' ||
+    archetype === 'cc' ||
+    archetype === 'heal';
+  const utility = targeted
+    ? archetype === 'strike' || archetype === 'cc' || archetype === 'burst' || archetype === 'shout'
+    : archetype === 'shout' || archetype === 'dash';
+  return ceremonial || utility;
+}
+
+/** Pure-DoT completions that own an authored rig gesture on their caster's
+ * form rig. The list is explicit on purpose: the humanoid rigs also carry
+ * attackByAbility rows for their own DoTs (corruption, rupture, serpent_sting),
+ * and those completions have never played a gesture; routing every DoT through
+ * the gesture read would change three classes to ship one cat finisher. */
+const DOT_COMPLETION_GESTURES: ReadonlySet<string> = new Set(['rip']);
+
+export function ownsDotCompletionGesture(archetype: string | undefined, ability: string): boolean {
+  return archetype === 'dot' && DOT_COMPLETION_GESTURES.has(ability);
+}
+
 export type AbilityVfxWindupStyle =
   | 'none'
   | 'stance'
@@ -104,6 +137,7 @@ export interface AbilityVfxImpactSpec {
 }
 
 export interface AbilityVfxBuffSpec {
+  ceremony?: 'spiritCoils' | 'ascend';
   style?: 'raise' | 'morph' | 'veil';
   orbit?: string;
   // While the buff aura (aura id == ability id) is worn, the held mainhand
@@ -144,6 +178,7 @@ export interface AbilityVfxBuffSpec {
 }
 
 export interface AbilityVfxFullSpec {
+  physical?: PhysicalChoreography;
   archetype: AbilityVfxArchetype;
   palette: string;
   power?: number;
@@ -163,6 +198,7 @@ export interface AbilityVfxFullSpec {
     headScale?: number;
     style?:
       | 'rock'
+      | 'warHammer'
       | 'shard'
       | 'comet'
       | 'arrow'
@@ -406,7 +442,7 @@ export function planImpact(
 // rig keys off the kind, so both its sources read) and both 'stasis' ids carry
 // a read (ice_block's shell, temporal_hourglass's own visual). The
 // NON-fear incapacitates still wear nothing persistent: Gouge, Sap, Blind,
-// Hibernate, Wyvern Sting, Startle Shot, Dragon's Breath and the staged-cone
+// Hibernate, Drakesting, Startle Shot, Dragon's Breath and the staged-cone
 // daze hold a victim in place and break on the first damage, which is a
 // different read again ("hit me and this ends"), and giving that its own tell
 // stays a separate design call.

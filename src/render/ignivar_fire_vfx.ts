@@ -22,6 +22,7 @@
 
 import * as THREE from 'three';
 import { assetUrl } from './assets/media';
+import { floorVfxRenderOrder } from './floor_vfx_layer';
 import { sharedUniforms } from './gfx';
 
 // NOTE: three.js's GLTFLoader sanitizes node names (dots are reserved chars
@@ -324,6 +325,27 @@ void main() {
 const FLAME_GRID = 6.0;
 const FLAME_FRAMES = 36.0;
 
+/** The one flipbook flame atlas every sprite fire in the game samples. */
+export const FLAME_ATLAS_URL = '/textures/vfx/ignivar_flame_6x6.webp';
+export const FLAME_ATLAS_FRAMES = FLAME_FRAMES;
+
+/**
+ * GLSL shared by every shader that addresses the flame atlas: the per-sprite
+ * hash and the flipY'd cell lookup (frame 0 is the image's top-left cell).
+ * Other encounters' sprite fires (the Nythraxis grave fire) include this so
+ * they read the same atlas the same way.
+ */
+export const FLAME_ATLAS_GLSL = `
+float h11(float p) { return fract(sin(p * 78.233) * 43758.5453); }
+
+vec2 cellUv(vec2 corner, float f) {
+  float col = mod(f, ${FLAME_GRID.toFixed(1)});
+  float row = floor(f / ${FLAME_GRID.toFixed(1)});
+  return vec2((col + corner.x) / ${FLAME_GRID.toFixed(1)},
+              (${(FLAME_GRID - 1).toFixed(1)} - row + corner.y) / ${FLAME_GRID.toFixed(1)});
+}
+`;
+
 const FLAME_COMMON = `
 uniform float uTime;
 uniform float uFlame;
@@ -335,15 +357,7 @@ varying vec2 vUvA;
 varying vec2 vUvB;
 varying float vBlend;
 varying float vFade;
-float h11(float p) { return fract(sin(p * 78.233) * 43758.5453); }
-
-// flipY'd atlas: frame 0 is the image's top-left cell
-vec2 cellUv(vec2 corner, float f) {
-  float col = mod(f, ${FLAME_GRID.toFixed(1)});
-  float row = floor(f / ${FLAME_GRID.toFixed(1)});
-  return vec2((col + corner.x) / ${FLAME_GRID.toFixed(1)},
-              (${(FLAME_GRID - 1).toFixed(1)} - row + corner.y) / ${FLAME_GRID.toFixed(1)});
-}
+${FLAME_ATLAS_GLSL}
 `;
 
 const FLAME_VERT = `
@@ -1000,7 +1014,8 @@ export function attachIgnivarVfx(
 // these, and rebuilding geometry per spawn is the only real cost worth
 // avoiding. ~10 concurrent instances = 20 draw calls, 3 shader programs.
 const flameTexCache = new Map<string, THREE.Texture>();
-function getFlameTex(url: string): THREE.Texture {
+/** The module-cached atlas texture (never disposed by a consumer: fires respawn all fight). */
+export function getFlameTex(url: string = FLAME_ATLAS_URL): THREE.Texture {
   let t = flameTexCache.get(url);
   if (!t) {
     t =
@@ -1087,6 +1102,50 @@ export interface GroundFireAoeHandle {
  *   aoe.stop();                 // wave over
  *   setTimeout(() => { scene.remove(aoe.group); aoe.dispose(); }, 1000);
  */
+/**
+ * The ground fire AoE's program anchor. Every AoE mints its own disc and flame
+ * ShaderMaterial (per-instance uniforms) and dispose() releases them when the
+ * wave ends; three then drops the shader stage whose last material went
+ * (WebGLShaderCache.remove: usedTimes reaches 0, the stage leaves the cache),
+ * so the NEXT wave's identical source gets a fresh stage id, a fresh cache
+ * key and a fresh link (2026-09-12 hunt: two programs every 17 s, one per
+ * Ignivar wave). One handle built once and never disposed keeps both stages
+ * and both programs referenced for the session; the boot manifest stages it
+ * hidden through ABILITY_MATERIAL_SOURCES, so the first wave links nothing.
+ */
+interface GroundFireAoeAnchor {
+  disc: THREE.ShaderMaterial;
+  flames: THREE.ShaderMaterial;
+}
+let groundFireAoeAnchor: GroundFireAoeAnchor | null = null;
+let groundFireAoeAnchorGroup: THREE.Group | null = null;
+
+/** The anchor's two materials (built on first ask, never disposed). */
+export function groundFireAoeMaterials(): {
+  disc: THREE.ShaderMaterial;
+  flames: THREE.ShaderMaterial;
+} {
+  if (!groundFireAoeAnchor) buildGroundFireAoeStandIn();
+  return groundFireAoeAnchor as { disc: THREE.ShaderMaterial; flames: THREE.ShaderMaterial };
+}
+
+/** A hidden AoE drawing both anchor materials the way a live wave does. */
+export function buildGroundFireAoeStandIn(): THREE.Group {
+  if (!groundFireAoeAnchorGroup) {
+    const handle = createGroundFireAoe();
+    handle.group.name = 'ground_fire_aoe__anchor';
+    handle.group.visible = false;
+    const disc = handle.group.getObjectByName('ground_fire_aoe__disc') as THREE.Mesh;
+    const flames = handle.group.getObjectByName('ground_fire_aoe__flames') as THREE.Mesh;
+    groundFireAoeAnchor = {
+      disc: disc.material as THREE.ShaderMaterial,
+      flames: flames.material as THREE.ShaderMaterial,
+    };
+    groundFireAoeAnchorGroup = handle.group;
+  }
+  return groundFireAoeAnchorGroup;
+}
+
 export function createGroundFireAoe(opts: GroundFireAoeOptions = {}): GroundFireAoeHandle {
   const radius = Math.max(0.01, opts.radius ?? 1.2);
   let innerRadius = Math.max(0, Math.min(radius * 0.98, opts.innerRadius ?? 0));
@@ -1125,13 +1184,14 @@ export function createGroundFireAoe(opts: GroundFireAoeOptions = {}): GroundFire
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   });
+  discMat.name = 'groundFireAoe:disc';
   const disc = new THREE.Mesh(
     getAoeDiscGeo(opts.dynamicInnerRadius === true ? 0 : innerRadiusRatio),
     discMat,
   );
   disc.name = 'ground_fire_aoe__disc';
   disc.position.y = 0.02 * localFlameScale;
-  disc.renderOrder = 1;
+  disc.renderOrder = floorVfxRenderOrder('encounter', 0);
   group.add(disc);
 
   const flameMat = new THREE.ShaderMaterial({
@@ -1156,9 +1216,10 @@ export function createGroundFireAoe(opts: GroundFireAoeOptions = {}): GroundFire
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
   });
+  flameMat.name = 'groundFireAoe:flames';
   const flames = new THREE.Mesh(getAoeFlameGeo(count), flameMat);
   flames.name = 'ground_fire_aoe__flames';
-  flames.renderOrder = 2;
+  flames.renderOrder = floorVfxRenderOrder('encounter', 1);
   group.add(flames);
 
   let heatTarget = 0;

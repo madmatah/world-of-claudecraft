@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleDeath } from '../src/sim/combat/damage';
 import { applySetProcs } from '../src/sim/combat/set_procs';
 import { aggregateSetBonuses, ITEM_SETS } from '../src/sim/content/item_sets';
-import { ITEMS } from '../src/sim/data';
-import { createPlayer, recalcPlayerStats } from '../src/sim/entity';
+import { ITEMS, MOBS } from '../src/sim/data';
+import { createMob, createPlayer, recalcPlayerStats } from '../src/sim/entity';
 import { PVP_DEFENSE_CAP, PVP_OFFENSE_CAP, pvpFractionsFromRatings } from '../src/sim/pvp';
 import { Sim } from '../src/sim/sim';
 import type { CrowdControlDrCategory, Entity, EquipSlot, ItemSet, SetProc } from '../src/sim/types';
@@ -75,6 +75,24 @@ function geared(equipment: Partial<Record<EquipSlot, string>>): Entity {
   e.level = 20;
   recalcPlayerStats(e, 'warrior', equipment as never, undefined, {});
   return e;
+}
+
+function requireEntity(sim: Sim, id: number): Entity {
+  const entity = sim.entities.get(id);
+  if (!entity) throw new Error(`missing test entity ${id}`);
+  return entity;
+}
+
+function requireDuel(sim: Sim, id: number): NonNullable<ReturnType<Sim['duels']['get']>> {
+  const duel = sim.duels.get(id);
+  if (!duel) throw new Error(`missing test duel ${id}`);
+  return duel;
+}
+
+function requireMob(sim: Sim): Entity {
+  const mob = [...sim.entities.values()].find((e) => e.kind === 'mob');
+  if (!mob) throw new Error('missing test mob');
+  return mob;
 }
 
 afterEach(() => {
@@ -196,8 +214,8 @@ describe('the crowd-control duration hook', () => {
     const a = sim.addPlayer('warrior', 'Striker');
     const b = sim.addPlayer('mage', 'Struck');
     sim.duels.set(a, { a, b, state: 'active', timer: 0 });
-    sim.duels.set(b, sim.duels.get(a)!);
-    return { sim, source: sim.entities.get(a)!, target: sim.entities.get(b)! };
+    sim.duels.set(b, requireDuel(sim, a));
+    return { sim, source: requireEntity(sim, a), target: requireEntity(sim, b) };
   }
 
   const cc = (sim: Sim, source: Entity, target: Entity, cat: CrowdControlDrCategory, dur: number) =>
@@ -250,7 +268,7 @@ describe('the crowd-control duration hook', () => {
 
   it('leaves a player-versus-mob application untouched', () => {
     const { sim, source } = duelists();
-    const mob = [...sim.entities.values()].find((e) => e.kind === 'mob')!;
+    const mob = requireMob(sim);
     mob.ccDurationReduction = 0.5;
     // The PvE path takes the non-hostile-pair early return, so the full authored
     // duration lands regardless of what the mob carries.
@@ -287,8 +305,8 @@ describe('pvpOnly set procs', () => {
     const pa = sim.addPlayer('warrior', 'Victor');
     const pb = sim.addPlayer('mage', 'Fallen');
     sim.duels.set(pa, { a: pa, b: pb, state: 'active', timer: 0 });
-    sim.duels.set(pb, sim.duels.get(pa)!);
-    return { sim, a: sim.entities.get(pa)!, b: sim.entities.get(pb)! };
+    sim.duels.set(pb, requireDuel(sim, pa));
+    return { sim, a: requireEntity(sim, pa), b: requireEntity(sim, pb) };
   }
 
   it('fires against a hostile player', () => {
@@ -300,7 +318,7 @@ describe('pvpOnly set procs', () => {
 
   it('does not fire against a mob, and draws no rng doing so', () => {
     const { sim, a } = world();
-    const mob = [...sim.entities.values()].find((e) => e.kind === 'mob')!;
+    const mob = requireMob(sim);
     a.setProcs = [ABSORB_PROC];
     // The gate sits BEFORE the chance roll on purpose: a gated proc must not
     // consume a draw outside hostile PvP, or every PvE run forks the shared
@@ -311,12 +329,34 @@ describe('pvpOnly set procs', () => {
     expect(a.auras.some((aura) => aura.id === ABSORB_PROC.id)).toBe(false);
   });
 
+  it("fires against a hostile player's pet (all PvP combat), never a wild mob's", () => {
+    const { sim, a, b } = world();
+    const pet = createMob(sim.nextId++, MOBS.forest_wolf, b.level, { ...b.pos });
+    pet.ownerId = b.id;
+    pet.hostile = false;
+    sim.addEntity(pet);
+    a.setProcs = [ABSORB_PROC];
+    applySetProcs(sim.ctx, a, pet, 'kill');
+    expect(a.auras.some((aura) => aura.id === ABSORB_PROC.id)).toBe(true);
+    // The wearer's OWN pet is not an enemy: no proc, no draw.
+    const own = createMob(sim.nextId++, MOBS.forest_wolf, a.level, { ...a.pos });
+    own.ownerId = a.id;
+    own.hostile = false;
+    sim.addEntity(own);
+    a.auras = a.auras.filter((aura) => aura.id !== ABSORB_PROC.id);
+    a.procReadyAt = {};
+    const chance = vi.spyOn(sim.rng, 'chance');
+    applySetProcs(sim.ctx, a, own, 'kill');
+    expect(chance).not.toHaveBeenCalled();
+    expect(a.auras.some((aura) => aura.id === ABSORB_PROC.id)).toBe(false);
+  });
+
   it('does not fire on a friendly player or on itself', () => {
     const sim = new Sim({ seed: 42, playerClass: 'warrior', noPlayer: true });
     const pa = sim.addPlayer('warrior', 'Solo');
     const pb = sim.addPlayer('priest', 'Ally');
-    const a = sim.entities.get(pa)!;
-    const b = sim.entities.get(pb)!;
+    const a = requireEntity(sim, pa);
+    const b = requireEntity(sim, pb);
     a.setProcs = [ABSORB_PROC];
     const chance = vi.spyOn(sim.rng, 'chance');
     applySetProcs(sim.ctx, a, b, 'kill'); // not hostile: no duel between them
@@ -327,7 +367,7 @@ describe('pvpOnly set procs', () => {
 
   it('leaves an ungated proc firing in PvE exactly as before', () => {
     const { sim, a } = world();
-    const mob = [...sim.entities.values()].find((e) => e.kind === 'mob')!;
+    const mob = requireMob(sim);
     const { pvpOnly: _drop, ...ungated } = ABSORB_PROC;
     a.setProcs = [ungated as SetProc];
     applySetProcs(sim.ctx, a, mob, 'kill');
@@ -351,8 +391,8 @@ describe('the kill trigger dispatch', () => {
     const pa = sim.addPlayer('warrior', 'Killer');
     const pb = sim.addPlayer('mage', 'Victim');
     sim.duels.set(pa, { a: pa, b: pb, state: 'active', timer: 0 });
-    sim.duels.set(pb, sim.duels.get(pa)!);
-    return { sim, killer: sim.entities.get(pa)!, victim: sim.entities.get(pb)! };
+    sim.duels.set(pb, requireDuel(sim, pa));
+    return { sim, killer: requireEntity(sim, pa), victim: requireEntity(sim, pb) };
   }
 
   it('fires for a hostile player kill', () => {

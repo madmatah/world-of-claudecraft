@@ -1,3 +1,5 @@
+import { gliderActionsLocked } from './glider_action_lock';
+import { shadowActionsLocked } from './shadow_action_lock';
 // Rideable ground mounts: collection + mount/dismount rules, a sibling sim
 // system behind the SimContext seam (module-first; sim.ts keeps thin delegates).
 //
@@ -26,13 +28,17 @@
 //
 // `src/sim`-pure and rng-free.
 
+import { normalizeMountSkinId } from './content/mount_skins';
 import { MOUNT_KEYS, type MountKey, mountDef, TRAINING_MOUNT_KEY } from './content/mounts';
 import { ITEMS } from './data';
 import { recalcPlayerStats } from './entity';
+import { onShipDeck } from './ship_deck_presence';
 import type { PlayerMeta } from './sim';
 import type { SimContext } from './sim_context';
 import { bgInMatch } from './social/battleground';
 import { DT, type Entity, FORM_AURA_KINDS, isNonSpellCast } from './types';
+import { wispMazeActionsLocked } from './wisp_maze_action_lock';
+import { hasWorldQuestDeliveryCargo } from './world_quest_delivery';
 
 // Summon channel duration (seconds). Mounting is a short cast the player can
 // interrupt by moving into combat or water. Dismounting has NO channel: it is
@@ -165,6 +171,7 @@ export function forceTrainingMount(ctx: SimContext, e: Entity): boolean {
   // Silent (no toast): the caller is unreachable from inside a match, so a
   // refusal line here would be text no player can ever see.
   if (bgInMatch(ctx, e.id)) return false;
+  if (hasWorldQuestDeliveryCargo(e)) return false;
   e.mountKey = TRAINING_MOUNT_KEY;
   e.mountCastRemaining = 0;
   e.mountCastKey = '';
@@ -176,21 +183,42 @@ export function forceTrainingMount(ctx: SimContext, e: Entity): boolean {
 // narrower "while carrying the flag" refusal: one rule for the whole match is
 // what a player can actually learn, and the carrier case is a subset of it.
 const IN_BATTLEGROUND_MSG = "You can't ride in a battleground.";
+// Scheduled ships are ridden on foot: no mount is summoned (or swapped) on a
+// ship's deck, moored or under way, and a rider who boards on horseback is
+// dismounted as it casts off (transport_ferry.ts). A mount on a moving deck
+// would jump its rails (the mounted jump clears them).
+const ABOARD_SHIP_MSG = "You can't mount while aboard a ship.";
 const RIDING_UNTRAINED_MSG = 'You must learn to ride first. Find a riding trainer.';
+const CARRYING_FREIGHT_MSG = "You can't ride while carrying freight.";
 
-/** Strip all active form auras (FORM_AURA_KINDS) and ghost_wolf from the entity,
- *  emitting aura-removal events for each one removed. Called before a mount summon
- *  starts so the player is never simultaneously shapeshifted and mounting. Calls
- *  recalcFor if any aura was removed so stat effects (speed, etc.) clear immediately. */
+/** Strip all active form auras (FORM_AURA_KINDS), ghost_wolf, and stealth from the
+ *  entity, emitting aura-removal events for each one removed. Called before a mount
+ *  summon starts so the player is never simultaneously shapeshifted/stealthed and
+ *  mounting. Stealth is routed through the single `ctx.breakStealth` funnel (not
+ *  spliced inline like the forms) until no stealth aura remains, so each aura's
+ *  linger/aftereffect side effects fire exactly as they do for every other way
+ *  stealth ends. Without this, a stealthed rider keeps the aura's shrunk detection
+ *  radius while moving at full mount speed: invisible AND fast, the "stealth horse"
+ *  duel exploit. Calls recalcFor if any aura was removed so stat effects (speed,
+ *  etc.) clear immediately. */
 function cancelFormsAndGhostWolf(ctx: SimContext, e: Entity): void {
   let stripped = false;
   for (let i = e.auras.length - 1; i >= 0; i--) {
     const aura = e.auras[i];
     if (FORM_AURA_KINDS.has(aura.kind) || aura.id === 'ghost_wolf') {
       e.auras.splice(i, 1);
-      ctx.emit({ type: 'aura', targetId: e.id, name: aura.name, gained: false });
+      ctx.emit({
+        type: 'aura',
+        targetId: e.id,
+        name: aura.name,
+        gained: false,
+      });
       stripped = true;
     }
+  }
+  while (e.auras.some((a) => a.kind === 'stealth')) {
+    ctx.breakStealth(e);
+    stripped = true;
   }
   if (stripped) {
     const meta = ctx.players.get(e.id);
@@ -215,11 +243,34 @@ function cancelFormsAndGhostWolf(ctx: SimContext, e: Entity): void {
  *
  *  Already riding something else: swap INSTANTLY, no dismount channel and no new
  *  summon channel. Clicking the reins you are already riding dismounts. */
+/** Wear (skinId) or take off (null) a mount SKIN (content/mount_skins.ts) on a
+ *  player: the persisted meta field plus the entity mirror the identity wire
+ *  (`msk`) reads. Cosmetic only: the ridden mount keeps its own key, so speed,
+ *  the melee block and crit are untouched. The account-ownership gate is the
+ *  caller's (the server's session cosmetics; Sim.changeMountSkin offline).
+ *  An id outside the catalog is refused. */
+export function setMountSkin(ctx: SimContext, pid: number, skinId: string | null): boolean {
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  if (!meta || e?.kind !== 'player') return false;
+  const next = skinId === null ? null : normalizeMountSkinId(skinId);
+  if (skinId !== null && next === null) return false;
+  meta.mountSkinId = next;
+  e.mountSkinId = next;
+  return true;
+}
+
 export function summonMountItem(ctx: SimContext, pid: number, key: string): boolean {
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
   if (meta.realmRacersMatchId !== null) return false;
+  if (
+    wispMazeActionsLocked(meta.worldQuestLog) ||
+    shadowActionsLocked(meta.worldQuestLog) ||
+    gliderActionsLocked(meta.worldQuestLog)
+  )
+    return false;
   const def = mountDef(key);
   if (!def) return false;
   // Clicking the reins you are currently riding puts the mount away.
@@ -248,9 +299,17 @@ export function summonMountItem(ctx: SimContext, pid: number, key: string): bool
     ctx.error(pid, IN_BATTLEGROUND_MSG);
     return false;
   }
+  if (hasWorldQuestDeliveryCargo(e)) {
+    ctx.error(pid, CARRYING_FREIGHT_MSG);
+    return false;
+  }
   if (e.dead || e.ghost) return false;
   if (e.inCombat) {
     ctx.error(pid, "You can't do that while in combat.");
+    return false;
+  }
+  if (onShipDeck(ctx, e)) {
+    ctx.error(pid, ABOARD_SHIP_MSG);
     return false;
   }
   // Swapping between mounts is instant: the player is already mounted, so there
@@ -281,6 +340,12 @@ export function toggleMount(ctx: SimContext, pid: number): boolean {
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
   if (meta.realmRacersMatchId !== null) return false;
+  if (
+    wispMazeActionsLocked(meta.worldQuestLog) ||
+    shadowActionsLocked(meta.worldQuestLog) ||
+    gliderActionsLocked(meta.worldQuestLog)
+  )
+    return false;
   // A toggle while a summon/dismount is already channeling is ignored.
   if ((e.mountCastRemaining ?? 0) > 0) return false;
   if (e.mountKey) {
@@ -310,9 +375,17 @@ export function toggleMount(ctx: SimContext, pid: number): boolean {
       ctx.error(pid, IN_BATTLEGROUND_MSG);
       return false;
     }
+    if (hasWorldQuestDeliveryCargo(e)) {
+      ctx.error(pid, CARRYING_FREIGHT_MSG);
+      return false;
+    }
     if (e.dead || e.ghost) return false;
     if (e.inCombat) {
       ctx.error(pid, "You can't do that while in combat.");
+      return false;
+    }
+    if (onShipDeck(ctx, e)) {
+      ctx.error(pid, ABOARD_SHIP_MSG);
       return false;
     }
     // The profession-cast interlock's third route: the lesson summon is the
@@ -387,7 +460,10 @@ export function updateMountTransition(ctx: SimContext, e: Entity, swimming: bool
       } else if (
         mountDef(target) &&
         meta &&
-        (mountOwned(meta, target) || trainingSummon(meta, target))
+        (mountOwned(meta, target) || trainingSummon(meta, target)) &&
+        // a channel that ends on a ship's deck lapses (the summon was refused
+        // aboard; this covers one finished standing on the gangway's lip)
+        !onShipDeck(ctx, e)
       ) {
         // Strip any form that slipped through during the channel (e.g. instant
         // shapeshifts cast while channeling), so the player is never

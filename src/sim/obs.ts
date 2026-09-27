@@ -8,6 +8,7 @@ import {
 } from './combat/necromancy_dominion';
 import { canUseForbiddenReflection } from './combat/warlock_talents';
 import { noticeboardDefByEntityId } from './content/noticeboards';
+import { corpseInteractionAvailability } from './corpse_interaction';
 import { CLASSES, ITEMS, QUEST_ORDER, QUESTS, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z } from './data';
 import {
   ASCENSION_CHARGES,
@@ -26,6 +27,7 @@ import {
   MAX_LEVEL,
   normAngle,
   questObjectiveRequired,
+  REALM_BUILDER_MONUMENT_TEMPLATE_ID,
   xpForLevel,
 } from './types';
 
@@ -206,11 +208,7 @@ export function encodeObs(sim: Sim): number[] {
           aura.kind === known.def.requiresAuraKind &&
           (aura.stacks ?? 1) >= (known.def.requiresAuraStacks ?? 1),
       );
-    const requiresPrimaryEye =
-      known.def.id === 'sentence' ||
-      known.def.id === 'coven' ||
-      known.def.id === 'possess_evil_eye' ||
-      known.def.id === 'hour_of_judgment';
+    const requiresPrimaryEye = known.def.id === 'sentence' || known.def.id === 'coven';
     const afflictionEyeReady =
       !requiresPrimaryEye ||
       !!selectedTarget?.auras.some(
@@ -237,6 +235,10 @@ export function encodeObs(sim: Sim): number[] {
       requiredAuraReady &&
       afflictionEyeReady &&
       dominionReady &&
+      // Deliberately ignores the GCD-tail queue: a press inside the final
+      // CAST_QUEUE_WINDOW_SEC of the GCD reports not-ready yet still queues
+      // and fires. The queued slot is not observed; policies see it only
+      // through the next transition.
       (known.def.offGcd || p.gcdRemaining <= 0);
     obs.push(ready ? 1 : 0);
     obs.push(known.def.cooldown > 0 ? cd / known.def.cooldown : 0);
@@ -299,11 +301,24 @@ export function encodeObs(sim: Sim): number[] {
   let bestQuestEntity: Interactable | null = null;
   let bestQuestEntityD2 = INTERACT_RANGE * INTERACT_RANGE;
   sim.grid.forEachInRadius(p.pos.x, p.pos.z, INTERACT_RANGE, (e, d2) => {
-    if (e.kind === 'mob' && e.lootable && d2 < bestCorpseD2) {
+    if (
+      e.kind === 'mob' &&
+      e.lootable &&
+      corpseInteractionAvailability(sim.ctx, e, p.id, true).hasLoot &&
+      d2 < bestCorpseD2
+    ) {
       bestCorpse = { e, d2, type: 0.33 };
       bestCorpseD2 = d2;
     }
-    if (e.kind === 'object' && e.lootable && d2 < bestObjectD2) {
+    // The Realm Builder monument is an honour roll, not a pickup: nothing an
+    // agent can gain from it, and as a permanent object in the middle of the
+    // square it would otherwise shadow the mailbox in this slot.
+    if (
+      e.kind === 'object' &&
+      e.lootable &&
+      e.templateId !== REALM_BUILDER_MONUMENT_TEMPLATE_ID &&
+      d2 < bestObjectD2
+    ) {
       const noticeboardDef = noticeboardDefByEntityId(sim.noticeboardDefinitions, e.id);
       if (!noticeboardDef || d2 <= noticeboardDef.interactionRadius ** 2) {
         bestObject = { e, d2, type: 0.66 };

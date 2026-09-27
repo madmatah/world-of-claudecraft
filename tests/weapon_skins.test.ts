@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WEAPON_VFX } from '../src/render/weapon_vfx';
 import {
   eligibleClassesForWeaponSkinType,
+  mainhandShowsWeaponSkin,
   offhandMirrorsWeaponSkin,
   resolveActiveWeaponSkin,
   skinnableWeaponTypesFor,
@@ -113,6 +114,10 @@ describe('weapon type classification', () => {
 
   it('stays in lockstep with the render variant family for mapped items', () => {
     const familyOf = (variant: string): string | null => {
+      // The violet-gem KayKit sword and axe (the Nythraxis gap-fill one-handers)
+      // carry the same VAR_SWORD / VAR_AXE grips as the adv set in assets.ts.
+      if (variant === 'purple_sword') return 'sword';
+      if (variant === 'purple_axe') return 'axe';
       if (/^(adv_)?sword/.test(variant)) return 'sword';
       // The bespoke dagger skins carry thematic names; assets.ts tags each of
       // these variants VAR_DAGGER, which is the render-side family authority.
@@ -230,6 +235,89 @@ describe('skin apply rule', () => {
   });
 });
 
+describe('offhand-held weapon type (reported: legendary mace skin never loaded)', () => {
+  // A rogue keeps the dagger mainhand and the equip resolver parks a mace in the
+  // offhand, so the account's mace skin showed as owned but could never apply:
+  // the rules read the mainhand alone. Both hands count now, mainhand first.
+  it('counts the offhand weapon type for apply, after the mainhand type', () => {
+    expect(
+      skinnableWeaponTypesFor('rogue', 'rusty_dagger', 'class', 'forgefathers_warhammer'),
+    ).toEqual(['dagger', 'mace']);
+    expect(
+      weaponSkinTypeMatches('rogue', 'rusty_dagger', 'mace', 'class', 'forgefathers_warhammer'),
+    ).toBe(true);
+    // Two weapons of one type count once; a shield or a spear adds nothing.
+    expect(skinnableWeaponTypesFor('rogue', 'rusty_dagger', 'class', 'keen_dirk')).toEqual([
+      'dagger',
+    ]);
+    expect(skinnableWeaponTypesFor('warrior', 'worn_sword', 'class', 'eastbrook_buckler')).toEqual([
+      'sword',
+    ]);
+    expect(skinnableWeaponTypesFor('warrior', 'worn_sword', 'class', 'tidereaver_gaff')).toEqual([
+      'sword',
+    ]);
+    // The mainhand-only call keeps its exact old answer.
+    expect(skinnableWeaponTypesFor('rogue', 'rusty_dagger', 'class')).toEqual(['dagger']);
+    // A bare mainhand beside an offhand weapon still counts; beside a shield or
+    // nothing it applies nothing, so a hunter with empty hands keeps [] too.
+    expect(skinnableWeaponTypesFor('rogue', null, 'class', 'forgefathers_warhammer')).toEqual([
+      'mace',
+    ]);
+    expect(skinnableWeaponTypesFor('warrior', null, 'class', 'eastbrook_buckler')).toEqual([]);
+    expect(skinnableWeaponTypesFor('hunter', null, 'class', 'eastbrook_buckler')).toEqual([]);
+    expect(skinnableWeaponTypesFor('hunter', null, 'mech', 'eastbrook_buckler')).toEqual([]);
+    // The hunter arm still needs a mainhand, whatever the offhand holds.
+    expect(skinnableWeaponTypesFor('hunter', null, 'class', 'forgefathers_warhammer')).toEqual([]);
+    expect(skinnableWeaponTypesFor('hunter', null, 'mech', 'forgefathers_warhammer')).toEqual([]);
+    // An offhand polearm is a weapon no skin targets: nothing to apply.
+    expect(skinnableWeaponTypesFor('warrior', null, 'class', 'tidereaver_gaff')).toEqual([]);
+  });
+
+  it('resolves the offhand-held type when only that skin is applied, mainhand type first', () => {
+    expect(
+      resolveActiveWeaponSkin(
+        'rogue',
+        'rusty_dagger',
+        { mace: 'starfall_mace' },
+        'class',
+        'forgefathers_warhammer',
+      ),
+    ).toBe('starfall_mace');
+    expect(
+      resolveActiveWeaponSkin(
+        'rogue',
+        'rusty_dagger',
+        { mace: 'starfall_mace', dagger: 'astravyr_dagger' },
+        'class',
+        'forgefathers_warhammer',
+      ),
+    ).toBe('astravyr_dagger');
+    // Without the offhand the mace skin stays dormant, exactly as before.
+    expect(
+      resolveActiveWeaponSkin('rogue', 'rusty_dagger', { mace: 'starfall_mace' }, 'class'),
+    ).toBeNull();
+  });
+
+  it('dresses the mainhand only while it holds the skin type; ranged skins always', () => {
+    expect(mainhandShowsWeaponSkin('starfall_mace', 'forgefathers_warhammer')).toBe(true);
+    expect(mainhandShowsWeaponSkin('starfall_mace', 'rusty_dagger')).toBe(false);
+    expect(mainhandShowsWeaponSkin('starfall_mace', null)).toBe(false);
+    expect(mainhandShowsWeaponSkin(null, 'forgefathers_warhammer')).toBe(false);
+    // The hunter rig's fixed attach and the mech swap slot take a ranged skin
+    // whatever the hand holds.
+    expect(mainhandShowsWeaponSkin('winterbite', 'rusty_hatchet')).toBe(true);
+    expect(mainhandShowsWeaponSkin('meteorlatch_crossbow', null)).toBe(true);
+    // The renderer's mainhand swap gates the skin url on this rule, so a dagger
+    // mainhand beside a skinned offhand mace keeps its own dagger model.
+    const src = readFileSync(join(ROOT, 'src/render/characters/assets.ts'), 'utf8');
+    const fn = src.slice(
+      src.indexOf('function swapAttachDef('),
+      src.indexOf('function offhandAttachDef('),
+    );
+    expect(fn).toContain('mainhandShowsWeaponSkin(weaponSkinId, weaponItemId)');
+  });
+});
+
 describe('offhand weapon-skin mirror rule', () => {
   it('mirrors the skin onto a matching-type offhand weapon (rogue dual-wield)', () => {
     // A rogue with two daggers and a dagger skin shows both blades skinned.
@@ -288,15 +376,17 @@ describe('offhand weapon-skin mirror rule', () => {
 
 describe('bow skin attack animation (hunter draw instead of crossbow aim)', () => {
   it('starts every typed player ranged shot at launch and suppresses its impact replay', async () => {
-    const { playerRangedAttackAlreadyStarted, playerRangedAttackStartsAtLaunch } = await import(
+    const { playerAttackAnimationAlreadyStarted, playerRangedAttackStartsAtLaunch } = await import(
       '../src/render/characters/skin_attack'
     );
     expect(playerRangedAttackStartsAtLaunch('player', 'ranged-shot')).toBe(true);
     expect(playerRangedAttackStartsAtLaunch('player', undefined)).toBe(false);
     expect(playerRangedAttackStartsAtLaunch('mob', 'ranged-shot')).toBe(false);
-    expect(playerRangedAttackAlreadyStarted('player', true)).toBe(true);
-    expect(playerRangedAttackAlreadyStarted('player', undefined)).toBe(false);
-    expect(playerRangedAttackAlreadyStarted('mob', true)).toBe(false);
+    // Not ranged-only: the same flag also covers a melee swing already started
+    // at launch (an auto-attack, or an ability like Red Harvest).
+    expect(playerAttackAnimationAlreadyStarted('player', true)).toBe(true);
+    expect(playerAttackAnimationAlreadyStarted('player', undefined)).toBe(false);
+    expect(playerAttackAnimationAlreadyStarted('mob', true)).toBe(false);
   });
 
   it('bow skins substitute the authored draw clip; every other type keeps its attack', async () => {
@@ -451,7 +541,21 @@ describe('bow skin attack animation (hunter draw instead of crossbow aim)', () =
       src.indexOf('private reattachHeldWeapon('),
       src.indexOf('private finishWeaponAttach('),
     );
-    expect(fn).toContain('this.finishWeaponAttach(payloads)');
+    // The skin material/VFX set is the hands that SHOW the skin (a melee skin
+    // held in the offhand alone leaves the mainhand's own model out of it).
+    expect(fn).toContain('this.finishWeaponAttach(skinned)');
+    // A hand outside the skin set still gets its bone-texture pass (the lean
+    // setOffhand path already gave a plain offhand one; the full re-attach now
+    // matches it).
+    expect(fn).toContain('if (!skinned.includes(payload)) configureTightBoneTextures(payload)');
+    // The sheathe swap feeds attachAllProps' skinned set to the same tail, so
+    // it sweeps the whole rig for the excluded hand instead.
+    const stow = src.slice(
+      src.indexOf('private applyStowSwap('),
+      src.indexOf('private rebuildCasters('),
+    );
+    expect(stow).toContain('configureTightBoneTextures(this.model)');
+    expect(fn).toContain('mainhandShowsWeaponSkin(this.weaponSkinId, this.weaponItemId)');
     expect(fn).toContain('return [...payloads, ...offPayloads]');
   });
 
@@ -674,7 +778,7 @@ describe('bow skin attack animation (hunter draw instead of crossbow aim)', () =
       join(ROOT, 'src/render/characters/damage_attack_animation.ts'),
       'utf8',
     );
-    expect(damageGate).toContain('playerRangedAttackAlreadyStarted(');
+    expect(damageGate).toContain('playerAttackAnimationAlreadyStarted(');
     expect(launch).not.toContain('weaponSkinAttackClips(source.weaponSkinId)');
     expect(damage).not.toContain('weaponSkinAttackClips(source.weaponSkinId)');
   });

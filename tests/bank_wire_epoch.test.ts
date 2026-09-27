@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ItemInstancePayload } from '../src/sim/types';
 import {
   type BankInfo,
   ONLINE_WORLD_AUTH_TYPE,
@@ -39,6 +40,34 @@ const AUTH_WORLD_10_VAULT_INFO = {
 
 const VAULT_SPECIAL_REQUIRED_KEYS = ['special'] as const satisfies readonly (keyof VaultInfo)[];
 
+// Exact auth-world-11 ItemInstancePayload key set from origin/release/v0.41.0
+// (e19d832b47). The masterwrought epoch (26: one past the release's Ignivar
+// ladder tip 25; it was 12 on the pre-merge branch) exists because
+// equipped-instance snapshots now carry the Perfecting rank, the Perfected
+// quality marker, and an orange piece's chosen name, none of which a
+// pre-masterwrought binary (epoch 11 through 25) can render or select. The
+// other half of the epoch-26 rationale, the `fplot` farm-plot self delta, has
+// no compile-time wire interface to fixture here; its presence in today's
+// delta registry is pinned by tests/snapshots.test.ts (the ALL_DELTA_KEYS /
+// TERSE_TO_IWORLD fplot rows).
+const AUTH_WORLD_11_ITEM_INSTANCE_PAYLOAD = {
+  signer: 'Maker',
+  charges: {},
+  rolled: {},
+  enchant: 'ench',
+  craftedRecipeId: 'recipe',
+  boundTo: 1,
+  bindOnTrade: true,
+  locked: true,
+  rift: {},
+} as const;
+
+const PERFECTING_REQUIRED_KEYS = [
+  'perfecting',
+  'perfected',
+  'name',
+] as const satisfies readonly (keyof ItemInstancePayload)[];
+
 // The load-bearing check on both historical fixtures is COMPILE-TIME and tsc
 // is its gate: the `satisfies` arms above prove every required key is a real
 // field of today's interfaces, and the AssertNever arms below prove neither
@@ -52,20 +81,63 @@ type _BankStorageKeysAreNew = AssertNever<
 type _VaultSpecialKeysAreNew = AssertNever<
   Extract<(typeof VAULT_SPECIAL_REQUIRED_KEYS)[number], keyof typeof AUTH_WORLD_10_VAULT_INFO>
 >;
+type _PerfectingKeysAreNew = AssertNever<
+  Extract<
+    (typeof PERFECTING_REQUIRED_KEYS)[number],
+    keyof typeof AUTH_WORLD_11_ITEM_INSTANCE_PAYLOAD
+  >
+>;
 
-describe('BankInfo wire compatibility epoch', () => {
-  it('separates the bank-storage snapshot from release/v0.41.0 before admission', () => {
-    // The runtime epoch pin: the world handshake version that fences the
-    // pre-bank-storage shape out before any snapshot is admitted. The Ignivar
-    // raid ladder moved the current epoch past the vault's own 11
-    // (src/world_api.ts); any epoch at or above 11 keeps the fence.
-    expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(26);
-    expect(ONLINE_WORLD_AUTH_TYPE).toBe('auth-world-26');
-  });
-
-  it('separates identity-preserving vault snapshots from auth-world-10 before admission', () => {
-    expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(26);
-    expect(ONLINE_WORLD_AUTH_TYPE).toBe('auth-world-26');
+describe('wire compatibility epoch', () => {
+  it('fences older item formats out at the epoch-46 handshake', () => {
+    // The runtime epoch pin: the world handshake version that fences older
+    // snapshot shapes out before any snapshot is admitted. The three frozen
+    // fixtures above carry the per-epoch rationale: bank storage (10) added
+    // the socket and two-pool BankInfo fields, the Materials Vault (11) the
+    // identity-preserving `special` collection, and masterwrought (26) the
+    // Perfecting instance fields plus the fplot self delta. The Ignivar raid
+    // ladder moved release/v0.41.0 from 11 to 25 (src/world_api.ts) before
+    // this branch merged it, so masterwrought sits one past that tip; any
+    // epoch at or above 11 keeps the bank and vault fences. Corpse harvesting
+    // (28) replaced the raw components array with a remembered, id-only
+    // harvest preference plus a correlated status query, so an epoch-27
+    // client (which still sends the old components-array harvest command and
+    // cannot render the new preference/query state) must also be fenced out.
+    // Epoch 29 landed the Nythraxis mechanics redo (Grave Eruption warning
+    // rings, Grave Flame patches, Binding Sigil and Gravefire snapshot
+    // families, the `nythraxisCallout` event, the Bone Spike mob) together
+    // with the Drakelands site swap (the Last Keep castle replaced by open
+    // build land, the trolls moved onto the old keep grounds, Wyrmwatch and
+    // its roads rebuilt), so an epoch-28 client would stand in rings and
+    // fire it cannot see and would render geography the server no longer
+    // stands anywhere near; it must be fenced out alongside every earlier
+    // incompatible epoch.
+    // Epoch 42 at the release/v0.43.0 merge into feature/world-quests: past
+    // both parents (release 29, the world-quest branch 41), because the merged
+    // snapshot carries the world-quest wire on top of the release geography.
+    // Epoch 43 replaces the Farshore salvage roster, area and compiled visuals.
+    // Epoch 45 at the fourth release/v0.44.0 base merge: the release's epoch 30
+    // (the scheduled ferry whose deck exists only where it lies docked) composed
+    // with the branch's 44, so an epoch-44 client (which draws the ship moored
+    // forever) and an epoch-30 client (no world-quest wire) are both fenced out.
+    // Epoch 46 at the release/v0.44.0 merge into feature/realm-racers: the
+    // Realm Racers race surface on top of the release's 45, so an epoch-45
+    // client (no drive state, no race self keys) is fenced out too.
+    expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(46);
+    expect(ONLINE_WORLD_AUTH_TYPE).toBe(`auth-world-${ONLINE_WORLD_LAYOUT_VERSION}`);
+    expect(ONLINE_WORLD_AUTH_TYPE).toBe('auth-world-46');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-45');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-44');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-42');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-43');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-41');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-30');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-29');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-28');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-27');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-26');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-25');
+    expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-11');
     expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-10');
     expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-9');
   });

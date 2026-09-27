@@ -1,5 +1,6 @@
 import { isPartyFrameRelevantAura } from '../sim/aura_classify';
 import type { PartyInfo, PartyMemberAura, PartyMemberInfo } from '../world_api';
+import { type HealthTextMode, healthTextForMode, healthTextMode } from './hud_frames';
 import type { PartyPetInfo } from './pet_frame_view';
 
 /**
@@ -34,10 +35,21 @@ export type PartyFrameMember = PartyMemberInfo & { oor: boolean; pet?: PartyPetI
 /** Owner entity id -> that owner's pet. Built once per repaint by the caller. */
 export type PartyPetMap = ReadonlyMap<number, PartyPetInfo>;
 
-export type PartyFrameHealthTextMode = 0 | 1 | 2 | 3;
+/** Same mode table as the player / target frames (hud_frames.ts). */
+export type PartyFrameHealthTextMode = HealthTextMode;
 export type PartyFrameSortMode = 0 | 1 | 2;
 export type PartyFrameStyleMode = 0 | 1 | 2;
 export type PartyFrameStyle = 'classic' | 'raid';
+
+export type PartyFrameSettingKey =
+  | 'partyFrameShowSelf'
+  | 'partyFrameShowResource'
+  | 'partyFrameShowAbsorbs'
+  | 'partyFrameShowAuras'
+  | 'partyFrameShowPets'
+  | 'partyFrameStyle'
+  | 'partyFrameHealthText'
+  | 'partyFrameSort';
 
 export interface PartyFrameDisplayConfig {
   showSelf: boolean;
@@ -60,6 +72,18 @@ export const DEFAULT_PARTY_FRAME_DISPLAY: PartyFrameDisplayConfig = {
   sort: 0,
   presentation: 0,
 };
+
+export interface PartyFrameHeaderState {
+  visible: boolean;
+  count: number;
+  collapsed: boolean;
+}
+
+/** Derive the desktop party disclosure from the roster count and user toggle. */
+export function partyFrameHeaderState(count: number, collapsed: boolean): PartyFrameHeaderState {
+  const safeCount = Math.max(0, Math.floor(count));
+  return { visible: safeCount > 0, count: safeCount, collapsed };
+}
 
 const ROLE_ORDER = { tank: 0, healer: 1, dps: 2 } as const;
 
@@ -97,12 +121,36 @@ export function partyFrameHealthText(
   mode: PartyFrameHealthTextMode,
   format: (value: number, percent?: boolean) => string,
 ): string {
-  const current = Math.max(0, Math.round(hp));
-  const maximum = Math.max(1, Math.round(maxHp));
-  if (mode === 1) return format(current / maximum, true);
-  if (mode === 2) return format(current);
-  if (mode === 3) return `${format(current)} / ${format(maximum)}`;
-  return '';
+  return healthTextForMode(hp, maxHp, mode, format);
+}
+
+/** Read the party-frame display profile from the live settings store (undefined
+ *  before the options hooks attach, in which case every field takes its default).
+ *  Shared by the live party painter and the Edit Frames preview so both read the
+ *  same keys with the same fallbacks. */
+export function readPartyFrameDisplayConfig(
+  settings: { get(key: PartyFrameSettingKey): number | boolean | undefined } | undefined,
+): PartyFrameDisplayConfig {
+  const d = DEFAULT_PARTY_FRAME_DISPLAY;
+  if (!settings) return { ...d };
+  const bool = (key: PartyFrameSettingKey, fallback: boolean): boolean => {
+    const v = settings.get(key);
+    return v === undefined ? fallback : !!v;
+  };
+  const choice = <T extends number>(key: PartyFrameSettingKey, fallback: T): T => {
+    const v = Number(settings.get(key));
+    return Number.isFinite(v) ? (Math.round(v) as T) : fallback;
+  };
+  return {
+    showSelf: bool('partyFrameShowSelf', d.showSelf),
+    showResource: bool('partyFrameShowResource', d.showResource),
+    showAbsorbs: bool('partyFrameShowAbsorbs', d.showAbsorbs),
+    showAuras: bool('partyFrameShowAuras', d.showAuras),
+    showPets: bool('partyFrameShowPets', d.showPets),
+    presentation: choice<PartyFrameStyleMode>('partyFrameStyle', d.presentation),
+    healthText: healthTextMode(Number(settings.get('partyFrameHealthText')), d.healthText),
+    sort: choice<PartyFrameSortMode>('partyFrameSort', d.sort),
+  };
 }
 
 const stableNameCompare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -152,7 +200,7 @@ export function selectPartyFrameMembers(
  * render from: per member the pid, group, hp/maxHp, resource, dead,
  * in-combat, the out-of-range flag (computed inline, identically to the selector),
  * level, and the aura strip (id + kind + sap flag per aura, in order), plus the
- * leader, raid flag, and the player's own group. The player is skipped (the
+ * leader, raid flag, selected target, and the player's own group. The player is skipped (the
  * frames never show the local player), matching the selector's `pid !== playerId`.
  *
  * Pure and deterministic (only `Math.hypot` and string building). It iterates in raw
@@ -169,6 +217,7 @@ export function partyFrameSignature(
   rangeYd = PARTY_FRAME_RANGE_YD,
   config: PartyFrameDisplayConfig = DEFAULT_PARTY_FRAME_DISPLAY,
   pets?: PartyPetMap,
+  targetId?: number | null,
 ): string {
   let sig = '';
   let myGroup: 1 | 2 = 1;
@@ -201,5 +250,5 @@ export function partyFrameSignature(
     sig += `W${m.rewind ?? 0}:I${m.incomingHeal ?? 0}:A${m.hasAggro ?? 0}:C${m.connected ?? 1}`;
     sig += pet ? `:P${pet.id},${pet.name},${pet.hp}/${pet.maxHp},${pet.dead ? 1 : 0}|` : '|';
   }
-  return `${sig}L${info.leader}:R${info.raid ? 1 : 0}:G${myGroup}:C${config.showSelf ? 1 : 0}${config.showResource ? 1 : 0}${config.showAbsorbs ? 1 : 0}${config.showAuras ? 1 : 0}${config.showPets ? 1 : 0}${config.healthText}${config.sort}${config.presentation}`;
+  return `${sig}L${info.leader}:R${info.raid ? 1 : 0}:G${myGroup}:T${targetId ?? 0}:C${config.showSelf ? 1 : 0}${config.showResource ? 1 : 0}${config.showAbsorbs ? 1 : 0}${config.showAuras ? 1 : 0}${config.showPets ? 1 : 0}${config.healthText}${config.sort}${config.presentation}`;
 }

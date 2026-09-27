@@ -8,8 +8,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BIND_ACTIONS } from '../src/game/keybinds';
 import { padReelItemId } from '../src/game/pad_reel';
+import { dispatchPetAction } from '../src/game/pet_commands';
+import { dispatchTargetingAction } from '../src/game/targeting_actions';
 import { ITEMS } from '../src/sim/data';
 import { FISHING_CAST_ID, GATHER_CAST_ID } from '../src/sim/types';
+import { dispatchCollectionAction } from '../src/ui/collection_actions_core';
 
 describe('padReelItemId', () => {
   it('answers the carried implement only during a live fishing cast', () => {
@@ -100,13 +103,52 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
     return mainTs.slice(start, end);
   };
 
-  it('every offered edge action id has a case in dispatchGamepadAction', () => {
+  it('every offered edge action id routes through the collection dispatcher or a direct case', () => {
     const body = dispatchBody();
+    expect(body).toContain('if (dispatchCollectionAction(id, hud)) return;');
+    // The targeting arm (the Tab cycles, the friendly picks, Pet: Mark, the F-row
+    // party hotkeys) lives in src/game/targeting_actions.ts; its dispatcher is
+    // called from the same spot, so an id it claims is routed, not dropped.
+    expect(body).toContain('if (dispatchTargetingAction(id, world, hud, settings)) return;');
+    const targetingWorld = {
+      tabTarget() {},
+      tabTargetPrev() {},
+      targetNearestFriendly() {},
+      friendlyTabTarget() {},
+      targetEntity() {},
+      partyInfo: null,
+      playerId: 1,
+      player: { pos: { x: 0, z: 0 } } as never,
+    };
+    const collections = {
+      toggleDeeds() {},
+      toggleProfessions() {},
+      toggleReliquary() {},
+      toggleCosmetics() {},
+      toggleHarvestJournal() {},
+      togglePerfecting() {},
+      toggleLootExplorer() {},
+    };
+    const petWorld = {
+      setPetMode() {},
+      petAttack() {},
+      petTaunt() {},
+      targetOwnPet() {},
+    };
     for (const action of BIND_ACTIONS) {
       if (action.kind !== 'edge') continue;
       if (action.id === 'attackMove') continue; // panel-excluded, pinned below
       if (action.id === 'jump' || action.id === 'autorun') continue; // gamepad.ts-handled, pinned below
+      if (action.id === 'friendlyNameplates') continue; // gamepad.ts-handled, pinned below
       if (action.id.startsWith('slot')) continue; // the slotN prefix arm, pinned below
+      if (dispatchPetAction(action.id, petWorld as never)) continue;
+      if (body.includes('dispatchPadSharedEdgeAction(id,') && action.id === 'hideInterface')
+        continue;
+      if (body.includes('dispatchPadSharedEdgeAction(id,') && action.id.startsWith('zoom'))
+        continue;
+      if (dispatchCollectionAction(action.id, collections)) continue;
+      if (dispatchTargetingAction(action.id, targetingWorld, { targetOwnPet() {} }, undefined))
+        continue;
       expect(body.includes(`case '${action.id}'`), `pad dispatch drops '${action.id}'`).toBe(true);
     }
   });
@@ -123,6 +165,11 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
     expect(pad).toContain('this.input.triggerGamepadJump();');
     expect(pad).toContain("if (action === 'autorun') {");
     expect(pad).toContain('this.input.toggleAutorun();');
+    // friendlyNameplates: same interception, because the toggle is a local view
+    // preference the input layer owns (game/nameplate_view_prefs) rather than a
+    // world action, so it never reaches main.ts's dispatcher at all.
+    expect(pad).toContain("if (action === 'friendlyNameplates') {");
+    expect(pad).toContain('this.input.toggleFriendlyNameplates();');
     // slotN: the prefix arm exists and dispatches to the hotbar, and the
     // registry genuinely offers slot ids as edges (so the arm is
     // load-bearing, not decorative).
@@ -137,17 +184,12 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
     expect(body).toContain('if (!hud.closeAll()) hud.toggleOptionsMenu();');
   });
 
-  it('the eight rewired actions dispatch to their exact keyboard handlers', () => {
+  it('the rewired actions dispatch to their exact keyboard handlers', () => {
     // Presence-only case labels satisfied `case 'petStop': break;` (the
     // phase 14 QA): pin each body to its real call, comment-stripped.
     const body = dispatchBody();
     const arms: Array<[string, string]> = [
       ['crafting', 'hud.toggleCrafting();'],
-      ['petStop', "world.setPetMode('passive');"],
-      ['petTaunt', 'world.petTaunt();'],
-      ['petAttack', 'world.petAttack();'],
-      ['petDefensive', "world.setPetMode('defensive');"],
-      ['petAggressive', "world.setPetMode('aggressive');"],
       ['dungeonFinder', 'hud.toggleDungeonFinder();'],
     ];
     for (const [id, call] of arms) {
@@ -156,14 +198,42 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
       const arm = body.slice(at, body.indexOf('break;', at));
       expect(arm, `case '${id}' body`).toContain(call);
     }
-    // sheathe carries the keyboard arm's cue-on-state-change rule whole.
-    const at = body.indexOf("case 'sheathe': {");
+    expect(body).toContain('if (dispatchPadSharedEdgeAction(id,');
+    const sharedPad = strip(
+      readFileSync(join(__dirname, '../src/game/pad_shared_edge_action.ts'), 'utf8'),
+    );
+    expect(sharedPad).toContain('if (dispatchPetAction(action, deps.world)) return true;');
+    expect(sharedPad).toContain(
+      'if (dispatchInterfaceVisibilityAction(action, deps.interfaceVisibility)) return true;',
+    );
+    expect(sharedPad).toContain('const zoomStep = zoomStepForAction(action);');
+    expect(sharedPad).toContain('deps.input.zoomBy(zoomStep);');
+    const petCommands = strip(readFileSync(join(__dirname, '../src/game/pet_commands.ts'), 'utf8'));
+    const petCalls: Array<[string, string, string]> = [
+      ['petStop', "petStop: 'stop'", "world.setPetMode('passive');"],
+      ['petTaunt', "petTaunt: 'taunt'", 'world.petTaunt();'],
+      ['petAttack', "petAttack: 'attack'", 'world.petAttack();'],
+      ['petDefensive', "petDefensive: 'defensive'", 'world.setPetMode(command);'],
+      ['petAggressive', "petAggressive: 'aggressive'", 'world.setPetMode(command);'],
+    ];
+    for (const [id, mapping, call] of petCalls) {
+      expect(petCommands).toContain(`${id}:`);
+      expect(petCommands).toContain(mapping);
+      expect(petCommands).toContain(call);
+    }
+    // sheathe carries the keyboard arm's cue-on-state-change rule whole: both
+    // dispatches call the ONE extracted rule (src/game/sheathe_toggle.ts,
+    // behavior pinned in tests/sheathe_toggle.test.ts), so the pad arm cannot
+    // drift from the keyboard arm by carrying its own copy.
+    const at = body.indexOf("case 'sheathe':");
     expect(at).toBeGreaterThan(-1);
-    const sheathe = body.slice(at, body.indexOf('}', body.indexOf('break;', at)));
-    expect(sheathe).toContain('const wasStowed = world.player.weaponStowed;');
-    expect(sheathe).toContain('world.toggleWeaponStow();');
-    expect(sheathe).toContain('if (world.player.weaponStowed !== wasStowed) {');
-    expect(sheathe).toContain('audio.weaponSheathe();');
-    expect(sheathe).toContain('audio.weaponUnsheathe();');
+    const sheathe = body.slice(at, body.indexOf('break;', at));
+    expect(sheathe).toContain('toggleSheatheWithCue(world, audio);');
+    const keyboardAt = mainTs.indexOf("case 'sheathe':");
+    expect(keyboardAt).toBeGreaterThan(-1);
+    expect(keyboardAt).toBeLessThan(mainTs.indexOf('function dispatchGamepadAction'));
+    expect(mainTs.slice(keyboardAt, mainTs.indexOf('break;', keyboardAt))).toContain(
+      'toggleSheatheWithCue(world, audio);',
+    );
   });
 });

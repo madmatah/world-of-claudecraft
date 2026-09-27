@@ -171,6 +171,44 @@ function mountLeftColumn(memberCount: number) {
   return { ui, target, party, rows };
 }
 
+/** The shipped #player-frame, mirroring index.html rather than a hand-shortened
+ *  copy of it. The heraldry-era frame is what the seat under test is measured
+ *  against: the name row is a `uf-name-header deed-heraldry-plaque` carrying the
+ *  pattern motif (not a bare `uf-name`), the portrait carries the heraldry seal
+ *  beside its level chip, and the bars carry the combo row plus the absorb and
+ *  text layers. Every one of those contributes to the rendered HEIGHT this
+ *  fixture then scales, which is exactly what a pre-heraldry copy got wrong.
+ *  The combat and rest markers are `display: none` until their state class
+ *  lands (hud.css), so they cost no height here and are present for shape. */
+const PLAYER_FRAME_MARKUP = `
+      <div id="player-frame" class="unitframe" role="group" tabindex="0" aria-haspopup="menu" aria-label="Your Hero">
+        <div class="portrait-wrap" id="pf-portrait-wrap">
+          <div class="portrait"><canvas id="pf-portrait" width="54" height="54"></canvas></div>
+          <span class="deed-heraldry-seal" aria-hidden="true">
+            <svg class="deed-heraldry-seal-art" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path id="pf-heraldry-seal-motif"></path>
+            </svg>
+          </span>
+          <div class="level-chip" id="pf-level">1</div>
+          <div class="combat-flash" id="pf-combat" role="status" aria-label="In Combat"><img src="/ui/crests/status/combat.webp" alt="" aria-hidden="true" /></div>
+          <div class="rest-indicator" id="pf-rest" role="status" aria-label="Resting">z</div>
+        </div>
+        <div class="uf-bars">
+          <div class="uf-name-header deed-heraldry-plaque" id="pf-name-header">
+            <svg class="deed-heraldry-pattern" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path id="pf-heraldry-pattern-motif"></path>
+            </svg>
+            <div class="uf-name" id="pf-name">Hero</div>
+          </div>
+          <!-- Painted display, not markup default: Hud.update sets the combo row to
+               flex only for an ENERGY user and to none otherwise, and both fixtures
+               model a stance-bearing warrior. -->
+          <div class="combo-row" id="combo-row" role="meter" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" aria-hidden="true" style="display: none"></div>
+          <div class="bar hp"><div class="bar-fill" id="pf-hp"></div><div class="bar-absorb" id="pf-absorb"></div><div class="bar-text" id="pf-hp-text"></div></div>
+          <div class="bar mana" id="pf-resource"><div class="bar-fill" id="pf-res"></div><div class="bar-text" id="pf-res-text"></div><div class="low-resource-label" id="pf-low-resource"></div></div>
+        </div>
+      </div>`;
+
 /** The bottom-centre column, in its shipped nesting: #player-frame and #stancebar
  *  both live inside #bottom-bar's stack under #ui, which is the stacking context
  *  the strip has to clear. Real content, because the frame's rendered height is
@@ -181,32 +219,26 @@ function mountBottomColumn() {
   ui.innerHTML = `
     <div id="bottom-bar"><div id="actionbar-row"><div id="actionbar-stack">
       <div id="pet-cluster">
-        <div id="petbar" class="panel"><div class="stancebar-group">
-          <button type="button" class="stance-btn"></button>
-          <button type="button" class="stance-btn"></button>
+        <div id="petbar" class="panel"><div class="petbar-group">
+          <button type="button" class="pet-btn ui-socket"></button>
+          <button type="button" class="pet-btn ui-socket"></button>
         </div></div>
       </div>
-      <div id="player-frame" class="unitframe" role="group" tabindex="0">
-        <div class="portrait-wrap" id="pf-portrait-wrap">
-          <div class="portrait"><canvas id="pf-portrait" width="54" height="54"></canvas></div>
-          <div class="level-chip" id="pf-level">1</div>
-        </div>
-        <div class="uf-bars">
-          <div class="uf-name" id="pf-name">Hero</div>
-          <div class="bar hp"><div class="bar-fill" id="pf-hp"></div></div>
-          <div class="bar mana" id="pf-resource"><div class="bar-fill" id="pf-res"></div></div>
-        </div>
-      </div>
+      ${PLAYER_FRAME_MARKUP}
       <div id="stancebar"><div class="stancebar-group">
-        <button type="button" class="stance-btn"></button>
-        <button type="button" class="stance-btn"></button>
-        <button type="button" class="stance-btn"></button>
+        <button type="button" class="stance-btn ui-socket ui-socket--stance"></button>
+        <button type="button" class="stance-btn ui-socket ui-socket--stance"></button>
+        <button type="button" class="stance-btn ui-socket ui-socket--stance"></button>
       </div></div>
     </div></div></div>`;
   document.body.appendChild(ui);
   const el = (id: string) => ui.querySelector(`#${id}`) as HTMLElement;
   const stancebar = el('stancebar');
   const petbar = el('petbar');
+  // What the shipped sheet does with the stance row before the fixture touches
+  // it: the touch HUD replaces it with the ring's stance control, so it is
+  // display:none here and the force-show below is a placeholder-seat probe.
+  const shippedStanceDisplay = getComputedStyle(stancebar).display;
   // Both bars are JS-flipped to flex by their own renderers; the CSS seat under
   // test only applies once they render, so the fixture flips them the same way.
   stancebar.style.display = 'flex';
@@ -217,6 +249,7 @@ function mountBottomColumn() {
     stancebar,
     stanceGroup: stancebar.querySelector('.stancebar-group') as HTMLElement,
     petbar,
+    shippedStanceDisplay,
   };
 }
 
@@ -500,7 +533,13 @@ describe.each(VIEWPORTS)('touch menu control at $label', ({ width, height }) => 
     // anchor end used to reach full strength at its first pixel and drew a
     // vertical edge straight through the control, so it ramps in too. The ramp
     // lives INSIDE the measured band, which is what keeps it off the control.
-    const stops = dim.backgroundImage.match(/rgba?\([^)]*\)\s+[\d.]+(?:px|%)/g) ?? [];
+    // W13: the band's stops are tokens composed with color-mix() now, which
+    // Chrome may serialize as color()/oklab() rather than rgba(), so the stop
+    // matcher accepts any resolved colour function, not only rgba().
+    const stops =
+      dim.backgroundImage.match(
+        /(?:rgba?|hsla?|color|oklab|oklch|lab|lch)\([^)]*\)\s+[\d.]+(?:px|%)/g,
+      ) ?? [];
     expect(stops.length).toBeGreaterThanOrEqual(4);
     expect(stops[0]).toMatch(/rgba\(0, 0, 0, 0\)\s+0px/);
     expect(stops[stops.length - 1]).toMatch(/rgba\(0, 0, 0, 0\)\s+100%/);
@@ -531,14 +570,24 @@ describe.each(VIEWPORTS)('touch menu control at $label', ({ width, height }) => 
     const moveZone = zone.getBoundingClientRect();
     const wheel = rig.moveJoystick.getBoundingClientRect();
 
-    for (const [name, bar] of [
-      ['stance bar', column.stanceGroup],
-      ['pet bar', column.petbar],
+    // The stance ROW is not a touch surface at all: the ring's stance control
+    // replaces it, so the shipped sheet hides it outright. Pin that first, because
+    // it is what makes the rest of this block a placeholder-seat probe rather than
+    // a live-layout claim.
+    expect(column.shippedStanceDisplay, '#stancebar must stand down on touch').toBe('none');
+    // The pet command row IS live, so it carries the full 40px coarse floor
+    // (--socket-size-pet is re-pinned to 40px under body.mobile-touch) and has to
+    // clear every thumb cluster. The force-shown stance row is only checked for
+    // the claim its seat actually makes: on screen, and never over the menu
+    // control or the player frame.
+    for (const [name, bar, live] of [
+      ['stance bar', column.stanceGroup, false],
+      ['pet bar', column.petbar, true],
     ] as const) {
       const box = bar.getBoundingClientRect();
       // Rendered and tappable, not merely absent.
       expect(box.width, `${name} must render`).toBeGreaterThan(0);
-      expect(box.height, `${name} must render`).toBeGreaterThanOrEqual(TOUCH_FLOOR_PX);
+      expect(box.height, `${name} must render`).toBeGreaterThan(0);
       expect(box.left, `${name} runs off the left edge`).toBeGreaterThan(-EDGE_TOLERANCE_PX);
       expect(box.right, `${name} runs off the right edge`).toBeLessThanOrEqual(
         width + EDGE_TOLERANCE_PX,
@@ -549,14 +598,17 @@ describe.each(VIEWPORTS)('touch menu control at $label', ({ width, height }) => 
       );
       expect(overlaps(box, anchor), `${name} covers the menu control`).toBe(false);
       expect(overlaps(box, frame), `${name} covers the player frame`).toBe(false);
+      if (!live) continue;
+      expect(box.height, `${name} must be tappable`).toBeGreaterThanOrEqual(TOUCH_FLOOR_PX);
       expect(overlaps(box, moveZone), `${name} covers the move capture zone`).toBe(false);
       expect(overlaps(box, wheel), `${name} covers the move wheel`).toBe(false);
     }
-    // Teeth for the seat: the stance bar's own flow box still spans the band the
-    // control sits under, so it is the SEAT that clears it, not luck about width.
-    expect(column.stancebar.getBoundingClientRect().width).toBeGreaterThan(
-      column.stanceGroup.getBoundingClientRect().width,
-    );
+    // Teeth for the seat, restated directionally after the stance buttons became
+    // the sized .ui-socket--stance species (their row and its group now shrink to
+    // the same width, so the old width comparison proved nothing): the placeholder
+    // row lands ABOVE the ring's Jump line, which is the claim #bottom-bar's
+    // mobile seat actually makes, not luck about how wide the row happens to be.
+    expect(column.stanceGroup.getBoundingClientRect().bottom).toBeLessThanOrEqual(anchor.top);
   });
 
   it('paints the open strip ABOVE the bottom-centre player frame', async () => {

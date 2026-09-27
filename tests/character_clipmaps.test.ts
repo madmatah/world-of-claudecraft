@@ -149,8 +149,12 @@ function requiredClipNames(clips: ClipMap): string[] {
   return [
     clips.idle,
     clips.combatIdle,
+    clips.prowlIdle,
+    clips.prowlWalk,
     clips.walk,
     clips.run,
+    clips.rush,
+    clips.rushArrival,
     clips.death,
     clips.cast,
     clips.sitDown,
@@ -160,11 +164,14 @@ function requiredClipNames(clips: ClipMap): string[] {
     clips.swimIdle,
     clips.wade,
     clips.jump,
+    clips.fall,
     clips.land,
     clips.walkBack,
     clips.flourish,
     clips.stow,
     ...clips.attack,
+    ...(clips.idleVariants ?? []),
+    clips.idleBeat?.clip,
     ...(clips.hit ?? []),
     ...Object.values(clips.attackByAbility ?? {}),
     ...Object.values(clips.castByAbility ?? {}),
@@ -186,8 +193,12 @@ function emoteChains(clips: ClipMap): [string, readonly string[]][] {
 const COVERED_CLIP_FIELDS = new Set<keyof ClipMap>([
   'idle',
   'combatIdle',
+  'prowlIdle',
+  'prowlWalk',
   'walk',
   'run',
+  'rush',
+  'rushArrival',
   'death',
   'cast',
   'sitDown',
@@ -197,6 +208,7 @@ const COVERED_CLIP_FIELDS = new Set<keyof ClipMap>([
   'swimIdle',
   'wade',
   'jump',
+  'jumpMoving',
   'fall',
   'land',
   'walkBack',
@@ -212,6 +224,8 @@ const COVERED_CLIP_FIELDS = new Set<keyof ClipMap>([
   'castPlayOut',
   'attackByHand',
   'emote',
+  'idleVariants',
+  'idleBeat',
 ]);
 
 /**
@@ -225,6 +239,10 @@ const COVERED_CLIP_FIELDS = new Set<keyof ClipMap>([
 const CLIPLESS_RIGS = new Set([
   'mount_stalkglider_snail',
   'mount_aether_hover_cycle',
+  // the Goblin Rocket Sled: a static prop whose exhaust, jump attitude and
+  // rider pivot are all driven procedurally (goblin_rocket_sled_fx.ts,
+  // mount_visuals.ts), so its GLB carries no clips to lose.
+  'mount_goblin_rocket_sled',
   'mount_rickshaw_mount',
   'mob_glimmerwisp',
   'mob_duskwisp',
@@ -232,6 +250,8 @@ const CLIPLESS_RIGS = new Set([
   // the dragonkin clutch shell: a two-state prop whose GLB ships no clips
   // (alive/dead is a mesh-visibility swap, VisualDef.corpseMeshSwap)
   'mob_dragon_egg',
+  // the Nythraxis Bone Spike: a stationary Tripo prop mob, no rig, no clips
+  'mob_nythraxis_bone_spike',
 ]);
 
 /** mob_yumi_cat is a single-clip objective prop: its ClipMap names the one real
@@ -346,6 +366,16 @@ describe('character ClipMaps match the shipped GLBs', () => {
       expect(empty).toEqual([]);
     });
   }
+
+  it('cuts wheeled vehicles straight to idle instead of crossfading', () => {
+    // A crossfade keeps the outgoing clip PLAYING while it fades, so a vehicle
+    // whose locomotion clip drives its wheels keeps turning them for the length
+    // of the fade after the throttle is released. Any mount rig that animates
+    // per-wheel nodes wants the cut.
+    expect(VISUALS.mount_rallycart_rxt.cutToIdle).toBe(true);
+    // Opt-in only: a creature's legs blending down to a stand needs the fade.
+    expect(VISUALS.mount_valorsteed.cutToIdle).toBeUndefined();
+  });
 
   it('bakes the far-LOD proxy from a real idle pose, never bind pose', () => {
     // prepareVisual poses a throwaway clone on clips.idle before baking the

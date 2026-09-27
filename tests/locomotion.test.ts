@@ -20,6 +20,27 @@ import {
 } from '../src/render/locomotion';
 import { assertAllocationStable } from './util/alloc_probe';
 
+describe('per-rig gait thresholds', () => {
+  it('uses the cat run gait at slowed speeds and retains hysteresis through speed noise', () => {
+    const track = newLocoTrack();
+    const out = newLocoState();
+    const gait = { runEnter: 3.2, runExit: 2.6 };
+    const settle = (speed: number) => {
+      for (let i = 0; i < 90; i++) updateLocomotionInto(out, track, 0, speed / 60, 0, 1 / 60, gait);
+      return out.running;
+    };
+    expect(settle(3.1)).toBe(false);
+    expect(settle(3.5)).toBe(true);
+    expect(settle(2.9)).toBe(true);
+    expect(settle(2.5)).toBe(false);
+    expect(settle(2.9)).toBe(false);
+    expect(settle(3.5)).toBe(true);
+    // The same track may return to the humanoid after a shapeshift ends.
+    for (let i = 0; i < 90; i++) updateLocomotionInto(out, track, 0, 3.5 / 60, 0, 1 / 60);
+    expect(out.running).toBe(false);
+  });
+});
+
 const FPS = 1 / 60;
 const BASE_ANIM_STATE: AnimState = {
   speed: 0,
@@ -219,7 +240,7 @@ describe('locomotion animation state', () => {
     expect(locomotionTimeScale('walkBack', state)).toBeGreaterThan(0);
   });
 
-  it('reverses forward locomotion for Ghost Wolf-style backpedal', () => {
+  it('reverses forward locomotion for Shadewolf-style backpedal', () => {
     const state = {
       ...BASE_ANIM_STATE,
       moving: true,

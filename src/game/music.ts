@@ -9,11 +9,23 @@
 // exactly as before while playback costs no synthesis CPU and no up-front
 // download. Each fight opens on one of the two battle themes at random.
 
-import type { BiomeId } from '../sim/types';
 import { resumeWhenAllowed } from './audio_unlock';
+import { CRUCIBLE_STREAM_URLS, type CrucibleFloor } from './crucible_music';
 import { dungeonMusicZoneForDungeon } from './dungeon_music_zones';
+import { minigameLayerFor } from './minigame_music_layer';
 import type { MusicMixState } from './music_mix_policy';
 import { isMusicMixAudible, musicMixMasterTarget } from './music_mix_policy';
+import type { ChordDef, NoteEvent, Phrase, Theme } from './music_notes';
+import {
+  mtof,
+  pushDrumHits,
+  pushNote,
+  pushPedal,
+  pushPhrase,
+  pushRepeated,
+  pushVoicing,
+  triad,
+} from './music_notes';
 import { MUSIC_OVERRIDES } from './music_overrides.generated';
 import { composeDungeonGravewyrmSanctum } from './music_theme_gravewyrm_sanctum';
 import {
@@ -25,203 +37,20 @@ import {
   REALM_RACERS_AREA_TRACKS,
   ZONE_STREAM_URLS,
 } from './music_tracks';
+import type { MusicZone } from './music_zones';
+
+export type { NoteEvent, Phrase, Theme } from './music_notes';
+export { INSTRUMENTS, pushDrumHits, pushNote, pushPhrase, pushVoicing } from './music_notes';
+
 import { buildIgnivarRaidThemes } from './raid_music_themes';
 
-export type MusicZone =
-  | 'town_eastbrook'
-  | 'town_fenbridge'
-  | 'town_highwatch'
-  | 'vale'
-  | 'vale_legacy'
-  | 'marsh'
-  | 'peaks'
-  | 'dusk'
-  | 'ember'
-  | 'frost'
-  | 'amber'
-  | 'fen'
-  | 'night'
-  | 'haunt'
-  | 'jungle'
-  | 'garden'
-  | 'gale'
-  | 'farshore'
-  | 'proving_shore'
-  | 'dungeon_hollow_crypt'
-  | 'dungeon_sunken_bastion'
-  | 'dungeon_gravewyrm_sanctum'
-  | 'ignivar_forge_approach'
-  | 'ignivar_raid_arena'
-  | 'ignivar_inner_crucible'
-  | 'rift_frost'
-  | 'rift_ember'
-  | 'rift_venom'
-  | 'rift_bone'
-  | 'rift_brute'
-  | 'rift_void'
-  | 'rift_storm'
-  | 'rift_tide';
-
-const TOWN_MUSIC: Record<string, MusicZone> = {
-  eastbrook_vale: 'town_eastbrook',
-  mirefen_marsh: 'town_fenbridge',
-  thornpeak_heights: 'town_highwatch',
-};
-
-// Per-zone overworld overrides. Farshore Isle shares the vale biome palette
-// but is the rift-scarred landfall where the breach story starts, so it gets
-// its own vigil theme instead of the vale's playful loop.
-const ZONE_MUSIC: Partial<Record<string, MusicZone>> = {
-  farshore_isle: 'farshore',
-  // The tutorial island paints as vale, but it is the first thing a new
-  // player ever hears and it deserves its own cue rather than the mainland's.
-  // One entry covers the whole island: Dawnrest Camp is a hub with no town
-  // theme, and that path falls through to ZONE_MUSIC (same as Gullhaven on
-  // the Farshore).
-  proving_shore: 'proving_shore',
-};
-
-// Every overworld biome resolves to a bespoke theme; the paint-only biomes
-// that never anchor a shipped zone (beach/desert/volcano/cave) borrow the
-// nearest-mood cue so a realm or custom-map zone always scores. tsc keeps
-// this table exhaustive over BiomeId.
-const BIOME_MUSIC: Record<BiomeId, MusicZone> = {
-  vale: 'vale',
-  marsh: 'marsh',
-  peaks: 'peaks',
-  dusk: 'dusk',
-  ember: 'ember',
-  frost: 'frost',
-  amber: 'amber',
-  fen: 'fen',
-  night: 'night',
-  haunt: 'haunt',
-  jungle: 'jungle',
-  garden: 'garden',
-  gale: 'gale',
-  beach: 'jungle',
-  desert: 'ember',
-  volcano: 'ember',
-  cave: 'dusk',
-};
-
-// Procedural Rift floors carry a RiftTheme (src/sim/content/rift/themes.ts);
-// the floor view ships the theme's display name, so the crawl cue is keyed by
-// that name. tests/music.test.ts pins this table against RIFT_THEMES so a new
-// or renamed archetype cannot silently fall back.
-const RIFT_MUSIC: Record<string, MusicZone> = {
-  Frostbound: 'rift_frost',
-  Emberforge: 'rift_ember',
-  Venomweald: 'rift_venom',
-  Boneyard: 'rift_bone',
-  Warcamp: 'rift_brute',
-  Voidscar: 'rift_void',
-  Stormspire: 'rift_storm',
-  Sunken: 'rift_tide',
-  // The authored set piece: hellfire halls read as the forge archetype.
-  'Infernal Citadel': 'rift_ember',
-};
-
-/** Crawl cue for a procedural Rift floor, from RiftFloorView.themeName. */
-export function riftMusicZoneForTheme(themeName: string): MusicZone {
-  return RIFT_MUSIC[themeName] ?? 'rift_void';
-}
-
-// DUNGEON_MUSIC moved to dungeon_music_zones.ts; re-exported for the existing
-// music.ts consumers (tests and instance music).
-export { dungeonMusicZoneForDungeon } from './dungeon_music_zones';
-
-export function shouldResetMusicForDungeonEntry(
-  previousDungeonId: string | null,
-  nextDungeonId: string | null,
-): boolean {
-  return nextDungeonId !== null && previousDungeonId !== nextDungeonId;
-}
-
-/** Pick the soundtrack layer from world position context. */
-export function musicZoneForLocation(
-  zoneId: string,
-  biome: BiomeId,
-  inHub: boolean,
-  inDungeon: boolean,
-  dungeonId: string | null = null,
-): MusicZone {
-  const biomeLayer: MusicZone = BIOME_MUSIC[biome];
-  if (inDungeon) return dungeonId ? dungeonMusicZoneForDungeon(dungeonId) : 'dungeon_hollow_crypt';
-  // A hub without a dedicated town theme keeps its zone's own cue: Gullhaven
-  // is the heart of the Farshore vigil, not a reason to fall back to the vale.
-  if (inHub) return TOWN_MUSIC[zoneId] ?? ZONE_MUSIC[zoneId] ?? biomeLayer;
-  return ZONE_MUSIC[zoneId] ?? biomeLayer;
-}
-
-type Inst =
-  | 'strings'
-  | 'flute'
-  | 'harp'
-  | 'horn'
-  | 'choir'
-  | 'bell'
-  | 'timpani'
-  | 'bass'
-  | 'stacc'
-  | 'pad'
-  | 'lute'
-  | 'dulcimer'
-  | 'frameDrum'
-  | 'warDrum'
-  | 'reed'
-  | 'pipe'
-  | 'squareLead'
-  | 'woodBlock'
-  | 'tinyBell'
-  | 'piano'
-  | 'shaker'
-  | 'brassStab'
-  | 'cymSwell'
-  | 'oboe';
-
-// Every synth voice, for tools (the music editor) that offer instrument
-// choices. Keep in sync with the Inst union above.
-export const INSTRUMENTS: Inst[] = [
-  'strings',
-  'flute',
-  'harp',
-  'horn',
-  'choir',
-  'bell',
-  'timpani',
-  'bass',
-  'stacc',
-  'pad',
-  'lute',
-  'dulcimer',
-  'frameDrum',
-  'warDrum',
-  'reed',
-  'pipe',
-  'squareLead',
-  'woodBlock',
-  'tinyBell',
-  'piano',
-  'shaker',
-  'brassStab',
-  'cymSwell',
-  'oboe',
-];
-
-export interface NoteEvent {
-  beat: number; // quarter-note position in the loop
-  midi: number;
-  dur: number; // beats
-  vel: number; // 0..1
-  inst: Inst;
-}
-
-export interface Theme {
-  bpm: number;
-  bars: number; // 4/4
-  events: NoteEvent[];
-}
+export type { MusicZone } from './music_zones';
+export {
+  dungeonMusicZoneForDungeon,
+  musicZoneForLocation,
+  riftMusicZoneForTheme,
+  shouldResetMusicForDungeonEntry,
+} from './music_zones';
 
 interface Layer {
   theme: Theme;
@@ -232,45 +61,6 @@ interface Layer {
   loopCount: number;
   transpose: number;
   trim: number; // measured per-theme loudness trim (THEME_TRIM)
-}
-
-const mtof = (m: number): number => 440 * 2 ** ((m - 69) / 12);
-
-// ---------------------------------------------------------------------------
-// Composition helpers
-// ---------------------------------------------------------------------------
-
-interface ChordDef {
-  root: number; // midi (octave 4 area)
-  minor?: boolean;
-}
-
-function triad(c: ChordDef): number[] {
-  return [c.root, c.root + (c.minor ? 3 : 4), c.root + 7];
-}
-
-export function pushNote(
-  out: NoteEvent[],
-  beat: number,
-  midi: number,
-  dur: number,
-  vel: number,
-  inst: Inst,
-): void {
-  out.push({ beat, midi, dur, vel, inst });
-}
-
-// melody phrases written as [beatOffset, midi, durBeats]
-export type Phrase = [number, number, number][];
-
-export function pushPhrase(
-  out: NoteEvent[],
-  startBeat: number,
-  phrase: Phrase,
-  vel: number,
-  inst: Inst,
-): void {
-  for (const [b, m, d] of phrase) pushNote(out, startBeat + b, m, d, vel, inst);
 }
 
 // ---------------------------------------------------------------------------
@@ -364,50 +154,6 @@ function composeTownEastbrook(): Theme {
 
   ev.sort((a, b) => a.beat - b.beat);
   return { bpm: 80, bars: 16, events: ev };
-}
-
-function pushRepeated(
-  out: NoteEvent[],
-  startBeat: number,
-  notes: number[],
-  step: number,
-  dur: number,
-  vel: number,
-  inst: Inst,
-): void {
-  for (const [i, m] of notes.entries()) {
-    pushNote(out, startBeat + i * step, m, dur, vel, inst);
-  }
-}
-
-export function pushDrumHits(
-  out: NoteEvent[],
-  startBeat: number,
-  offsets: number[],
-  inst: Inst,
-  vel: number,
-  midi = 42,
-): void {
-  for (const [i, b] of offsets.entries()) {
-    pushNote(out, startBeat + b, midi, 0.22, vel * (i % 2 === 0 ? 1 : 0.78), inst);
-  }
-}
-
-function pushPedal(out: NoteEvent[], beat: number, root: number, inst: Inst, vel: number): void {
-  pushNote(out, beat, root - 24, 4.1, vel, inst);
-  pushNote(out, beat, root - 17, 4.1, vel * 0.62, inst);
-}
-
-// explicit chord voicing: absolute midi pitches sounded together
-export function pushVoicing(
-  out: NoteEvent[],
-  beat: number,
-  midis: number[],
-  dur: number,
-  vel: number,
-  inst: Inst,
-): void {
-  for (const m of midis) pushNote(out, beat, m, dur, vel, inst);
 }
 
 function composeTownFenbridge(): Theme {
@@ -1391,11 +1137,11 @@ function composeFarshore(): Theme {
   return { bpm: 72, bars: 24, events: ev };
 }
 
-/** Veiled Hollow: "Under the Eldergleam". F lydian, 66 bpm, 24 bars, ABA'.
+/** Veiled Hollow: "Under the Eldershine". F lydian, 66 bpm, 24 bars, ABA'.
  *  A valley sealed beneath the mountains in permanent dusk, glowing flora,
  *  a town grown around the roots of a great tree. The lydian fourth keeps
  *  the air raised and wondering: dulcimer-and-bell glimmer for the wisps, a
- *  serene flute hymn for Eldergleam, and a middle eight that sinks to D
+ *  serene flute hymn for Eldershine, and a middle eight that sinks to D
  *  minor for the corrupted fringe (the Sunken Court), where a reed grieves
  *  over a wounded choir drone before the seal holds and the light returns. */
 function composeDusk(): Theme {
@@ -1450,7 +1196,7 @@ function composeDusk(): Theme {
     }
   });
 
-  // the Eldergleam hymn, floating on the lydian fourth
+  // the Eldershine hymn, floating on the lydian fourth
   const hymn: Phrase = [
     [0, 65, 1],
     [1, 69, 1],
@@ -2036,7 +1782,7 @@ function composeFen(): Theme {
  *  Violet downs under a luminous sky; the air itself dreams. A weightless
  *  nocturne: drifting choir, constellation bells on the pentatonic, harp
  *  rolls, piano fragments, and a flute that moves in long floating arcs.
- *  The middle eight lifts to D major over the Moonwell before settling
+ *  The middle eight lifts to D major over the Moonspring before settling
  *  back; a deep drum stirs once in a while under the Sleepless Barrow. */
 function composeNight(): Theme {
   const ev: NoteEvent[] = [];
@@ -2106,7 +1852,7 @@ function composeNight(): Theme {
     [28, 66, 3.5],
   ];
   pushPhrase(ev, 0, dream, 0.2, 'flute');
-  // the Moonwell: the same soul in D major, strings underneath
+  // the Moonspring: the same soul in D major, strings underneath
   const moonwell: Phrase = [
     [0, 74, 2],
     [2, 78, 1],
@@ -4563,6 +4309,8 @@ export class MusicDirector {
   private bossLoading = false;
   private zoneStreams: Partial<Record<MusicZone, StreamTrack>> = {};
   private combatStreams: StreamTrack[] = [];
+  private crucibleStreams: Partial<Record<CrucibleFloor, StreamTrack>> = {};
+  private crucibleFloor: CrucibleFloor | null = null;
   private combatIdx = 0;
   // null until the first update() so the initial state always applies
   private zone: MusicZone | null = null;
@@ -4653,6 +4401,7 @@ export class MusicDirector {
         /* browser may reject seeking before metadata */
       }
     }
+    minigameLayerFor(this).rewind();
     this.stopBossSource();
   }
 
@@ -4922,6 +4671,29 @@ export class MusicDirector {
     if (stream) this.zoneStreams[zone] = stream;
   }
 
+  /** Each floor owns its whole soundtrack, including pulls and quiet gaps. */
+  private setCrucibleFloor(floor: CrucibleFloor | null): void {
+    if (floor === this.crucibleFloor) return;
+    this.crucibleFloor = floor;
+    if (floor !== null) {
+      const stream = this.crucibleStreams[floor] ?? this.makeStream(CRUCIBLE_STREAM_URLS[floor]);
+      if (stream) {
+        this.crucibleStreams[floor] = stream;
+        if (stream.el) {
+          try {
+            stream.el.currentTime = 0;
+          } catch {
+            /* browser may reject seeking before metadata */
+          }
+        }
+      }
+    }
+    for (const [key, stream] of Object.entries(this.crucibleStreams)) {
+      const target = Number(key) === floor ? 1 : 0;
+      this.setStreamTarget(stream, target, target > 0 ? FADE_SECONDS / 3 : 0.35);
+    }
+  }
+
   // Streams are audible only when nothing has the master ducked to zero: the
   // toggle, the menu fade, the volume slider, and the dedicated boss and
   // area file tracks (which own the mix while active). While inaudible,
@@ -4949,7 +4721,9 @@ export class MusicDirector {
 
   private *allStreams(): Iterable<StreamTrack> {
     for (const stream of Object.values(this.zoneStreams)) yield stream;
+    yield* minigameLayerFor<StreamTrack>(this).streams();
     yield* this.combatStreams;
+    yield* Object.values(this.crucibleStreams);
   }
 
   // Runs every STREAM_KEEPER_MS (and directly on unmute, menu close, volume
@@ -5025,19 +4799,23 @@ export class MusicDirector {
   }
 
   // called every frame by the HUD; cheap unless the state changed
-  update(zone: MusicZone, inCombat: boolean): void {
+  update(zone: MusicZone, inCombat: boolean, crucibleFloor: CrucibleFloor | null = null): void {
     if (!this.ctx) return;
-    if (zone === this.zone && inCombat === this.combat) return;
-    const combatStarting = inCombat && !this.combat;
+    const combat = inCombat && crucibleFloor === null;
+    if (zone === this.zone && combat === this.combat && crucibleFloor === this.crucibleFloor)
+      return;
+    const combatStarting = combat && !this.combat;
+    this.setCrucibleFloor(crucibleFloor);
     this.zone = zone;
-    this.combat = inCombat;
+    this.combat = combat;
+    if (minigameLayerFor(this).active !== null) return;
     // Combat music replaces the zone theme rather than layering over it: the
     // zone is silenced for the duration of combat and fades back in when it
     // ends. Fade out faster than fade in so instance music does not bleed
     // into the world.
-    if (!inCombat) this.ensureZoneStream(zone);
+    if (!combat && crucibleFloor === null) this.ensureZoneStream(zone);
     for (const [name, stream] of Object.entries(this.zoneStreams) as [MusicZone, StreamTrack][]) {
-      const target = name === zone && !inCombat ? 1 : 0;
+      const target = name === zone && !combat && crucibleFloor === null ? 1 : 0;
       this.setStreamTarget(stream, target, target > 0 ? FADE_SECONDS / 3 : 0.35);
     }
     // Each fight opens on one of the battle themes, chosen at random per
@@ -5058,8 +4836,12 @@ export class MusicDirector {
       }
     }
     this.combatStreams.forEach((stream, idx) => {
-      const target = inCombat && idx === this.combatIdx ? 1 : 0;
-      this.setStreamTarget(stream, target, target > 0 ? 0.35 : FADE_SECONDS / 3);
+      const target = combat && idx === this.combatIdx ? 1 : 0;
+      this.setStreamTarget(
+        stream,
+        target,
+        target > 0 || crucibleFloor !== null ? 0.35 : FADE_SECONDS / 3,
+      );
     });
   }
 }

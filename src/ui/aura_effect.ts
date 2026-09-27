@@ -22,7 +22,20 @@ import {
   ECHO_GROUP_CONVERT_AOE,
   ECHO_GROUP_CONVERT_SINGLE,
 } from '../sim/combat/chronomancy';
-import { MOONTIDE_STAGES, OLD_BLOOD_STAGES, VERDANCE_STAGES } from '../sim/combat/druid_engines';
+import {
+  BRUIN_RUSH_WINDOW_ID,
+  MOONTIDE_STAGES,
+  OLD_BLOOD_STAGES,
+  PIN_DURATION,
+  PIN_SLOW_MULT,
+  VERDANCE_STAGES,
+} from '../sim/combat/druid_engines';
+import {
+  COLDSIGHT_READ_AURA_ID,
+  COLDSIGHT_READ_FELL_SHOT_MULT,
+  COLDSIGHT_READ_LONG_DRAW_MULT,
+} from '../sim/combat/hunter_coldsight_read';
+import { BENISON_WHISPER_AURA_ID } from '../sim/combat/priest/benison_dawnweave';
 import {
   GLOAM_STAGES,
   KNOCKOUT_PER_PIP,
@@ -51,8 +64,44 @@ import {
   VARKHUL_MAKERS_BRAND_PER_STACK,
   VARKHUL_MAKERS_BRAND_TANK_SWAP_STACKS,
 } from '../sim/encounters/varkhul';
+import {
+  NYTHRAXIS_ASCENSION_AURA_ID,
+  NYTHRAXIS_ASCENSION_HASTE_AURA_ID,
+  NYTHRAXIS_BOUND_AURA_ID,
+  NYTHRAXIS_BOUND_SECONDS_NORMAL,
+  NYTHRAXIS_BOUND_STUN_AURA_ID,
+  NYTHRAXIS_BOUND_VULNERABILITY,
+  NYTHRAXIS_UNBOUND_AURA_ID,
+} from '../sim/nythraxis_binding_sigil';
+import {
+  NYTHRAXIS_IMPALED_AURA_ID,
+  NYTHRAXIS_IMPALED_TICK_MAX_HP_HEROIC,
+  NYTHRAXIS_IMPALED_TICK_MAX_HP_NORMAL,
+  NYTHRAXIS_IMPALED_TICK_SECONDS,
+} from '../sim/nythraxis_bone_spike';
+import {
+  NYTHRAXIS_BONE_STORM_AURA_ID,
+  NYTHRAXIS_BONE_STORM_RADIUS,
+  NYTHRAXIS_BONE_STORM_WHIRL_TICK_MAX_HP_NORMAL,
+} from '../sim/nythraxis_bone_storm';
+import {
+  NYTHRAXIS_DREAD_CURSE_AURA_ID,
+  NYTHRAXIS_DREAD_CURSE_DURATION,
+  NYTHRAXIS_DREAD_CURSE_EVERY,
+  NYTHRAXIS_DREAD_CURSE_HIT_MAX_HP_NORMAL,
+  NYTHRAXIS_DREAD_CURSE_MAX_STACKS,
+  NYTHRAXIS_DREAD_CURSE_PER_STACK_NORMAL,
+  NYTHRAXIS_DREAD_CURSE_TANK_SWAP_STACKS,
+} from '../sim/nythraxis_dread_curse';
+import {
+  NYTHRAXIS_CROWN_ENDURES_AURA_ID,
+  NYTHRAXIS_CROWN_ENDURES_HASTE_AURA_ID,
+  NYTHRAXIS_ENRAGE_HASTE_BONUS,
+} from '../sim/nythraxis_enrage_clock';
+import { NYTHRAXIS_KINGS_WRATH_AURA_ID } from '../sim/nythraxis_kings_wrath';
 import type { AuraKind } from '../sim/types';
 import {
+  CAT_FORM_MOVE_MULT,
   ENRAGE_DMG_DONE,
   ENRAGE_HASTE_PCT,
   ENRAGE_MOVE_MULT,
@@ -68,6 +117,7 @@ import {
   VARKHUL_SHARED_PYRE_TOTAL_DAMAGE_HEROIC,
   VARKHUL_SHARED_PYRE_TOTAL_DAMAGE_NORMAL,
 } from '../sim/varkhul_shared_pyre';
+import { type TrinketAuraViewer, trinketAuraEffectDescriptor } from './trinket_aura_effect';
 
 export type AuraSchool = 'physical' | 'fire' | 'frost' | 'arcane' | 'shadow' | 'holy' | 'nature';
 
@@ -117,7 +167,16 @@ const flatStat = (statKey: string, value: number): AuraEffectDescriptor => ({
  * Describe an aura's gameplay effect. This switch is intentionally exhaustive:
  * adding an AuraKind without player-facing explanation is a compile-time error.
  */
-export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor | null {
+export function auraEffectDescriptor(
+  a: AuraEffectInput,
+  // The local player, for their own trinket auras whose amount scales with
+  // their live power (trinket_aura_effect.ts); omitted, those read number-free.
+  viewer?: TrinketAuraViewer,
+): AuraEffectDescriptor | null {
+  // Every trinket aura explains itself in full (its generic kind line would
+  // not say what the trinket does with it).
+  const trinket = trinketAuraEffectDescriptor(a, viewer);
+  if (trinket) return trinket;
   // This is a four-second placement marker, not a damage-taken modifier. Its
   // countdown and localized name are the complete tooltip; the generic
   // vulnerability copy would misleadingly claim that it adds 0% damage taken.
@@ -186,6 +245,98 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
       },
     };
   }
+  if (
+    a.id === NYTHRAXIS_ASCENSION_HASTE_AURA_ID ||
+    a.id === NYTHRAXIS_BOUND_STUN_AURA_ID ||
+    a.id === NYTHRAXIS_CROWN_ENDURES_HASTE_AURA_ID
+  ) {
+    return null;
+  }
+  if (a.id === NYTHRAXIS_ASCENSION_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisAscension`,
+      nums: {
+        stacks: Math.max(1, Math.trunc(a.stacks ?? 1)),
+        pct: pctFromFrac(a.value),
+      },
+    };
+  }
+  if (a.id === NYTHRAXIS_BOUND_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisBound`,
+      nums: {
+        pct: pctFromFrac(NYTHRAXIS_BOUND_VULNERABILITY),
+        // The burn window is per difficulty and rides the aura's value2.
+        duration: a.value2 ?? NYTHRAXIS_BOUND_SECONDS_NORMAL,
+      },
+    };
+  }
+  if (a.id === NYTHRAXIS_UNBOUND_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisUnbound`,
+      nums: { pct: pctFromFrac(a.value) },
+    };
+  }
+  if (a.id === NYTHRAXIS_KINGS_WRATH_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisKingsWrath`,
+      nums: { pct: pctFromFrac(a.value) },
+    };
+  }
+  if (a.id === NYTHRAXIS_BONE_STORM_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisBoneStorm`,
+      nums: {
+        // The whirl tick is per difficulty and rides the aura's value2; a
+        // mirror that has not carried it yet falls back to the normal number.
+        tick: pctFromFrac(a.value2 ?? NYTHRAXIS_BONE_STORM_WHIRL_TICK_MAX_HP_NORMAL),
+        radius: NYTHRAXIS_BONE_STORM_RADIUS,
+      },
+    };
+  }
+  if (a.id === NYTHRAXIS_CROWN_ENDURES_AURA_ID) {
+    return {
+      key: `${KEY}.nythraxisCrownEndures`,
+      nums: {
+        stacks: Math.max(1, Math.trunc(a.stacks ?? 1)),
+        pct: pctFromFrac(a.value),
+        haste: pctFromFrac(NYTHRAXIS_ENRAGE_HASTE_BONUS),
+      },
+    };
+  }
+  if (a.id === NYTHRAXIS_DREAD_CURSE_AURA_ID) {
+    // The aura's value is stacks x per-stack, and the per-stack bonus is the one
+    // number heroic changes (nythraxis_dread_curse.ts), so read it back off the
+    // live aura instead of guessing the difficulty; a mirror that has not
+    // carried the value yet falls back to the normal-mode bonus.
+    const stacks = Math.max(1, Math.trunc(a.stacks ?? 1));
+    const perStackFrac = a.value > 0 ? a.value / stacks : NYTHRAXIS_DREAD_CURSE_PER_STACK_NORMAL;
+    return {
+      key: `${KEY}.nythraxisDreadCurse`,
+      nums: {
+        perStack: pctFromFrac(perStackFrac),
+        duration: NYTHRAXIS_DREAD_CURSE_DURATION,
+        stacks,
+        max: NYTHRAXIS_DREAD_CURSE_MAX_STACKS,
+        pct: pctFromFrac(perStackFrac * stacks),
+        hit: pctFromFrac(a.value2 ?? NYTHRAXIS_DREAD_CURSE_HIT_MAX_HP_NORMAL),
+        every: NYTHRAXIS_DREAD_CURSE_EVERY,
+        swap: NYTHRAXIS_DREAD_CURSE_TANK_SWAP_STACKS,
+      },
+    };
+  }
+  if (a.id === NYTHRAXIS_IMPALED_AURA_ID) {
+    // Unbreakable encounter stun with a per-second max-health drain the aura does
+    // not carry (the driver reads the difficulty); both tiers are spelled.
+    return {
+      key: `${KEY}.nythraxisImpaled`,
+      nums: {
+        normal: pctFromFrac(NYTHRAXIS_IMPALED_TICK_MAX_HP_NORMAL),
+        heroic: pctFromFrac(NYTHRAXIS_IMPALED_TICK_MAX_HP_HEROIC),
+        interval: NYTHRAXIS_IMPALED_TICK_SECONDS,
+      },
+    };
+  }
   if (a.id === 'temporal_hourglass' && a.kind === 'stasis') {
     return { key: `${KEY}.temporalHourglass`, nums: {} };
   }
@@ -209,6 +360,20 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
     return {
       key: `${KEY}.elementalTrance`,
       nums: { pct: pctFromFrac(a.value), mana: pctFromFrac(ELEMENTAL_TRANCE_MANA_PCT) },
+    };
+  }
+  // v0.42.0 Coldsight (docs/design/class-balance-v042.md): the banked
+  // opportunity a completed Fevered Draw grants. Shown on the buff itself
+  // (per the design's "show the charge on the existing aura surface") since
+  // whether it is armed is conditional state a static ability tooltip can't
+  // reflect.
+  if (a.id === COLDSIGHT_READ_AURA_ID && a.kind === 'hunter_coldsight_read') {
+    return {
+      key: `${KEY}.coldsightRead`,
+      nums: {
+        longDrawPct: pctFromMult(COLDSIGHT_READ_LONG_DRAW_MULT),
+        fellShotPct: pctFromMult(COLDSIGHT_READ_FELL_SHOT_MULT),
+      },
     };
   }
   if (a.kind === 'hunter_ferocity') {
@@ -241,7 +406,14 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
     return { key: `${KEY}.veilstrikeWindow`, nums: { pct: pctFromFrac(a.value) } };
   }
   if (a.id === 'veiled_edge' && a.kind === 'veiled_edge') {
-    return { key: `${KEY}.veiledEdge`, nums: {} };
+    // v0.42 (docs/design/class-balance-v042.md, "Skulduggery"): the
+    // repeatable veil-window Edge bonus was halved (+100% -> +50%, Ashveil
+    // 4pc +200% -> +100%), so the number must read the aura's actual armed
+    // VALUE (`veiledEdgeArmValue`, base VEILED_EDGE_BONUS or the set bonus)
+    // rather than a hardcoded "double". `veiledEdgeStrike`, not the old
+    // `veiledEdge` key: see the hud_chrome.ts catalog comment for why this
+    // could not reuse the original key.
+    return { key: `${KEY}.veiledEdgeStrike`, nums: { pct: pctFromFrac(a.value) } };
   }
   if (a.kind === 'dusk_economy') {
     return { key: `${KEY}.duskEconomy`, nums: { pct: pctFromFrac(a.value) } };
@@ -262,6 +434,12 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
     };
   }
   if (a.kind === 'internal_cd') {
+    if (a.id === BRUIN_RUSH_WINDOW_ID) {
+      return {
+        key: `${KEY}.bruinRushWindow`,
+        nums: { pct: pctFromMult(PIN_SLOW_MULT), sec: PIN_DURATION },
+      };
+    }
     if (a.id === 'colossal_might_cap' || a.id === 'overflowing_power_cap') {
       return { key: `${KEY}.cooldownCap`, nums: { used: round(a.value), cap: 10 } };
     }
@@ -283,6 +461,12 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
   // otherwise undiscoverable and this hover is the only surface that can teach it.
   if (a.id === 'bg_carried_flag' && a.kind === 'flag_carried') {
     return { key: `${KEY}.carriedFlag`, nums: {} };
+  }
+  if (a.id === 'world_quest_delivery_cargo' && a.kind === 'world_quest_cargo') {
+    return {
+      key: `${KEY}.carryingFreight`,
+      nums: { pct: pctFromMult(a.value) },
+    };
   }
   switch (a.kind) {
     case 'dot':
@@ -320,6 +504,8 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
 
     case 'buff_ap':
       return flatStat('ap', a.value);
+    case 'buff_str':
+      return flatStat('str', a.value);
     case 'debuff_ap':
       return flatStat('ap', -Math.abs(a.value));
     case 'buff_armor':
@@ -356,7 +542,15 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
     case 'next_execute_free':
       return { key: `${KEY}.freeExecute` };
     case 'next_cast_instant':
+      if (a.id === BENISON_WHISPER_AURA_ID) {
+        return { key: `${KEY}.benisonWhisper`, nums: { pct: pctFromFrac(a.value) } };
+      }
       return { key: `${KEY}.instantCast`, nums: {} };
+    case 'benison_prayers':
+      return {
+        key: `${KEY}.benisonPrayers`,
+        nums: { pct: pctFromFrac(a.value) },
+      };
     case 'next_cast_cheap':
       return { key: `${KEY}.cheapCast`, nums: { pct: pctFromFrac(a.value) } };
     case 'paladin_radiant_resonance':
@@ -495,7 +689,9 @@ export function auraEffectDescriptor(a: AuraEffectInput): AuraEffectDescriptor |
     case 'form_bear':
       return { key: `${KEY}.formBear` };
     case 'form_cat':
-      return { key: `${KEY}.formCat` };
+      // The aura value is the threat multiplier; the speed is the constant
+      // moveSpeedMult reads, so the buff line resolves it the same way.
+      return { key: `${KEY}.wolfForm`, nums: { pct: pctFromMult(CAT_FORM_MOVE_MULT) } };
     case 'form_travel':
       return { key: `${KEY}.formTravel`, nums: { pct: pctFromMult(a.value) } };
     case 'battle_stance':

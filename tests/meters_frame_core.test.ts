@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  anchorAdjustedMeterFrame,
   clampMeterFrame,
   initialMeterFrame,
   METER_FRAME_LIMITS,
   type MeterFrameGeometry,
+  oppositeDockSide,
   parseMeterFrame,
   placeMeterFrame,
   serializeMeterFrame,
+  snapFrameToTargets,
+  syncDockedResize,
   TABBED_METER_FRAME_LIMITS,
 } from '../src/ui/meters_frame_core';
 
@@ -110,6 +114,110 @@ describe('meter frame geometry', () => {
     expect({ ...TABBED_METER_FRAME_LIMITS, minWidth: 0 }).toEqual({
       ...METER_FRAME_LIMITS,
       minWidth: 0,
+    });
+  });
+
+  it('round-trips the saved viewport through the serializer, both fields or neither', () => {
+    const withViewport = { ...geo(1, 2, 240, 180), vw: 1600, vh: 900 };
+    expect(parseMeterFrame(serializeMeterFrame(withViewport))).toEqual(withViewport);
+    // A lone axis cannot re-anchor honestly, so it is dropped on parse.
+    expect(parseMeterFrame('{"left":1,"top":2,"width":240,"height":180,"vw":1600}')).toEqual(
+      geo(1, 2, 240, 180),
+    );
+  });
+
+  describe('anchorAdjustedMeterFrame (viewport re-anchoring)', () => {
+    it('adjusts only when a saved viewport is present and differs', () => {
+      const box = geo(700, 800, 240, 180);
+      // No saved viewport (an older save): returned unchanged.
+      expect(anchorAdjustedMeterFrame(box, { w: 1200, h: 700 })).toEqual(box);
+      // Same viewport: untouched.
+      const stamped = { ...box, vw: 1600, vh: 900 };
+      expect(anchorAdjustedMeterFrame(stamped, { w: 1600, h: 900 })).toEqual(stamped);
+    });
+
+    it('re-anchors a corner-parked panel across a fullscreen exit, and growing back restores it', () => {
+      // The DPS meter dragged into the bottom-right corner at 4K.
+      const corner = { ...geo(3500, 1900, 240, 180), vw: 3840, vh: 2160 };
+      const shrunk = anchorAdjustedMeterFrame(corner, { w: 1920, h: 1080 });
+      // Rides both edges into the smaller viewport instead of keeping its
+      // absolute 4K offset (which would land off-screen or mid-window).
+      expect(shrunk).toMatchObject({ left: 1580, top: 820 });
+      // Leaving fullscreen again restores the exact 4K spot: this is the
+      // shrink-then-grow round trip the bug report described.
+      const restamped = { ...shrunk, vw: 1920, vh: 1080 };
+      expect(anchorAdjustedMeterFrame(restamped, { w: 3840, h: 2160 })).toMatchObject({
+        left: 3500,
+        top: 1900,
+      });
+    });
+  });
+
+  describe('meter frame docking and snapping', () => {
+    it('oppositeDockSide returns correct inverse sides', () => {
+      expect(oppositeDockSide('right')).toBe('left');
+      expect(oppositeDockSide('left')).toBe('right');
+      expect(oppositeDockSide('bottom')).toBe('top');
+      expect(oppositeDockSide('top')).toBe('bottom');
+    });
+
+    it('snaps to the right edge of an adjacent target within threshold', () => {
+      const target = { id: 'main', geo: geo(100, 100, 240, 180) };
+      const moving = geo(345, 105, 200, 160); // right edge is 340, moving left is 345 (diff 5 <= 18)
+      const res = snapFrameToTargets(moving, [target]);
+      expect(res.dockedTo).toEqual({ id: 'main', side: 'right' });
+      expect(res.geo.left).toBe(340);
+      expect(res.geo.top).toBe(100);
+      expect(res.geo.height).toBe(180);
+      expect(res.geo.width).toBe(200);
+    });
+
+    it('snaps to the left edge of an adjacent target within threshold', () => {
+      const target = { id: 'main', geo: geo(400, 100, 240, 180) };
+      const moving = geo(195, 105, 200, 160); // moving right is 395, target left is 400 (diff 5 <= 18)
+      const res = snapFrameToTargets(moving, [target]);
+      expect(res.dockedTo).toEqual({ id: 'main', side: 'left' });
+      expect(res.geo.left).toBe(200); // 400 - 200
+      expect(res.geo.top).toBe(100);
+      expect(res.geo.height).toBe(180);
+    });
+
+    it('snaps to the bottom edge of an adjacent target within threshold', () => {
+      const target = { id: 'main', geo: geo(100, 100, 240, 180) };
+      const moving = geo(105, 285, 200, 150); // target bottom is 280, moving top is 285 (diff 5 <= 18)
+      const res = snapFrameToTargets(moving, [target]);
+      expect(res.dockedTo).toEqual({ id: 'main', side: 'bottom' });
+      expect(res.geo.top).toBe(280);
+      expect(res.geo.left).toBe(100);
+      expect(res.geo.width).toBe(240);
+    });
+
+    it('leaves moving frame unchanged when beyond threshold', () => {
+      const target = { id: 'main', geo: geo(100, 100, 240, 180) };
+      const moving = geo(500, 500, 200, 160);
+      const res = snapFrameToTargets(moving, [target]);
+      expect(res.dockedTo).toBeNull();
+      expect(res.geo).toEqual(moving);
+    });
+
+    it('syncDockedResize synchronizes height and position for side-by-side dock', () => {
+      const parent = geo(100, 100, 260, 220);
+      const child = geo(340, 100, 200, 180); // was at left: 340 (prev width 240)
+      const synced = syncDockedResize(parent, child, 'right');
+      expect(synced.left).toBe(360); // 100 + 260
+      expect(synced.top).toBe(100);
+      expect(synced.height).toBe(220); // matched parent height
+      expect(synced.width).toBe(200); // kept its own width
+    });
+
+    it('syncDockedResize synchronizes width and position for stacked dock', () => {
+      const parent = geo(100, 100, 260, 220);
+      const child = geo(100, 280, 240, 150);
+      const synced = syncDockedResize(parent, child, 'bottom');
+      expect(synced.top).toBe(320); // 100 + 220
+      expect(synced.left).toBe(100);
+      expect(synced.width).toBe(260); // matched parent width
+      expect(synced.height).toBe(150); // kept its own height
     });
   });
 });

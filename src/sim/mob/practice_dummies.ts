@@ -16,11 +16,22 @@ import type { Entity, PlayerClass } from '../types';
 // max-armor kit"), so the healing target is the same body those floors describe
 // rather than a second, competing definition of a geared player.
 //
+// AMENDED 2026-09-01 (qr-19-ref-armor-calibration-constant): "the same body" is
+// now true only of the PROSE, not of the numbers. That ruling ratified REF_ARMOR
+// as a PINNED calibration constant at 2861 rather than a live catalog read,
+// while this dummy derives its vitals live (bestEpicGearFor plus
+// characterDerivedStats above), and the committed max-armour kit pins at 4085
+// (tests/heroic_difficulty_floors.test.ts). So the dummy and the difficulty
+// floors DO describe two different bodies today, and the basis of 2861 is itself
+// unsettled; the sibling hazard is recorded the same way at
+// scripts/healing_montecarlo.ts, whose bench pick is a third basis again. Do not
+// read a dummy parse as landing on the floors' reference tank.
+//
 // GEAR ONLY, no talents: the kit is what a player can be handed, while a
 // spec's passive stamina and armor multipliers are what they bring themselves.
 // Excluding them keeps this number a property of the item tables alone.
 const REFERENCE_CLASS: PlayerClass = 'warrior';
-const REFERENCE_SPEC = 'protection';
+const REFERENCE_SPEC = 'prot';
 export const PLAYER_DUMMY_LEVEL = 20;
 
 // A friendly dummy rests here rather than at full, so a healer arriving at it
@@ -54,8 +65,11 @@ export function playerDummyVitals(): PlayerDummyVitals {
 }
 
 /** The health a friendly dummy settles back to. At least 1: it never dies of rest. */
-export function playerDummyRestHp(maxHp: number): number {
-  return Math.max(1, Math.round(maxHp * PLAYER_DUMMY_REST_HP_FRACTION));
+export function playerDummyRestHp(
+  maxHp: number,
+  fraction: number = PLAYER_DUMMY_REST_HP_FRACTION,
+): number {
+  return Math.max(1, Math.round(maxHp * fraction));
 }
 
 /**
@@ -63,8 +77,13 @@ export function playerDummyRestHp(maxHp: number): number {
  * past it; health at or below it is left alone, so a heal in progress is what
  * moves the bar rather than this. Pure.
  */
-export function playerDummyShedHp(hp: number, maxHp: number, dt: number): number {
-  const rest = playerDummyRestHp(maxHp);
+export function playerDummyShedHp(
+  hp: number,
+  maxHp: number,
+  dt: number,
+  fraction: number = PLAYER_DUMMY_REST_HP_FRACTION,
+): number {
+  const rest = playerDummyRestHp(maxHp, fraction);
   if (hp <= rest) return hp;
   // Whole points, and never fewer than one per call: health elsewhere in the sim
   // is integral, and a rounded-to-zero step would strand a small pool above rest

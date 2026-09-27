@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { INTERFACE_OFF_MENU_KEYS } from '../src/ui/interface_reset_keys';
+import { keybindDeviceNoteKeys } from '../src/ui/keybind_device_notes_core';
 import { OptionsWindow } from '../src/ui/options_window';
 
 // Source-level guards for the options painter. The pure control descriptors +
@@ -9,12 +11,71 @@ import { OptionsWindow } from '../src/ui/options_window';
 // roles/aria, the bug-report + keybind dispatch, and that the window stays cold
 // (never wired into the per-frame Hud.update path).
 const painter = readFileSync(new URL('../src/ui/options_window.ts', import.meta.url), 'utf8');
+// The Auras and Cooldown Manager sub-panels the window composes.
+const overlayPanels = readFileSync(
+  new URL('../src/ui/options_overlay_panels.ts', import.meta.url),
+  'utf8',
+);
+// The main menu's button list is the sibling painter the window composes.
+const mainMenu = readFileSync(
+  new URL('../src/ui/options_main_menu_controller.ts', import.meta.url),
+  'utf8',
+);
+const settingsControls = readFileSync(
+  new URL('../src/ui/settings_controls.ts', import.meta.url),
+  'utf8',
+);
 const hudTs = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
 const componentsCss = readFileSync(
   new URL('../src/styles/components.css', import.meta.url),
   'utf8',
 );
 const mobileCss = readFileSync(new URL('../src/styles/hud.mobile.css', import.meta.url), 'utf8');
+const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const playHtml = readFileSync(new URL('../play.html', import.meta.url), 'utf8');
+
+describe('options_window: interface-redesign primitive adoption', () => {
+  it('keeps legacy hooks while adopting the shared window and control primitives', () => {
+    expect(painter).toContain('panel-title ui-win-head');
+    expect(painter).toContain('ui-win-art');
+    expect(mainMenu).toContain('btn ui-btn opt-btn');
+    expect(mainMenu).toContain("b.classList.add('ui-btn--red', 'ui-btn--lg')");
+    expect(mainMenu).toContain("b.classList.add('opt-btn-hostile')");
+    expect(mainMenu).toContain("status.textContent = t('hudChrome.bugReport.online')");
+    expect(painter).toContain('set-choice ui-seg');
+    expect(painter).toContain('btn ui-seg-tab set-choice-btn');
+    expect(painter).toContain('btn ui-keycap kb-key');
+    expect(settingsControls).toContain('perf-card ui-card');
+  });
+
+  it('uses shared card, input, toggle, and action primitives in the bug sub-view', () => {
+    const report = painter.slice(painter.indexOf('private renderBugReport(): void {'));
+    expect(report).toContain("infoEl.className = 'bug-info ui-card'");
+    expect(report).toContain("desc.className = 'bug-desc ui-input'");
+    expect(report).toContain("toggle.className = 'btn ui-btn ui-btn--plate set-toggle'");
+    expect(report).toContain("submit.className = 'btn ui-btn ui-btn--gold'");
+  });
+
+  it('keeps static HUD frame ids and gives index and play identical option surfaces', () => {
+    for (const html of [indexHtml, playHtml]) {
+      expect(html).toContain('id="ctx-menu" class="panel ui-panel-strong"');
+      expect(html).toContain('id="options-menu" class="window panel ui-window"');
+      expect(html).toContain('id="report-window" class="window panel ui-window"');
+    }
+  });
+
+  it('renders controller status, two panes, and all three reset scopes', () => {
+    const controller = painter.slice(
+      painter.indexOf('private renderController(): void {'),
+      painter.indexOf('private renderCrossHotbarRows('),
+    );
+    expect(controller).toContain('controllerDeviceStatusView(');
+    expect(controller).toContain("className = 'controller-pane controller-pane-tuning'");
+    expect(controller).toContain("className = 'controller-pane controller-pane-layout'");
+    expect(controller).toContain('this.renderCrossHotbarRows(tuning, hooks);');
+    expect(controller).toContain('this.settingsViewFooter(controls');
+  });
+});
 
 describe('options_window: no magic values', () => {
   it('carries no literal color in TS (colors live in the extracted stylesheet)', () => {
@@ -40,13 +101,112 @@ describe('options_window: no magic values', () => {
   });
 });
 
+describe('options_window: keyboard overview', () => {
+  it('paints the keyboard overview on desktop only, hiding the same Attack Move row the list does', () => {
+    const keybinds = painter.slice(
+      painter.indexOf('private renderKeybinds(): void {'),
+      painter.indexOf('private beginCapture('),
+    );
+    // Pinned against the shell's scrolling body, not the window root: the panel
+    // fills .ui-win-body so Reset / Back stay pinned under it (W25).
+    expect(keybinds).toContain('if (!useTouchInterface()) this.paintKeyboardOverview(scroll);');
+    const deps = painter.slice(painter.indexOf('private keyboardMapDeps('));
+    expect(deps.slice(0, deps.indexOf('\n  }\n'))).toContain('delete snapshot.attackMove;');
+    // The pop-out closes the menu first so the board floats over the world.
+    const overview = painter.slice(painter.indexOf('private paintKeyboardOverview('));
+    expect(overview.slice(0, overview.indexOf('\n  }\n'))).toContain('this.keyboardWindow.open();');
+  });
+});
+
+describe('options_window: hotkey setup row', () => {
+  it('exports the live snapshot and imports live, refusing a code that names no known action', () => {
+    const rows = painter.slice(
+      painter.indexOf('private keybindTransferRows('),
+      painter.indexOf('private transferControls('),
+    );
+    expect(rows).toContain('buildKeybindCode(this.deps.keybinds().snapshot())');
+    expect(rows).toContain('importBindings(parsed.binds)');
+    expect(rows).toContain("'hudChrome.keybindTransfer.wrongKind'");
+    // The hollow-code refusal lives in the core (pinned in
+    // tests/keybind_transfer_core.test.ts); the panel hands it the registry ids.
+    expect(rows).toContain('parseKeybindCode(text, KNOWN_ACTION_IDS)');
+    expect(painter).toContain(
+      'const KNOWN_ACTION_IDS: ReadonlySet<string> = new Set(BIND_ACTIONS.map((a) => a.id));',
+    );
+    expect(rows).toContain('this.dropKeyCapture();');
+    expect(rows).toContain('this.renderKeybinds();');
+    expect(rows).not.toContain('window.location.reload()');
+    // The row sits at the foot of the SCROLLING body, right before the pinned
+    // Reset / Back foot (W25: both moved from the window root into .ui-win-body).
+    expect(painter).toMatch(
+      /scroll\.appendChild\(cols\);[\s\S]*?this\.keybindTransferRows\(scroll\);/,
+    );
+  });
+
+  it('never leaves a key capture armed behind a closed or rebuilt panel', () => {
+    const close = painter.slice(painter.indexOf('  close(): void {'));
+    const body = close.slice(0, close.indexOf('\n  }\n'));
+    expect(body).toContain('if (this.capturingKey) this.deps.options()?.captureKey(null);');
+    expect(body).toContain('this.keyboardBoard?.dispose();');
+    const keybinds = painter.slice(
+      painter.indexOf('private renderKeybinds(): void {'),
+      painter.indexOf('private beginCapture('),
+    );
+    expect(keybinds).toContain('this.keyboardBoard?.dispose();');
+    // A board capture replaces a row capture on the one-shot seam, so the row
+    // stops painting as capturing.
+    const deps = painter.slice(painter.indexOf('private keyboardMapDeps('));
+    expect(deps.slice(0, deps.indexOf('\n  }\n'))).toMatch(
+      /captureKey: \(cb\) => \{\s*this\.capturingKey = null;\s*hooks\.captureKey\(cb\);/,
+    );
+  });
+
+  it('every rebind path repaints the pop-out through the HUD keycap refresh', () => {
+    expect(painter).toContain('repaintKeyboardWindow(): void {');
+    const refresh = hudTs.slice(hudTs.indexOf('refreshKeybindLabels(): void {'));
+    expect(refresh.slice(0, refresh.indexOf('\n  }\n'))).toContain(
+      'this.optionsWindow.repaintKeyboardWindow();',
+    );
+  });
+});
+
+describe('options_window: import / export routing', () => {
+  it('routes the Import / Export view to the full-settings transfer panel', () => {
+    expect(painter).toContain("case 'transfer':");
+    expect(painter).toContain('this.renderTransfer();');
+    const panel = painter.slice(
+      painter.indexOf('private renderTransfer(): void {'),
+      painter.indexOf('private renderKeybinds(): void {'),
+    );
+    // The widest kind, through the same allowlisted envelope as the Interface
+    // tab's rows, and a reload on success (every family is read at boot).
+    expect(panel).toContain("exportTransferCode('full')");
+    expect(panel).toContain("importTransferCode('full', text)");
+    expect(panel).toContain('window.location.reload();');
+    expect(panel).toContain("t('hudChrome.fullTransfer.excluded')");
+  });
+});
+
 describe('options_window: aura menu routing', () => {
-  it('routes the top-level Auras view to its settings panel and placement preview', () => {
+  it('routes the Auras and Cooldown Manager views to their panels and placement previews', () => {
+    // Both overlay sub-panels live in options_overlay_panels.ts; the window
+    // routes both views there and syncs both previews on every render.
+    expect(painter).toContain("case 'overlays':");
     expect(painter).toContain("case 'auras':");
-    expect(painter).toContain('this.renderAuras();');
+    expect(painter).toContain("case 'cooldowns':");
+    // Back goes up one level: an overlay panel returns to the Overlays list.
+    expect(painter).toContain('this.view = this.overlayPanels.parentView(this.view);');
+    expect(overlayPanels).toContain('buildOptionsMenuList(buildOverlaysMenu(), {');
+    expect(painter).toContain('this.overlayPanels.render(this.view);');
+    expect(painter).toContain('this.overlayPanels.sync(this.view);');
+    expect(painter).toContain('this.overlayPanels.close();');
     // Optional chain: unstuck tests (and any pre-wire path) close without hooks.
-    expect(painter).toContain("this.deps.auraOverlays?.().setPlacement(this.view === 'auras')");
-    expect(painter).toContain('this.auraSettings.render(body);');
+    expect(painter).toContain('auras: () => this.deps.auraOverlays?.(),');
+    expect(painter).toContain('cooldowns: () => this.deps.cooldownManager?.(),');
+    expect(overlayPanels).toContain("this.deps.auras()?.setPlacement(view === 'auras');");
+    expect(overlayPanels).toContain("this.deps.cooldowns()?.setPlacement(view === 'cooldowns');");
+    expect(overlayPanels).toContain('this.auraSettings.render(body);');
+    expect(overlayPanels).toContain('this.cooldownSettings.render(body);');
   });
 });
 
@@ -177,6 +337,12 @@ describe('options_window: WCAG 2.2 AA', () => {
     expect(componentsCss).toMatch(/\.gfx-footer \{[\s\S]*min-height: 40px;/);
     expect(componentsCss).toMatch(/\.graphics-apply-status \{[\s\S]*min-height: 1\.4em;/);
     expect(mobileCss).toMatch(/body\.mobile-touch \.graphics-apply-btn \{[\s\S]*min-height: 40px;/);
+    // The restart strip shares the row shape and the touch wrap: the status
+    // takes the whole line so the button keeps its floor beside it.
+    expect(mobileCss).toMatch(/body\.mobile-touch \.restart-strip \{[\s\S]*?flex-wrap: wrap;/);
+    expect(mobileCss).toMatch(
+      /body\.mobile-touch \.restart-strip-status \{[\s\S]*?flex-basis: 100%;/,
+    );
     const rule = componentsCss.match(/\.gfx-footer \{([\s\S]*?)\n {2}\}/)?.[1] ?? '';
     expect(rule).not.toContain('transition');
     expect(rule).not.toContain('animation');
@@ -198,7 +364,8 @@ describe('options_window: WCAG 2.2 AA', () => {
       'if (crossHotbarOwned && isCrossHotbarModifier(button)) continue;',
     );
     expect(controller).not.toContain('isCrossHotbarButton(button)');
-    expect(controller).not.toContain('crossHotbarOwnsButtons');
+    // W9 makes the existing ownership explanation visible without hiding editable d-pad rows.
+    expect(controller).toContain('crossHotbarOwnsButtons');
   });
 });
 
@@ -207,8 +374,14 @@ describe('options_window: deed-broadcast account row', () => {
     expect(painter).toContain(
       'if (hooks?.deedBroadcasts) buildDeedBroadcastRow(body, hooks.deedBroadcasts);',
     );
-    // The hooks seam is optional by declaration: offline main.ts never wires it.
-    expect(hudTs).toMatch(/deedBroadcasts\?: \{/);
+    // The queue-pop Discord DM opt-in row is the family's second member, on
+    // the same online-only seam rule.
+    expect(painter).toContain(
+      'if (hooks?.discordQueuePings) buildDiscordQueuePingRow(body, hooks.discordQueuePings);',
+    );
+    // The hooks seams are optional by declaration: offline main.ts never wires them.
+    expect(hudTs).toMatch(/deedBroadcasts\?: AccountToggleSeam;/);
+    expect(hudTs).toMatch(/discordQueuePings\?: AccountToggleSeam;/);
   });
 
   it('reads before it enables and reflects busy/pressed state programmatically', () => {
@@ -219,8 +392,9 @@ describe('options_window: deed-broadcast account row', () => {
     expect(body).toContain("toggle.setAttribute('aria-pressed', String(on));");
     expect(body).toContain('toggle.disabled = true;');
     // The row renders in the classic set-row grammar beside the chat rows.
-    expect(body).toContain("row.className = 'set-row';");
-    expect(body).toContain("toggle.className = 'btn set-toggle';");
+    // W9 adds library classes beside the load-bearing legacy hooks.
+    expect(body).toContain("row.className = 'set-row ui-stat-row';");
+    expect(body).toContain("toggle.className = 'btn ui-btn ui-btn--plate set-toggle';");
     // The behavior round-trip (echo wins, failed write reverts) is jsdom-driven
     // in tests/deed_broadcast_row.test.ts.
   });
@@ -251,7 +425,7 @@ describe('options_window: interface tab split', () => {
     // through render(), not renderInterface(): the dispatcher re-wires the
     // title-bar [data-back] control the rebuild just destroyed
     expect(painter).toMatch(
-      /wireTabStrip\(el, 'opt-tab', \(id, focusFollow\) => \{\s*this\.interfaceTab = id as InterfaceTab;\s*this\.render\(\);/,
+      /wireTabStrip\(el, 'opt-tab', \(id, focusFollow\) => \{\s*this\.interfaceTab = id as InterfaceTab;\s*this\.frameOptionsId = null;\s*this\.render\(\);/,
     );
     // the panel body is the tabpanel the strip points at
     expect(painter).toContain("panelId: 'interface-tabpanel',");
@@ -299,17 +473,14 @@ describe('options_window: interface tab split', () => {
     expect(painter).toMatch(
       /if \(tab === 'general'\) \{\s*this\.languageSelect\(body\);\s*this\.renderThemeControls\(body\);/,
     );
-    // the Edit Frames entry and the layout transfer lead the Frames tab,
-    // with the remaining declarative rows under the Party Frame Options
-    // subhead (the unit-frames reset row was retired with the per-frame
-    // Reset size buttons in the editor's Show or Hide Frames list)
-    expect(painter).toMatch(
-      /if \(tab === 'frames'\) \{[\s\S]*?if \(!env\.touch\) this\.interfaceUnlockRow\(body\);\s*this\.transferRows\(body, 'frames'\);\s*subhead\(body, t\('hudChrome\.partyFrames\.optionsSection'\), 'set-subhead'\);/,
+    // Edit Frames remains desktop-only; layout transfer now lives in the preset dropdown.
+    expect(painter).toContain(
+      'if (!env.touch && !env.nativeShell) buildInterfaceUnlockRow(body, this.deps);',
     );
     expect(painter).not.toContain('unitFramesResetRow');
     // the chat-timestamp / chat-reset / deed-broadcast rows live in the Chat tab
     expect(painter).toMatch(
-      /if \(tab === 'chat'\) \{[\s\S]*this\.chatTimestampRows\(body\);[\s\S]*this\.chatWindowResetRow\(body\);/,
+      /if \(tab === 'chat'\) \{[\s\S]*buildChatTimestampRows\(body, this\.deps\);[\s\S]*buildChatWindowResetRow\(body, this\.deps\);/,
     );
   });
 
@@ -317,7 +488,8 @@ describe('options_window: interface tab split', () => {
     expect(painter).toContain("private interfaceTab: InterfaceTab = 'general';");
     // The ONLY mutation of interfaceTab is the tab-select in the wireTabStrip
     // callback, so the assignment count across the whole painter is exactly one.
-    expect(painter.match(/this\.interfaceTab = /g) ?? []).toHaveLength(1);
+    expect(painter.match(/this\.interfaceTab = /g) ?? []).toHaveLength(2);
+    expect(painter).toContain("this.interfaceTab = id === 'chat' ? 'chat' : 'frames';");
     // And that one assignment is the tab-select, not a reset.
     expect(painter).toContain('this.interfaceTab = id as InterfaceTab;');
   });
@@ -326,8 +498,7 @@ describe('options_window: interface tab split', () => {
     // The session-persistence contract fails if a reset creeps into a lifecycle
     // path, even one the "assignment count" guard above would miss (e.g. via a
     // helper or a differently-spelled expression). Slice each lifecycle method
-    // body and assert none so much as mentions interfaceTab: only tab selection
-    // touches it. This is the source-guard equivalent of a close-reopen round
+    // body and refuse assignments; close may read the tab to remember its scroll. This is the source-guard equivalent of a close-reopen round
     // trip (the live DOM round trip is the opt-in browser suite).
     const methodBody = (sig: string) => {
       const start = painter.indexOf(sig);
@@ -335,7 +506,9 @@ describe('options_window: interface tab split', () => {
       return painter.slice(start, painter.indexOf('\n  }\n', start));
     };
     for (const sig of ['toggle(): void {', 'close(): void {', 'private goBack(): void {']) {
-      expect(methodBody(sig), `${sig} must not touch interfaceTab`).not.toContain('interfaceTab');
+      expect(methodBody(sig), `${sig} must not reset interfaceTab`).not.toMatch(
+        /this\.interfaceTab\s*=(?!=)/,
+      );
     }
   });
 });
@@ -360,7 +533,7 @@ describe('options_window: control-primitive dispatch wiring', () => {
     expect(painter).toContain('toggle.dataset.settingKey = key');
     expect(painter).toContain('onChange?.(key)');
     expect(painter).toMatch(/data-setting-key="\$\{focusKey\}"/);
-    expect(painter).toContain('?.focus()');
+    expect(painter).toContain('?.focus({ preventScroll: true })');
   });
 
   it('fires the exact same setting write per control kind as the inline original', () => {
@@ -403,7 +576,7 @@ describe('options_window: bug-report dispatch + async states (cluster 2)', () =>
   it('preserves the submit action and the no-text / in-flight / failure states', () => {
     const bug = painter.slice(
       painter.indexOf('private renderBugReport'),
-      painter.indexOf('private localizeBugReportError'),
+      painter.indexOf('// Controller (cluster 5)'),
     );
     // no-text guard short-circuits with the describe-first message
     expect(bug).toContain("error.textContent = t('hudChrome.bugReport.describeFirst')");
@@ -418,13 +591,13 @@ describe('options_window: bug-report dispatch + async states (cluster 2)', () =>
     expect(bug).toContain('hudChrome.bugReport.submittedNoShot');
     // failure: re-enable + localized error
     expect(bug).toContain('submit.disabled = false');
-    expect(bug).toContain('this.localizeBugReportError(err)');
+    expect(bug).toContain('bugReportErrorText(err)');
   });
 
   it('paints the form before the deferred screenshot capture and gates submit on it', () => {
     const bug = painter.slice(
       painter.indexOf('private renderBugReport'),
-      painter.indexOf('private localizeBugReportError'),
+      painter.indexOf('// Controller (cluster 5)'),
     );
     expect(bug).toContain('const capturePromise = new Promise<string | null>');
     expect(bug).toContain('requestIdleCallback(capture, { timeout: 500 })');
@@ -444,13 +617,23 @@ describe('options_window: keybind rebind dispatch (cluster 5)', () => {
   }
 
   it('localizes the Target Buffs and Debuffs row through its chrome key', () => {
-    expect(painter).toContain("targetAuras: 'hudChrome.targetAuras.keybindLabel'");
+    // The label table lives in the shared keybind_action_names_core.ts (the on-bar
+    // rebind prompts name actions from the same table); the painter's
+    // actionDisplayName must resolve through it, never a private copy.
+    const names = readFileSync(
+      new URL('../src/ui/keybind_action_names_core.ts', import.meta.url),
+      'utf8',
+    );
+    expect(names).toContain("targetAuras: 'hudChrome.targetAuras.keybindLabel'");
+    expect(names).toContain('t(key)');
     const displayName = painter.slice(
       painter.indexOf('private actionDisplayName('),
       painter.indexOf('private gamepadActionOptions('),
     );
-    expect(displayName).toContain('BIND_ACTION_LABEL_KEYS[actionId]');
-    expect(displayName).toContain('t(BIND_ACTION_LABEL_KEYS[actionId])');
+    expect(displayName).toContain(
+      'bindActionDisplayName(actionId, fallback, this.deps.slotActionName)',
+    );
+    expect(painter).not.toContain('const BIND_ACTION_LABEL_KEYS');
   });
 
   it('captures a key and binds it to the same action/index', () => {
@@ -460,17 +643,23 @@ describe('options_window: keybind rebind dispatch (cluster 5)', () => {
     expect(painter).toContain('this.deps.refreshKeybindLabels()');
   });
 
-  it('notes the bindable mouse buttons through t(), on pointer devices only', () => {
-    // The hint is the one place the panel tells the player a mouse button binds
-    // like a key; it must be localized and hidden on touch, which has no mouse.
+  it('notes the bindable mouse buttons and wheel through t(), on pointer devices only', () => {
+    // The notes are the one place the panel tells the player a mouse button or a
+    // wheel notch binds like a key; keybind_device_notes_core.ts owns the list
+    // (localized keys, none on touch, which has no mouse) and the painter loops
+    // it through t() under the same touch gate the desktop-only rows use.
     const keybinds = painter.slice(
       painter.indexOf('private renderKeybinds(): void {'),
       painter.indexOf('private beginCapture('),
     );
-    expect(keybinds).toContain("t('hudChrome.keybinds.mouseHint')");
-    const hintIdx = keybinds.indexOf("t('hudChrome.keybinds.mouseHint')");
-    const gateIdx = keybinds.lastIndexOf('if (!useTouchInterface()) {', hintIdx);
-    expect(gateIdx).toBeGreaterThan(-1);
+    expect(keybinds).toContain('keybindDeviceNoteKeys(useTouchInterface())');
+    const loopIdx = keybinds.indexOf('keybindDeviceNoteKeys(useTouchInterface())');
+    expect(keybinds.indexOf('deviceNote.textContent = t(key)', loopIdx)).toBeGreaterThan(loopIdx);
+    expect(keybindDeviceNoteKeys(false)).toEqual([
+      'hudChrome.keybinds.mouseHint',
+      'hudChrome.keybinds.wheelHint',
+    ]);
+    expect(keybindDeviceNoteKeys(true)).toEqual([]);
   });
 
   it('removes dead slot choices from controller remaps while the cross hotbar is on', () => {
@@ -511,9 +700,9 @@ describe('options_window: viewport resync on open (PR #1118)', () => {
     const render = painter.slice(painter.indexOf('private render(): void {'));
     const renderEnd = render.indexOf('\n  }\n');
     const renderBody = render.slice(0, renderEnd);
-    expect(renderBody).toContain(
-      "el.style.display = this.view === 'performance' ? 'flex' : 'block'",
-    );
+    // Every sub-view is a flex-column window shell now (W25), so the one display
+    // value is 'flex'; Performance is no longer the exception.
+    expect(renderBody).toContain("el.style.display = 'flex'");
   });
 });
 
@@ -550,7 +739,8 @@ describe('options_window: title-bar back control', () => {
     expect(body).toContain("this.view === 'main'");
     expect(body).toContain('data-back');
     // square x-btn chrome, kept in flow at the inline start via .back-btn
-    expect(body).toContain('class="x-btn back-btn"');
+    // W9 keeps those legacy hooks beside the shared close-button primitive.
+    expect(body).toContain('class="x-btn ui-x-btn back-btn"');
     // accessible name from the existing footer-Back key (no new i18n key)
     expect(body).toContain("t('hud.options.back')");
   });
@@ -559,23 +749,27 @@ describe('options_window: title-bar back control', () => {
     expect(painter).toContain(
       "el.querySelector('[data-back]')?.addEventListener('click', () => this.goBack());",
     );
-    // the four footer Back buttons (the shared settingsViewFooter, which
+    // the five footer Back buttons (the shared settingsViewFooter, which
     // Audio/Controller/Interface feed into; the graphics inline action row,
-    // which replaces it for that view; bug report; keybinds) reuse the same
-    // path (no inline copies left)
+    // which replaces it for that view; bug report; keybinds; import / export)
+    // reuse the same path (no inline copies left)
     expect(
       painter.match(/back\.addEventListener\('click', \(\) => this\.goBack\(\)\);/g),
-    ).toHaveLength(4);
-    // the click-then-flip-to-main sequence lives ONLY in goBack itself; a stray
+    ).toHaveLength(5);
+    // the click-then-go-up sequence lives ONLY in goBack itself; a stray
     // inline copy in some handler would push this count past 1
-    expect(painter.match(/audio\.click\(\);\s*this\.view = 'main';/g) ?? []).toHaveLength(1);
+    expect(
+      painter.match(/audio\.click\(\);\s*this\.view = this\.overlayPanels\.parentView/g) ?? [],
+    ).toHaveLength(1);
   });
 
-  it('goBack returns to the root without closing, drops key capture, and moves focus', () => {
+  it('goBack goes up one level without closing, drops key capture, and moves focus', () => {
     const goBack = painter.slice(painter.indexOf('private goBack(): void {'));
     const body = goBack.slice(0, goBack.indexOf('\n  }\n'));
     expect(body).toContain('audio.click();');
-    expect(body).toContain("this.view = 'main';");
+    // One level up (optionsParentView, pinned in options_view.test.ts): an
+    // overlay panel returns to the Overlays list, every other view to the root.
+    expect(body).toContain('this.view = this.overlayPanels.parentView(this.view);');
     expect(body).toContain('this.capturingKey = null;');
     expect(body).toContain("this.keybindNote = '';");
     expect(body).toContain('this.render();');
@@ -656,7 +850,9 @@ describe('options_window: settings shows the running version (#1541)', () => {
     expect(body).toContain("t('hudChrome.options.version', { version, build })");
     // Rendered as the .opt-version secondary line appended after the button list.
     expect(body).toContain("'opt-version'");
-    expect(body.indexOf("'opt-version'")).toBeGreaterThan(body.indexOf('el.appendChild(list)'));
+    const listAppend = body.indexOf('scroll.appendChild(list)');
+    expect(listAppend).toBeGreaterThanOrEqual(0);
+    expect(body.indexOf("'opt-version'")).toBeGreaterThan(listAppend);
   });
 });
 
@@ -722,7 +918,7 @@ describe('options_window: Reset to Defaults is scoped per sub-view (#2341)', () 
     const rest = painter.slice(start);
     const body = rest.slice(0, rest.indexOf('\n  }\n'));
     expect(body).toContain('buildInterfaceControls');
-    expect(body).toContain('this.settingsViewFooter(interfaceControlsForTab(controls, tab)');
+    expect(body).toContain('this.settingsViewFooter(shownControls');
   });
 
   it('renderGraphics passes its flattened section controls into the inline action row', () => {
@@ -762,7 +958,7 @@ describe('options_window: Reset to Defaults is scoped per sub-view (#2341)', () 
     expect(body).toContain("rows.className = 'set-rows';");
     // The dispatcher clears the wide class when the view moves elsewhere, the
     // same lifecycle the kb/perf/aura wide classes follow.
-    expect(painter).toContain("if (this.view !== 'graphics') el.classList.remove('gfx-wide');");
+    expect(painter).toContain('this.layout.begin(');
   });
 
   it('renderGraphics carries keyboard focus across its own rebuild', () => {
@@ -793,9 +989,7 @@ describe('options_window: Reset to Defaults is scoped per sub-view (#2341)', () 
     // the footer takes the active tab's slice plus a scoped reset callback
     // (the off-menu keys that moved into the editor's Frames Settings menu
     // reset with their tab even though no row renders them here)
-    expect(body).toContain(
-      'this.settingsViewFooter(interfaceControlsForTab(controls, tab), (hooks, keys) => {',
-    );
+    expect(body).toContain('this.settingsViewFooter(shownControls, (hooks, keys) => {');
     // the old bespoke back-button block (no reset) is gone from this method
     expect(body).not.toContain("back.textContent = t('hud.options.back')");
   });
@@ -810,18 +1004,9 @@ describe('options_window: Reset to Defaults is scoped per sub-view (#2341)', () 
 // table is exactly the keys with no rendered control), so the table is pinned
 // here as literals, per tab.
 describe('options_window: off-menu reset keys are pinned per tab', () => {
-  // Extract the offMenuTabKeys object literal from the painter source and read
-  // each tab's quoted key list. Comments inside the literal are stripped first
-  // (one carries an apostrophe that would derail a quoted-string scan).
-  const start = painter.indexOf('const offMenuTabKeys');
-  const block = painter.slice(start, painter.indexOf('};', start)).replace(/^\s*\/\/.*$/gm, '');
-  const tabKeys = (tab: string): string[] => {
-    const list = block.match(new RegExp(`${tab}: \\[([^\\]]*)\\]`))?.[1] ?? '';
-    return [...list.matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  };
-
-  it('finds the table inside renderInterface', () => {
-    expect(start).toBeGreaterThan(painter.indexOf('private renderInterface(): void {'));
+  const tabKeys = (tab: keyof typeof INTERFACE_OFF_MENU_KEYS) => INTERFACE_OFF_MENU_KEYS[tab];
+  it('uses the shared table in renderInterface', () => {
+    expect(painter).toContain('interfaceResetKeys(tab, this.frameOptionsId, keys)');
   });
 
   it('General owns exactly the retired UI Scale slider key', () => {
@@ -837,6 +1022,16 @@ describe('options_window: off-menu reset keys are pinned per tab', () => {
       'playerFrameHeight',
       'targetFrameWidth',
       'targetFrameHeight',
+      'petFrameWidth',
+      'petFrameHeight',
+      'focusTarget1Width',
+      'focusTarget1Height',
+      'focusTarget2Width',
+      'focusTarget2Height',
+      'focusTarget3Width',
+      'focusTarget3Height',
+      'showPetFrame',
+      'showEmptyFocusFrames',
       'partyFrameWidth',
       'partyFrameHeight',
       'partyFrameColumns',
@@ -850,8 +1045,10 @@ describe('options_window: off-menu reset keys are pinned per tab', () => {
       'menuRailHorizontal',
       'frameSnapToGrid',
       'combineActionBars',
+      'combineTrackerFrames',
+      'combineAuraFrames',
+      'moveTargetOfTargetIndependently',
       'hideUnusedActionSlots',
-      'mouseoverCast',
       'lockActionBars',
     ]);
   });
@@ -863,13 +1060,14 @@ describe('options_window: off-menu reset keys are pinned per tab', () => {
 });
 
 // Key Bindings' Reset to Defaults used to reset only the rebindable key-code
-// map (Keybinds.reset()), silently leaving the seven GameSettings toggles the
+// map (Keybinds.reset()), silently leaving the six GameSettings toggles the
 // same panel renders (mouse camera, click-to-move + its mouse button, attack
-// move, left-handed touch, profanity filter) untouched.
+// move, left-handed touch) untouched. The profanity filter moved to Interface >
+// Chat, so it is deliberately NOT in this list any more.
 describe('options_window: Key Bindings Reset to Defaults also resets its own toggles', () => {
-  it('names the same seven setting keys the panel renders via settingToggleKeybind/clickMoveMouseButtonRow', () => {
+  it('names the same six setting keys the panel renders via settingToggleKeybind/clickMoveMouseButtonRow', () => {
     expect(painter).toContain(
-      "const KEYBIND_PANEL_SETTING_KEYS: (keyof GameSettings)[] = [\n  'mouseCamera',\n  'lockCursorOnRotate',\n  'clickToMove',\n  'clickToMoveButton',\n  'attackMove',\n  'leftHandedTouch',\n  'filterProfanity',\n];",
+      "const KEYBIND_PANEL_SETTING_KEYS: (keyof GameSettings)[] = [\n  'mouseCamera',\n  'lockCursorOnRotate',\n  'clickToMove',\n  'clickToMoveButton',\n  'attackMove',\n  'leftHandedTouch',\n];",
     );
   });
 
@@ -896,7 +1094,15 @@ describe('options_window: frame editing is locked out on touch', () => {
     // Every frame-editing gesture refuses touch layouts, so the touch HUD
     // never renders the entry row (the reviewer found the floating lock bar
     // and inert previews still reachable there).
-    expect(painter).toContain('if (!env.touch) this.interfaceUnlockRow(body);');
+    expect(painter).toContain(
+      'if (!env.touch && !env.nativeShell) buildInterfaceUnlockRow(body, this.deps);',
+    );
+  });
+
+  it('moves frame transfer into presets while keeping General settings transfer available', () => {
+    expect(painter).not.toContain("this.transferRows(body, 'frames')");
+    // The General tab's whole-settings transfer stays on every layout.
+    expect(painter).toContain("if (tab === 'general') this.transferRows(body, 'settings');");
   });
 
   it('Hud.toggleInterfaceUnlock refuses on the mobile layout as the backstop', () => {
@@ -904,5 +1110,64 @@ describe('options_window: frame editing is locked out on touch', () => {
     expect(start).toBeGreaterThan(-1);
     const body = hudTs.slice(start, hudTs.indexOf('\n  }\n', start));
     expect(body).toContain('if (this.isMobileLayout()) return false;');
+  });
+});
+
+// Finding 2: "there is a lot of padding in the menus not nicely aligned". The
+// gutter is ONE value now (--window-pad, via .ui-win-body / .ui-win-foot /
+// .ui-win-head), and the options family stopped fighting it with per-row insets.
+// Normalized like window_fill_css.test.ts so a re-wrap never breaks a pin.
+const flatComponents = componentsCss.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+
+describe('options window: one padding scale', () => {
+  it('lets the shell own the scroll, so the window itself no longer scrolls', () => {
+    // With the window scrolling, its footer scrolled with it however the body
+    // was shaped, so this is half of finding 1 as well.
+    expect(flatComponents).toContain('#options-menu { width: 320px; z-index: 40; }');
+  });
+
+  it('starts the settings rows on the gutter instead of a 6px inset of their own', () => {
+    expect(flatComponents).toContain(
+      '.set-row { display: grid; grid-template-columns: 120px 1fr 48px; align-items: center; gap: 10px; padding: 3px 0; }',
+    );
+  });
+
+  it('hangs the Interface tab strip on the same gutter as the head and the rows', () => {
+    // The strip sits between the head and the scroller, so it is NOT inside the
+    // body's padding and has to carry the gutter itself.
+    expect(flatComponents).toContain(
+      '.opt-tabs { display: flex; gap: var(--spacing-xs); margin: 0; padding: var(--spacing-sm) var(--window-pad) 0; flex: none; }',
+    );
+  });
+
+  it('gives the rows and sections one vertical rhythm off the spacing scale', () => {
+    expect(flatComponents).toContain(
+      '.set-rows { display: flex; flex-direction: column; gap: var(--spacing-sm); }',
+    );
+    expect(flatComponents).toContain('margin: var(--spacing-md) 0 var(--spacing-2xs);');
+  });
+
+  it('drops the second inset inside the Custom Colors panel', () => {
+    // The swatch grid sat on the card's inset PLUS 12px of its own.
+    expect(flatComponents).toContain('padding: 0 0 var(--spacing-sm); }');
+    expect(flatComponents).not.toContain(
+      '.theme-color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 6px 12px; padding: 0 12px 12px; }',
+    );
+  });
+
+  it('gives the settings-card family ONE inset instead of three hand-tuned ones', () => {
+    expect(flatComponents).toContain(
+      'padding: var(--spacing-xs) var(--spacing-md) var(--spacing-md); min-width: 0; }',
+    );
+    expect(flatComponents).not.toContain('.gfx-card { padding: 6px 15px 13px; }');
+  });
+
+  it('leaves the pinned foot rows to the primitive, with no margin of their own', () => {
+    // A margin-top on a pinned foot opens a seam between it and the scroller.
+    expect(flatComponents).not.toContain('.options-footer { display: flex;');
+    expect(flatComponents).not.toContain(
+      '.perf-footer { display: flex; gap: 12px; margin-top: 9px; }',
+    );
+    expect(flatComponents).toContain('.gfx-footer { gap: 10px; min-height: 40px; }');
   });
 });

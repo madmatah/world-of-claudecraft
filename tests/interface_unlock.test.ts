@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // The "Unlock interface" coordinator (src/ui/interface_unlock.ts): one press
 // loosens every LIVE frame at once, a second press locks them all back
 // (including any that went inactive meanwhile), the body class the stylesheet
@@ -12,6 +13,7 @@ import {
   INTERFACE_UNLOCKED_BODY_CLASS,
   InterfaceUnlock,
   makeUiRootDetacher,
+  restoreFrameHome,
 } from '../src/ui/interface_unlock';
 import type { HudFrameSpec } from '../src/ui/interface_unlock_core';
 import type { MovableFrame } from '../src/ui/movable_frame';
@@ -58,6 +60,13 @@ class FakeMover {
 // handler map an assertion can fire, and the few properties the code writes.
 class FakeEl {
   tag: string;
+  dataset: Record<string, string> = {};
+  replaceChildren(...children: FakeEl[]): void {
+    this.children = children;
+  }
+  querySelectorAll(): FakeEl[] {
+    return this.children.filter((child) => child.tag === 'details');
+  }
   type = '';
   id = '';
   className = '';
@@ -167,13 +176,14 @@ function harness(
   // The show/hide rows live inside the details sub-menu's rows container:
   // menu > details(.frames-menu-sub) > [summary, div.frames-menu-rows]. Each
   // entry is a WRAP: [checkRow label (checkbox, span), per-frame reset btn].
-  const frameRows = () => byId('interface-frames-menu')?.children[0]?.children[1]?.children ?? [];
+  const frameRows = () =>
+    byId('interface-visibility-menu')?.children.flatMap(
+      (group) => group.children[1]?.children ?? [],
+    ) ?? [];
   const rowBox = (wrap: FakeEl | undefined) => wrap?.children[0]?.children[0];
   const rowName = (wrap: FakeEl | undefined) => wrap?.children[0]?.children[1]?.textContent;
   const rowReset = (wrap: FakeEl | undefined) => wrap?.children[1];
-  const settingRows = () =>
-    byId('interface-frames-menu')?.children.find((c) => c.className === 'frames-menu-settings')
-      ?.children ?? [];
+  const settingRows = () => byId('interface-frames-menu')?.children ?? [];
   return {
     unlock,
     movers,
@@ -192,6 +202,36 @@ function harness(
 }
 
 describe('InterfaceUnlock', () => {
+  it('synchronizes settings-backed visibility and editor chrome without another unlock', () => {
+    const { unlock } = harness({});
+    const mover = new FakeMover();
+    let enabled = true;
+    unlock.register({
+      id: 'reliquaryTracker',
+      mover: mover as unknown as MovableFrame,
+      isActive: () => enabled,
+      rowOverride: {
+        listed: () => true,
+        value: () => enabled,
+        set: (v) => {
+          enabled = v;
+        },
+      },
+    });
+    unlock.setUnlocked(true);
+    enabled = false;
+    unlock.refreshSettings();
+    expect(mover.hidden).toBe(true);
+    expect(mover.last).toBe(false);
+    enabled = true;
+    unlock.refreshSettings();
+    expect(mover.hidden).toBe(false);
+    expect(mover.last).toBe(true);
+    unlock.setUnlocked(false);
+    enabled = false;
+    unlock.refreshSettings();
+    expect(mover.hidden).toBe(true);
+  });
   it('starts locked and reports the flag it flips to', () => {
     const { unlock } = harness({ actionBar1: true });
     expect(unlock.isUnlocked).toBe(false);
@@ -234,8 +274,19 @@ describe('InterfaceUnlock', () => {
     expect(classes.has(INTERFACE_UNLOCKED_BODY_CLASS)).toBe(false);
   });
 
-  it('resetAll locks first, then resets every registered frame', () => {
+  it('resetAll locks first, then resets every registered frame in reverse order', () => {
     const { unlock, movers, classes } = harness({ actionBar1: true, minimap: true });
+    // Reverse registration order matters: the unit frames register AFTER the
+    // table rows, so the player frame must re-dock into the action-bar stack
+    // before the doom meter's re-dock tries to land back beside it.
+    const order: string[] = [];
+    for (const [id, mover] of movers) {
+      const reset = mover.reset.bind(mover);
+      mover.reset = () => {
+        order.push(id);
+        reset();
+      };
+    }
     unlock.setUnlocked(true);
     unlock.resetAll();
     expect(unlock.isUnlocked).toBe(false);
@@ -245,6 +296,7 @@ describe('InterfaceUnlock', () => {
       // Locking must land BEFORE the reset, or a live gesture outlives the clear.
       expect(mover.last).toBe(false);
     }
+    expect(order).toEqual([...movers.keys()].reverse());
   });
 
   it('fans reapply and relocalize out to every frame (the single fan-out arm)', () => {
@@ -278,6 +330,8 @@ describe('InterfaceUnlock frames menu', () => {
       'interface-lock-all',
       'interface-frames-toggle',
       'interface-frames-menu',
+      'interface-visibility-toggle',
+      'interface-visibility-menu',
     ]);
     // Collapsed until the button opens it.
     expect(byId('interface-frames-menu')?.hidden).toBe(true);
@@ -296,15 +350,15 @@ describe('InterfaceUnlock frames menu', () => {
     });
     movers.get('minimap')?.setUserHidden(true);
     unlock.setUnlocked(true);
-    byId('interface-frames-toggle')?.fire('click');
-    const menu = byId('interface-frames-menu');
+    byId('interface-visibility-toggle')?.fire('click');
+    const menu = byId('interface-visibility-menu');
     expect(menu?.hidden).toBe(false);
-    expect(byId('interface-frames-toggle')?.attrs.get('aria-expanded')).toBe('true');
+    expect(byId('interface-visibility-toggle')?.attrs.get('aria-expanded')).toBe('true');
     // The show/hide list folds into a details sub-menu with its own summary.
     const sub = menu?.children[0];
     expect(sub?.tag).toBe('details');
     expect(sub?.children[0]?.tag).toBe('summary');
-    expect(sub?.children[0]?.textContent).toBe('Show or Hide Frames');
+    expect(sub?.children[0]?.textContent).toBe('Action Bars');
     const rows = frameRows();
     expect(rows.map((r) => rowName(r))).toEqual(['actionBar1', 'minimap']);
     // The checkbox state mirrors the mover: hidden rides unticked, which is the
@@ -338,7 +392,7 @@ describe('InterfaceUnlock frames menu', () => {
 
     // Flipping the Snap to Grid row in the open menu shows the grid at once.
     made.find((el) => el.id === 'interface-frames-toggle')?.fire('click');
-    const settings = made.find((el) => el.className === 'frames-menu-settings');
+    const settings = made.find((el) => el.id === 'interface-frames-menu');
     const box = settings?.children[0]?.children.find((c) => c.tag === 'input');
     expect(box).toBeTruthy();
     if (!box) return;
@@ -355,7 +409,7 @@ describe('InterfaceUnlock frames menu', () => {
   it('toggling a row drives the mover hidden state both ways', () => {
     const { unlock, movers, byId, frameRows, rowBox } = harness({ actionBar1: true });
     unlock.setUnlocked(true);
-    byId('interface-frames-toggle')?.fire('click');
+    byId('interface-visibility-toggle')?.fire('click');
     const box = rowBox(frameRows()[0]);
     expect(box).toBeTruthy();
     if (!box) return;
@@ -373,7 +427,7 @@ describe('InterfaceUnlock frames menu', () => {
       minimap: true,
     });
     unlock.setUnlocked(true);
-    byId('interface-frames-toggle')?.fire('click');
+    byId('interface-visibility-toggle')?.fire('click');
     const rows = frameRows();
     // Visible text is the shared action word; the accessible name carries
     // WHICH frame the button resets.
@@ -450,19 +504,19 @@ describe('InterfaceUnlock frames menu', () => {
   it('keeps the sub-menu expanded state across a rebuild (a mid-session refresh)', () => {
     const { unlock, byId, active } = harness({ actionBar1: true, actionBar2: false });
     unlock.setUnlocked(true);
-    byId('interface-frames-toggle')?.fire('click');
-    const sub = byId('interface-frames-menu')?.children[0];
-    expect(sub?.open).toBe(false);
+    byId('interface-visibility-toggle')?.fire('click');
+    const sub = byId('interface-visibility-menu')?.children[0];
+    expect(sub?.open).toBe(true);
     if (!sub) return;
-    sub.open = true;
+    sub.open = false;
     sub.fire('toggle');
     // A bar enabled mid-unlock refreshes the coordinator, which rebuilds the
     // open menu; the fold the player just opened must not snap shut.
     active.actionBar2 = true;
     unlock.refresh();
-    const rebuilt = byId('interface-frames-menu')?.children[0];
+    const rebuilt = byId('interface-visibility-menu')?.children[0];
     expect(rebuilt).not.toBe(sub);
-    expect(rebuilt?.open).toBe(true);
+    expect(rebuilt?.open).toBe(false);
   });
 
   it('a rowOverride entry lists on listed(), reads value(), writes set(), never the hidden flag', () => {
@@ -486,8 +540,11 @@ describe('InterfaceUnlock frames menu', () => {
       };
     }
     unlock.setUnlocked(true);
-    byId('interface-frames-toggle')?.fire('click');
-    const rowsOf = () => byId('interface-frames-menu')?.children[0]?.children[1]?.children ?? [];
+    byId('interface-visibility-toggle')?.fire('click');
+    const rowsOf = () =>
+      byId('interface-visibility-menu')?.children.flatMap(
+        (group) => group.children[1]?.children ?? [],
+      ) ?? [];
     const nameOf = (wrap: FakeEl) => wrap.children[0]?.children[1]?.textContent;
     let row = rowsOf().find((r) => nameOf(r) === 'actionBar2');
     expect(row, 'inactive overridden bar still listed').toBeTruthy();
@@ -520,7 +577,13 @@ describe('InterfaceUnlock frames menu', () => {
 });
 
 // A minimal element/parent graph: enough to prove the reparent goes to #ui and
-// comes back to the exact original slot.
+// comes back to the exact original slot. insertBefore keeps the DOM's contract
+// that the reference node must be a CURRENT child (a real browser throws
+// NotFoundError otherwise): the two-rows-detached regression below is decisive
+// only because a remembered sibling that has since left the parent throws here
+// exactly as it does in play, instead of quietly appending. It carries no text
+// nodes, so `firstChild` is always an element here; in the shipped markup it is
+// the indentation text node, which the `first` slot inserts before just as well.
 class FakeNode {
   children: FakeNode[] = [];
   parentNode: FakeNode | null = null;
@@ -533,6 +596,7 @@ class FakeNode {
       else this.classes.delete(name);
       return on;
     },
+    contains: (name: string) => this.classes.has(name),
   };
   appendChild(child: FakeNode): void {
     child.parentNode?.remove(child);
@@ -540,15 +604,19 @@ class FakeNode {
     this.children.push(child);
   }
   insertBefore(child: FakeNode, next: FakeNode | null): void {
+    const at = next ? this.children.indexOf(next) : -1;
+    if (next && at < 0) throw new Error('NotFoundError: reference node is not a child');
     child.parentNode?.remove(child);
     child.parentNode = this;
-    const at = next ? this.children.indexOf(next) : -1;
     if (at < 0) this.children.push(child);
-    else this.children.splice(at, 0, child);
+    else this.children.splice(this.children.indexOf(next as FakeNode), 0, child);
   }
   remove(child: FakeNode): void {
     const at = this.children.indexOf(child);
     if (at >= 0) this.children.splice(at, 1);
+  }
+  get firstChild(): FakeNode | null {
+    return this.children[0] ?? null;
   }
   get nextSibling(): FakeNode | null {
     const siblings = this.parentNode?.children ?? [];
@@ -561,7 +629,8 @@ const spec = (detachToUiRoot: boolean): HudFrameSpec => ({
   elementId: 'actionbar',
   storageKey: 'woc_hud_frame_actionbar',
   labelKey: 'hudChrome.interfaceUnlock.frameNames.actionBar1',
-  fallbackSize: { w: 612, h: 46 },
+  // The plateless action rail is 596px wide after removing its old tray padding.
+  fallbackSize: { w: 596, h: 46 },
   detachToUiRoot,
 });
 
@@ -610,5 +679,180 @@ describe('makeUiRootDetacher', () => {
     detach(false);
     expect(stack.children.indexOf(frame)).toBe(1);
     expect(frame.nextSibling).toBe(after);
+  });
+
+  it('re-docks by appending when the captured sibling has itself left home', () => {
+    // The doom meter's home anchor is the player frame, which detaches to #ui
+    // too: re-docking against the stale reference would throw NotFoundError
+    // in a real DOM, so the detacher falls back to appending instead.
+    const { uiRoot, stack, frame, after, doc } = scene();
+    const detach = makeUiRootDetacher(doc, spec(true), frame as unknown as HTMLElement);
+    detach(true);
+    uiRoot.appendChild(after);
+    detach(false);
+    expect(frame.parentNode).toBe(stack);
+    expect(stack.children[stack.children.length - 1]).toBe(frame);
+  });
+});
+
+// The two player aura rows share one stock parent (#aura-stack) and both
+// detach, which is the shape the captured-sibling detacher cannot serve: the
+// buff row's remembered `next` is the debuff row, and it may have left the
+// column too by the time the buff row comes back.
+const el = (id: string): FakeNode => Object.assign(new FakeNode(), { id });
+
+const rowSpec = (id: 'buffBar' | 'debuffBar', slot: 'first' | 'last'): HudFrameSpec => ({
+  ...spec(true),
+  id,
+  elementId: id === 'buffBar' ? 'buff-bar' : 'debuff-bar',
+  stockHome: { parentId: 'aura-stack', slot },
+});
+
+function auraScene() {
+  const uiRoot = el('ui');
+  const stack = el('aura-stack');
+  const buffBar = el('buff-bar');
+  const debuffBar = el('debuff-bar');
+  const playerFrame = el('player-frame');
+  stack.appendChild(buffBar);
+  stack.appendChild(debuffBar);
+  uiRoot.appendChild(stack);
+  uiRoot.appendChild(playerFrame);
+  const byId: Record<string, FakeNode> = {
+    ui: uiRoot,
+    'aura-stack': stack,
+    'buff-bar': buffBar,
+    'debuff-bar': debuffBar,
+  };
+  const doc = { getElementById: (id: string) => byId[id] ?? null } as unknown as Document;
+  const asEl = (n: FakeNode) => n as unknown as HTMLElement;
+  return { uiRoot, stack, buffBar, debuffBar, playerFrame, doc, asEl };
+}
+
+describe('makeUiRootDetacher with a declared stock home', () => {
+  it('brings two detached rows back in column order, released in registration order', () => {
+    const { uiRoot, stack, buffBar, debuffBar, doc, asEl } = auraScene();
+    const detachBuffs = makeUiRootDetacher(doc, rowSpec('buffBar', 'first'), asEl(buffBar));
+    const detachDebuffs = makeUiRootDetacher(doc, rowSpec('debuffBar', 'last'), asEl(debuffBar));
+
+    // Both rows carry a saved position at boot: both lift onto #ui.
+    detachBuffs(true);
+    detachDebuffs(true);
+    expect(buffBar.parentNode).toBe(uiRoot);
+    expect(debuffBar.parentNode).toBe(uiRoot);
+    expect(stack.children).toEqual([]);
+
+    // "Reset Frame Positions" releases them in HUD_FRAME_SPECS order, buff row
+    // first, while its remembered sibling is still out on #ui. A captured
+    // `next` throws here; the declared slot does not.
+    expect(() => detachBuffs(false)).not.toThrow();
+    detachDebuffs(false);
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+  });
+
+  it('keeps the column order whichever row comes back first', () => {
+    const { stack, buffBar, debuffBar, doc, asEl } = auraScene();
+    const detachBuffs = makeUiRootDetacher(doc, rowSpec('buffBar', 'first'), asEl(buffBar));
+    const detachDebuffs = makeUiRootDetacher(doc, rowSpec('debuffBar', 'last'), asEl(debuffBar));
+    detachBuffs(true);
+    detachDebuffs(true);
+    detachDebuffs(false);
+    detachBuffs(false);
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+  });
+
+  it('only puts back what it took: a row another owner holds stays put on release', () => {
+    const { uiRoot, buffBar, playerFrame, doc, asEl } = auraScene();
+    const detach = makeUiRootDetacher(doc, rowSpec('buffBar', 'first'), asEl(buffBar));
+    detach(true);
+    expect(buffBar.parentNode).toBe(uiRoot);
+    // The auras-on-frame option docks the row on the player frame; a reset
+    // while it sits there must not yank it off (the option is still on).
+    playerFrame.appendChild(buffBar);
+    detach(false);
+    expect(buffBar.parentNode).toBe(playerFrame);
+    expect(buffBar.classes.has('hud-frame-detached')).toBe(false);
+  });
+
+  it('a row without a declared stock home still returns to its captured slot', () => {
+    const { stack, buffBar, debuffBar, doc, asEl } = auraScene();
+    const detach = makeUiRootDetacher(doc, { ...spec(true), id: 'buffBar' }, asEl(buffBar));
+    detach(true);
+    detach(false);
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+  });
+
+  it('a declared parent missing from the tree leaves the row on #ui rather than guessing', () => {
+    // No captured-slot fallback here: the captured slot is exactly the stale
+    // answer the declaration exists to replace, so the row stays where the
+    // detacher can still find it.
+    const { uiRoot, buffBar, asEl } = auraScene();
+    const doc = { getElementById: (id: string) => (id === 'ui' ? uiRoot : null) };
+    const detach = makeUiRootDetacher(
+      doc as unknown as Document,
+      rowSpec('buffBar', 'first'),
+      asEl(buffBar),
+    );
+    detach(true);
+    detach(false);
+    expect(buffBar.parentNode).toBe(uiRoot);
+  });
+});
+
+describe('restoreFrameHome', () => {
+  // The blocker sequence from review: a saved position applies at boot (the row
+  // is on #ui before the auras-on-frame option ever looks), the option goes on
+  // (row onto the player frame), then off. A home remembered at the first look
+  // was { parent: #ui, next: #debuff-bar } and threw on the way back; the class
+  // decides now.
+  it('returns a row that still carries a custom position to #ui, never into the column', () => {
+    const { uiRoot, stack, buffBar, debuffBar, playerFrame, doc, asEl } = auraScene();
+    const detach = makeUiRootDetacher(doc, rowSpec('buffBar', 'first'), asEl(buffBar));
+    detach(true);
+    playerFrame.appendChild(buffBar);
+
+    expect(() => restoreFrameHome(doc, 'buffBar')).not.toThrow();
+    expect(buffBar.parentNode).toBe(uiRoot);
+    expect(stack.children).toEqual([debuffBar]);
+
+    // Idempotent: a second call must not re-append the row to the end of #ui,
+    // which would reorder it among its absolutely positioned siblings.
+    const order = [...uiRoot.children];
+    restoreFrameHome(doc, 'buffBar');
+    expect(uiRoot.children).toEqual(order);
+  });
+
+  // The other order: no saved position at boot, the row is dragged later (onto
+  // #ui), then the option goes on and off. The old code put the detached row
+  // back INSIDE the column, where its saved left/top resolved against the
+  // column's box.
+  it('the drag-after-boot order lands on #ui too', () => {
+    const { uiRoot, stack, buffBar, debuffBar, playerFrame, doc, asEl } = auraScene();
+    const detach = makeUiRootDetacher(doc, rowSpec('buffBar', 'first'), asEl(buffBar));
+    playerFrame.appendChild(buffBar);
+    restoreFrameHome(doc, 'buffBar');
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+
+    detach(true);
+    playerFrame.appendChild(buffBar);
+    restoreFrameHome(doc, 'buffBar');
+    expect(buffBar.parentNode).toBe(uiRoot);
+    expect(stack.children).toEqual([debuffBar]);
+  });
+
+  it('seats a row with no custom position at the head of the column, ahead of the debuff row', () => {
+    const { stack, buffBar, debuffBar, playerFrame, doc } = auraScene();
+    playerFrame.appendChild(buffBar);
+    restoreFrameHome(doc, 'buffBar');
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+    expect(buffBar.nextSibling).toBe(debuffBar);
+  });
+
+  it('is a no-op for a row already home, and for an id the table does not know', () => {
+    const { stack, buffBar, debuffBar, doc } = auraScene();
+    restoreFrameHome(doc, 'buffBar');
+    expect(stack.children).toEqual([buffBar, debuffBar]);
+    restoreFrameHome(doc, 'noSuchFrame');
+    expect(stack.children).toEqual([buffBar, debuffBar]);
   });
 });

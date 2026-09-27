@@ -7,7 +7,8 @@
 // THE LINEAGE LADDER (the incumbent retune, docs/prd/ignivar-raid-loot.md):
 // each archetype's tier-1 and tier-2 families count as ONE lineage with
 // breakpoints at 2, 4, and 6 pieces worn ACROSS the lineage: deathlord plus
-// crownforged (Strength), wyrmshadow plus nighttalon (Agility), and
+// crownforged plus the druid-only bramblehide (Strength), wyrmshadow plus
+// nighttalon (Agility), and
 // necromancers plus soulflame plus stormcallers (caster; the two tier-2 caster
 // families share slots so they can never be worn together). Every lineage
 // unions to exactly seven wearable slots with one overlap, so six pieces is a
@@ -28,6 +29,8 @@
 // `entity.ts`.
 
 import type { ItemSet, SetBonusEffect, SetBonusTier, SetProc } from '../types';
+import { CRUCIBLE_COLLECTION_SETS } from './crucible_collections';
+import { VANGUARD_ITEM_SETS } from './vanguard_item_sets';
 
 // Haste granted by a set tier after the global combat-rating conversion: what
 // SET_HASTE_3PC_RATING is worth once recalcPlayerStats converts it. Read only
@@ -101,6 +104,12 @@ export const SET_CROWNFORGED = 'crownforged'; // t2 plate, Strength
 export const SET_NIGHTTALON = 'nighttalon'; // t2 leather, Agility
 export const SET_SOULFLAME = 'soulflame'; // t2 cloth, caster
 export const SET_STORMCALLERS = 'stormcallers'; // t2 cloth (shaman), caster
+// Roots' Bramblehide: the feral druid's Strength leather family, dropped whole
+// (all seven wearable slots) by the Nythraxis raid boss. It joins the STRENGTH
+// lineage (its wearers pay 2 attack power per Strength, exactly like the plate
+// families), and because druids can wear neither plate nor mail the lineage's
+// slot union is unchanged at seven and no cross-family stacking is opened.
+export const SET_BRAMBLEHIDE = 'bramblehide'; // t2 leather (feral druid), Strength
 // Leveling haste kits: families of EXISTING world-drop items (each member gets
 // the `set` tag on its ItemDef in items.ts; no new item names).
 export const SET_VALE_ARCANIST = 'vale_arcanist'; // cloth, caster
@@ -357,6 +366,8 @@ function warfareBonuses(signature: SetProc, capstoneText: string): SetBonusTier[
 }
 
 export const ITEM_SETS: Record<string, ItemSet> = {
+  ...CRUCIBLE_COLLECTION_SETS,
+  ...VANGUARD_ITEM_SETS,
   [SET_DEATHLORD]: {
     id: SET_DEATHLORD,
     name: 'Barrowlord Battlegear',
@@ -398,6 +409,12 @@ export const ITEM_SETS: Record<string, ItemSet> = {
     name: 'Galecall Vestments',
     lineage: LINEAGE_CASTER,
     bonuses: CASTER_LINEAGE_BONUSES,
+  },
+  [SET_BRAMBLEHIDE]: {
+    id: SET_BRAMBLEHIDE,
+    name: "Roots' Bramblehide",
+    lineage: LINEAGE_STRENGTH,
+    bonuses: STRENGTH_LINEAGE_BONUSES,
   },
   [SET_VALE_ARCANIST]: {
     id: SET_VALE_ARCANIST,
@@ -661,7 +678,7 @@ export const ITEM_SETS: Record<string, ItemSet> = {
       {
         pieces: 4,
         effect: {},
-        text: 'Your Veiled Edge strike hits for triple, up from double.',
+        text: "Veiled Edge adds 100% weapon damage to your next Lurker's Strike instead of 50%. It does not increase the flat bonus or stack with the stealth bonus.",
       },
     ],
   },
@@ -690,12 +707,12 @@ export const ITEM_SETS: Record<string, ItemSet> = {
       {
         pieces: 2,
         effect: {},
-        text: "Seraphic Vigil's rescue heals for 270, up from 180. Damage taken no longer delays your spellcasting.",
+        text: "Restoring health with Whispered Prayer, Solemn Prayer, or Urgent Prayer increases your next Choirmend's healing by 10%, stacking up to 3 times. Each cast grants at most one stack. Choirmend consumes all stacks when it finishes casting. Damage taken no longer delays your spellcasting.",
       },
       {
         pieces: 4,
         effect: {},
-        text: 'When Seraphic Vigil triggers, its ally is also mended for 15 percent of their maximum health over 10 sec.',
+        text: 'Finishing Choirmend with 3 stacks makes your next Whispered Prayer within 60 sec instant and increases its healing by 100%. This benefit does not stack; earning it again refreshes its duration.',
       },
     ],
   },
@@ -724,12 +741,12 @@ export const ITEM_SETS: Record<string, ItemSet> = {
         effect: {},
         // The caster 2pc carries the pushback rider (full immunity, the raid
         // tier's upgrade over the leveling lineage's 50 percent).
-        text: 'Unleash Weapon on Pyrebrand grants 3 Thunder. Damage taken no longer delays your spellcasting.',
+        text: 'Arc Overload triggers 30 percent of the time. Damage taken no longer delays your spellcasting.',
       },
       {
         pieces: 4,
         effect: {},
-        text: "Earthen Jolt's bonus per Thunder rises to 30 percent.",
+        text: "Earthen Jolt's bonus per Thunder rises to 30 percent, and Magma Burst deals 20 percent more damage.",
       },
     ],
   },
@@ -793,12 +810,12 @@ export const ITEM_SETS: Record<string, ItemSet> = {
         effect: {},
         // The healer 2pc carries the pushback rider (full immunity, the raid
         // tier's upgrade over the leveling lineage's 50 percent).
-        text: 'Temporal Echo converts 50 percent of your single-target Arcane damage into healing. Damage taken no longer delays your spellcasting.',
+        text: 'Temporal Echo converts 50 percent of your other single-target Arcane damage into healing. Aether Surge and Aether Darts instead convert 200 percent of their damage. Damage taken no longer delays your spellcasting.',
       },
       {
         pieces: 4,
         effect: {},
-        text: "Temporal Cascade's cooldown is reduced by 5 sec.",
+        text: "Temporal Cascade's cooldown is reduced by 5 sec and its mana cost is reduced by 30 percent.",
       },
     ],
   },
@@ -946,7 +963,10 @@ export const ITEM_SETS: Record<string, ItemSet> = {
         // consumes any HoT when the wearer has none of their own, so "only"
         // would overclaim the narrowing. Recorded as a copy deviation in the
         // wave's PR notes.
-        text: 'Swiftmend consumes your own Wildbloom or Second Bloom first and heals 25 percent more. Damage taken no longer delays your spellcasting.',
+        // "Fleetmend" is the ability's shipped display name (the Phase 03 naming
+        // audit renamed swiftmend; docs/design/naming-audit.md, pinned by
+        // tests/ip_scrub.test.ts): player copy names the ability as players see it.
+        text: 'Fleetmend consumes your own Wildbloom or Second Bloom first and heals 25 percent more. Damage taken no longer delays your spellcasting.',
       },
       {
         pieces: 4,

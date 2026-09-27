@@ -36,9 +36,11 @@ CSM is N directional lights, which moves `numDirLights` and
 prewarm and compile lane the renderer is built around, and it breaks the
 single-ortho-volume assumption baked into `src/render/foliage_shadow_core.ts`.
 
-The cheaper wins in the same problem space land first, and all three are on
-this branch: the dial cap, the texel snap, and the budget-governed shadow
-cadence (`src/render/shadow_cadence_core.ts`). Revisit CSM only if the
+The cheaper wins in the same problem space land first: the dial cap, the texel
+snap, the budget-governed shadow cadence (`src/render/shadow_cadence_core.ts`)
+and, below it, the budget-governed extent ladder
+(`src/render/shadow_extent_core.ts`), which shrinks the single ortho box under
+sustained pressure instead of splitting it. Revisit CSM only if the
 measurements in "What would change the verdict" come back the way CSM would
 need them to.
 
@@ -57,12 +59,20 @@ From the sun setup in `src/render/renderer.ts`:
 | `shadowMap.type` | `THREE.PCFShadowMap` |
 | Map size | `GFX.shadowMap` |
 
-`GFX.shadowMap` per profile (`src/render/gfx.ts`): 4096 high/ultra/insane, 2560
-medium, 1536 medium-constrained, 2048 low and constrained, 1024 iOS memory
-profile. `GFX.dynamicShadows` is false on low and on constrained memory, so
-the shadow pass does not exist at all on the phone-class profiles. The advanced
-Shadow Quality dial now caps at 4096 (the retired 8192 rung falls through to the
-High base).
+`GFX.shadowMap` per profile (`src/render/gfx.ts`): 4096 ultra/insane, 2560 high
+and medium, 2048 high-constrained, 1536 medium-constrained, 2048 low and
+constrained, 1024 iOS memory profile. High moved from 4096 to 2560 after this
+evaluation was written: at the 210 u box that is 0.082 u per texel against
+0.051 u, inside what the 2.25-texel PCF radius filters over anyway, and it cuts
+the pass's texel count by 2.56x (2560^2 / 4096^2 = 0.39), and with it the clear,
+the sampling footprint and the resident allocation, on the tier most likely to
+be draw-bound. Which population that reaches: the High PRESET and any device
+whose auto-detected tier is high. The Advanced mix is unaffected by design,
+because it always resolves on the high-tier base and its Shadow Quality dial's
+top rung writes 4096 explicitly, so a player who chose that rung keeps the
+showcase map (the dial caps at 4096, and the retired 8192 rung lands on that
+same top rung). `GFX.dynamicShadows` is false on low and on constrained memory,
+so the shadow pass does not exist at all on the phone-class profiles.
 
 Texel snapping landed on this branch: `shadowTexelWorldSize` and
 `snapShadowAnchor` in `src/render/shadow_texel_snap_core.ts`, consumed by the
@@ -140,9 +150,15 @@ exactly one cascade: still 17 taps, not 34.
 
 ## 3. Texel density
 
-World units per shadow texel. Current single map over the 210 u box:
+World units per shadow texel. Current single map over the 210 u box (4096 is
+the ultra/insane allocation, 2560 the high/medium one).
 
-| Map size | u per texel | cm per texel |
+UNITS. The sim's world unit is a yard (`src/sim/` and the design docs say yd
+throughout). The centimetre columns below are a readability aid only: they read
+one world unit as one metre, so they are metric-per-unit, not a conversion from
+yards. Compare the `u per texel` column when the absolute figure matters.
+
+| Map size | u per texel | cm per texel (1 u read as 1 m) |
 |---|---|---|
 | 4096 | 0.051270 | 5.13 |
 | 2560 | 0.082031 | 8.20 |
@@ -159,7 +175,7 @@ term.
 
 Near cascade at 2048, split ending at 25 u (the articulated band):
 
-| Camera | Box side | u per texel | cm per texel | vs today's 5.13 cm |
+| Camera | Box side | u per texel | cm per texel (1 u = 1 m) | vs today's 0.05127 u |
 |---|---|---|---|---|
 | fov 60, 4:3 | 48.11 u | 0.023492 | 2.35 | 2.18x finer |
 | fov 60, 16:9 | 58.88 u | 0.028751 | 2.88 | 1.78x finer |
@@ -168,7 +184,7 @@ Near cascade at 2048, split ending at 25 u (the articulated band):
 
 Far cascade at 2048, split 25 u to 105 u (matching today's reach):
 
-| Camera | Box side | u per texel | cm per texel | vs today's 5.13 cm |
+| Camera | Box side | u per texel | cm per texel (1 u = 1 m) | vs today's 0.05127 u |
 |---|---|---|---|---|
 | fov 60, 16:9 | 247.30 u | 0.120754 | 12.08 | **2.36x coarser** |
 | fov 60, 21:9 | 307.79 u | 0.150287 | 15.03 | **2.93x coarser** |
@@ -260,7 +276,9 @@ Two things could reclaim it, neither free:
 The budget-governed half-rate shadow cadence lands on this same branch
 (`src/render/shadow_cadence_core.ts`, applied from the renderer right after
 the budget governor each frame): under sustained over-budget pressure the one
-shadow map updates every other frame.
+shadow map updates every other frame, except while a ship under way is close by
+(`src/render/ship_shadow_hold.ts`: a moving hull's own shadows flicker on a stale
+frame).
 
 Its savings stack differently under CSM, and mostly in CSM's favor. With one
 map, half-rate is a binary: full shadow pass or none, and the skipped frame's
@@ -318,10 +336,10 @@ mutates the **same global chunk** CSM overwrites:
 `THREE.ShaderChunk.lights_fragment_begin`, via `patchPointLightFragmentChunk`
 in `src/render/point_light_shader_core.ts`. It is invoked from `initGfxTier`
 (`src/render/gfx.ts`) with the comment "install before any scene material
-compiles", because the pinned point-light pad budget
-(`pointLightPadCount` in `src/render/point_light_budget.ts`, and the light-pad
-loop in `src/render/renderer.ts`) keeps `numPointLights` constant by adding
-zero-intensity pads, and the shader guard is what makes those pads cheap.
+compiles", because the point-light carriers (`attachPointLightCarriers` in
+`src/render/point_light_carriers.ts`) keep `numPointLights` constant with a
+fixed set of lights packed live-first, and the shader's point loop stops at
+the first black carrier, which is what makes the idle ones cheap.
 
 Who wins depends on ordering, and both orders are bad:
 
@@ -340,7 +358,7 @@ Who wins depends on ordering, and both orders are bad:
   `getPointLightInfo(...)` and the point-light `RE_Direct(...)` still resolve
   to exactly one occurrence inside their search range, and the patch applies.
   But this arm is fragile by construction: `pinnedAnchor` throws
-  `Three r165 point-light chunk ... anchor changed` and takes the whole boot
+  `pinned three point-light chunk ... anchor changed` and takes the whole boot
   down if the fork ever drifts, and the fork is a hand-copied snapshot of a
   version-specific chunk that no test in this repo pins.
 
@@ -405,9 +423,11 @@ a large surface and no existing guard.
 `shadow.radius` is honored per `LightShadow`, so each cascade carries its own.
 `PCFShadowMap`'s kernel offsets are `texelSize * shadowRadius`, and `texelSize`
 is `1.0 / shadowMapSize`, that is in TEXELS, not world units. With one map,
-radius 2.25 at 5.13 cm per texel is a world-space penumbra of about 11.5 cm.
-With cascades the same radius means about 6.5 cm on the near cascade and about
-27 cm on the far one. Keeping today's look means retuning radius per cascade
+radius 2.25 at 0.05127 u per texel is a world-space penumbra of about 0.115 u
+(about 0.185 u on the high tier's 2560 map: the kernel offsets are in texels,
+so the penumbra widens with the texel).
+With cascades the same radius means about 0.065 u on the near cascade and about
+0.27 u on the far one. Keeping today's look means retuning radius per cascade
 (roughly 4.0 near, 0.95 far at fov 60 and 16:9), and the retune is
 aspect-ratio-dependent, because the cascade box side is. The penumbra will also
 visibly step at the cascade boundary unless `CSM.fade` is enabled, and `fade`
@@ -415,7 +435,7 @@ adds a `CSM_FADE` define that toggles `material.needsUpdate = true` from
 `updateUniforms`, that is a recompile trigger inside a per-frame path.
 
 `shadow.bias` and `normalBias` need the same per-cascade treatment for the same
-reason: they are tuned against today's 5.13 cm texel.
+reason: they are tuned against today's 0.05127 u texel.
 
 ### 5e. The foliage shadow volume seam
 
@@ -480,9 +500,9 @@ delicate machinery in the renderer.
 ### 5g. Graphics rebuild and light counting
 
 The point-light pinning is unaffected: CSM adds directional lights, and
-`GFX.maxPointLights` (`src/render/gfx.ts`), the pad loop in the renderer, and
-`pointLightPadCount` (`src/render/point_light_budget.ts`) all count point
-lights. The invariant they protect (a constant light count so materials never
+`GFX.maxPointLights` (`src/render/gfx.ts`) and the carriers
+(`attachPointLightCarriers`, `src/render/point_light_carriers.ts`) count point
+lights only. The invariant they protect (a constant light count so materials never
 recompile mid-travel) is intact for point lights.
 
 The directional side is a new instance of that same invariant, and it holds

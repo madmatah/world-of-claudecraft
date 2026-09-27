@@ -15,8 +15,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 999,
-      "state": "c6eb4032",
+      "nextId": 1011,
+      "state": "606d970e",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -47,6 +47,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -60,14 +61,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -88,7 +94,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -103,7 +111,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
@@ -117,7 +125,7 @@
           "fiveSecondRule": 99,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -161,8 +169,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 1001,
-      "state": "aedbc6a9",
+      "nextId": 1013,
+      "state": "2925aa16",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -193,6 +201,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -206,14 +215,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -234,7 +248,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -249,7 +265,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
@@ -263,7 +279,7 @@
           "fiveSecondRule": 99,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -312,7 +328,7 @@
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 999,
+          "id": 1011,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",
@@ -351,7 +367,7 @@
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 1000,
+          "id": 1012,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",
@@ -384,9 +400,9 @@
     {
       "tick": 20,
       "time": 1,
-      "nextId": 1001,
-      "state": "06854e70",
-      "events": "632a979f",
+      "nextId": 1013,
+      "state": "c36a401e",
+      "events": "6cb80331",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -395,8 +411,8 @@
     {
       "tick": 40,
       "time": 2,
-      "nextId": 1001,
-      "state": "1424590b",
+      "nextId": 1013,
+      "state": "5a093bda",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -406,8 +422,8 @@
     {
       "tick": 60,
       "time": 3,
-      "nextId": 1001,
-      "state": "4a3502fb",
+      "nextId": 1013,
+      "state": "f4c933dd",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -417,8 +433,8 @@
     {
       "tick": 80,
       "time": 4,
-      "nextId": 1001,
-      "state": "4ac59034",
+      "nextId": 1013,
+      "state": "27d0def0",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -428,8 +444,8 @@
     {
       "tick": 80,
       "time": 4,
-      "nextId": 1001,
-      "state": "4ac59034",
+      "nextId": 1013,
+      "state": "27d0def0",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -460,6 +476,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -473,14 +490,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -501,7 +523,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -516,7 +540,7 @@
               "name": "Battle Stance",
               "remaining": 3596,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
@@ -530,7 +554,7 @@
           "fiveSecondRule": 103,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -575,12 +599,12 @@
           "critChance": 0.05,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.05,
-          "facing": 0.118553,
+          "facing": -1.813336,
           "fallStartY": -3.019823,
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 999,
+          "id": 1011,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",
@@ -590,9 +614,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 0.695462,
-            "y": -2.831005,
-            "z": 15.838727
+            "x": -5.436095,
+            "y": -3.052099,
+            "z": 8.655055
           },
           "potionCooldownUntil": -1,
           "spawnPos": {
@@ -603,7 +627,7 @@
             "armor": 40
           },
           "templateId": "forest_wolf",
-          "wanderTimer": 5.867928,
+          "wanderTimer": 6.331937,
           "weapon": {
             "max": 12,
             "min": 8,
@@ -621,7 +645,7 @@
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 1000,
+          "id": 1012,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",
@@ -654,8 +678,8 @@
     {
       "tick": 80,
       "time": 4,
-      "nextId": 1001,
-      "state": "4ac59034",
+      "nextId": 1013,
+      "state": "27d0def0",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -686,6 +710,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -699,14 +724,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -727,7 +757,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -742,7 +774,7 @@
               "name": "Battle Stance",
               "remaining": 3596,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
@@ -756,7 +788,7 @@
           "fiveSecondRule": 103,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -801,12 +833,12 @@
           "critChance": 0.05,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.05,
-          "facing": 0.118553,
+          "facing": -1.813336,
           "fallStartY": -3.019823,
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 999,
+          "id": 1011,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",
@@ -816,9 +848,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 0.695462,
-            "y": -2.831005,
-            "z": 15.838727
+            "x": -5.436095,
+            "y": -3.052099,
+            "z": 8.655055
           },
           "potionCooldownUntil": -1,
           "spawnPos": {
@@ -829,7 +861,7 @@
             "armor": 40
           },
           "templateId": "forest_wolf",
-          "wanderTimer": 5.867928,
+          "wanderTimer": 6.331937,
           "weapon": {
             "max": 12,
             "min": 8,
@@ -847,7 +879,7 @@
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 96,
-          "id": 1000,
+          "id": 1012,
           "kind": "mob",
           "level": 5,
           "lootFfaTimer": "Infinity",

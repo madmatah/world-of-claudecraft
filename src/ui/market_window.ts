@@ -19,6 +19,7 @@
 // prompt itself is Hud's one #confirm-dialog, injected as a dep.
 
 import { audio } from '../game/audio';
+import { ITEMS } from '../sim/data';
 import type { ItemInstancePayload, ItemSlot } from '../sim/types';
 import {
   type IWorld,
@@ -29,17 +30,30 @@ import {
 } from '../world_api';
 import { markDialogRoot } from './dialog_root';
 import { dropdownKeyNav } from './dropdown_nav';
-import { computeDropdownPlacement } from './dropdown_position';
+import { computeDropdownPlacement, dropdownClipBounds } from './dropdown_position';
 import { itemDisplayName } from './entity_i18n';
 import { esc } from './esc';
-import { formatMoney as formatLocalizedMoney, formatNumber, t } from './i18n';
-import { marketArmorBadge, marketArmorPips, marketHeroicStar } from './market_armor_badge';
+import {
+  formatMoney as formatLocalizedMoney,
+  formatNumber,
+  getLanguage,
+  languageTag,
+  t,
+} from './i18n';
+import {
+  isHeroicItem,
+  marketArmorBadge,
+  marketArmorPips,
+  marketHeroicStar,
+  marketPatternMark,
+} from './market_armor_badge';
 import {
   type MarketBuyConfirm,
   marketBuyConfirm,
   recheckMarketBuy,
 } from './market_buy_confirm_core';
 import {
+  defaultMarketQuery,
   MARKET_ARMOR_CLASS_FILTERS,
   MARKET_ITEM_TYPE_FILTERS,
   MARKET_PRIMARY_STAT_FILTERS,
@@ -52,16 +66,22 @@ import {
   type MarketRarityFilter,
   type MarketSort,
   type MarketSubtypeFilter,
+  marketItemMatches,
 } from './market_filters';
 import { marketNameColor } from './market_name_color';
+import { MarketOrdersPanel } from './market_orders_panel';
 import { marketPriceHtml } from './market_price_view';
+import { localizedMarketSearch } from './market_search_localized_core';
+import { sweepEligibleRow } from './market_sweep_core';
+import { MarketSweepPanel } from './market_sweep_panel';
 import {
   buildMarketView,
   COPPER_PER_GOLD,
   COPPER_PER_SILVER,
   type MarketBrowseBody,
   type MarketCollectBody,
-  type MarketCollectSaleRow,
+  type MarketHistoryBody,
+  type MarketSaleRow,
   type MarketSellBody,
   type MarketSellMeta,
   type MarketSubtypeKind,
@@ -69,8 +89,15 @@ import {
   marketCollectBadgeCount,
   marketFilterMenus,
 } from './market_view';
+import {
+  appendMaterialSourcesActionAfter,
+  attachMaterialSourcesContextMenu,
+  closeMaterialSourcesDialogForOwner,
+} from './material_sources_dialog';
+import { materialFungibleUnitCount, materialSourcesForDisplay } from './material_sources_view';
 import type { PainterHostPresentation } from './painter_host';
 import { svgIcon } from './ui_icons';
+import { wornItemCellParts } from './worn_item_cell_view';
 
 // The filter dropdown's natural size (mirrors .mkt-select-menu's max-height/gap in
 // components.css). #market-window clips with overflow: hidden on mobile, and a menu
@@ -127,6 +154,19 @@ export class MarketWindow {
   private sellItemId: string | null = null;
   private sellInstance: ItemInstancePayload | null = null;
   private searchQuery = '';
+  // Memo for the typed-to-sent search translation (effectiveSearch): the
+  // resolution walks the whole item catalog, and currentQuery() is reachable
+  // from the per-frame reconnect check as well as from a keystroke.
+  //
+  // The LANGUAGE is part of the key, not just the typed text. The resolution
+  // reads localized item names, so the same typed string resolves to a
+  // different search per locale, and a text-only key served the previous
+  // locale's substitution after a switch: not the empty result the untranslated
+  // path gives, but a wrong one, which is the single thing this feature must
+  // never produce. This is the memo half of the language fan-out rule
+  // (src/ui/CLAUDE.md); keying it is what answers it, so no relocalize() arm is
+  // owed and none is registered.
+  private searchEcho: { typed: string; lang: string; sent: string } | null = null;
   private lastSig = '';
   // The Sell tab's price-reference echo signature (issue 3043), tracked SEPARATELY
   // from lastSig: the Sell tab is excluded from the general per-frame rebuild (it
@@ -145,6 +185,30 @@ export class MarketWindow {
   // there and the resync would never fire. Deferring the comparison to the
   // next snapshot lets it see the real post-reconnect echo instead.
   private pendingReconnectResync = false;
+
+  // The Market Sweep card (market_sweep_panel.ts): staged by a browse row's Sweep
+  // button, mounted at the head of the Browse list, its quote patched per frame.
+  private readonly sweep = new MarketSweepPanel({
+    world: () => this.deps.world(),
+    showError: (text) => this.deps.showError(text),
+    confirmDialog: (title, body, ok, cancel, onOk) =>
+      this.deps.confirmDialog(title, body, ok, cancel, onOk),
+    repaint: () => this.renderContent(),
+  });
+
+  // The Wanted tab (market_orders_panel.ts): the buy-order board, its place
+  // card, and the not-on-the-market strip. Same dep shape as the sweep card.
+  private readonly orders = new MarketOrdersPanel({
+    itemIcon: (item, quality) => this.deps.itemIcon(item, quality),
+    moneyHtml: (copper) => this.deps.moneyHtml(copper),
+    itemTooltip: (item, instance, sources) => this.deps.itemTooltip(item, instance, sources),
+    attachTooltip: (el, build) => this.deps.attachTooltip(el, build),
+    world: () => this.deps.world(),
+    showError: (text) => this.deps.showError(text),
+    confirmDialog: (title, body, ok, cancel, onOk) =>
+      this.deps.confirmDialog(title, body, ok, cancel, onOk),
+    fungibleBagCount: (itemId) => this.fungibleBagCount(itemId),
+  });
 
   constructor(private readonly deps: MarketWindowDeps) {}
 
@@ -190,11 +254,15 @@ export class MarketWindow {
 
   close(): void {
     if (!this.opened) return;
+    const root = this.deps.root();
+    closeMaterialSourcesDialogForOwner(root);
     this.opened = false;
     this.sellItemId = null;
     this.sellInstance = null;
     this.pushSellPriceCheck();
-    this.deps.root().style.display = 'none';
+    this.sweep.clear(false);
+    this.orders.reset();
+    root.style.display = 'none';
     this.deps.hideTooltip();
     document.body.classList.remove('market-open');
     this.deps.syncBags(false);
@@ -212,10 +280,32 @@ export class MarketWindow {
     this.render();
   }
 
+  /** The search string actually SENT, which is the typed text translated at the
+   *  UI boundary when the player is not typing English (see
+   *  market_search_localized_core.ts; the box keeps showing what they typed).
+   *  Memoized on the typed text because currentQuery() is also reached from the
+   *  per-frame reconnect check, while the resolution walks the whole catalog. */
+  private effectiveSearch(): string {
+    const lang = getLanguage();
+    if (this.searchEcho?.typed === this.searchQuery && this.searchEcho.lang === lang) {
+      return this.searchEcho.sent;
+    }
+    const sent = localizedMarketSearch({
+      query: this.searchQuery,
+      localeTag: languageTag(lang),
+      itemIds: Object.keys(ITEMS),
+      localizedNameOf: (id) => itemDisplayName(ITEMS[id]),
+      englishMatches: (id, search) => marketItemMatches(id, { ...defaultMarketQuery(), search }),
+      englishHaystackOf: (id) => `${id} ${ITEMS[id]?.name ?? ''}`,
+    });
+    this.searchEcho = { typed: this.searchQuery, lang, sent };
+    return sent;
+  }
+
   /** The current browse query (search + filters + page) the UI sends to the server. */
   private currentQuery(): MarketQuery {
     return {
-      search: this.searchQuery,
+      search: this.effectiveSearch(),
       itemType: this.itemTypeFilter,
       subtype: this.subtypeFilter,
       armorClass: this.armorClassFilter,
@@ -296,6 +386,8 @@ export class MarketWindow {
       this.refreshSellPriceRef(info);
       return;
     }
+    if (this.tab === 'browse') this.sweep.refresh(this.deps.root());
+    if (this.tab === 'orders') this.orders.refresh();
     const sig = JSON.stringify([
       this.tab,
       this.itemTypeFilter,
@@ -318,6 +410,12 @@ export class MarketWindow {
       // this the open Collect tab would never repaint to show its row.
       info?.collectionSales,
       info?.collectionSalesOmitted,
+      // The Wanted tab's own axes: the board, the viewer's cap use, and the
+      // unlisted strip (bag counts ride the inventory, which the rows read live).
+      info?.orders,
+      info?.myOrderCount,
+      info?.unlistedMaterials,
+      this.tab === 'orders' ? this.deps.world().inventory : null,
     ]);
     if (sig === this.lastSig) return;
     this.lastSig = sig;
@@ -387,7 +485,7 @@ export class MarketWindow {
   // match every locale's punctuation (e.g. a fullwidth colon in CJK).
   private sellPriceRefHtml(priceRef: number | null): string {
     if (priceRef === null) return esc(t('itemUi.market.lowestPriceNone'));
-    return `<span>${esc(t('itemUi.market.lowestPriceLabel'))}</span><span class="mkt-price">${this.deps.moneyHtml(priceRef)}</span>`;
+    return `<span>${esc(t('itemUi.market.lowestPriceLabel'))}</span><span class="mkt-price ui-money">${this.deps.moneyHtml(priceRef)}</span>`;
   }
 
   render(): void {
@@ -399,6 +497,8 @@ export class MarketWindow {
     const tabLabel = (id: MarketTab): string => {
       if (id === 'browse') return t('itemUi.market.browse');
       if (id === 'sell') return t('itemUi.market.sell');
+      if (id === 'orders') return t('itemUi.market.ordersTab');
+      if (id === 'history') return t('itemUi.market.history');
       const n = marketCollectBadgeCount(info);
       return n > 0
         ? t('itemUi.market.collectWithCount', {
@@ -407,7 +507,7 @@ export class MarketWindow {
         : t('itemUi.market.collect');
     };
     const tab = (id: MarketTab) =>
-      `<button type="button" class="mkt-tab${this.tab === id ? ' sel' : ''}" data-tab="${id}" aria-pressed="${this.tab === id ? 'true' : 'false'}">${esc(tabLabel(id))}</button>`;
+      `<button type="button" class="mkt-tab ui-tab${this.tab === id ? ' sel is-on' : ''}" data-tab="${id}" aria-pressed="${this.tab === id ? 'true' : 'false'}">${esc(tabLabel(id))}</button>`;
     // The search box and the type/subtype/rarity dropdowns are all filter controls for
     // the Browse tab, so `.mkt-controls` owns their shared accessible group and responsive
     // grid. The search box lives here (rather than being created inside #market-body by
@@ -417,20 +517,24 @@ export class MarketWindow {
     const controlsHtml =
       this.tab === 'browse'
         ? `<div class="mkt-controls" role="group" aria-label="${esc(t('itemUi.market.filters'))}">` +
-          `<input type="search" class="mkt-search" placeholder="${esc(t('itemUi.market.searchPlaceholder'))}" aria-label="${esc(t('itemUi.market.searchAria'))}" value="${esc(this.searchQuery)}">` +
+          `<input type="search" class="mkt-search ui-input" placeholder="${esc(t('itemUi.market.searchPlaceholder'))}" aria-label="${esc(t('itemUi.market.searchAria'))}" value="${esc(this.searchQuery)}">` +
           this.renderMarketFilters() +
           this.renderCollapseLowestToggle() +
           `</div>`
         : '';
     el.innerHTML =
-      `<div class="panel-title"><span>${esc(t('itemUi.market.title'))} <span class="panel-subtitle">${esc(t('itemUi.market.subtitle'))}</span></span><button type="button" class="x-btn" data-close aria-label="${esc(t('itemUi.market.close'))}">${svgIcon('close')}</button></div>` +
-      `<div class="mkt-tabs">` +
+      `<div class="panel-title ui-win-head"><span class="ui-win-title">${esc(t('itemUi.market.title'))} <span class="panel-subtitle ui-win-sub">${esc(t('itemUi.market.subtitle'))}</span></span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('itemUi.market.close'))}">${svgIcon('close')}</button></div>` +
+      `<div class="mkt-tabs ui-tabs">` +
       tab('browse') +
       tab('sell') +
+      tab('orders') +
       tab('collect') +
+      tab('history') +
       `</div>` +
-      controlsHtml +
-      `<div id="market-body"></div>`;
+      `<div class="mkt-layout${this.tab === 'browse' ? '' : ' mkt-layout-wide'}">${controlsHtml}<div id="market-body"></div></div>` +
+      (this.tab === 'browse'
+        ? `<p class="mkt-footer ui-muted">${esc(t('hudChrome.marketWindow.mixedListingsFooter'))}</p>`
+        : '');
     el.querySelector('[data-close]')?.addEventListener('click', () => this.close());
     const searchInput = el.querySelector<HTMLInputElement>('.mkt-search');
     searchInput?.addEventListener('input', () => {
@@ -455,6 +559,10 @@ export class MarketWindow {
       node.addEventListener('click', () => {
         const next = (node as HTMLElement).dataset.tab as MarketTab;
         if (next === this.tab) return;
+        // Leaving Browse drops the staged sweep: nothing paints it elsewhere, and
+        // a quote nobody reads must not stay staged server-side.
+        if (next !== 'browse') this.sweep.clear(false);
+        if (next !== 'orders') this.orders.reset();
         this.tab = next;
         this.browsePage = 0;
         this.lastSig = '';
@@ -493,11 +601,31 @@ export class MarketWindow {
       // border-inclusive box.
       const borderTop = Number.parseFloat(getComputedStyle(el).borderTopWidth) || 0;
       const borderBottom = Number.parseFloat(getComputedStyle(el).borderBottomWidth) || 0;
+      // On desktop `.mkt-controls` is a 200px column that SCROLLS, so it clips in
+      // its own right and starts well below the window's own top edge. Measuring
+      // only the window let a flipped-up menu render above the column, where its
+      // first option was invisible and hit-testing reached the window title. On
+      // mobile the same element gives up its scroller (overflow-y: visible, the
+      // whole sheet scrolls instead), so it clips nothing and must NOT constrain
+      // the menu: the computed overflow is what tells the two layouts apart.
+      const controls = trigger.closest<HTMLElement>('.mkt-controls');
+      const controlsRect =
+        controls && getComputedStyle(controls).overflowY !== 'visible'
+          ? controls.getBoundingClientRect()
+          : undefined;
+      const clip = dropdownClipBounds(
+        controlsRect
+          ? [
+              { top: c.top + borderTop, bottom: c.bottom - borderBottom },
+              { top: controlsRect.top, bottom: controlsRect.bottom },
+            ]
+          : [{ top: c.top + borderTop, bottom: c.bottom - borderBottom }],
+      );
       const placement = computeDropdownPlacement({
         triggerTop: t.top,
         triggerBottom: t.bottom,
-        containerTop: c.top + borderTop,
-        containerBottom: c.bottom - borderBottom,
+        containerTop: clip.top,
+        containerBottom: clip.bottom,
         preferredMaxHeight: MKT_MENU_PREFERRED_HEIGHT,
         gap: MKT_MENU_GAP,
         minHeight: MKT_MENU_MIN_HEIGHT,
@@ -656,7 +784,15 @@ export class MarketWindow {
       this.renderSell(body, view.body, view.meta);
       return;
     }
-    this.renderCollect(body, view.body);
+    if (view.kind === 'orders') {
+      this.orders.mount(body);
+      return;
+    }
+    if (view.kind === 'collect') {
+      this.renderCollect(body, view.body);
+      return;
+    }
+    this.renderHistory(body, view.body);
   }
 
   private renderBrowse(body: HTMLElement, view: MarketBrowseBody): void {
@@ -692,6 +828,7 @@ export class MarketWindow {
       search.value = this.searchQuery;
     }
     list.innerHTML = '';
+    this.sweep.mount(list);
     if (view.state === 'empty') {
       if (view.reason === 'filtered') this.browsePage = 0;
       const empty = document.createElement('div');
@@ -734,16 +871,21 @@ export class MarketWindow {
     for (const { listing: l, item } of page.items) {
       // The Browse-row NAME uses the market-readable quality color (rare/epic
       // lifted to clear WCAG AA on the panel; market_name_color.ts). The icon
-      // border below keeps the shipped hue via its own q-<quality> class, so
-      // quality still reads on the icon at full saturation while the name stays
-      // legible.
-      const qColor = marketNameColor(item.quality);
+      // keeps the shipped hue at full saturation via its q-<quality> class,
+      // driven by the SAME instance-effective quality as the name (the
+      // all-surfaces item-cell rule): the listing's publicInstanceView
+      // carries rolled, so a promoted legendary listing reads legendary on
+      // both the name and the icon rim, not its def tier.
+      const parts = wornItemCellParts(item, l.instance);
+      const effQuality = parts.quality;
+      const qColor = marketNameColor(effQuality);
       const row = document.createElement('div');
-      row.className = 'mkt-row';
-      const itemName = itemDisplayName(item);
+      row.className = 'mkt-row ui-card';
+      const itemName = parts.name;
+      const displayedSources = materialSourcesForDisplay(l);
       const each =
         l.count > 1
-          ? `<br><span class="seller">${esc(t('itemUi.market.each', { money: formatLocalizedMoney(Math.ceil(l.price / l.count)) }))}</span>`
+          ? `<span class="seller">${esc(t('itemUi.market.each', { money: formatLocalizedMoney(Math.ceil(l.price / l.count)) }))}</span>`
           : '';
       const stack =
         l.count > 1
@@ -764,6 +906,13 @@ export class MarketWindow {
       // the bracketed [HEROIC] tooltip tag, so a screen reader reads "Heroic", not
       // "left-bracket HEROIC right-bracket".
       const heroicStar = marketHeroicStar(item, esc(t('hudChrome.itemHeroicLabel')));
+      const heroicLabel = isHeroicItem(item)
+        ? `<span class="mkt-heroic-label ui-chip">${esc(t('hudChrome.itemHeroicLabel'))}</span>`
+        : '';
+      // Pattern mark: the third corner of the same family, bottom-left (the two
+      // above hold top-left and bottom-right). Reuses the type chip's own word,
+      // so the mark and the filter that finds it read the same.
+      const patternMark = marketPatternMark(item, esc(t('itemUi.market.filterTypePattern')));
       // Gold-dominant, coinless, copper-trimmed price (market-scoped, see
       // market_price_view). The pure builder is i18n-free: pass the localized
       // short unit letters and the full localized amount (which rides the block's
@@ -775,17 +924,17 @@ export class MarketWindow {
         esc(formatLocalizedMoney(l.price, 'long')),
       );
       row.innerHTML =
-        `<span class="mkt-ico">${this.deps.itemIcon(item)}${badge}${heroicStar}</span>` +
-        `<span class="mkt-name"><span class="nm" style="color:${qColor}">${esc(itemName)}${stack}</span>` +
+        `<span class="mkt-ico ui-socket ui-socket--bag">${this.deps.itemIcon(item, effQuality)}${parts.qualityBadge}${badge}${heroicStar}${patternMark}</span>` +
+        `<span class="mkt-name"><span class="nm" style="color:${qColor}">${esc(itemName)}${stack}</span>${heroicLabel}` +
         `<span class="seller${l.house ? ' house' : ''}">${esc(l.house ? t('itemUi.market.merchantStock') : l.sellerName)}</span></span>` +
-        `<span class="mkt-price">${priceHtml}${each}</span>`;
+        `<span class="mkt-price ui-money">${priceHtml}${each}</span>`;
       const btn = document.createElement('button');
-      btn.className = `mkt-btn${l.mine ? ' cancel' : ''}`;
+      btn.className = `mkt-btn ui-btn${l.mine ? ' cancel' : ' ui-btn--red'}`;
       btn.textContent = l.mine ? t('itemUi.market.reclaim') : t('itemUi.market.buy');
       btn.setAttribute(
         'aria-label',
         t(l.mine ? 'itemUi.market.reclaimAria' : 'itemUi.market.buyAria', {
-          item: itemName,
+          item: parts.ariaName,
           price: formatLocalizedMoney(l.price),
         }),
       );
@@ -795,11 +944,48 @@ export class MarketWindow {
         // click; a buyout spends coin outright, so it asks first (the bank
         // slot-purchase precedent).
         if (l.mine) this.deps.world().marketCancel(l.id);
-        else this.promptBuy(l, itemName);
+        else this.promptBuy(l, parts.ariaName);
       });
       row.appendChild(btn);
-      this.deps.attachTooltip(row, () => this.deps.itemTooltip(item, l.instance));
+      if (!l.mine && l.count > 1) {
+        // A bulk stack need not be bought whole: a small quantity field beside
+        // the Buy button lets the buyer take just a few units instead (defaults
+        // to 1, so leaving it untouched is a one-click "buy one" action). The
+        // sell tab's #mkt-qty field is the precedent; this one is per-row, so it
+        // is selected by class, never a document-wide id.
+        row.appendChild(this.buildPartialBuyControl(l, parts.ariaName));
+      }
+      if (sweepEligibleRow(l)) {
+        // Market Sweep: buy this item across many sellers' listings at once. Only
+        // a plain, fungible, someone-else's row can stage one (the sim planner's
+        // own exclusions); the card it opens quotes and confirms before sending.
+        const sweepBtn = document.createElement('button');
+        sweepBtn.className = 'mkt-sweep-btn ui-btn';
+        sweepBtn.textContent = t('itemUi.market.sweep');
+        sweepBtn.setAttribute('aria-label', t('itemUi.market.sweepAria', { item: itemName }));
+        sweepBtn.addEventListener('click', () => {
+          audio.click();
+          this.sweep.stage(l.itemId, itemName);
+        });
+        row.appendChild(sweepBtn);
+      }
+      // A bulk material listing states WHOSE units are in it: the buyer is
+      // agreeing to those exact contributors, and the listing carries them
+      // (world_api/market.ts MarketListingView.materialSources).
+      this.deps.attachTooltip(row, () => this.deps.itemTooltip(item, l.instance, displayedSources));
+      attachMaterialSourcesContextMenu(
+        row,
+        itemName,
+        displayedSources,
+        this.deps.openMaterialSources,
+      );
       list.appendChild(row);
+      appendMaterialSourcesActionAfter(
+        row,
+        itemName,
+        displayedSources,
+        this.deps.openMaterialSources,
+      );
     }
     if (page.pageCount > 1) {
       const pager = document.createElement('div');
@@ -807,9 +993,9 @@ export class MarketWindow {
       const pageNumber = formatNumber(page.page + 1, { maximumFractionDigits: 0 });
       const pageCount = formatNumber(page.pageCount, { maximumFractionDigits: 0 });
       pager.innerHTML =
-        `<button type="button" class="mkt-page-btn" data-market-page="prev"${page.page <= 0 ? ' disabled' : ''} aria-label="${esc(t('itemUi.market.pagePrevAria'))}">${esc(t('itemUi.market.pagePrev'))}</button>` +
+        `<button type="button" class="mkt-page-btn ui-btn" data-market-page="prev"${page.page <= 0 ? ' disabled' : ''} aria-label="${esc(t('itemUi.market.pagePrevAria'))}">${esc(t('itemUi.market.pagePrev'))}</button>` +
         `<span class="mkt-page-info">${esc(t('itemUi.market.pageStatus', { current: pageNumber, total: pageCount }))}</span>` +
-        `<button type="button" class="mkt-page-btn" data-market-page="next"${page.page >= page.pageCount - 1 ? ' disabled' : ''} aria-label="${esc(t('itemUi.market.pageNextAria'))}">${esc(t('itemUi.market.pageNext'))}</button>`;
+        `<button type="button" class="mkt-page-btn ui-btn" data-market-page="next"${page.page >= page.pageCount - 1 ? ' disabled' : ''} aria-label="${esc(t('itemUi.market.pageNextAria'))}">${esc(t('itemUi.market.pageNext'))}</button>`;
       pager.querySelectorAll<HTMLButtonElement>('[data-market-page]').forEach((button) => {
         button.addEventListener('click', () => {
           if (button.disabled) return;
@@ -844,22 +1030,35 @@ export class MarketWindow {
 
   // The Browse tab's buy gate. It captures the row's terms in the pure core and
   // states them in Hud's one modal confirm prompt; nothing is sent until OK.
-  private promptBuy(listing: MarketListingView, itemName: string): void {
-    const pending = marketBuyConfirm(listing);
-    // A stack quotes both the total ask and the per-unit ask the row showed, so the
-    // prompt can never read as the price of a single item.
+  // `requestedCount` names a partial buy of a bulk stack (the row's quantity
+  // field); omitted, it buys the listing whole, unchanged from before.
+  private promptBuy(listing: MarketListingView, itemName: string, requestedCount?: number): void {
+    const pending = marketBuyConfirm(listing, requestedCount);
+    // A partial buy states how many of the stack THIS confirm takes, distinct
+    // from a whole-stack buy's body (which states the stack's own count) so the
+    // prompt never reads as "the whole stack" when it is not. A stack (whole or
+    // partial) quotes both the total ask and the per-unit ask the row showed, so
+    // the prompt can never read as the price of a single item.
     const body =
       pending.unitPrice === null
         ? t('itemUi.market.buyConfirmBody', {
             item: itemName,
             price: formatLocalizedMoney(pending.price),
           })
-        : t('itemUi.market.buyConfirmBodyStack', {
-            item: itemName,
-            count: formatNumber(pending.count, { maximumFractionDigits: 0 }),
-            price: formatLocalizedMoney(pending.price),
-            each: formatLocalizedMoney(pending.unitPrice),
-          });
+        : pending.buyCount < pending.count
+          ? t('itemUi.market.buyConfirmBodyPartial', {
+              item: itemName,
+              count: formatNumber(pending.buyCount, { maximumFractionDigits: 0 }),
+              total: formatNumber(pending.count, { maximumFractionDigits: 0 }),
+              price: formatLocalizedMoney(pending.buyPrice),
+              each: formatLocalizedMoney(pending.unitPrice),
+            })
+          : t('itemUi.market.buyConfirmBodyStack', {
+              item: itemName,
+              count: formatNumber(pending.count, { maximumFractionDigits: 0 }),
+              price: formatLocalizedMoney(pending.price),
+              each: formatLocalizedMoney(pending.unitPrice),
+            });
     this.deps.confirmDialog(
       t('itemUi.market.buyConfirmTitle'),
       body,
@@ -867,6 +1066,39 @@ export class MarketWindow {
       t('itemUi.market.buyConfirmCancel'),
       () => this.commitBuy(pending),
     );
+  }
+
+  // A per-row quantity field plus its own Buy trigger, for taking fewer than a
+  // bulk listing's whole stack. Defaults to 1 (leaving it untouched buys one
+  // unit), bounded [1, l.count]; at l.count it behaves exactly like the row's
+  // main Buy button (marketBuyConfirm treats a requestedCount at or above the
+  // stack size as a whole-stack buy). Selected by CLASS, never an id: Browse
+  // renders one of these per bulk row, unlike the Sell tab's single #mkt-qty.
+  private buildPartialBuyControl(listing: MarketListingView, itemName: string): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'mkt-buy-partial';
+    const input = document.createElement('input');
+    input.className = 'mkt-buy-partial-qty coininput ui-input';
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(listing.count);
+    input.value = '1';
+    input.setAttribute(
+      'aria-label',
+      t('itemUi.market.buyQuantityAria', { item: itemName, total: listing.count }),
+    );
+    wrap.appendChild(input);
+    const qtyBtn = document.createElement('button');
+    qtyBtn.className = 'mkt-buy-partial-btn ui-btn ui-btn--red';
+    qtyBtn.textContent = t('itemUi.market.buy');
+    qtyBtn.setAttribute('aria-label', t('itemUi.market.buyQuantityBtnAria', { item: itemName }));
+    qtyBtn.addEventListener('click', () => {
+      audio.click();
+      const requested = Math.max(1, Math.min(listing.count, Number.parseInt(input.value, 10) || 1));
+      this.promptBuy(listing, itemName, requested);
+    });
+    wrap.appendChild(qtyBtn);
+    return wrap;
   }
 
   // OK pressed: re-resolve the captured listing against the LIVE snapshot before
@@ -883,7 +1115,14 @@ export class MarketWindow {
       );
       return;
     }
-    this.deps.world().marketBuy(pending.listingId);
+    // A whole-stack buy sends no count (byte-identical to the pre-partial-buy
+    // wire shape); a partial buy names exactly how many.
+    this.deps
+      .world()
+      .marketBuy(
+        pending.listingId,
+        pending.buyCount < pending.count ? pending.buyCount : undefined,
+      );
     audio.coin();
   }
 
@@ -897,7 +1136,7 @@ export class MarketWindow {
     )}</div>`;
     if (view.state === 'pick-empty') {
       const pick = document.createElement('div');
-      pick.className = 'mkt-sell-pick empty';
+      pick.className = 'mkt-sell-pick ui-card empty';
       pick.textContent = t('itemUi.market.sellPickEmpty');
       body.appendChild(pick);
       return;
@@ -907,7 +1146,7 @@ export class MarketWindow {
       this.sellInstance = null;
       this.pushSellPriceCheck();
       const pick = document.createElement('div');
-      pick.className = 'mkt-sell-pick empty';
+      pick.className = 'mkt-sell-pick ui-card empty';
       pick.textContent = t('itemUi.tooltip.cannotMarket');
       body.appendChild(pick);
       return;
@@ -915,10 +1154,15 @@ export class MarketWindow {
     // Keep the release Sell-tab lowest-price fields (priceRef, stagedItemId) AND
     // the redesign's market-scoped WCAG name color (marketNameColor), not raw QUALITY_COLOR.
     const { item, have, suggested, priceRef, itemId: stagedItemId } = view.form;
-    const qColor = marketNameColor(item.quality);
+    // The staged copy's own payload decides the name color AND the icon's
+    // q-<quality> rim (an instanced staging is single-copy, so the color,
+    // the rim, and the tooltip all describe one unit).
+    const staged = wornItemCellParts(item, view.form.instance);
+    const stagedQuality = staged.quality;
+    const qColor = marketNameColor(stagedQuality);
     const pick = document.createElement('div');
-    pick.className = 'mkt-sell-pick';
-    pick.innerHTML = `${this.deps.itemIcon(item)}<span class="ps-name" style="color:${qColor}">${esc(itemDisplayName(item))}</span>`;
+    pick.className = 'mkt-sell-pick ui-card';
+    pick.innerHTML = `${this.deps.itemIcon(item, stagedQuality)}${staged.qualityBadgeLabelled}<span class="ps-name" style="color:${qColor}">${esc(staged.name)}</span>`;
     // The staged copy's tooltip carries its payload, so a player holding plain
     // AND special copies can see WHICH one is staged (the mail chip precedent).
     this.deps.attachTooltip(pick, () => this.deps.itemTooltip(item, view.form.instance));
@@ -949,18 +1193,18 @@ export class MarketWindow {
     form.className = 'mkt-price-form';
     const qtyRow =
       have > 1
-        ? `<div class="mkt-price-row"><label for="mkt-qty">${esc(t('itemUi.market.quantity'))}</label><input class="coininput" id="mkt-qty" type="number" min="1" max="${have}" value="1"> <span class="mkt-coin-tag">${esc(t('itemUi.market.quantityOf', { count: formatNumber(have, { maximumFractionDigits: 0 }) }))}</span></div>`
+        ? `<div class="mkt-price-row"><label for="mkt-qty">${esc(t('itemUi.market.quantity'))}</label><input class="coininput ui-input" id="mkt-qty" type="number" min="1" max="${have}" value="1"> <span class="mkt-coin-tag">${esc(t('itemUi.market.quantityOf', { count: formatNumber(have, { maximumFractionDigits: 0 }) }))}</span></div>`
         : '';
     form.innerHTML =
       qtyRow +
       `<div class="mkt-price-row"><label>${esc(t('itemUi.market.priceEach'))}</label>` +
-      `<input class="coininput" id="mkt-g" type="number" min="0" value="${suggested.gold}" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.goldShort'))}</span>` +
-      `<input class="coininput" id="mkt-s" type="number" min="0" max="99" value="${suggested.silver}" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.silverShort'))}</span>` +
-      `<input class="coininput" id="mkt-c" type="number" min="0" max="99" value="${suggested.copper}" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.copperShort'))}</span></div>`;
+      `<input class="coininput ui-input" id="mkt-g" type="number" min="0" value="${suggested.gold}" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.goldShort'))}</span>` +
+      `<input class="coininput ui-input" id="mkt-s" type="number" min="0" max="99" value="${suggested.silver}" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.silverShort'))}</span>` +
+      `<input class="coininput ui-input" id="mkt-c" type="number" min="0" max="99" value="${suggested.copper}" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.copperShort'))}</span></div>`;
     body.appendChild(form);
 
     const listBtn = document.createElement('button');
-    listBtn.className = 'mkt-list-btn';
+    listBtn.className = 'mkt-list-btn ui-btn ui-btn--gold';
     listBtn.textContent = t('itemUi.market.listButton');
     listBtn.addEventListener('click', () => {
       const root = this.deps.root();
@@ -1012,25 +1256,28 @@ export class MarketWindow {
     body.innerHTML = `<div class="mkt-note">${esc(t('itemUi.market.collectNote'))}</div>`;
     if (view.proceeds > 0) {
       const row = document.createElement('div');
-      row.className = 'mkt-collect';
-      row.innerHTML = `<span>${esc(t('itemUi.market.saleProceeds'))}</span><span class="mkt-price">${this.deps.moneyHtml(view.proceeds)}</span>`;
+      row.className = 'mkt-collect ui-card';
+      row.innerHTML = `<span>${esc(t('itemUi.market.saleProceeds'))}</span><span class="mkt-price ui-money">${this.deps.moneyHtml(view.proceeds)}</span>`;
       body.appendChild(row);
     }
-    this.renderCollectSales(body, view.sales, view.salesOmitted);
     for (const { item, count, instance } of view.rows) {
-      const qColor = marketNameColor(item.quality);
+      // Returned goods keep their copy identity: the name color and the icon
+      // rim both read the instance-effective quality (the all-surfaces rule).
+      const returned = wornItemCellParts(item, instance);
+      const returnedQuality = returned.quality;
+      const qColor = marketNameColor(returnedQuality);
       const row = document.createElement('div');
-      row.className = 'mkt-collect';
+      row.className = 'mkt-collect ui-card';
       const stack =
         count > 1
           ? ` ${t('itemUi.market.stackCount', { count: formatNumber(count, { maximumFractionDigits: 0 }) })}`
           : '';
-      row.innerHTML = `<span class="mkt-collect-item">${this.deps.itemIcon(item)}<span class="mkt-collect-name" style="color:${qColor}">${esc(itemDisplayName(item))}${esc(stack)}</span></span>`;
+      row.innerHTML = `<span class="mkt-collect-item">${this.deps.itemIcon(item, returnedQuality)}${returned.qualityBadgeLabelled}<span class="mkt-collect-name" style="color:${qColor}">${esc(returned.name)}${esc(stack)}</span></span>`;
       this.deps.attachTooltip(row, () => this.deps.itemTooltip(item, instance));
       body.appendChild(row);
     }
     const btn = document.createElement('button');
-    btn.className = 'mkt-list-btn';
+    btn.className = 'mkt-list-btn ui-btn ui-btn--gold';
     btn.textContent = t('itemUi.market.collectAll');
     btn.addEventListener('click', () => {
       this.deps.world().marketCollect();
@@ -1039,32 +1286,43 @@ export class MarketWindow {
     body.appendChild(btn);
   }
 
-  // The itemized ledger under the proceeds line: what sold, to whom, and for how
-  // much, so the single gold figure above is accountable. Sits between the purse
-  // and the returned-goods rows because it explains the purse, not the goods.
-  private renderCollectSales(
-    body: HTMLElement,
-    sales: MarketCollectSaleRow[],
-    omitted: number,
-  ): void {
-    if (sales.length === 0 && omitted === 0) return;
+  // The History tab: the itemized ledger of what sold, to whom, and for how much
+  // (issue: "Different tab for All sales history"), split out of Collect so a
+  // sale stays visible here after its proceeds are claimed on the Collect tab.
+  private renderHistory(body: HTMLElement, view: MarketHistoryBody): void {
+    if (view.state === 'empty') {
+      body.innerHTML = `<div class="mkt-empty">${esc(t('itemUi.market.historyEmpty'))}</div>`;
+      return;
+    }
+    body.innerHTML = `<div class="mkt-note">${esc(t('itemUi.market.historyNote'))}</div>`;
+    this.renderSalesList(body, view.sales, view.salesOmitted);
+  }
+
+  private renderSalesList(body: HTMLElement, sales: MarketSaleRow[], omitted: number): void {
     const list = document.createElement('div');
     list.className = 'mkt-sale-list';
-    for (const { item, count, proceeds, buyerName } of sales) {
+    for (const { item, itemName, count, proceeds, buyerName } of sales) {
       const qColor = marketNameColor(item.quality);
       const row = document.createElement('div');
-      row.className = 'mkt-sale';
+      row.className = 'mkt-sale ui-card';
       const stack =
         count > 1
           ? ` ${t('itemUi.market.stackCount', { count: formatNumber(count, { maximumFractionDigits: 0 }) })}`
           : '';
-      // esc on the buyer: a player-authored name reaching innerHTML raw is the
-      // exact hole src/ui/CLAUDE.md names.
+      // esc on BOTH names: a chosen name and a buyer name are player-authored
+      // text, and either reaching innerHTML raw is the exact hole
+      // src/ui/CLAUDE.md names.
+      // The sold copy itself is gone, so the ICON still shows the def (there is
+      // no payload left to shade it by), but the NAME is the one the copy
+      // carried when it sold: the ledger stamped it at the sale, because
+      // nothing afterwards can recover it and two listings of one id otherwise
+      // read as two identical rows.
+      const saleName = itemName ?? itemDisplayName(item);
       row.innerHTML =
-        `<span class="mkt-collect-item">${this.deps.itemIcon(item)}` +
-        `<span class="mkt-sale-name"><span style="color:${qColor}">${esc(itemDisplayName(item))}${esc(stack)}</span>` +
+        `<span class="mkt-collect-item">${this.deps.itemIcon(item, item.quality)}` +
+        `<span class="mkt-sale-name"><span style="color:${qColor}">${esc(saleName)}${esc(stack)}</span>` +
         `<span class="mkt-sale-buyer">${esc(t('itemUi.market.saleBuyer', { buyer: buyerName }))}</span></span></span>` +
-        `<span class="mkt-price">${this.deps.moneyHtml(proceeds)}</span>`;
+        `<span class="mkt-price ui-money">${this.deps.moneyHtml(proceeds)}</span>`;
       this.deps.attachTooltip(row, () => this.deps.itemTooltip(item));
       list.appendChild(row);
     }
@@ -1081,13 +1339,14 @@ export class MarketWindow {
 
   // Fungible stock only: the plain listing form's quantity cap must match what
   // marketList can actually escrow (an instanced copy is never swept into a
-  // bulk listing), or a qty above the fungible stock just bounces off the
-  // sim's denial. An instanced staging is single-copy and never reads this.
+  // bulk listing, and a material stack's premium/signed buckets never are
+  // either), or a qty above the fungible stock just bounces off the sim's
+  // denial. An instanced staging is single-copy and never reads this.
   private fungibleBagCount(itemId: string): number {
     return this.deps
       .world()
       .inventory.filter((s) => s.itemId === itemId && !s.instance)
-      .reduce((n, s) => n + s.count, 0);
+      .reduce((n, s) => n + materialFungibleUnitCount(s), 0);
   }
 
   // ---- Filter chrome (the browse-tab type/subtype/rarity dropdowns) ----
@@ -1099,6 +1358,7 @@ export class MarketWindow {
     if (filter === 'consumable') return t('itemUi.market.filterTypeConsumable');
     if (filter === 'material') return t('itemUi.market.filterTypeMaterial');
     if (filter === 'cosmetic') return t('itemUi.market.filterTypeCosmetic');
+    if (filter === 'pattern') return t('itemUi.market.filterTypePattern');
     if (filter === 'other') return t('itemUi.market.filterTypeOther');
     return t('itemUi.market.filterTypeAll');
   }
@@ -1188,13 +1448,15 @@ export class MarketWindow {
         // esc() on the value too: every option used to be a source-authored literal, but
         // the bag capacities are derived from content (ITEMS[*].bagSlots), so the reason
         // this interpolation was safe by construction no longer holds on its own.
-        return `<button type="button" class="mkt-select-option${selected ? ' sel' : ''}" role="option" tabindex="-1" aria-selected="${selected ? 'true' : 'false'}" data-market-filter-option="${esc(option)}">${esc(optionLabel(option))}</button>`;
+        return `<button type="button" class="mkt-select-option ui-chip${selected ? ' sel is-on' : ''}" role="option" tabindex="-1" aria-selected="${selected ? 'true' : 'false'}" data-market-filter-option="${esc(option)}">${esc(optionLabel(option))}</button>`;
       })
       .join('');
+    // The open menu floats over the rows and the other filters, so it wears the strong
+    // panel (the shared gold dropdown's fill), not the translucent in-flow .ui-card plate.
     return (
       `<div class="mkt-filter"><span>${esc(label)}</span><div class="mkt-select" data-market-filter-menu="${menu}">` +
-      `<button type="button" class="mkt-select-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(t('itemUi.market.filterValueAria', { label, value: current }))}"><span>${esc(current)}</span><span class="mkt-select-chevron" aria-hidden="true"></span></button>` +
-      `<div class="mkt-select-menu" role="listbox" hidden>${optionHtml}</div>` +
+      `<button type="button" class="mkt-select-btn ui-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(t('itemUi.market.filterValueAria', { label, value: current }))}"><span>${esc(current)}</span><span class="mkt-select-chevron" aria-hidden="true"></span></button>` +
+      `<div class="mkt-select-menu ui-panel-strong" role="listbox" hidden>${optionHtml}</div>` +
       `</div></div>`
     );
   }
@@ -1208,7 +1470,7 @@ export class MarketWindow {
     const checked = this.collapseLowest ? ' checked' : '';
     return (
       `<label class="mkt-collapse-toggle">` +
-      `<input type="checkbox" class="mkt-collapse-checkbox"${checked}> ` +
+      `<input type="checkbox" class="mkt-collapse-checkbox ui-check"${checked}> ` +
       `<span>${esc(t('itemUi.market.collapseLowest'))}</span>` +
       `</label>`
     );

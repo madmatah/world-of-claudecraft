@@ -8,7 +8,6 @@
 // Sim layer: no DOM/Three imports. This file is types only.
 
 import type { DungeonLayout, InteriorStyle } from '../dungeon_layout';
-import type { CombatExitMemory } from '../instance_exit_memory';
 import type { LockSession } from '../lockpick';
 import type { DelveHazardZone, RiftTier } from '../types';
 
@@ -316,6 +315,12 @@ export interface RiftInstance {
   orbActive: boolean;
   /** Overworld position to return the player to when they leave. */
   returnPos: { x: number; z: number };
+  /** Predefined facing to return the player with: away from the portal along
+   *  the line they approached it on (0 for a dev run with no portal entity, or
+   *  a still-free pool slot; enterRift always sets it once a run is claimed,
+   *  same lifecycle as returnPos). Optional only so the pool's placeholder
+   *  literal (sim.ts) does not need to carry it. */
+  returnFacing?: number;
   emptyFor: number;
   /** Rank of the world-spawned portal this run came through (null for dev
    * portals): drives the Heroic Mark payout and the sealed announcement. */
@@ -342,12 +347,6 @@ export interface RiftInstance {
    * to the boss's cast time; at zero it detonates (lethal to anyone inside `radius`).
    * Cleared on boss death or floor reset. */
   bossDeathZones: Array<{ x: number; z: number; radius: number; remaining: number; total: number }>;
-  /** Recently-exited-mid-combat memory (issue #2653): a player who left this run
-   * through the beacon/exit while a mob was actively fighting them has their
-   * dropped threat snapshotted here for a short window. Re-entering before it
-   * lapses resumes the fight instead of granting a free, unengaged reset
-   * (rift/runs.ts). Session state, cleared with the claim. */
-  combatExitMemory: CombatExitMemory;
 }
 
 /** The rift as a whole (derived from the descriptor's seed + baseLevel), used for

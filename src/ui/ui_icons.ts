@@ -28,6 +28,7 @@ export type UiIconName =
   | 'tank'
   | 'healer'
   | 'check'
+  | 'sprout'
   | 'questlog'
   | 'crown'
   | 'target'
@@ -58,6 +59,7 @@ export type UiIconName =
   | 'next'
   | 'more'
   | 'meters'
+  | 'gear'
   | 'battleground'
   | 'whisper'
   | 'music'
@@ -75,6 +77,7 @@ export type UiIconName =
   | 'cards'
   | 'trash'
   | 'mount'
+  | 'rally'
   | 'crafting'
   | 'professions'
   | 'makers-mark'
@@ -87,7 +90,9 @@ export type UiIconName =
   | 'demote'
   | 'out-of-range'
   | 'wiki'
-  | 'alert';
+  | 'alert'
+  | 'perfecting'
+  | 'harvest-journal';
 
 // Inner SVG markup per icon (one or more <path>). Default fill rule is nonzero
 // (correct for game-icons.net art incl. overlaps); the two hand-authored cut-out
@@ -111,6 +116,11 @@ const ICONS: Record<UiIconName, string> = {
   tank: '<path d="M256 32l192 64v128c0 132-82 227-192 256C146 451 64 356 64 224V96zm0 68l-128 43v81c0 100 57 172 128 197 71-25 128-97 128-197v-81z"/>',
   healer: '<path d="M198 64h116v134h134v116H314v134H198V314H64V198h134z"/>',
   check: '<path d="M202 378L74 250l46-46 82 82 190-190 46 46z"/>',
+  // hand-authored seedling (the guild board's new-player-friendly mark): a
+  // stem rising from a mound with one leaf each side, built from the same
+  // even-odd-safe solid shapes as the other geometrics.
+  sprout:
+    '<path d="M240 468V292c-52 4-100-22-124-70-16-32-20-72-14-108 60 2 112 38 134 96 4 10 6 20 8 30 2-10 4-20 8-30 22-58 74-94 134-96 6 36 2 76-14 108-24 48-72 74-124 70v176z"/><path d="M96 468c0-30 72-52 160-52s160 22 160 52z"/>',
   questlog:
     '<path d="M103.432 17.844c-1.118.005-2.234.032-3.348.08-2.547.11-5.083.334-7.604.678-20.167 2.747-39.158 13.667-52.324 33.67-24.613 37.4 2.194 98.025 56.625 98.025.536 0 1.058-.012 1.583-.022v.704h60.565c-10.758 31.994-30.298 66.596-52.448 101.43-2.162 3.4-4.254 6.878-6.29 10.406l34.878 35.733-56.263 9.423c-32.728 85.966-27.42 182.074 48.277 182.074v-.002l9.31.066c23.83-.57 46.732-4.298 61.325-12.887 4.174-2.458 7.63-5.237 10.467-8.42h-32.446c-20.33 5.95-40.8-6.94-47.396-25.922-8.956-25.77 7.52-52.36 31.867-60.452 5.803-1.93 11.723-2.834 17.565-2.834v-.406h178.33c-.57-44.403 16.35-90.125 49.184-126 23.955-26.176 42.03-60.624 51.3-94.846l-41.225-24.932 38.272-6.906-43.37-25.807h-.005l.002-.002.002.002 52.127-8.85c-5.232-39.134-28.84-68.113-77.37-68.113C341.14 32.26 222.11 35.29 149.34 28.496c-14.888-6.763-30.547-10.723-45.908-10.652zm.464 18.703c13.137.043 27.407 3.804 41.247 10.63l.033-.07c4.667 4.735 8.542 9.737 11.68 14.985H82.92l10.574 14.78c10.608 14.83 19.803 31.99 21.09 42.024.643 5.017-.11 7.167-1.814 8.836-1.705 1.67-6.228 3.875-15.99 3.875-40.587 0-56.878-44.952-41.012-69.06C66.238 46.64 79.582 39.22 95.002 37.12c2.89-.395 5.863-.583 8.894-.573zM118.5 80.78h46.28c4.275 15.734 3.656 33.07-.544 51.51H131.52c1.9-5.027 2.268-10.574 1.6-15.77-1.527-11.913-7.405-24.065-14.62-35.74zm101.553 317.095c6.44 6.84 11.192 15.31 13.37 24.914 3.797 16.736 3.092 31.208-1.767 43.204-4.526 11.175-12.576 19.79-22.29 26h237.19c14.448 0 24.887-5.678 32.2-14.318 7.312-8.64 11.2-20.514 10.705-32.352-.186-4.473-.978-8.913-2.407-13.18l-69.91-8.205 42.017-20.528c-8.32-3.442-18.64-5.537-31.375-5.537H220.053zm-42.668.506c-1.152-.003-2.306.048-3.457.153-2.633.242-5.256.775-7.824 1.63-15.11 5.02-25.338 21.54-20.11 36.583 3.673 10.57 15.347 17.71 25.654 13.938l1.555-.57h43.354c.946-6.36.754-13.882-1.358-23.192-3.71-16.358-20.543-28.483-37.815-28.54z"/>',
   crown:
@@ -180,6 +190,8 @@ const ICONS: Record<UiIconName, string> = {
   next: '<path d="M176 96 376 256 176 416Z"/>',
   more: '<path d="M94 256a34 34 0 1 0 68 0 34 34 0 1 0-68 0M222 256a34 34 0 1 0 68 0 34 34 0 1 0-68 0M350 256a34 34 0 1 0 68 0 34 34 0 1 0-68 0Z"/>',
   meters: '<path d="M84 288h72v152H84zM220 184h72v256h-72zM356 96h72v344h-72z"/>',
+  // hand-authored gear / cogwheel: 8-tooth mechanical gear with center cut-out
+  gear: '<path fill-rule="evenodd" d="M411 216l59 10v60l-59 10-17 41 34 49-42 42-49-34-41 17-10 59h-60l-10-59-41-17-49 34-42-42 34-49-17-41-59-10v-60l59-10 17-41-34-49 42-42 49 34 41-17 10-59h60l10 59 41 17 49-34 42 42-34 49 17 41zM256 184a72 72 0 1 0 0 144 72 72 0 1 0 0-144z"/>',
   // hand-authored: a unit nameplate — name bar over a health bar, with a
   // downward pointer aimed at the unit it floats above.
   nameplates: '<path d="M88 132h336v68H88zM88 220h336v56H88zM236 296h40l-20 34z"/>',
@@ -226,6 +238,10 @@ const ICONS: Record<UiIconName, string> = {
   // matching the bar glyph weight
   mount:
     '<path d="M120 140 A176 176 0 1 0 392 140 L340 188 A104 104 0 1 1 172 188 Z"/><path d="M96 108h84v36H96zM332 108h84v36h-84z"/>',
+  // hand-authored chequered flag on a pole (the Realm Racers window), so its
+  // launcher never shares the horseshoe the Cosmetics launcher carries
+  rally:
+    '<path d="M120 56h26v400h-26z"/><path fill-rule="evenodd" d="M146 72h272v204H146zM158 84v180h248V84z"/><path d="M146 72h68v68h-68zM282 72h68v68h-68zM214 140h68v68h-68zM350 140h68v68h-68zM146 208h68v68h-68zM282 208h68v68h-68z"/>',
   // hand-authored playing card (the Card Duel minigame): a solid card body
   // with a hollowed diamond pip so the glyph reads as "a card" at
   // micro-button size (evenodd punches the pip through the body)
@@ -264,6 +280,21 @@ const ICONS: Record<UiIconName, string> = {
   // hollowed with evenodd so the links stay legible at corner size.
   'bond-link':
     '<path fill-rule="evenodd" d="M186 148a108 108 0 1 0 0 216 108 108 0 0 0 0-216zm0 56a52 52 0 1 1 0 104 52 52 0 0 1 0-104zM326 148a108 108 0 1 0 0 216 108 108 0 0 0 0-216zm0 56a52 52 0 1 1 0 104 52 52 0 0 1 0-104z"/>',
+  // hand-authored faceted gem with a rising spark (the Perfecting launcher): a
+  // cut stone hollowed with evenodd so the facet reads at micro-button size,
+  // and a four-point spark above its shoulder for the rank climb. Distinct from
+  // the `crafting` anvil it sits under and from the `enchant-rune` spark alone.
+  // This glyph remains the inline and load-failure fallback for the painted
+  // side-rail launcher registered in CHROME_ART_IDS.
+  perfecting:
+    '<path fill-rule="evenodd" d="M256 128 L388 240 L256 448 L124 240 Z M256 192 L336 244 L256 376 L176 244 Z"/><path d="M400 56 L416 108 L468 124 L416 140 L400 192 L384 140 L332 124 L384 108 Z"/>',
+  // hand-authored sprout over a soil line (the Harvest Journal launcher): a
+  // stem with two leaves, the growing-crop read the journal tracks. Distinct
+  // from the `professions` mortar it sits beside and from the deeds `book`.
+  // This glyph remains the inline and load-failure fallback for the painted
+  // side-rail launcher registered in CHROME_ART_IDS.
+  'harvest-journal':
+    '<path d="M256 464V236" stroke="currentColor" stroke-width="36" fill="none" stroke-linecap="round"/><path d="M252 300C150 300 100 240 90 150C190 150 250 200 252 300Z"/><path d="M260 240C262 140 320 90 420 90C410 190 360 240 260 240Z"/><path d="M128 464H384" stroke="currentColor" stroke-width="28" fill="none" stroke-linecap="round"/>',
 };
 
 export function hasUiIcon(name: string): name is UiIconName {

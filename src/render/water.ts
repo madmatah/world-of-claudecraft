@@ -22,6 +22,7 @@ import {
 import { activeFarFieldPolicy } from './foliage_impostor';
 import { GFX, type GfxSettings, SUN_DIR } from './gfx';
 import { idleSlot, runIdleQueue } from './idle_queue';
+import { applyTextureAnisotropy } from './texture_anisotropy';
 import { waterNormalish, waterNormalMaps } from './textures';
 import {
   bakeSwellGate,
@@ -252,7 +253,7 @@ function prepareWaterTex(key: string, file: string): Promise<void> {
   if (existing) return existing;
   const task = loadTexture(`/textures/water/${file}`, { repeat: true })
     .then((tex) => {
-      tex.anisotropy = 4;
+      applyTextureAnisotropy(tex, 'normal');
       WATER_TEX[key] = tex;
     })
     .catch((err) => {
@@ -405,6 +406,13 @@ export interface WaterView {
    * field at all, so there this is a no-op.
    */
   setWavesEnabled(enabled: boolean): void;
+  /** One live from-below ceiling mesh (every underside shares its material),
+   *  the root the underwater compile gate links; null on the Phong tier,
+   *  which has no underside. */
+  undersideRoot(): THREE.Object3D | null;
+  /** Keep every underside hidden while held, whatever the camera does: the
+   *  underwater compile gate holds them until their program has linked. */
+  setUndersideHeld(held: boolean): void;
   /**
    * Editor-only: re-seat the surface at the ACTIVE waterLevel() and recompute
    * the per-vertex shore depth from the CURRENT terrainHeight (after a
@@ -1055,8 +1063,10 @@ function buildShaderWater(seed: number, renderer?: THREE.WebGLRenderer): WaterVi
   // (attributes, culled index and all), visible only while the camera is
   // under the waterline, so above water it costs nothing at all.
   const underPairs: { front: THREE.Mesh; under: THREE.Mesh }[] = [];
+  let undersideHeld = false;
   const addUnderside = (front: THREE.Mesh): void => {
     const under = new THREE.Mesh(front.geometry, undersideMaterial);
+    under.name = 'water-underside';
     under.renderOrder = front.renderOrder;
     under.position.copy(front.position);
     under.visible = false;
@@ -1587,7 +1597,7 @@ function buildShaderWater(seed: number, renderer?: THREE.WebGLRenderer): WaterVi
       const under = cameraY < surfaceY + 1.1;
       for (const pair of underPairs) {
         pair.under.position.y = pair.front.position.y;
-        pair.under.visible = under && pair.front.visible;
+        pair.under.visible = !undersideHeld && under && pair.front.visible;
       }
       if (!wavesEnabled) return 0;
       return simulation?.update(_time, cameraX, cameraZ) ?? 0;
@@ -1633,6 +1643,12 @@ function buildShaderWater(seed: number, renderer?: THREE.WebGLRenderer): WaterVi
     ): void {
       if (!wavesEnabled) return;
       simulation?.releaseContact(x, z, radius, halfLength, axisX, axisZ, strength);
+    },
+    undersideRoot: () => underPairs[0]?.under ?? null,
+    setUndersideHeld(held: boolean): void {
+      if (held === undersideHeld) return;
+      undersideHeld = held;
+      if (held) for (const pair of underPairs) pair.under.visible = false;
     },
     setWavesEnabled(enabled: boolean): void {
       if (enabled === wavesEnabled) return;
@@ -1719,6 +1735,8 @@ function buildPhongWater(): WaterView {
     moveContact: () => {},
     releaseContact: () => {},
     setWavesEnabled: () => {},
+    undersideRoot: () => null,
+    setUndersideHeld: () => {},
     setLevel(): void {
       for (const m of meshes) m.position.y = waterLevel();
     },

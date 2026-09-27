@@ -7,13 +7,15 @@
 // a typed keyed per-aura node pool (Top risk 3: the pool's tooltip closure reads a
 // LIVE mutable slot, never a captured aura).
 //
-// Component contract: the core is INSTANCE-PARAMETERIZED by the aura
-// MODE ('all' for the buff bar, 'debuffs' for the target frame). createAurasView(mode,
-// deps) preallocates a per-aura slot pool ONCE and returns a tick(entity) that mutates
-// it IN PLACE and returns the SAME { slots, count } container every call, so a correct
-// frame allocates no new array/object garbage (the reused-reference allocation proxy,
-// tests/util/alloc_probe.ts). Two modes yield two independent views (the buff bar and
-// the target debuffs are two instances, not a code fork).
+// Component contract: the core is INSTANCE-PARAMETERIZED by the aura MODE ('buffs'
+// and 'debuffs' for the player's own two rows, 'all' for the target strip and the
+// party mini-strips; the mode semantics comment on createAurasView is the one the
+// ordering design leans on). createAurasView(mode, deps) preallocates a per-aura slot
+// pool ONCE and returns a tick(entity) that mutates it IN PLACE and returns the SAME
+// { slots, count } container every call, so a correct frame allocates no new
+// array/object garbage (the reused-reference allocation proxy,
+// tests/util/alloc_probe.ts). Each mode yields an independent view (the player rows
+// and the target strip are separate instances, not a code fork).
 //
 // The DEBUFF display allowlist lives in the host-agnostic sim/aura_classify leaf.
 // This core stays DOM-free and i18n-MECHANISM-free (no i18n runtime import): the
@@ -30,11 +32,14 @@
 import {
   isDebuffDisplayAura as classifyDebuffDisplayAura,
   DEBUFF_AURA_KINDS,
+  isToggleAura as isToggleAuraShared,
 } from '../sim/aura_classify';
 import { isCancelableAura } from '../sim/combat/aura_cancel';
+import { isColdsightInternalMarkerAuraId } from '../sim/combat/hunter_coldsight_read';
 import { isPersistentEngineAura } from '../sim/persistent_aura';
 import type { AuraKind } from '../sim/types';
 import type { AuraSchool } from './aura_effect';
+import { AURA_URGENCY_BUCKET_COUNT, auraUrgencyBucket } from './aura_strip_order_core';
 
 // Re-export the shared set for the view contract and its exact-set regression test.
 // Classification itself stays in the sim leaf so HUD display surfaces cannot drift.
@@ -44,42 +49,15 @@ export { DEBUFF_AURA_KINDS };
 // Wolf) read as MODES, not timed effects: WoW shows no countdown under them, so
 // neither do we, even though the sim backs each with a long finite duration
 // (3600s). Every other aura shows a compact WoW-style remaining label (20s /
-// 5m / 1h / 2d) via compactAuraDuration below.
-const TOGGLE_KINDS: ReadonlySet<AuraKind> = new Set([
-  'stealth',
-  'form_bear',
-  'form_cat',
-  'form_moonkin',
-  'form_shadow',
-  'form_travel',
-  'form_fireball',
-  'battle_stance',
-  'berserker_stance',
-  'defensive_stance',
-]);
+// 5m / 1h / 2d) via compactAuraDuration below. The MEMBERSHIP itself lives in
+// the host-agnostic sim leaf (src/sim/aura_classify.ts) so every surface that
+// asks the question reads one rule.
 /** Thornhollow Fields' carried-flag buff (src/sim/social/battleground.ts
  *  `CARRIED_FLAG_AURA_ID`, named here as a literal the same way icons.ts names
  *  the rune ids). Exported because the buff bar's cancel affordance has to
  *  recognize it: cancelling THIS buff is a gameplay action (it drops the flag),
  *  not a cosmetic un-buff. */
 export const CARRIED_FLAG_AURA_ID = 'bg_carried_flag';
-// Ghost Wolf toggles too, but its aura rides the generic buff_speed kind (which
-// Sprint also uses, 15s and very much worth a countdown), so it hides by id.
-// The carried-flag buff is a MODE for the same reason: you have the flag until
-// you do not, and the sim only backs it with a longer-than-any-match duration so
-// nothing can expire it out from under the carry. A countdown under either would
-// be a lie the player reads as "this is about to leave me".
-// The Realm Racers ward hides its countdown for a related reason: it is not a
-// mode and not timed, it lasts until something SPENDS it (or the race ends), and
-// the sim backs that with the long finite duration the aura system uses for
-// permanent effects. A countdown ticking down from three hours would be telling
-// a pilot about a clock that decides nothing.
-const TOGGLE_IDS: ReadonlySet<string> = new Set([
-  'ghost_wolf',
-  'beacon_of_light',
-  CARRIED_FLAG_AURA_ID,
-  'rally_ward',
-]);
 // Auras the low graphics tier's buff cap may NEVER shed (auras_painter.ts).
 // The cap's fairness rule is "spend the budget on buffs, a debuff always
 // renders", which rests on buffs being cosmetic. That is false for an aura whose
@@ -89,11 +67,34 @@ const TOGGLE_IDS: ReadonlySet<string> = new Set([
 // the one player who needs it. Hiding it is hiding an action, which the
 // gameplay-neutral-graphics invariant forbids (docs/design/graphics-settings-fairness.md).
 const NEVER_SHED_IDS: ReadonlySet<string> = new Set([CARRIED_FLAG_AURA_ID]);
-// The inverse override: an aura that rides a TOGGLE_KIND but is a genuine timed
-// buff worth a countdown. Greater Invisibility reuses the rogue-stealth machinery
-// for its vanish (kind 'stealth' with full move speed), but it is a fixed 20s
-// buff, not a toggle, so it must show its remaining time like any other buff.
-const TIMED_IDS: ReadonlySet<string> = new Set(['greater_invisibility']);
+
+/**
+ * Whether an aura reads as a MODE rather than a timed effect (a stance, a druid
+ * form, stealth, Ghost Wolf, the carried flag), by the only two facts the rule
+ * needs.
+ *
+ * Split out of `isToggleAura` below when the aura TRACKS
+ * (src/ui/hud/aura_tracks/) became a third caller. They hold the id and kind but
+ * NOT a whole `AuraInput`, and building one per aura per frame would allocate on
+ * the per-frame path; a second copy of the rule would drift from this one, which
+ * is the outcome the shared classifier exists to prevent.
+ *
+ * The membership moved down to the sim leaf when the Auras watchlist became a
+ * caller from OUTSIDE the view (src/ui/aura_watchlist_core.ts, which must not
+ * offer a mode as a watchable proc). This stays the UI-side name every HUD
+ * surface already imports, so hud.ts and the aura tracks are unaffected.
+ */
+export function isToggleAuraKind(id: string, kind: AuraKind): boolean {
+  return isToggleAuraShared(kind, id);
+}
+
+/** The `AuraInput` form, for the two callers inside this module that hold one:
+ *  the slot's suppressed countdown (`toggle`) and the urgency band an ordered
+ *  strip sorts by (`auraUrgencyBucket`). Keeping it one rule is what stops the
+ *  strip from banding an aura as a mode while still printing a countdown. */
+function isToggleAura(a: AuraInput): boolean {
+  return isToggleAuraKind(a.id, a.kind);
+}
 
 /** Whether cancelling this aura performs a GAMEPLAY action rather than merely
  *  dropping a buff, so a touch host must confirm it before it fires. Today that
@@ -397,12 +398,23 @@ function makeSlotState(): AuraSlotState {
 export function createAurasView(
   mode: AuraMode,
   deps: AurasDeps,
-  opts?: { ownFirst?: boolean; effectHtmlCacheVersion?: () => unknown },
+  opts?: { ownFirst?: boolean; orderByUrgency?: boolean; effectHtmlCacheVersion?: () => unknown },
 ): AurasView {
   const slots: AuraSlotState[] = [];
   const effectHtmlCache: Array<AuraEffectHtmlCache | undefined> = [];
   const state: AurasState = { slots, count: 0 };
   const ownFirst = opts?.ownFirst === true;
+  // Urgency ordering is a property of the PLAYER-STRIP modes, not an option the caller
+  // has to remember. 'buffs' and 'debuffs' exist for exactly one thing, the player's own
+  // two rows in hud.ts, and those are the rows a player scans for what is about to run
+  // out. 'all' is the SHARED mode (the target strip and the party mini-strips in
+  // party_frame_row.ts), which reads as a roster of what is on somebody else and keeps
+  // sim application order. An explicit opts.orderByUrgency still overrides either way.
+  //
+  // ownFirst wins where both apply: on the target strip "these are MY dots" is the
+  // stronger read than "this one expires soonest", and the two orderings would otherwise
+  // fight over the same leading slots.
+  const orderByUrgency = (opts?.orderByUrgency ?? mode !== 'all') && !ownFirst;
   const effectHtmlCacheVersion = opts?.effectHtmlCacheVersion;
 
   return {
@@ -423,6 +435,13 @@ export function createAurasView(
         // via echoVisibleTo, so re-filtering here would wrongly hide the viewer's OWN
         // marks too.
         if (ownFirst && a.kind === 'temporal_echo' && !deps.isOwn(a)) return;
+        // Coldsight Read's internal bookkeeping markers (the Fevered Draw progress
+        // counter, the two per-ability reserved-cast markers): kind 'internal_cd'
+        // with an 86400s reservation-timeout duration purely so nothing but their
+        // own consumer clears them, never a real day-long buff. Exact-id, so every
+        // OTHER internal_cd marker (Heating Up, Stormsurge Ready, ...) and the
+        // real armed Coldsight Read opportunity (10s) still render normally.
+        if (a.kind === 'internal_cd' && isColdsightInternalMarkerAuraId(a.id)) return;
         const debuff = isAuraDebuff(a);
         if (mode === 'debuffs' && !debuff) return;
         if (mode === 'buffs' && debuff) return;
@@ -436,9 +455,7 @@ export function createAurasView(
         slot.iconKey = deps.iconId(a);
         slot.isDebuff = debuff;
         slot.school = debuff ? (a.school ?? 'physical') : '';
-        const toggle =
-          (TOGGLE_KINDS.has(a.kind) || TOGGLE_IDS.has(a.id) || isPersistentEngineAura(a.id)) &&
-          !TIMED_IDS.has(a.id);
+        const toggle = isToggleAura(a);
         slot.durationText = toggle ? '' : compactAuraDuration(a.remaining, units);
         // Toggles show no countdown, so they never blink either.
         slot.expiring = !toggle && isAuraExpiring(a.remaining, a.duration);
@@ -520,6 +537,17 @@ export function createAurasView(
       if (ownFirst) {
         for (const a of entity.auras) if (deps.isOwn(a)) fill(a, true);
         for (const a of entity.auras) if (!deps.isOwn(a)) fill(a, false);
+      } else if (orderByUrgency) {
+        // One pass per urgency band (aura_strip_order_core.ts), most urgent first, so the
+        // slots nearest the strip's anchor hold what is about to expire. Same shape as
+        // the ownFirst two-pass above: no sort, no comparator, no per-frame allocation,
+        // and the sim's application order survives INSIDE each band, so an icon only
+        // ever moves when its aura crosses a band boundary.
+        for (let b = 0; b < AURA_URGENCY_BUCKET_COUNT; b++) {
+          for (const a of entity.auras) {
+            if (auraUrgencyBucket(a.remaining, isToggleAura(a)) === b) fill(a, false);
+          }
+        }
       } else {
         for (const a of entity.auras) fill(a, false);
       }

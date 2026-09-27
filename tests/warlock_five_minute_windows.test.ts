@@ -29,17 +29,37 @@ describe('Affliction full-BiS five-minute inert-boss balance', () => {
     // 0.096 measured at the 2026-08-30 legendary band (Heartwood's spirit
     // and intellect grew with its ilvl-49 budget, so slightly more pool is
     // left at five minutes); the corridor widens to match.
-    expect(result.manaEndPct).toBeLessThan(0.12);
+    // 0.242 measured 2026-09-11 with the stamina baseline model
+    // (item_budget.ts): the Deathless Heartwood was authored with its stamina
+    // inside its line, so on the caster line the line was filled with Spirit
+    // (25 to 43) and the kit's badge jewelry and Soulflame pieces gained
+    // Spirit the same way; regen up, no Spell Power moved, so a quarter of the
+    // pool survives the window. The corridor widens to 0.30 with the same
+    // headroom the 0.12 line carried over its 0.096 measurement; the pool is
+    // still finite (starvation still binds below).
+    expect(result.manaEndPct).toBeLessThan(0.3);
+    // And a floor under the measured 0.242, so the larger surviving pool is
+    // pinned from both sides rather than left open below.
+    expect(result.manaEndPct).toBeGreaterThan(0.18);
     expect(result.starvedPct).toBeLessThan(0.45);
   }, 120_000);
 });
 
 describe('Demonology full-BiS five-minute inert-boss balance', () => {
-  it('keeps a modest sustain floor without approaching Affliction', () => {
+  // Re-anchored for the v0.42.0 Necromancy retune (+20% demonology damage:
+  // spec_output_tuning.ts's owner spell bonus 0.10 -> 0.32 plus the baseline
+  // pet bonus 0.15 -> 0.42, docs/design/class-balance-v042-results.md).
+  // Measured seed-42 actual moved 179 -> 228.92 on this fixture; the corridor
+  // moves with it, preserving the SAME relative floor/ceiling margins as the
+  // pre-v0.42.0 corridor (150/210 against a measured 179, i.e. about -16%/
+  // +17%) rather than just raising the ceiling. This asserts demonology's own
+  // corridor only; it overlaps Affliction's (175-235, above), so no cross-spec
+  // ordering is claimed or tested here.
+  it('lands the Necromancy-buffed sustained DPS corridor', () => {
     const result = runWarlockBalanceProbe('demonology', 42, 300);
 
-    expect(result.dps).toBeGreaterThanOrEqual(150);
-    expect(result.dps).toBeLessThanOrEqual(210);
+    expect(result.dps).toBeGreaterThanOrEqual(192);
+    expect(result.dps).toBeLessThanOrEqual(269);
     expect(result.manaEndPct).toBeLessThan(0.12);
     expect(result.starvedPct).toBeLessThan(0.45);
   }, 120_000);
@@ -59,12 +79,16 @@ describe('Destruction full-BiS five-minute inert-boss balance', () => {
   // filler's mana cost does not move it at all (a +1 on Gloom Bolt reproduced
   // 0.18037518 to every digit). The invariants that actually bite here are the
   // dps band and starvedPct; the end-pool pin is widened to match the cycle.
+  // Re-anchored at the v0.43 integration: the approved Ruinbolt cycle composes
+  // with the later stamina/Spirit item-model pass, and seed 42 measures 241.176
+  // DPS and 0.237 ending mana in the full-world BiS probe. The pool still spends
+  // down; the check remains a finite-economy bound rather than a cycle-phase pin.
   it('spends the mana pool by five minutes inside the sanity corridor', () => {
     const result = runWarlockBalanceProbe('destruction', 42, 300);
 
     expect(result.dps).toBeGreaterThanOrEqual(170);
-    expect(result.dps).toBeLessThanOrEqual(230);
-    expect(result.manaEndPct).toBeLessThan(0.2);
+    expect(result.dps).toBeLessThanOrEqual(255);
+    expect(result.manaEndPct).toBeLessThan(0.3);
     expect(result.starvedPct).toBeLessThan(0.45);
   }, 120_000);
 });

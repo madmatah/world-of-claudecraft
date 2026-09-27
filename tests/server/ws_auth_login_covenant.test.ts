@@ -28,6 +28,7 @@
 // it, so sharing a file with the rest of the ws_auth suite would let a stray
 // kick satisfy an arm for the wrong reason (and would leave that suite's ~30
 // existing joins taking real holds).
+
 import { EventEmitter } from 'node:events';
 import type * as http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,6 +44,7 @@ import {
 } from '../../server/storage_purchases';
 import { createWsAuth, type WsAuthDeps } from '../../server/ws_auth';
 import { bufferHandshakeMessages } from '../../server/ws_buffer';
+import { freshAccountLedger } from '../../src/sim/account_ledger';
 import { ONLINE_WORLD_AUTH_TYPE } from '../../src/world_api';
 
 const CHARACTER = 7;
@@ -111,6 +113,9 @@ function setup() {
     beginChatModerationHydration: vi.fn((accountId: number) =>
       new ChatModerationLiveState().beginHydration(accountId),
     ),
+    // The fresh-join arm asks the action-bar store for a still-queued document
+    // before its post-lease reload; this file has nothing queued.
+    hotbarLayouts: { pending: () => null },
   };
   const deps: WsAuthDeps = {
     game: game as unknown as WsAuthDeps['game'],
@@ -138,6 +143,7 @@ function setup() {
     permissionsForRoles: vi.fn((roles: readonly string[]) => new Set<string>(roles)),
     metaRequestUserData: vi.fn(() => ({ fbp: null, fbc: null })),
     metaEventSourceUrl: vi.fn(() => undefined),
+    loadAccountLedger: async () => freshAccountLedger(),
     loadAccountCosmetics: vi.fn(async () => ({
       completedQuestIds: [],
       mechChromaIds: [],
@@ -146,7 +152,7 @@ function setup() {
     })),
     acquireCharacterLease: vi.fn(async () => true),
     releaseCharacterLease: vi.fn(async () => {}),
-    bankBonusForAccount: vi.fn(async () => ({ bonusSlots: 0, sources: [], characterCount: 1 })),
+    bankBonusForAccount: vi.fn(async () => ({ bonusSlots: 0, sources: [] })),
     isConnectionRefused: vi.fn(() => false),
     bufferHandshakeMessages,
     requestMetadata: vi.fn(() => ({ ip: '1.2.3.4', userAgent: 'ua' })),

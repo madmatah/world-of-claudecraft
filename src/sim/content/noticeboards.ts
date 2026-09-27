@@ -3,6 +3,7 @@
 
 import { EASTBROOK_LAYOUT } from '../eastbrook_layout';
 import { FENBRIDGE_LAYOUT } from '../fenbridge_layout';
+import { GLIDER_RANKINGS_BOARD_ID } from '../glider_scoreboards';
 import {
   assertCanonicalEastbrookNoticeboardDef,
   type MusterBoardDef,
@@ -48,8 +49,13 @@ assertCanonicalEastbrookNoticeboardDef(EASTBROOK_NOTICEBOARD);
 // to the board surface reach the newest players too, where they are deciding
 // who to travel with. Everything except id, entityId, placement and facing is
 // the canonical shape the Sim's constructor asserts on every board.
+/** The recruits' signpost id: the guild board opened from THIS board defaults
+ *  to its new-player-friendly view (src/ui/guild_leaderboard_view.ts
+ *  defaultGuildBoardCategory); every other board opens the full ranking. */
+export const PROVING_SHORE_NOTICEBOARD_ID = 'proving_shore_noticeboard';
+
 const PROVING_SHORE_NOTICEBOARD = {
-  id: 'proving_shore_noticeboard',
+  id: PROVING_SHORE_NOTICEBOARD_ID,
   // The reserved high-range static-service id one past Eastbrook's, so adding
   // a board never shifts the sequential entity allocator (see eastbrook_layout).
   entityId: 2_000_000_002,
@@ -152,6 +158,7 @@ export const NOTICEBOARDS: readonly NoticeboardDef[] = Object.freeze([
   hubBoard('hedgewick_noticeboard', 2_000_000_013, EVERGARDEN_ZONE, 5),
   hubBoard('wickharbor_noticeboard', 2_000_000_014, GALECREST_ZONE, -5),
   hubBoard('gullhaven_noticeboard', 2_000_000_015, FARSHORE_ZONE, 5),
+  townBoard(GLIDER_RANKINGS_BOARD_ID, 2_000_000_016, 201, 560, Math.PI, { x: 201, z: 558.5 }),
 ]);
 
 const fenbridgeMusterBoard = FENBRIDGE_LAYOUT.civic.musterBoard;

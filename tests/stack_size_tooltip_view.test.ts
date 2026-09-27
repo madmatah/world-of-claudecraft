@@ -73,6 +73,10 @@ describe('stackSizeTooltipLine', () => {
       ['valefire_lantern', 'held_offhand'],
       ['silkspun_satchel', 'bag'],
       ['riding_training', 'tool'],
+      // Masterwrought phase 11: a shipped pattern item. RecipeItemDef bars
+      // stackSize outright, so the kind can never opt back in the way
+      // heroic_mark's tool row does below.
+      ['pattern_ironhusk_flask', 'recipe'],
     ];
     for (const [id, kind] of probes) {
       const def = ITEMS[id];
@@ -105,12 +109,18 @@ describe('stackSizeTooltipLine', () => {
   });
 
   it('an explicit def stackSize wins over the kind default, formatter grouped', () => {
-    const probe: ItemDef = { ...ITEMS.minor_healing_potion, stackSize: 1000 };
+    // Narrow before spreading: RecipeItemDef bars stackSize outright, so a
+    // spread over the bare union no longer accepts the override.
+    const potion = ITEMS.minor_healing_potion;
+    if (potion.kind !== 'potion') throw new Error('fixture must be a potion');
+    const probe: ItemDef = { ...potion, stackSize: 1000 };
     expect(stackSizeTooltipLine(probe)).toBe('<div class="tt-sub">Max stack: 1,000</div>');
   });
 
   it('an explicit stackSize of 1 on a stackable kind also renders nothing', () => {
-    const probe: ItemDef = { ...ITEMS.minor_healing_potion, stackSize: 1 };
+    const potion = ITEMS.minor_healing_potion;
+    if (potion.kind !== 'potion') throw new Error('fixture must be a potion');
+    const probe: ItemDef = { ...potion, stackSize: 1 };
     expect(stackSizeTooltipLine(probe)).toBe('');
   });
 
@@ -122,6 +132,17 @@ describe('stackSizeTooltipLine', () => {
 
   it('a mergeable signed payload keeps the line: same-signer copies really stack', () => {
     expect(stackSizeTooltipLine(ITEMS.sunpetal_healing_draught, { signer: 'Adventurer' })).toBe(
+      '<div class="tt-sub">Max stack: 20</div>',
+    );
+  });
+
+  it('a LOCKED but uncharged payload keeps the line: it still shares the def cap', () => {
+    // Locking is one flag over the WHOLE counted stack (item_lock.ts
+    // setItemLocked), not a per-unit identity, so unlike the charge case
+    // above a locked stack really does share the def cap; hiding the line
+    // here would be the exact stale assumption the packing-core fix removed
+    // elsewhere (material_stack_packing.ts, bags.ts).
+    expect(stackSizeTooltipLine(ITEMS.minor_healing_potion, { locked: true })).toBe(
       '<div class="tt-sub">Max stack: 20</div>',
     );
   });
@@ -158,7 +179,7 @@ describe('stackSizeTooltipLine', () => {
       path.join(__dirname, '../src/ui/stack_size_tooltip_view.ts'),
       'utf8',
     ).replace(/^\s*\/\/.*$/gm, '');
-    expect(viewSrc).toContain('${esc(text)}');
+    expect(viewSrc).toContain('$' + '{esc(text)}');
   });
 
   it('Hud.itemTooltip composes the max-stack line (method-scoped source pin)', () => {

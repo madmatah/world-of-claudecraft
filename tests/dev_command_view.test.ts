@@ -16,6 +16,30 @@ describe('developer command view', () => {
     expect(buildDevCommand('biskit', { bisSpec: 'prot; /dev gold 999' })).toBe('/dev bis');
   });
 
+  it('builds the town teleport from a slug and refuses a crafted value', () => {
+    expect(buildDevCommand('town', { town: 'eastbrook' })).toBe('/dev town eastbrook');
+    expect(buildDevCommand('town', { town: 'dawnrest_camp' })).toBe('/dev town dawnrest_camp');
+    // Token-gated like every other id field: an injection-shaped value never
+    // reaches the command line, and there is no wider form to fall back to.
+    expect(buildDevCommand('town', { town: 'eastbrook; /dev gold 999' })).toBeNull();
+    expect(buildDevCommand('town', {})).toBeNull();
+    expect(DEV_COMMAND_ACTIONS.find((action) => action.id === 'town')?.category).toBe('travel');
+  });
+
+  it('builds farmgrow with the optional bed id and refuses to splice a crafted one', () => {
+    // The all-plots form is what an EMPTY field means, not a refusal: the
+    // command already accepts both shapes, so the row degrades to the wider
+    // one instead of going dead (the biskit optional-spec contract).
+    expect(buildDevCommand('farmgrow', {})).toBe('/dev farmgrow');
+    expect(buildDevCommand('farmgrow', { bed: '' })).toBe('/dev farmgrow');
+    expect(buildDevCommand('farmgrow', { bed: 'bed_eastbrook_1' })).toBe(
+      '/dev farmgrow bed_eastbrook_1',
+    );
+    // Token-gated like every other field: an injection-shaped value never
+    // reaches the command line, and the fallback is the harmless wide form.
+    expect(buildDevCommand('farmgrow', { bed: 'bed_1; /dev gold 999' })).toBe('/dev farmgrow');
+  });
+
   it('shows the Spawns tab only to admin accounts', () => {
     expect(devCategoryVisible('spawns', true)).toBe(true);
     expect(devCategoryVisible('spawns', false)).toBe(false);
@@ -23,6 +47,15 @@ describe('developer command view', () => {
     for (const category of ['player', 'inventory', 'progress', 'travel', 'scenarios'] as const) {
       expect(devCategoryVisible(category, false)).toBe(true);
     }
+  });
+
+  it('offers the King of the Hill levers as fixed scenario commands', () => {
+    expect(buildDevCommand('hillwarn', {})).toBe('/dev hill warn');
+    expect(buildDevCommand('hillnow', {})).toBe('/dev hill');
+    expect(buildDevCommand('hillrise', {})).toBe('/dev hill rise');
+    expect(buildDevCommand('hillend', {})).toBe('/dev hill end');
+    const ids = filteredDevActions('scenarios', '').map((action) => action.id);
+    expect(ids).toEqual(expect.arrayContaining(['hillwarn', 'hillnow', 'hillrise', 'hillend']));
   });
 
   it('recognizes only the exact GUI command', () => {

@@ -52,10 +52,11 @@ import {
   MELEE_RANGE,
   questObjectiveRequired,
   SALVAGE_CAST_ID,
+  SUNDER_CAST_ID,
   TOOL_RECHARGE_CAST_ID,
   xpForLevel,
 } from '../types';
-import { UNSTUCK_COOLDOWN_ID } from '../unstuck_cooldown';
+import { isUnstuckSystemCooldown } from '../unstuck_cooldown';
 import { groundHeight } from '../world';
 
 const NEARBY_RANGE = 40; // /nearby scan radius — wider than say, tighter than yell
@@ -167,14 +168,16 @@ export function comboReadout(e: Entity): string {
   if (e.comboPoints <= 0) return 'You have no combo points built up.';
   return `Combo points: ${e.comboPoints}/5.`;
 }
-// Readout for "/combat": reads only the live Entity.inCombat / combatTimer
-// (no new fields). combatTimer is "time since last combat event"; a player
-// lingers in combat until it reaches COMBAT_LINGER (the literal 5s drop-out
-// window applied in updatePlayers, sim.ts where inCombat is recomputed). If
-// inCombat is still set past that window, an enemy is actively engaged, so no
-// countdown can be promised.
-export function combatReadout(e: Entity): string {
+// Readout for "/combat": reads the live Entity.inCombat / combatTimer plus
+// `heldByEnemies`, the caller's answer from combat/engaged_combat.ts
+// (isHeldInCombat: an enemy still carries the player on its hate table, or an
+// engaged boss holds their group). combatTimer is "time since last combat
+// event"; a player only lingers in combat until it reaches COMBAT_LINGER (the
+// literal 5s window the coordinator's engaged pass applies in sim.ts) when no
+// enemy holds them, so a countdown is promised only then.
+export function combatReadout(e: Entity, heldByEnemies: boolean): string {
   if (!e.inCombat) return 'You are not in combat.';
+  if (heldByEnemies) return 'You are in combat (enemies still engaged).';
   const COMBAT_LINGER = 5;
   const remaining = COMBAT_LINGER - e.combatTimer;
   if (remaining > 0) {
@@ -432,7 +435,7 @@ function auraLabel(a: Aura): string {
 //
 export function cooldownsReadout(e: Entity): string {
   const parts = [...e.cooldowns]
-    .filter(([id]) => id !== UNSTUCK_COOLDOWN_ID)
+    .filter(([id]) => !isUnstuckSystemCooldown(id))
     .sort((a, b) => a[1] - b[1])
     .map(([id, remaining]) => `${ABILITIES[id]?.name ?? id} (${Math.ceil(remaining)}s)`);
   if (parts.length === 0) return 'No abilities are on cooldown.';
@@ -603,6 +606,9 @@ export function castingReadout(e: Entity): string {
   }
   if (e.castingAbility === SALVAGE_CAST_ID) {
     return `You are salvaging: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === SUNDER_CAST_ID) {
+    return `You are sundering: ${remaining}s of ${total}s remaining.`;
   }
   if (e.castingAbility === TOOL_RECHARGE_CAST_ID) {
     return `You are recharging a tool effect: ${remaining}s of ${total}s remaining.`;

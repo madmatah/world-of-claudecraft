@@ -100,7 +100,7 @@ function spawnRallyBot(sim: Sim, tier: RallyDriverTier, offset: number): number 
     REALM_RACERS_BOT_CLASSES[
       (sim.realmRacers.nextMatchId + offset) % REALM_RACERS_BOT_CLASSES.length
     ];
-  const pid = sim.addPlayer(cls, nextBotName(sim));
+  const pid = sim.addPlayer(cls, nextBotName(sim), { bot: true });
   sim.realmRacers.bots.set(pid, tier);
   return pid;
 }

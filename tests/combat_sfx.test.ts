@@ -9,12 +9,14 @@ import {
   consumeHealCue,
   dispatchVarkhulCalloutSfx,
   groundTickAbilityCue,
+  healAudioPlan,
   impactCueForDamage,
   MOB_VOICE_CUES,
   mobVoiceActionForDamage,
   mobVoiceCue,
   mobVoiceCueWithFallback,
   mobVoiceFamily,
+  nythraxisCalloutCue,
   playerSwingCueForDamage,
   playerVoiceCue,
   shouldPlayCombatImpactForTarget,
@@ -316,6 +318,18 @@ describe('combat SFX policy', () => {
     ).toEqual({ key: 'spell_nova', anchorId: 10 });
   });
 
+  it('gives Piercing Howl one voiced nova without a duplicate shout sound', () => {
+    const ev = {
+      type: 'spellfx' as const,
+      sourceId: 10,
+      targetId: 20,
+      school: 'physical' as const,
+      ability: 'piercing_howl',
+    };
+    expect(spellFxCue({ ...ev, fx: 'nova' })).toEqual({ key: 'piercing_howl', anchorId: 10 });
+    expect(spellFxCue({ ...ev, fx: 'shout' })).toBeNull();
+  });
+
   it('gives Intimidating Shout its own distinct nova cue, not the shared fear_shout', () => {
     expect(
       spellFxCue({
@@ -518,7 +532,7 @@ describe('combat SFX policy', () => {
     ).toBe('impact_fire');
   });
 
-  it('gives Frozen Orb and Glacial Spike their own impact instead of the shared impact_frost', () => {
+  it('gives Frostglobe and Rimeneedle their own impact instead of the shared impact_frost', () => {
     for (const [abilityId, key] of [
       ['frozen_orb', 'frozen_orb'],
       ['glacial_spike', 'glacial_spike'],
@@ -995,7 +1009,19 @@ describe('combat SFX policy', () => {
 
     const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
     expect(hud).toContain("case 'varkhulCallout'");
-    expect(hud).toContain('dispatchVarkhulCalloutSfx(');
+    // The HUD arm is shared with the Nythraxis callouts: dispatchRaidCalloutSfx
+    // routes a varkhulCallout event through dispatchVarkhulCalloutSfx.
+    expect(hud).toContain('dispatchRaidCalloutSfx(');
+  });
+
+  it('gives every new Nythraxis warning an existing sampled cue', () => {
+    expect(nythraxisCalloutCue('sigilAppears')).toBe('impact_arcane');
+    expect(nythraxisCalloutCue('sigilBound')).toBe('impact_arcane');
+    expect(nythraxisCalloutCue('sigilUnbound')).toBe('impact_shadow');
+    expect(nythraxisCalloutCue('gravefireTarget')).toBe('impact_shadow');
+    for (const call of ['sigilAppears', 'sigilBound', 'sigilUnbound', 'gravefireTarget'] as const) {
+      expect(nythraxisCalloutCue(call) in SFX_CLIPS, call).toBe(true);
+    }
   });
 });
 
@@ -1044,5 +1070,20 @@ describe('playerVoiceCue', () => {
     ]) {
       expect(SFX_CLIPS, key).toHaveProperty(key);
     }
+  });
+});
+
+describe('extracted heal audio ownership', () => {
+  it.each([
+    ['frenzied_regeneration', true, true],
+    ['frenzied_regeneration', false, false],
+    ['rejuvenation', true, false],
+    ['healing_touch', false, true],
+  ])('%s hot=%s preserves its established playback', (abilityId, hot, audible) => {
+    const ev = { type: 'heal2', targetId: 2, sourceId: 1, amount: 10, abilityId, hot } as Extract<
+      SimEvent,
+      { type: 'heal2' }
+    >;
+    expect(healAudioPlan(ev)).toEqual(audible ? { cue: 'heal_impact', gain: 1 } : null);
   });
 });

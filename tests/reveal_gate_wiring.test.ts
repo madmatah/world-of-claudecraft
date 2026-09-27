@@ -12,10 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { prewarmResumeIsDebt } from '../src/render/prewarm_policy';
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-}
+import { stripComments } from './helpers/strip_comments';
 
 const read = (path: string): string =>
   stripComments(readFileSync(new URL(path, import.meta.url), 'utf8'));
@@ -71,11 +68,13 @@ describe('reveal gate wiring (source pins)', () => {
     // The link is cut into one queue unit per material group of the root
     // (compile_gate_pieces.ts), each running the colour arm, the shadow arm,
     // then the variant settle on that group's representative node, each under
-    // its own deadline.
+    // its own deadline. The shader warm audit is told in the warm gate's
+    // assembly unit, not here: the host carries no announcement arm.
     const colourAt = anchor(
       host,
       'const pieces = linkPieceWork(target, deps.compileColor, deps.compileShadow, deps.settle);',
     );
+    expect(host).not.toContain('deps.expect');
     // Uploads sit BETWEEN the link and the touch: the touch's driver round trip
     // flushes behind everything already queued, so an upload paid after it is
     // measured by it instead of being its own budgeted piece. Both ride the
@@ -179,10 +178,10 @@ describe('reveal gate wiring (source pins)', () => {
   });
 
   it('covers graphics rebuild prewarm and bounds the entry-only first-paint barrier', () => {
-    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const main = stripComments(readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'));
     const rebuild = main.slice(
       anchor(main, 'prewarmRenderer: async (next) => {'),
-      anchor(main, 'validateRenderer: (next) => {'),
+      anchor(main, 'validateRenderer: validateGameRenderer,'),
     );
     expect(rebuild).toContain('await next.prewarmInitialScene();');
 
@@ -201,7 +200,10 @@ describe('reveal gate wiring (source pins)', () => {
     const vistaAt = rendererSource.indexOf('if (vista) {', demandAt);
     expect(vistaAt).toBeGreaterThan(demandAt);
     const ambience = rendererSource.slice(demandAt, vistaAt);
-    expect(ambience).toContain('this.renderBudgetState.externalFrameCap,');
+    // A chosen frame rate limit is pacing the client knows about, read the same way.
+    expect(ambience).toContain(
+      'this.renderBudgetState.externalFrameCap || chosenCadenceMissShare() >= 0,',
+    );
   });
 
   it('props threads the gate into the per-frame far-cell and band updates', () => {
@@ -326,9 +328,23 @@ describe('reveal gate wiring (source pins)', () => {
       // every building group: a building outside the roots links its
       // unshared materials cold on its own first fog reveal. The piecewise
       // anchors are built in the SAME order, so root index i is root i.
+      // Eastbrook's monument (body plus FX) rides the roots after the
+      // buildings: it shares no material with any batch and linked six
+      // programs cold on its first fog reveal before it did (2026-09-12 hunt).
       expect(source).toContain(
-        'const staticRevealRoots: THREE.Object3D[] = [...staticCullTargets, ...buildingGroups];',
+        _town === 'eastbrook'
+          ? 'const staticRevealRoots: THREE.Object3D[] = [\n' +
+              '    ...staticCullTargets,\n' +
+              '    ...buildingGroups,\n' +
+              '    ...monumentRoots,\n' +
+              '  ];'
+          : 'const staticRevealRoots: THREE.Object3D[] = [...staticCullTargets, ...buildingGroups];',
       );
+      if (_town === 'eastbrook') {
+        expect(source).toContain(
+          'const monumentRoots: THREE.Object3D[] = [monumentBody.group, monumentFx.group];',
+        );
+      }
       expect(source).toContain('buildingGroups.push(built.group);');
       expect(source).toContain('staticRevealRoots(): readonly THREE.Object3D[] {');
       // The gate asks for the roots inside the consult that fires the request,

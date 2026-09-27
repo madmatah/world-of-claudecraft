@@ -15,7 +15,7 @@ import { markDialogRoot } from './dialog_root';
 import { tEntity } from './entity_i18n';
 import { esc } from './esc';
 import { captureFocusKey, restoreFirstEnabled } from './focus_restore';
-import { formatMoney, formatNumber, t } from './i18n';
+import { formatDuration, formatMoney, formatNumber, t } from './i18n';
 import type { TownFocusView } from './town_focus_view';
 import { svgIcon } from './ui_icons';
 
@@ -104,17 +104,17 @@ export function renderTownFocusWindow(
   // every clause, so the root stays programmatically focusable (the focus-first
   // fallback) without joining the cycle.
   markDialogRoot(el, { label: t('hudChrome.townFocus.title') });
-  el.innerHTML = `<div class="panel-title"><span>${esc(t('hudChrome.townFocus.title'))}</span><button type="button" class="x-btn" data-close data-focus-key="${CLOSE_FOCUS_KEY}" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
+  el.innerHTML = `<div class="panel-title ui-win-head"><span class="ui-win-title">${esc(t('hudChrome.townFocus.title'))}</span><button type="button" class="x-btn ui-x-btn" data-close data-focus-key="${CLOSE_FOCUS_KEY}" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
 
   const hint = document.createElement('div');
-  hint.className = 'town-focus-hint';
+  hint.className = 'town-focus-hint ui-meta ui-muted';
   hint.textContent = t('hudChrome.townFocus.hint');
   el.appendChild(hint);
 
   // Legibility hints: the tier-shift rule and the town-only rule,
   // parameterized off the real focus constants so the copy cannot rot.
   const tierHint = document.createElement('div');
-  tierHint.className = 'town-focus-hint';
+  tierHint.className = 'town-focus-hint ui-meta ui-muted';
   tierHint.textContent = t('hudChrome.townFocus.tierHint', {
     points: formatNumber(POINTS_PER_TIER_BONUS, { maximumFractionDigits: 0 }),
     steps: formatNumber(MAX_FOCUS_TIER_BONUS, { maximumFractionDigits: 0 }),
@@ -122,9 +122,32 @@ export function renderTownFocusWindow(
   el.appendChild(tierHint);
 
   const townOnlyHint = document.createElement('div');
-  townOnlyHint.className = 'town-focus-hint';
+  townOnlyHint.className = 'town-focus-hint ui-meta ui-muted';
   townOnlyHint.textContent = t('hudChrome.townFocus.townOnlyHint');
   el.appendChild(townOnlyHint);
+
+  // Focus is a bonus, never a selector: the one thing that narrows a harvest
+  // to a single material is the Harvest Preference, and a player who has
+  // just put ten points on silk and still skins hide off a spider needs to be
+  // told so HERE, on the panel they just used.
+  const preferenceHint = document.createElement('div');
+  preferenceHint.className = 'town-focus-hint ui-meta ui-muted';
+  preferenceHint.textContent = t('hudChrome.townFocus.preferenceHint');
+  el.appendChild(preferenceHint);
+
+  // The queued re-spec (#1144): Save on the 'time' / 'timeAndPartial' tiers
+  // does not commit at once, and without this line the panel showed only the
+  // old committed allocation for the whole wait, so Save read as a no-op and
+  // a second Save used to restart the clock. The rows below already show the
+  // queued allocation (Hud opens the draft on it); this says when it lands.
+  if (view.pending !== null) {
+    const pendingLine = document.createElement('div');
+    pendingLine.className = 'town-focus-pending ui-meta';
+    pendingLine.textContent = t('hudChrome.townFocus.pendingLine', {
+      time: formatDuration(view.pending.remainingSeconds),
+    });
+    el.appendChild(pendingLine);
+  }
 
   if (!view.inTown) {
     const notInTown = document.createElement('div');
@@ -142,7 +165,7 @@ export function renderTownFocusWindow(
   // 0..FOCUS_POINT_BUDGET range, which is exactly why it was easy to write the
   // other way.
   const budget = document.createElement('div');
-  budget.className = 'town-focus-budget';
+  budget.className = 'town-focus-budget ui-h ui-num';
   budget.textContent = t('hudChrome.townFocus.budgetLabel', {
     remaining: formatNumber(view.remaining, { maximumFractionDigits: 0 }),
     budget: formatNumber(view.budget, { maximumFractionDigits: 0 }),
@@ -155,7 +178,7 @@ export function renderTownFocusWindow(
       `hudChrome.corpseHarvest.components.${row.component}` as Parameters<typeof t>[0],
     );
     const rowEl = document.createElement('div');
-    rowEl.className = 'town-focus-row';
+    rowEl.className = 'town-focus-row ui-stat-row';
     // esc() as well as formatNumber, matching the name beside it: no separator
     // any supported locale emits is HTML-special (they are U+002C, U+002E,
     // U+00A0, U+202F), so this is a no-op today and stays one for the file's
@@ -165,7 +188,7 @@ export function renderTownFocusWindow(
 
     const dec = document.createElement('button');
     dec.type = 'button';
-    dec.className = 'tf-step';
+    dec.className = 'tf-step ui-icon-btn ui-icon-btn--micro';
     dec.textContent = '-';
     dec.disabled = !row.canDecrease;
     dec.dataset.focusKey = stepFocusKey(row.component, 'dec');
@@ -177,7 +200,7 @@ export function renderTownFocusWindow(
 
     const inc = document.createElement('button');
     inc.type = 'button';
-    inc.className = 'tf-step';
+    inc.className = 'tf-step ui-icon-btn ui-icon-btn--micro';
     inc.textContent = '+';
     inc.disabled = !row.canIncrease;
     inc.dataset.focusKey = stepFocusKey(row.component, 'inc');
@@ -204,7 +227,7 @@ export function renderTownFocusWindow(
   tierRow.innerHTML = `<label for="town-focus-tier-select" class="town-focus-tier-label">${esc(t('hudChrome.townFocus.respecTierLabel'))}</label>`;
   const tierSelect = document.createElement('select');
   tierSelect.id = 'town-focus-tier-select';
-  tierSelect.className = 'town-focus-tier-select';
+  tierSelect.className = 'town-focus-tier-select ui-input';
   tierSelect.disabled = !view.inTown;
   tierSelect.dataset.focusKey = TIER_FOCUS_KEY;
   for (const option of RESPEC_TIER_OPTIONS) {
@@ -221,13 +244,13 @@ export function renderTownFocusWindow(
   el.appendChild(tierRow);
 
   const costLine = document.createElement('div');
-  costLine.className = 'town-focus-cost';
+  costLine.className = 'town-focus-cost ui-meta ui-muted';
   costLine.textContent = respecCostText(respec.cost);
   el.appendChild(costLine);
 
   const save = document.createElement('button');
   save.type = 'button';
-  save.className = 'town-focus-save';
+  save.className = 'town-focus-save ui-btn';
   save.textContent = t('hudChrome.townFocus.saveButton');
   save.disabled = !view.inTown;
   save.dataset.focusKey = SAVE_FOCUS_KEY;

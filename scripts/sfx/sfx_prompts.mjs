@@ -18,7 +18,11 @@
 // single-event, "no music, no speech" where it matters. Footsteps/impacts are ONE
 // hit (the engine pitch-randomizes and alternates to avoid repetition).
 
+import { FURY_SFX } from './fury_sfx.mjs';
 import { UI_SFX_CATALOG } from './ui_sfx.mjs';
+import { WARRIOR_CONTACT_SFX } from './warrior_contact_sfx.mjs';
+import { WARRIOR_FALLBACK_SFX } from './warrior_fallback_sfx.mjs';
+import { WARRIOR_VOICE_SFX } from './warrior_voice_sfx.mjs';
 
 // UI cues in the baked-tone generator's list that already have a real
 // recording dropped in over the synth placeholder (see gen_ui_sfx.mjs's
@@ -84,6 +88,10 @@ const mob = (family, who, aggro, attack, death, hurt, idle) => {
 };
 
 export const SFX = [
+  ...FURY_SFX,
+  ...WARRIOR_CONTACT_SFX,
+  ...WARRIOR_VOICE_SFX,
+  ...WARRIOR_FALLBACK_SFX,
   // --- Movement & footsteps -------------------------------------------------
   FOOT('foot_grass', 'on soft grass and dry leaves, light leather boot'),
   FOOT('foot_dirt', 'in wet mud and soft dirt, faint squelch'),
@@ -119,6 +127,97 @@ export const SFX = [
     key: 'mount_run_thunderstrut_gobbler',
     custom: true,
   },
+  // The Lanternback Troll and the Chimeglass Tortoise deliberately have NO
+  // mount_run_ entry. Both shipped synthesised cues and both read as cheap and
+  // nagging at the mounted gallop's ~0.46s stride beat; rather than keep
+  // tuning a synth, they now borrow the player's own surface footfall
+  // (foot_<surface>) through Sfx.mountRun's fallback branch. A mount is opted
+  // into that fallback purely by the ABSENCE of its key here, so adding one
+  // back is all it takes to give either of them a bespoke stride again.
+  {
+    key: 'mount_run_goblin_rocket_sled_start',
+    custom: true,
+  },
+  {
+    key: 'mount_run_goblin_rocket_sled',
+    custom: true,
+    loop: true,
+  },
+  {
+    // The sled's summon call, fired once when the summon channel completes and
+    // the mount appears. Never on dismount, never for a rider already mounted
+    // when they come into view.
+    key: 'mount_summon_goblin_rocket_sled',
+    custom: true,
+  },
+  {
+    key: 'mount_run_goblin_rocket_sled_stop',
+    custom: true,
+  },
+  {
+    key: 'mount_run_goblin_rocket_sled_reverse_start',
+    custom: true,
+  },
+  {
+    key: 'mount_run_goblin_rocket_sled_reverse',
+    custom: true,
+    loop: true,
+  },
+  {
+    key: 'mount_run_goblin_rocket_sled_reverse_stop',
+    custom: true,
+  },
+  {
+    key: 'mount_summon_rallycart_rxt',
+    custom: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt_idle',
+    custom: true,
+    loop: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt_start',
+    custom: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt',
+    custom: true,
+    loop: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt_stop',
+    custom: true,
+  },
+  // Reverse, the same three-part shape the sled uses. The engine builds these
+  // key names generically (`mount_run_<mountKey>_reverse*`), so the takes were
+  // on disk and reachable by code but absent from this catalog, which meant
+  // they were never in SFX_CLIPS and reversing the cart was silent.
+  {
+    key: 'mount_run_rallycart_rxt_reverse_start',
+    custom: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt_reverse',
+    custom: true,
+    loop: true,
+  },
+  {
+    key: 'mount_run_rallycart_rxt_reverse_stop',
+    custom: true,
+  },
+  {
+    // Takeoff and touchdown for the cart, five and four takes respectively.
+    // A mount that carries no jump/land set falls back to the rider's own
+    // move_jump/move_land, so these two keys are the whole opt-in: no shipped
+    // mount changes behavior by their existing.
+    key: 'mount_jump_rallycart_rxt',
+    custom: true,
+  },
+  {
+    key: 'mount_land_rallycart_rxt',
+    custom: true,
+  },
   {
     key: 'mount_run_terrorspark_groundshaker_start',
     custom: true,
@@ -140,6 +239,67 @@ export const SFX = [
   },
   {
     key: 'mount_run_terrorspark_groundshaker_stop',
+    custom: true,
+  },
+  {
+    // The Viridian Valestrider's summon call: an authored bird cry played once
+    // when the 1.5s summon channel completes and the mount appears.
+    // Sfx.mountSummon resolves `mount_summon_<key>` per mount and stays silent
+    // for a mount with no authored take, so the other mounts are unaffected.
+    key: 'mount_summon_avian_strider',
+    custom: true,
+  },
+  {
+    // The Valestrider's gait beat, six variants. Rotated per stride by playAt's
+    // variant pool, which is what stops a bird jogging past sounding like a
+    // metronome. This REPLACES the rider's own footsteps while mounted: it is
+    // part of the world mix and does not answer to the on-foot footstep toggle.
+    key: 'mount_run_avian_strider',
+    custom: true,
+  },
+  {
+    // Takeoff and touchdown, on the airborne edges.
+    key: 'mount_jump_avian_strider',
+    custom: true,
+  },
+  {
+    key: 'mount_land_avian_strider',
+    custom: true,
+  },
+  {
+    // Fired together at the APEX of a jump, not at takeoff: the bird calls out
+    // and beats its wings at the top of the arc. Two keys rather than one baked
+    // pair so the variants rotate independently and the mix can be tuned apart.
+    key: 'mount_squawk_avian_strider',
+    custom: true,
+  },
+  {
+    key: 'mount_flap_avian_strider',
+    custom: true,
+  },
+  {
+    // The Mech Bird's gait beat: the recorded servo footsteps assembled 1-2-1
+    // (step one, step two, step one) per stride by scripts/gen_mech_bird_sfx.mjs.
+    key: 'mount_run_mech_bird',
+    custom: true,
+  },
+  {
+    // The Mech Bird's standstill powered-on hum: driven through Sfx.loop()
+    // while mounted and stationary (see mountIdle in src/game/sfx.ts), so the
+    // manifest loop flag must say so, like the tank engine sustain above.
+    key: 'mount_idle_mech_bird',
+    custom: true,
+    loop: true,
+  },
+  {
+    // Launch servo one-shot: replaces the generic move_jump while riding the
+    // Mech Bird (the mount-aware arm of Sfx.movement).
+    key: 'mount_jump_mech_bird',
+    custom: true,
+  },
+  {
+    // Landing clank one-shot: replaces the generic move_land while riding.
+    key: 'mount_land_mech_bird',
     custom: true,
   },
   {

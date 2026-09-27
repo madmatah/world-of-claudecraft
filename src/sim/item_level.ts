@@ -11,7 +11,8 @@
 // tests import it directly.
 //
 // Two distinct outputs:
-//   - itemLevel(item): the tier number shown in the tooltip ("Item Level 10").
+//   - itemLevel(item): the definition's baseline tier. itemInstanceLevel adds
+//     an earned Perfected collection tier for the tooltip, never cosmetic rarity.
 //   - primaryStatBudget(...): the total primary-stat points an item of that tier
 //     SHOULD grant. normalizePrimaryStats() distributes that budget back across an
 //     item's existing stats so two drops from the same place carry the same total
@@ -19,6 +20,7 @@
 //     str/sta, a mage cloth piece stays int/spi). itemScore() is the realized
 //     power (stats + armor + weapon dps) for at-a-glance comparison.
 
+import { crucibleCollectionForItem } from './content/crucible_collections';
 import {
   HEROIC_BOSS_LOOT,
   HEROIC_LOOT_SOURCE_LEVEL,
@@ -27,46 +29,75 @@ import {
 } from './content/heroic_loot';
 import { HEROIC_VENDOR_STOCK } from './content/heroic_vendor';
 import { IGNIVAR_LOOT_ITEM_IDS, IGNIVAR_RAID_LOOT_SOURCE_LEVEL } from './content/ignivar_loot';
-import { FURY_STOCK, WARFARE_SOURCE_LEVEL } from './content/pvp_honor';
+import { FURY_STOCK, WARFARE_SOURCE_LEVEL, WARFARE_TRINKET_STOCK } from './content/pvp_honor';
+import { SEASON2_SOURCE_LEVEL, SEASON2_STOCK } from './content/pvp_honor_season2';
 import {
   RIFT_EPIC_ITEM_IDS,
   RIFT_GEAR_ITEM_IDS,
   RIFT_LEGENDARY_ITEM_IDS,
   RIFT_RARE_ITEM_IDS,
 } from './content/rift/items';
+import { CRUCIBLE_TRINKET_ITEM_IDS } from './content/trinkets';
 import { ALL_RECIPES, DUNGEONS, ITEMS, MOBS, QUESTS } from './data';
 // The pure budget primitives live in the leaf module ./item_budget (no ./data
 // import, so content/heroic_variants.ts can share them at data-eval time without a
 // cycle). Imported for internal use and re-exported so every existing importer of
 // item_level keeps working unchanged.
 import {
+  checkStaminaModel,
+  expectedStatTotal,
   HEROIC_VARIANT_SOURCE_LEVEL,
   normalizePrimaryStats,
+  normalizeToStaminaModel,
   PRIMARY_STATS,
   type PrimaryStat,
   primaryStatBudget,
   QUALITY_ILVL_BONUS,
   QUALITY_STAT_MULT,
+  realizedLineBudget,
   SLOT_STAT_MULT,
+  STAMINA_BASELINE_SHARE,
+  STAMINA_MODEL_EXEMPT_SLOTS,
+  STAMINA_PREMIUM,
   STAT_PER_ILVL,
+  type StaminaModelCheck,
+  type StatIdentity,
   slotStatMultForItem,
+  staminaBaseline,
+  staminaModelExempt,
+  statIdentity,
   TWOHAND_DPS_MULT,
   TWOHAND_STAT_MULT,
   WORN_OFFHAND_STAT_MULT,
 } from './item_budget';
-import type { ItemDef } from './types';
+import { lootQualityItemLevelBonus } from './loot_quality/core';
+import { COLLECTION_PERFECTING_SOURCE_INCREASE } from './professions/perfecting_bonus';
+import { RIFT_BAND_SHELLS, riftBandItemLevel } from './rift/band_ladder';
+import type { ItemDef, ItemInstancePayload } from './types';
 
 export {
+  checkStaminaModel,
+  expectedStatTotal,
   HEROIC_VARIANT_SOURCE_LEVEL,
   normalizePrimaryStats,
+  normalizeToStaminaModel,
   PRIMARY_STATS,
   type PrimaryStat,
   primaryStatBudget,
   QUALITY_ILVL_BONUS,
   QUALITY_STAT_MULT,
+  realizedLineBudget,
   SLOT_STAT_MULT,
+  STAMINA_BASELINE_SHARE,
+  STAMINA_MODEL_EXEMPT_SLOTS,
+  STAMINA_PREMIUM,
   STAT_PER_ILVL,
+  type StaminaModelCheck,
+  type StatIdentity,
   slotStatMultForItem,
+  staminaBaseline,
+  staminaModelExempt,
+  statIdentity,
   TWOHAND_DPS_MULT,
   TWOHAND_STAT_MULT,
   WORN_OFFHAND_STAT_MULT,
@@ -196,21 +227,26 @@ function buildSourceIndex(): Map<string, ItemSource> {
   // bosses), so the stock reads that source level: the epic pieces land at item
   // level 26 (20 + the epic bump) and get budget-enforced like any drop.
   for (const offer of HEROIC_VENDOR_STOCK) bump(offer.itemId, HEROIC_VENDOR_SOURCE_LEVEL, false);
-  // FURY's WARFARE stock is level-22 PvP content. The epic quality bump puts
-  // every piece at item level 28, including vendor-only necks and rings.
+  // FURY's WARFARE entry stock reads source 25, so the epic bump puts every
+  // piece at item level 31, including vendor-only necks and rings.
   for (const itemId of FURY_STOCK) bump(itemId, WARFARE_SOURCE_LEVEL, false);
+  // The two honor trinkets sold beside the kit read the same PvP tier.
+  for (const itemId of WARFARE_TRINKET_STOCK) bump(itemId, WARFARE_SOURCE_LEVEL, false);
+  // Warfare Season 2 reads source 29: epic item level 35, level with the raid tier.
+  for (const itemId of SEASON2_STOCK) bump(itemId, SEASON2_SOURCE_LEVEL, false);
   // Heroic boss drops: level-20 content one tier up (the heroic bump), so the
   // five-man epic pieces read item level 31 (25 + the epic bump). The 10-player
   // raid (Heroic Nythraxis) is one tier ABOVE the five-mans: its heroic-only
   // weapons register at NYTHRAXIS_RAID_LOOT_SOURCE_LEVEL (27) so they land at
-  // item level 33.
+  // item level 33. Migrated base-table paths preserve their original source
+  // index; listing them in the shared heroic slot must not increase their level.
   for (const [bossId, entries] of Object.entries(HEROIC_BOSS_LOOT)) {
     const src =
       bossId === NYTHRAXIS_RAID_BOSS_ID
         ? NYTHRAXIS_RAID_LOOT_SOURCE_LEVEL
         : HEROIC_LOOT_SOURCE_LEVEL;
     for (const entry of entries) {
-      if (entry.itemId) bump(entry.itemId, src, false);
+      if (entry.itemId && !entry.preserveSourceTier) bump(entry.itemId, src, false);
     }
   }
   // Heroic upgraded drop variants (content/heroic_variants.ts): the "Heroic X"
@@ -238,6 +274,11 @@ function buildSourceIndex(): Map<string, ItemSource> {
   // boss mobs (bump() is highest-level-wins, so this overrides that). Sigils
   // are kind 'tool' with no slot and stay item-level ineligible.
   for (const id of IGNIVAR_LOOT_ITEM_IDS) bump(id, IGNIVAR_RAID_LOOT_SOURCE_LEVEL, true);
+  // The Crucible raid trinkets (content/trinkets.ts) drop from the same two
+  // bosses on both difficulties (Normal off-set slot and Heroic exclusive
+  // slot), so they read the Crucible tier (35), out-ranking both the level-20
+  // mob-loot source and the heroic-table default source above.
+  for (const id of CRUCIBLE_TRINKET_ITEM_IDS) bump(id, IGNIVAR_RAID_LOOT_SOURCE_LEVEL, true);
   // Rift-only clear-time epics and legendaries: gated behind B+/A/S final-boss
   // kills (addRiftClearGearLoot), they never appear on static mob loot tables, so
   // the mob-loot block above never registers them. The epics register at
@@ -297,6 +338,41 @@ function sourceIndexOf(): Map<string, ItemSource> {
   return sourceIndex;
 }
 
+// itemId -> "this drops from the HEROIC Nythraxis raid", the question the raid
+// flag above cannot answer. The heroic raid's loot registers raid: false on
+// purpose: its source level IS the raid tier (27), so OR-ing the raid bonus in
+// would price it a second time. Two arms, the two ways a heroic raid pays:
+// the heroic-ONLY extras on the boss's own heroic table (the three bespoke
+// weapons), and the heroic variants of the boss's normal drops, which the
+// claim swaps in. Built once, lazily, from the same static tables, and reset
+// with the source index.
+let heroicRaidIndex: Set<string> | null = null;
+
+function buildHeroicRaidIndex(): Set<string> {
+  const idx = new Set<string>();
+  for (const entry of HEROIC_BOSS_LOOT[NYTHRAXIS_RAID_BOSS_ID] ?? []) {
+    if (entry.itemId) idx.add(entry.itemId);
+  }
+  const raidBases = new Set(
+    (MOBS[NYTHRAXIS_RAID_BOSS_ID]?.loot ?? []).flatMap((e) => (e.itemId ? [e.itemId] : [])),
+  );
+  for (const item of Object.values(ITEMS)) {
+    if (item.heroicOf && raidBases.has(item.heroicOf)) idx.add(item.id);
+  }
+  return idx;
+}
+
+// Whether the HEROIC Nythraxis raid is a source for this item. Separate from
+// itemFromRaid because the two answer different questions: that one drives the
+// item-level raid bonus (which the heroic tier already prices into its source
+// level), this one says the piece was won in a raid encounter. Sundering is
+// the consumer: the Phase 05 QA ruling admits heroic-raid epics, and reading
+// the source here keeps that eligibility flip out of the item-level math.
+export function itemFromHeroicRaid(itemId: string): boolean {
+  if (!heroicRaidIndex) heroicRaidIndex = buildHeroicRaidIndex();
+  return heroicRaidIndex.has(itemId);
+}
+
 // The level of the content an item drops from, or undefined for items with no
 // drop/quest source (vendor stock, starter gear, junk, conjured/quest items).
 export function itemSourceLevel(itemId: string): number | undefined {
@@ -330,17 +406,57 @@ export function itemLevel(item: ItemDef): number | undefined {
   return Math.max(1, src.level + bonus + raid);
 }
 
-// The budget an item is expected to carry given its own source/quality/slot, or
-// undefined when the item has no derivable item level. A two-handed weapon carries
-// only the modest TWOHAND_STAT_MULT premium over the mainhand line (its real
-// compensation is weapon dps, TWOHAND_DPS_MULT); rounded so budgets stay integral.
-export function expectedStatBudget(item: ItemDef): number | undefined {
+/** Display a copy's earned tier without repricing static budgets or cosmetic
+ *  promotion. Only the new collections earn three item levels when Perfected;
+ *  their partial ranks and the 17 legacy Masterwrought items keep the base tier. */
+export function itemInstanceLevel(
+  item: ItemDef,
+  instance?: ItemInstancePayload,
+): number | undefined {
+  const level =
+    instance?.rift && RIFT_BAND_SHELLS[item.id]
+      ? riftBandItemLevel(instance.rift.tier, instance.rift.upgradeLevel)
+      : itemLevel(item);
+  if (level === undefined) return undefined;
+  const perfected =
+    instance?.perfected === true && crucibleCollectionForItem(item.id)
+      ? COLLECTION_PERFECTING_SOURCE_INCREASE
+      : 0;
+  return level + perfected + lootQualityItemLevelBonus(instance);
+}
+
+// The offense-and-resource LINE an item is expected to spend on its identity
+// (str/agi or int/spi, plus any stamina above the baseline) given its own
+// source/quality/slot, or undefined when the item has no derivable item level. A
+// two-handed weapon carries only the modest TWOHAND_STAT_MULT premium over the
+// mainhand line (its real compensation is weapon dps, TWOHAND_DPS_MULT); rounded
+// so budgets stay integral. This is the number the stamina baseline is taken from.
+export function expectedLineBudget(item: ItemDef): number | undefined {
   const level = itemLevel(item);
   if (level === undefined) return undefined;
   const base = primaryStatBudget(level, item.quality, item.slot, slotStatMultForItem(item));
   return item.kind === 'weapon' && item.hand === 'twohand'
     ? Math.round(base * TWOHAND_STAT_MULT)
     : base;
+}
+
+// The primary-stat TOTAL (all five attributes) an item is expected to carry: the
+// line above plus, for a caster identity, its free stamina baseline (a physical
+// identity already holds its baseline inside the line). primaryStatSum(item) equals
+// this for every item on the model; see item_budget.ts for the model.
+export function expectedStatBudget(item: ItemDef): number | undefined {
+  const line = expectedLineBudget(item);
+  if (line === undefined) return undefined;
+  // A stamina-model-exempt slot (the trinket) spends the plain line on its one
+  // attribute, with no caster baseline on top.
+  if (staminaModelExempt(item)) return line;
+  return expectedStatTotal(line, statIdentity(item.stats));
+}
+
+// The stamina-model readout for an item with a derivable line, or undefined.
+export function itemStaminaModel(item: ItemDef): StaminaModelCheck | undefined {
+  const line = expectedLineBudget(item);
+  return line === undefined ? undefined : checkStaminaModel(item.stats, line);
 }
 
 // The sum of an item's primary stats (its realized stat budget).
@@ -368,4 +484,5 @@ export function itemScore(item: ItemDef): number {
 export function resetItemLevelCache(): void {
   sourceIndex = null;
   encounterIndex = null;
+  heroicRaidIndex = null;
 }

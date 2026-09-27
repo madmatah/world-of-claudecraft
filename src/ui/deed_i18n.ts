@@ -8,6 +8,8 @@
 // English (clean English is preferable to a broken guess).
 
 import { DEEDS } from '../sim/content/deeds';
+import { devBadgeTitleTier } from '../sim/dev_badge_titles';
+import { devTierByIndex, devTierDisplayName } from './dev_tier';
 import { getLanguage, type SupportedLanguage, t } from './i18n';
 import { maybePseudoString, pseudoLocaleString } from './i18n_pseudo_port';
 import { makeLazyLocaleChannel } from './lazy_locale_channel';
@@ -23,6 +25,36 @@ export interface DeedLocaleEntry {
 }
 
 export type DeedLocaleTable = Record<string, DeedLocaleEntry>;
+
+// These deed descriptions deliberately resolve through the authored English
+// fallback. Their old locale descs described retired or removed requirements;
+// names and title rewards remain localized, but desc rows stay outside the
+// release-fill manifest until updated translations are authored.
+export const RETIRED_DEED_DESCRIPTION_FALLBACK_IDS = [
+  'chr_vale_chapter_ii',
+  'chr_vale_cup_debut',
+  'pvp_vcup_first_match',
+  'pvp_vcup_first_win',
+  'pvp_vcup_wins_10',
+  'pvp_vcup_wins_25',
+  'pvp_vcup_first_goal',
+  'pvp_vcup_hat_trick',
+  'pvp_vcup_golden_goal',
+  'pvp_vcup_first_save',
+  'pvp_vcup_clean_sheet',
+  'pvp_vcup_guild_win',
+  'pvp_fiesta_first_bout',
+  'pvp_fiesta_first_win',
+  'pvp_fiesta_double',
+  'pvp_fiesta_shutdown',
+  'pvp_fiesta_full_build',
+  'pvp_fiesta_powerups',
+  'pvp_fiesta_five_kills',
+] as const;
+
+const RETIRED_DEED_DESCRIPTION_FALLBACK_SET = new Set<string>(
+  RETIRED_DEED_DESCRIPTION_FALLBACK_IDS,
+);
 
 // The release-fill tables (the TALENT_NEW newlocales shape) live in per-base-
 // locale chunks (deed_i18n.locales/<locale>.ts) behind DEED_LOCALE_LOADERS,
@@ -159,11 +191,20 @@ export function deedDesc(id: string): string {
   return maybePseudoString(localeEntry(id)?.desc ?? def.desc);
 }
 
-/** The localized display title for a title-reward deed; '' when the deed is
- *  unknown or carries no title reward (callers hide the surface entirely). */
+/** The localized display text for a selected title id: a title-reward deed,
+ *  or a developer-badge rung title ('dev:<rung>', src/sim/dev_badge_titles.ts,
+ *  not a deed), which reads the badge's own rung name so the title always
+ *  matches the badge. '' when the id is unknown or carries no title (callers
+ *  hide the surface entirely). Every title surface (nameplate, target frame,
+ *  inspect, chat, social, boards, player card, picker) resolves through here. */
 export function deedTitleText(id: string): string {
+  const rung = devBadgeTitleTier(id);
+  if (rung) {
+    const tier = devTierByIndex(rung.index);
+    return tier ? devTierDisplayName(tier) : '';
+  }
   const def = deedDef(id);
-  if (!def || def.reward?.kind !== 'title') return '';
+  if (def?.reward?.kind !== 'title') return '';
   return maybePseudoString(localeEntry(id)?.title ?? def.reward.text);
 }
 
@@ -226,12 +267,16 @@ export interface DeedTranslationManifestEntry {
 }
 
 /** Every (deed, field) pair the release fill must cover, with its English
- *  source (the talentTranslationManifest shape for coverage tooling). */
+ *  source (the talentTranslationManifest shape for coverage tooling). Retired
+ *  fallback-only descs are omitted so the release bar covers the locale fields
+ *  that should exist, not the deliberately absent fallback fields. */
 export function deedTranslationManifest(): DeedTranslationManifestEntry[] {
   const entries: DeedTranslationManifestEntry[] = [];
   for (const def of Object.values(DEEDS)) {
     entries.push({ id: def.id, field: 'name', source: def.name });
-    entries.push({ id: def.id, field: 'desc', source: def.desc });
+    if (!RETIRED_DEED_DESCRIPTION_FALLBACK_SET.has(def.id)) {
+      entries.push({ id: def.id, field: 'desc', source: def.desc });
+    }
     if (def.reward?.kind === 'title') {
       entries.push({ id: def.id, field: 'title', source: def.reward.text });
     }

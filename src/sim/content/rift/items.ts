@@ -9,6 +9,9 @@ export const RIFT_GEAR_ITEM_IDS = [
   'riftbound_band_of_insight',
   'riftbound_band_of_guile',
 ] as const;
+/** The same three ids as a set, for the by-id refusals (trade, enchanting,
+ *  the dev kit) that would otherwise each build their own. */
+export const RIFT_GEAR_ITEM_ID_SET: ReadonlySet<string> = new Set(RIFT_GEAR_ITEM_IDS);
 
 /** The clear-time gear ladder above the rares: epics that only a B+ final-boss
  * kill can shed (B already GUARANTEES one, so A does not raise the floor; S
@@ -24,6 +27,10 @@ export const RIFT_EPIC_ITEM_IDS = [
   'voidweave_mantle',
   'abysswrought_band',
   'rimefang',
+  // The two rift trinkets (content/trinkets.ts): no combat rating, their use
+  // effect is the differentiator.
+  'sundered_prism',
+  'gamblers_die',
 ] as const;
 /** The S-rank chase items. Each rolls its OWN independent chance in
  *  addRiftClearGearLoot rather than being picked from this pool, so a clear that
@@ -66,8 +73,12 @@ const CASTER = ['mage', 'priest', 'warlock', 'druid'] as ItemDef['requiredClass'
 const RIFT_ARMOR_RATING = 40; // 40 rating = 4.0%, mirrors the heroic ilvl-31 armor floor
 const RIFT_JEWELRY_RATING = 25; // 25 rating, matches heroic quartermaster jewelry precedent
 
-/** Static shells. The non-fungible payload carries each drop's source, power,
- * upgrades, enchantment, sockets, gems, and rolled bonus stats. */
+/** Static shells. The three Riftbound bands below carry NO stats of their
+ * own: the non-fungible payload (ItemInstancePayload.rift) records the clear's
+ * rank, the essence upgrades, and the socketed gems, and rift/band_ladder.ts
+ * prices the whole ring from those (item level, primary stats, gem ratings)
+ * into the copy's rolled aggregate. A bare shell (a copy that somehow lost its
+ * payload) is therefore an empty ring, never a stat stick. */
 export const RIFT_ITEMS: Record<string, ItemDef> = {
   // Rogue dagger (Rift epic, B+ clear). A frost-bolt on-hit gives the fast
   // dagger a proc that actually helps a DPS rogue: an attack-speed chill would
@@ -121,6 +132,10 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     stackSize: 20,
     sellValue: 0,
   },
+  // Rift gems: one combat rating line each when socketed into a Riftbound
+  // band (rift/band_ladder.ts RIFT_GEM_RATING_STAT: crimson is crit, azure is
+  // haste, verdant is hit; RIFT_GEM_RATING per gem). The tooltip states the
+  // colour's rating (src/ui/rift_band_tooltip.ts) so the def needs no prose.
   rift_gem_crimson: {
     id: 'rift_gem_crimson',
     name: 'Crimson Rift Gem',
@@ -152,7 +167,6 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'ring',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { str: 6, sta: 5 },
     sellValue: 5000,
     noMarketList: true,
   },
@@ -163,7 +177,6 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'ring',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { int: 6, spi: 5 },
     sellValue: 5000,
     noMarketList: true,
   },
@@ -174,7 +187,6 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'ring',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { agi: 6, sta: 5 },
     sellValue: 5000,
     noMarketList: true,
   },
@@ -230,8 +242,8 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'shoulder',
     quality: 'rare',
     requiredLevel: 20,
-    // ilvl-26 shoulder rare budget = 11; int:7+spi:4 = 11
-    stats: { armor: 38, int: 7, spi: 4 },
+    // ilvl-26 shoulder rare line = 11; int:7+spi:4 = 11, stamina baseline 4 on top
+    stats: { armor: 38, int: 7, spi: 4, sta: 4 },
     sellValue: 5000,
     requiredClass: CASTER,
   },
@@ -256,8 +268,8 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'gloves',
     quality: 'rare',
     requiredLevel: 20,
-    // ilvl-26 gloves rare budget = 10; int:6+spi:4 = 10
-    stats: { armor: 42, int: 6, spi: 4 },
+    // ilvl-26 gloves rare line = 10; int:6+spi:4 = 10, stamina baseline 3 on top
+    stats: { armor: 42, int: 6, spi: 4, sta: 3 },
     sellValue: 5000,
     requiredClass: CASTER,
   },
@@ -281,8 +293,9 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'ring',
     quality: 'rare',
     requiredLevel: 20,
-    // ilvl-26 ring rare budget = 9; sta:5+spi:4 = 9 (unchanged from ilvl-28: same budget)
-    stats: { sta: 5, spi: 4 },
+    // ilvl-26 ring rare line = 9: spi:7 plus two stamina bought above the free
+    // baseline of 3 (sta:5); stamina baseline model (unchanged line from ilvl-28)
+    stats: { sta: 5, spi: 7 },
     sellValue: 5000,
   },
   // ---- The Infernal Citadel set-piece drops ----
@@ -294,8 +307,8 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'chest',
     quality: 'rare',
     requiredLevel: 20,
-    // ilvl-26 chest rare budget = 15; int:9+spi:6 = 15
-    stats: { armor: 55, int: 9, spi: 6 },
+    // ilvl-26 chest rare line = 15; int:9+spi:6 = 15, stamina baseline 5 on top
+    stats: { armor: 55, int: 9, spi: 6, sta: 5 },
     sellValue: 6500,
     requiredClass: CASTER,
   },
@@ -319,7 +332,9 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
   // precedent (RIFT_JEWELRY_RATING = 25, matching heroic quartermaster rings).
   // All ratings are off the primary-stat budget like spellPower so stat sums stay
   // budget-enforced. Rating choices follow the stat identity: str/tank -> hit,
-  // agi -> crit, int/spi (healer-facing) -> haste (healers are not level-resisted).
+  // agi -> crit; the int/spi pieces carry haste and NO authored Hit, which under
+  // the operative heroic_variants.ts rule (only an authored Hit seed marks a
+  // spell-facing piece as caster DPS) reads them as healer/throughput cloth.
   // See heroic_loot.ts for the ilvl-31 armor template these mirror.
   emberforged_bulwark: {
     id: 'emberforged_bulwark',
@@ -357,8 +372,8 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'shoulder',
     quality: 'epic',
     requiredLevel: 20,
-    // ilvl-31 shoulder epic budget = 16; int:10+spi:6 = 16
-    stats: { armor: 48, int: 10, spi: 6 },
+    // ilvl-31 shoulder epic line = 16; int:10+spi:6 = 16, stamina baseline 5 on top
+    stats: { armor: 48, int: 10, spi: 6, sta: 5 },
     hasteRating: RIFT_ARMOR_RATING,
     sellValue: 13000,
     requiredClass: CASTER,
@@ -370,11 +385,13 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     slot: 'ring',
     quality: 'epic',
     requiredLevel: 20,
-    // ilvl-31 ring epic budget = 13; sta:8+spi:5 = 13.
+    // ilvl-31 ring epic line = 13: spi:9 plus four stamina bought above the
+    // free baseline of 4 (sta:8); stamina baseline model.
     // Rating follows the jewelry precedent (25, not the 40 armor-piece floor).
-    // Haste suits the sta/spi (healer-facing) stat identity; healers are not
-    // resisted by level so Hit would be wasted.
-    stats: { sta: 8, spi: 5 },
+    // Haste with NO authored Hit: under the heroic_variants.ts rule an authored
+    // Hit seed is what marks caster DPS, so the Hit-free sta/spi line reads as
+    // healer/throughput jewelry.
+    stats: { sta: 8, spi: 9 },
     hasteRating: RIFT_JEWELRY_RATING,
     sellValue: 12000,
   },
@@ -435,7 +452,7 @@ export const RIFT_ITEMS: Record<string, ItemDef> = {
     // so no rogue is tempted); the ilvl-49 band power lives in the caster
     // axes: the 65-point stat line and the lane-share Spell Power.
     weapon: { min: 15, max: 25, speed: 1.8, dagger: true },
-    stats: { int: 25, spi: 23, sta: 17 },
+    stats: { int: 25, spi: 40, sta: 22 },
     spellPower: 25,
     // NO requiredClass, deliberately: a class lock is a nerf, and the stat line
     // already decides who wants this (19 int / 17 spi / 0 agi / 0 str). A paladin

@@ -364,11 +364,27 @@ describe('Book of Deeds webp icons', () => {
     expect(artless, 'only the pinned art-pending deeds may lack painted art').toEqual([
       ...DEED_ART_PENDING_IDS,
     ]);
-    // The release catalog (281) plus the seven Realm Racers placing deeds, none of
-    // which ships painted art yet, so the painted count stays at the release's 271
-    // and the pending set is the release's pending rows plus the Realm Racers seven.
-    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(288);
-    expect(DEED_IMAGE_IDS.size, 'every live deed but the pending set is painted').toBe(271);
+    // The Masterwrought completion wave paints its ten formerly pending deed
+    // identities (and replaces prog_farming_100), leaving only the ten
+    // release-owned castle, bank, tutorial, and Crucible rows on fallback art
+    // (which also carry the release-side additions, including the Roots'
+    // Bramblehide collection crest from roots-bramblehide-icons-2026-09-07).
+    // The self-crafted hammer's hidden celebration adds one explicit pending crest.
+    // The world-quest branch's eight exploration deeds join the pending set on
+    // category crests at the release/v0.43.0 merge: 308 live, 289 painted.
+    // The seven faction standing progression deeds join the pending set on
+    // the progression crest: 315 live, still 289 painted.
+    // The two Clue Scroll casket exploration deeds join the pending set on the
+    // exploration crest: 317 live, still 289 painted.
+    // The release's Eastbrook ferry round trip (exp_harbor_to_harbor) joins the
+    // pending set on the exploration crest: 318 live, still 289 painted.
+    // The seven Realm Racers placing deeds join the pending set on the pvp crest,
+    // appended after the ferry round trip: 325 live, still 289 painted.
+    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(325);
+    expect(DEED_IMAGE_IDS.size, 'every live deed but the pending set is painted').toBe(289);
+    expect(DEED_ART_PENDING_IDS).toHaveLength(36);
+    expect(DEED_ART_PENDING_IDS.at(-1)).toBe('pvp_rr_comeback');
+    expect(DEED_ORDER.length - DEED_IMAGE_IDS.size).toBe(DEED_ART_PENDING_IDS.length);
     for (const id of artless) {
       const catCrestId = deedCrestId(id, DEEDS[id].category);
       expect(catCrestId, `${id} must fall back to a category base crest`).toMatch(/^deed_cat_/);
@@ -407,5 +423,66 @@ describe('Book of Deeds webp icons', () => {
         `${id}.webp must not be committed`,
       ).toBe(false);
     }
+  });
+
+  it('the Masterwrought crest provenance record matches the committed bytes', () => {
+    // The contract pinned beside the blob (the PR #3295 authored-art lesson):
+    // docs/achievements/masterwrought-phase05-art/README.md records accepted
+    // sha256 hashes for the three hand-authored jewelcrafting crests, and a
+    // bulk art-normalization pass preferentially hits hand-authored files.
+    // These literals are the same hashes the README records; a re-encode
+    // that moves the bytes reds HERE naming the crest, and the fix is to
+    // re-review and move BOTH the pin and the provenance record, never to
+    // bump the pin alone. CREDITS.md must keep naming both crest rows.
+    const ACCEPTED_CREST_SHA256: Record<string, string> = {
+      prog_jewelcrafting_rare: '057a867ec786493771e9bdd9a1100f38694bb6c7aeffca4de78fb9fd6896f5dd',
+      prog_jewelcrafting_50: '5edc61e01ce5f20dbf525c1430dc1709a1bc58ff550e0f49bb0a5ca7a4f68d8a',
+      prog_grandmaster_jewelcrafting:
+        'f3ff906d390920499779101c7d361be8b81d07398ab9c0133778ed5daed8ee49',
+    };
+    // The phase 06 inscription trio, same contract, recorded in the phase 06
+    // provenance README; its superseded crest SVG sources remain in git history.
+    const ACCEPTED_PHASE06_CREST_SHA256: Record<string, string> = {
+      prog_inscription_rare: 'a165b790da1fb23e97bf4824df7595383ea14550a4f566e583054d113abe9368',
+      prog_inscription_50: 'a9dc7528e104550baf7bed4f864fee96cb68d90e60fe6a9385bae65f18de9ab4',
+      prog_grandmaster_inscription:
+        'cee13b0815db111d330e11cc29773f6ab6d9c793ba1e5b47b04d56d74057498e',
+    };
+    for (const [id, sha] of Object.entries({
+      ...ACCEPTED_CREST_SHA256,
+      ...ACCEPTED_PHASE06_CREST_SHA256,
+    })) {
+      const bytes = readFileSync(path.join(deedsDir, `${id}.webp`));
+      expect(
+        createHash('sha256').update(bytes).digest('hex'),
+        `${id}.webp drifted from its accepted provenance hash`,
+      ).toBe(sha);
+    }
+    // The provenance READMEs record the same hashes (the pin and the
+    // record cannot drift apart silently), and CREDITS carries the rows.
+    const readme = readFileSync(
+      path.join(repoRoot, 'docs/achievements/masterwrought-phase05-art/README.md'),
+      'utf8',
+    );
+    for (const sha of Object.values(ACCEPTED_CREST_SHA256)) {
+      expect(readme, 'provenance README must record the accepted hash').toContain(sha);
+    }
+    const readme06 = readFileSync(
+      path.join(repoRoot, 'docs/achievements/masterwrought-phase06-art/README.md'),
+      'utf8',
+    );
+    for (const sha of Object.values(ACCEPTED_PHASE06_CREST_SHA256)) {
+      expect(readme06, 'phase 06 provenance README must record the accepted hash').toContain(sha);
+    }
+    const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');
+    expect(credits).toContain('prog_jewelcrafting_rare');
+    expect(credits).toContain('prog_jewelcrafting_50');
+    expect(credits).toContain('prog_grandmaster_jewelcrafting');
+    // The phase 06 crests are excluded from the blanket deed-art row (it
+    // carves out "the project-generated additions credited below"), so each
+    // id must appear in its own CREDITS row or it is credited nowhere.
+    expect(credits).toContain('prog_inscription_rare');
+    expect(credits).toContain('prog_inscription_50');
+    expect(credits).toContain('prog_grandmaster_inscription');
   });
 });

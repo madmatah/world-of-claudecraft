@@ -6,6 +6,7 @@ import {
   buildPaperdollView,
   PAPERDOLL_LEFT_SLOTS,
   PAPERDOLL_RIGHT_SLOTS,
+  PAPERDOLL_WEAPON_SLOTS,
 } from '../src/ui/char_view';
 import { borderAccent } from '../src/ui/deed_border_view';
 import {
@@ -382,16 +383,44 @@ describe('buildInspectView: gear reuses the char_view paperdoll (no forked slot 
     const m = buildInspectView(base, ITEMS);
     // Identical to the shared core: same arrays, same empty-slot resolution.
     expect(m.gear).toEqual(buildPaperdollView(base.equippedItems, ITEMS));
-    // And the column order IS char_view's 6/6 split (offhand in the left column).
+    // And the column order IS char_view's 5/5 split with the weapon hands in their own row.
     expect(m.gear.left.map((c) => c.slot)).toEqual([...PAPERDOLL_LEFT_SLOTS]);
     expect(m.gear.right.map((c) => c.slot)).toEqual([...PAPERDOLL_RIGHT_SLOTS]);
-    expect(m.gear.left.map((c) => c.slot)).toContain('offhand');
+    expect(m.gear.weapons.map((c) => c.slot)).toEqual([...PAPERDOLL_WEAPON_SLOTS]);
     // Filled vs empty resolution.
     expect(m.gear.left[0].item).toBe(ITEMS.monarch_crown_helm);
     const emptySlots = m.gear.right.filter(
       (c: { slot: EquipSlot; item: unknown }) => c.item === null,
     );
     expect(emptySlots.length).toBe(m.gear.right.length); // nothing on the right in `base`
+  });
+
+  it('threads worn instances into the cells (projected), and stays def-only without them', () => {
+    // The 2026-08-27 QA round: the inspect card was the one item-cell surface
+    // still def-only. The core now hands equippedInstances to
+    // buildPaperdollView, whose cells carry each slot's eqi-projected payload
+    // (cosmetic fields survive, the bond fields are trimmed).
+    const promoted = {
+      name: 'Dawnbreaker',
+      rolled: { quality: 'legendary' as const },
+      signer: 'Maker',
+      boundTo: 7,
+    };
+    const m = buildInspectView({ ...base, equippedInstances: { helmet: promoted } }, ITEMS);
+    expect(m.gear).toEqual(buildPaperdollView(base.equippedItems, ITEMS, { helmet: promoted }));
+    expect(m.gear.left[0].instance).toEqual({
+      name: 'Dawnbreaker',
+      rolled: { quality: 'legendary' },
+      signer: 'Maker',
+    });
+    // Slot-keyed, never smeared: the worn mainhand carries no payload.
+    expect(m.gear.weapons[0].item).toBe(ITEMS.worn_sword);
+    expect(m.gear.weapons[0].instance).toBeNull();
+    // The def-only negative: no instances input resolves every cell
+    // payload-free, byte for byte the old model.
+    const defOnly = buildInspectView(base, ITEMS);
+    expect(defOnly.gear.left.every((c) => c.instance === null)).toBe(true);
+    expect(defOnly.gear.right.every((c) => c.instance === null)).toBe(true);
   });
 });
 

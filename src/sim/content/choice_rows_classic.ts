@@ -13,7 +13,7 @@ const rogueBuilderAbilityIds = [
   'ghostly_strike',
 ];
 
-const rogueFinisherAbilityIds = [
+const _rogueFinisherAbilityIds = [
   'eviscerate',
   'rupture',
   'kidney_shot',
@@ -62,14 +62,14 @@ export const MAGE_CHOICE_ROWS: ClassChoiceRows = {
         {
           id: 'mag_r5_double_blink',
           name: 'Double Blink',
-          description: 'Flickerstep stores 2 charges, but each recharges 30% more slowly.',
+          description: 'Flitstep stores 2 charges, but each recharges 30% more slowly.',
           icon: 'double_blink',
           effect: { ability: [{ ability: 'blink', bonusCharges: 1, cooldownPct: 0.3 }] },
         },
         {
           id: 'mag_r5_blink_cast',
           name: 'Blink While Casting',
-          description: 'You can use Flickerstep in the middle of a cast without interrupting it.',
+          description: 'You can use Flitstep in the middle of a cast without interrupting it.',
           icon: 'blink_while_casting',
           effect: { global: { blinkCast: 1 } },
         },
@@ -200,7 +200,7 @@ export const MAGE_CHOICE_ROWS: ClassChoiceRows = {
           id: 'mag_r17_cold_snap',
           name: "Winter's Recall",
           description:
-            "Grants Winter's Recall: instantly finishes the cooldown of Flickerstep, Frostveil and Greater Invisibility.",
+            "Grants Winter's Recall: instantly finishes the cooldown of Flitstep, Frostveil and Greater Invisibility.",
           icon: 'cold_snap',
           effect: { grant: { ability: 'cold_snap' } },
         },
@@ -390,7 +390,7 @@ export const PALADIN_CHOICE_ROWS: ClassChoiceRows = {
     {
       level: 17,
       theme: 'dawn',
-      decision: 'more Ascension charges vs longer Avenging Wrath vs crit and haste during it',
+      decision: 'more Ascension charges vs longer Zealwing vs crit and haste during it',
       options: [
         {
           id: 'pal_r17_extended_dawn',
@@ -403,7 +403,7 @@ export const PALADIN_CHOICE_ROWS: ClassChoiceRows = {
           id: 'pal_r17_radiant_wrath',
           name: 'Radiant Wrath',
           description:
-            'Avenging Wrath lasts 5 sec longer (20 sec total) and its cooldown is reduced to 100 sec.',
+            'Zealwing lasts 5 sec longer (20 sec total) and its cooldown is reduced to 100 sec.',
           icon: 'pal_r17_radiant_wrath',
           effect: {
             ability: [{ ability: 'avenging_wrath', cooldownFlat: -20, durationFlat: 5 }],
@@ -412,7 +412,7 @@ export const PALADIN_CHOICE_ROWS: ClassChoiceRows = {
         {
           id: 'pal_r17_sanctified_fervor',
           name: 'Sanctified Fervor',
-          description: 'Avenging Wrath also grants 15% critical strike chance and 15% haste.',
+          description: 'Zealwing also grants 15% critical strike chance and 15% haste.',
           icon: 'pal_r17_sanctified_fervor',
           effect: {
             ability: [
@@ -1043,7 +1043,7 @@ export const ROGUE_CHOICE_ROWS: ClassChoiceRows = {
         {
           id: 'rog_r20_kill_chain',
           name: 'Kill Chain',
-          description: 'Killing blows refresh Smokestep and grant 5 combo points.',
+          description: 'Killing blows refresh Smokefade and grant 5 combo points.',
           icon: 'vanish',
           effect: { global: { onKillCombo: 5, onKillVanishReset: 1 } },
         },
@@ -1469,7 +1469,7 @@ export const SHAMAN_CHOICE_ROWS: ClassChoiceRows = {
           id: 'sha_r17_earthbind',
           name: 'Primal Exaltation',
           description:
-            'For 12 sec, Thundercall Arc Bolt and Skybranch cast 50% faster, while Arc Bolt grants 2 Thunder; Warspirit triggers its cadence every 2 weapon hits; Spiritmend adds 50% more healing to Mending Current. 120 sec cooldown.',
+            'For 12 sec, Thundercall Arc Bolt and Skybranch cast 50% faster, while Arc Bolt grants 2 Thunder; Warspirit triggers its cadence every 2 weapon hits; Spiritcall adds 50% more healing to Mending Current. 120 sec cooldown.',
           icon: 'elemental_mastery',
           effect: { grant: { ability: 'primal_exaltation' } },
         },
@@ -1502,7 +1502,7 @@ export const SHAMAN_CHOICE_ROWS: ClassChoiceRows = {
           id: 'sha_r20_bloodlust',
           name: 'Deep Reservoir',
           description:
-            'After Earthen Jolt or Faultwake consumes all Thunder, retain 2 Thunder. After a spell consumes Stormcast, retain 1 Warspirit Cadence step. After Cascading Mend consumes Mending Current, restore 25% of the amount consumed.',
+            'After Earthen Jolt or Faultwake consumes a full Thunder bank, retain 2 Thunder. After a spell consumes Stormcast, retain 1 Warspirit Cadence step. After Cascading Mend consumes Mending Current, restore 25% of the amount consumed.',
           icon: 'lightning_bolt',
           effect: { runtime: { thunderCharges: 2, cadenceSteps: 1, reseedPercent: 25 } },
         },
@@ -1510,7 +1510,7 @@ export const SHAMAN_CHOICE_ROWS: ClassChoiceRows = {
           id: 'sha_r20_elemental_fury',
           name: 'Echoing Elements',
           description:
-            'After Earthen Jolt or Faultwake consumes all Thunder, repeat 40% of its damage after 1 sec. A spell that consumes Stormcast repeats at 40% strength. Healing from consumed Mending Current repeats at 40% strength after 2 sec. These repeats cannot trigger other effects.',
+            'After Earthen Jolt or Faultwake consumes a full Thunder bank, repeat 40% of its damage after 1 sec. A spell that consumes Stormcast repeats at 40% strength. Healing from consumed Mending Current repeats at 40% strength after 2 sec. These repeats cannot trigger other effects.',
           icon: 'chain_lightning',
           effect: { runtime: { echoPercent: 40, damageDelay: 1, healingDelay: 2 } },
         },
@@ -1518,7 +1518,7 @@ export const SHAMAN_CHOICE_ROWS: ClassChoiceRows = {
           id: 'sha_r20_tidal_waves',
           name: 'Living Weapon',
           description:
-            "After Earthen Jolt or Faultwake consumes all Thunder, Pyrebrand makes the next Arc Bolt instant. Galeheart's echoes each deal 40% damage to up to 2 enemies within 8 yards. A Stonebound spell that consumes Stormcast grants an absorb equal to 8% of your maximum health. With Lifespring active, Tidecall also adds 50% of its full heal to the most injured ally within 10 yards.",
+            "After Earthen Jolt or Faultwake consumes a full Thunder bank, Pyrebrand makes the next Arc Bolt instant. Galeheart's echoes each deal 40% damage to up to 2 enemies within 8 yards. A Stonebound spell that consumes Stormcast grants an absorb equal to 8% of your maximum health. With Lifespring active, Tidecall also adds 50% of its full heal to the most injured ally within 10 yards.",
           icon: 'rockbiter_weapon',
           effect: {
             runtime: {
@@ -1601,10 +1601,10 @@ export const WARLOCK_CHOICE_ROWS: ClassChoiceRows = {
           id: 'wlk_r8_curse_of_exhaustion',
           name: 'Leaden Hex',
           description:
-            'Damaging spells apply a 5% slow for 5 sec, stacking 3 times. At 3 stacks, the next spell roots for 3.5 sec and consumes them. A target can be rooted once every 15 sec.',
+            'Damaging spells apply a 10% slow for 5 sec, stacking 3 times. At 3 stacks, the next spell roots for 3.5 sec and consumes them. A target can be rooted once every 15 sec.',
           icon: 'wlk_r8_curse_of_exhaustion',
           effect: {
-            global: { warlockLeadenHex: 0.05 },
+            global: { warlockLeadenHex: 0.1 },
             tuning: {
               maxStacks: 3,
               slowDuration: 5,
@@ -1796,25 +1796,30 @@ export const DRUID_CHOICE_ROWS: ClassChoiceRows = {
     {
       level: 5,
       theme: 'movement',
-      decision: 'escape control, sprint after shifting, or cast while moving',
+      decision: 'escape control, a longer and more frequent shift sprint, or cast while moving',
       options: [
         {
           id: 'dru_r5_improved_wrath',
           name: 'Wildshift',
-          description: 'Shapeshifting removes breakable roots and slows.',
+          description:
+            'Shapeshifting into Cat, Bruin, or Moonwing Form removes breakable roots and slows.',
           icon: 'travel_form',
           effect: { intrinsic: { mechanic: 'druid_wildshift', metrics: {} } },
         },
         {
+          // Loping Stride (the 60% for 3 sec, once per 20 sec shift sprint) is
+          // baseline for every druid since the Wildfang kit pass 2; this slot
+          // keeps its option id so saved allocations still resolve, and the
+          // engine (combat/druid_engines.ts) reads these metrics as the
+          // selected-talent duration and cooldown.
           id: 'dru_r5_ferocity',
-          name: 'Loping Stride',
-          description:
-            'Shapeshifting grants 60% movement speed for 3 sec, at most once every 20 sec.',
+          name: 'Longstride',
+          description: 'Loping Stride lasts 5 sec and its cooldown is 12 sec.',
           icon: 'cat_form',
           effect: {
             intrinsic: {
-              mechanic: 'druid_loping_stride',
-              metrics: { pct: 0.6, duration: 3, icd: 20 },
+              mechanic: 'druid_longstride',
+              metrics: { duration: 5, icd: 12 },
             },
           },
         },

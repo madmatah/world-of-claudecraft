@@ -1,3 +1,5 @@
+import { gliderActionsLocked } from '../glider_action_lock';
+import { shadowActionsLocked } from '../shadow_action_lock';
 // Player auto-attack + the melee/ranged white-hit table, extracted from the Sim
 // monolith (C5). This module owns:
 //   - startAutoAttack / stopAutoAttack: the public auto-attack toggle (validate
@@ -35,6 +37,7 @@ import { grantDevotionFromBlock } from '../paladin_devotion';
 import { scheduleProjectile } from '../projectile_travel';
 import type { PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
+import { disciplineWandOffenseMultiplier } from '../spec_output_tuning';
 import { resolveTalentHitMult } from '../talent_hit_mult';
 import { addThreat, hasEscapeStealth } from '../threat';
 import { creditAbilityDrill } from '../tutorial/ability_drill';
@@ -54,11 +57,14 @@ import {
   type WeaponInfo,
 } from '../types';
 import { drawWeapon } from '../weapon_stow';
+import { wispMazeActionsLocked } from '../wisp_maze_action_lock';
 import { applyRageSpendCooldownRefund, spendResource } from './casting_lifecycle';
 import { blindMissBonus, isDisarmed, isInStasis, isStunned } from './cc';
 import { druidEngineOnLandedStrike } from './druid_engines';
+import { naturesBoonOnAutoAttack } from './druid_natures_boon';
 import { consumeNextAttackCrit } from './empower_next';
 import { runWeaponProcs } from './equip_procs';
+import { meleeReachActor } from './feral_reach';
 import {
   baseSwingSpeed,
   catAutoWeaponRollMult,
@@ -72,6 +78,7 @@ import { tryGrantSolarReprisal } from './paladin_solar_reprisal';
 import { applyRequitalAutoAttack } from './paladin_talents';
 import { isValkyrsCallingAirborne } from './paladin_valkyrs_calling_state';
 import { effectivePlayerAttackRange } from './player_attack_reach';
+import { applyPoisonCoats } from './poison_coating';
 import { rangedShotProfile } from './ranged_shot';
 import { wearsSetBonus } from './set_bonus_wearer';
 import { triggerWardCycle } from './shaman_talents';
@@ -79,6 +86,7 @@ import { advanceWarspiritCadence, stoneboundThreatMultiplier } from './shaman_wa
 import { blockedMeleeDamage } from './shield_block';
 import { onCastCompleted, onMeleeSwing } from './talent_procs';
 import { applyThornsReaction } from './thorns_charge';
+import { onTrinketAvoidance } from './trinkets';
 import { warriorMeleeDefense } from './warrior_hit_table';
 
 // Fraction of the mainhand weapon's damage a hunter's Auto Shot deals. There is no
@@ -125,6 +133,13 @@ function autoAttackWeaponDamageMult(hand: AutoAttackHand): number {
 export function startAutoAttack(ctx: SimContext, pid?: number): void {
   const r = ctx.resolve(pid);
   if (!r) return;
+  if (
+    r.meta.vehicle ||
+    wispMazeActionsLocked(r.meta.worldQuestLog) ||
+    shadowActionsLocked(r.meta.worldQuestLog) ||
+    gliderActionsLocked(r.meta.worldQuestLog)
+  )
+    return;
   const p = r.e;
   if (p.dead) return;
   if (isInStasis(p)) return;
@@ -165,7 +180,7 @@ export function startAutoAttack(ctx: SimContext, pid?: number): void {
   // bug, #1324). The toggle still arms autoAttack above; once the cast resolves, the
   // first landed swing (or the spell's own damage) aggros the target legitimately.
   if (
-    d <= effectivePlayerAttackRange(t, MELEE_RANGE) &&
+    d <= effectivePlayerAttackRange(t, MELEE_RANGE, meleeReachActor(ctx, p)) &&
     !p.castingAbility &&
     t.kind === 'mob' &&
     t.hostile &&
@@ -193,9 +208,33 @@ export function stopAutoAttack(ctx: SimContext, pid?: number): void {
   if (r) r.e.autoAttack = false;
 }
 
+// Eye Jab (gouge): classic WoW's Gouge resets the caster's own swing timer on
+// use, so the auto-attack already in flight cannot land right behind it and
+// break the incapacitate it just applied. Mirrors the exact reset a landed
+// swing applies in updatePlayerAutoAttack below (same formula, both hands),
+// so this reads as "the caster just swung," not a bespoke delay.
+export function resetSwingTimer(ctx: SimContext, p: Entity, meta: PlayerMeta): void {
+  const haste = stanceMasteryAutoHaste(ctx, p, meta);
+  p.swingTimer = (baseSwingSpeed(p) * ctx.swingIntervalMult(p)) / (1 + haste);
+  if (p.dualWielding && p.offhandWeapon) {
+    p.offhandSwingTimer = (p.offhandWeapon.speed * ctx.swingIntervalMult(p)) / (1 + haste);
+  }
+}
+
 export function updatePlayerAutoAttack(ctx: SimContext, p: Entity, meta: PlayerMeta): void {
   p.swingTimer = Math.max(0, p.swingTimer - DT);
   p.offhandSwingTimer = Math.max(0, p.offhandSwingTimer - DT);
+  tryPlayerSwing(ctx, p, meta);
+}
+
+// The swing attempt behind the per-tick driver, without the timer decay: every
+// gate (armed, not casting, target, timer, stun, facing, range, LoS) and the
+// swing itself. Reachable a second time in one tick from the spell queue
+// (casting_lifecycle.fireQueuedCast, via ctx.tryPlayerSwing): a cast that
+// completes with the next cast already queued never shows the driver a null
+// castingAbility, so the queue fires the ready swing itself before starting
+// the queued cast. Calling in here with the timer still running is a no-op.
+export function tryPlayerSwing(ctx: SimContext, p: Entity, meta: PlayerMeta): void {
   if (isValkyrsCallingAirborne(p)) return;
   if (p.auras.some((a) => isTravelFormAuraKind(a.kind))) {
     p.autoAttack = false;
@@ -239,7 +278,7 @@ export function updatePlayerAutoAttack(ctx: SimContext, p: Entity, meta: PlayerM
     p.swingTimer = shot.speed * ctx.swingIntervalMult(p, 'ranged');
     return;
   }
-  if (d > effectivePlayerAttackRange(t, MELEE_RANGE)) return;
+  if (d > effectivePlayerAttackRange(t, MELEE_RANGE, meleeReachActor(ctx, p))) return;
   // Melee normally skips line of sight (it's always point-blank), but the
   // arena's thin enclosing walls sit inside MELEE_RANGE: without this a
   // combatant pressed against a wall could swing through it. See sibling
@@ -314,7 +353,7 @@ export function updatePlayerAutoAttack(ctx: SimContext, p: Entity, meta: PlayerM
     }
     maybeProcBattleTrance(ctx, p, meta, connected);
     maybeProcSuddenDeath(ctx, p, meta, connected);
-    // Wolf Form swings at the fixed fast cat cadence, not the carried weapon's
+    // Cat Form swings at the fixed fast cat cadence, not the carried weapon's
     // speed (see combat/form_swing.ts); everyone else uses their weapon speed.
     // Melee haste (item sets + Enrage + haste buffs) lives in the ONE additive
     // bucket inside swingIntervalMult (v0.27.1); only the stance-mastery auto
@@ -434,6 +473,10 @@ export function rangedSwing(
     let dmg =
       (ranged.wand ? weaponRoll : weaponRoll * RANGED_WEAPON_COEFF) +
       (atk.rangedPower / 14) * ranged.speed;
+    const owner = ranged.wand ? ctx.players.get(atk.id) : undefined;
+    if (owner?.cls === 'priest' && ctx.playerMods(owner).spec === 'discipline') {
+      dmg *= disciplineWandOffenseMultiplier();
+    }
     // ranged white hits suffer the same higher-level crit suppression as melee
     const critChance = Math.max(0.005, atk.critChance - Math.max(0, tgt.level - atk.level) * 0.002);
     const crit = ctx.rng.chance(consumeNextAttackCrit(ctx, atk) ? 1 : critChance);
@@ -476,6 +519,8 @@ export function meleeSwing(
     cannotBeDodged?: boolean;
     weapon?: WeaponInfo;
     weaponMult?: number;
+    /** Scales the complete primary hit before callbacks snapshot copied damage. */
+    primaryDamageMult?: number;
     autoAttackHand?: AutoAttackHand;
     apSwingSpeed?: number;
     threatFlat?: number;
@@ -497,6 +542,8 @@ export function meleeSwing(
     // #2861: this is what left Ambush/Backstab/Sinister Strike's dedicated
     // impact cues unreachable).
     abilityId?: string | null;
+    /** An explicit cast-start cue already began this ability's performance. */
+    attackAnimationStarted?: boolean;
     // Classic instant-attack normalization (weaponStrike effect `normalized`):
     // scale the weapon-damage portion to a fixed normalized speed by weapon
     // class instead of the weapon's real speed. Only meaningful for an ability
@@ -525,6 +572,7 @@ export function meleeSwing(
       school: 'physical',
       ability: abilityName,
       kind: 'miss',
+      ...(opts.attackAnimationStarted ? { attackAnimationStarted: true as const } : {}),
     });
     ctx.enterCombat(attacker, target);
     return false;
@@ -539,8 +587,10 @@ export function meleeSwing(
       school: 'physical',
       ability: abilityName,
       kind: 'dodge',
+      ...(opts.attackAnimationStarted ? { attackAnimationStarted: true as const } : {}),
     });
     ctx.enterCombat(attacker, target);
+    onTrinketAvoidance(ctx, target);
     if (attacker.kind === 'player') attacker.overpowerUntil = ctx.time + 5;
     return false;
   }
@@ -554,8 +604,10 @@ export function meleeSwing(
       school: 'physical',
       ability: abilityName,
       kind: 'parry',
+      ...(opts.attackAnimationStarted ? { attackAnimationStarted: true as const } : {}),
     });
     ctx.enterCombat(attacker, target);
+    onTrinketAvoidance(ctx, target);
     return false;
   }
   const mult = opts.weaponMult ?? 1;
@@ -571,7 +623,7 @@ export function meleeSwing(
     opts.normalizedInstant && opts.autoAttackHand === undefined
       ? normalizedInstantSpeed(weapon)
       : undefined;
-  // The cat mainhand auto is the one REAL auto attack that normalizes: Wolf
+  // The cat mainhand auto is the one REAL auto attack that normalizes: Cat
   // Form swings its claws at the fixed cat cadence, so the carried weapon's
   // roll is rescaled to that cadence (catAutoWeaponRollMult, the same shape as
   // the instant rescale above) and white DPS equals the weapon's authored dps
@@ -590,7 +642,7 @@ export function meleeSwing(
   let dmg =
     (ctx.rng.range(weapon.min, weapon.max) * weaponRollMult +
       // Normalize the attack-power contribution to the SAME cadence the swing
-      // fires at: Wolf Form swings at the fixed cat speed (baseSwingSpeed), so
+      // fires at: Cat Form swings at the fixed cat speed (baseSwingSpeed), so
       // its AP-per-swing must use that speed too, not the slow staff's, or
       // feral would double-dip (fast swings AND heavy slow-weapon AP weighting).
       (ctx.effectiveAttackPower(attacker) / 14) * apSwingSpeed) *
@@ -624,8 +676,9 @@ export function meleeSwing(
       grantDevotionFromBlock(target);
       tryGrantSolarReprisal(ctx, target, 'block');
     }
+    onTrinketAvoidance(ctx, target);
   }
-  const dealtAmount = Math.max(1, Math.round(dmg));
+  const dealtAmount = Math.max(1, Math.round(dmg * (opts.primaryDamageMult ?? 1)));
   const hpBefore = target.hp;
   const resolvedAmount = ctx.dealDamage(
     attacker,
@@ -641,7 +694,7 @@ export function meleeSwing(
       mult: (opts.threatMult ?? 1) * stoneboundThreatMultiplier(ctx, attacker),
     },
     true,
-    false,
+    opts.attackAnimationStarted ?? false,
     false,
     // Cue-presentation only on this path: onSpellCrit skips the physical
     // school, so the id can never newly arm an ability-filtered proc here.
@@ -676,6 +729,16 @@ export function meleeSwing(
       triggerWardCycle(ctx, attacker);
     }
     onMeleeSwing(ctx, attacker);
+    // Nature's Boon (combat/druid_natures_boon.ts): a landed AUTO-attack, and
+    // only an auto-attack, can arm the Wildfang free-spell window. The
+    // opts.autoAttack gate is what keeps a weaponStrike ability (which
+    // resolves through this same shell) from rolling it. Feral-gated inside,
+    // so no other player draws rng here.
+    if (opts.autoAttack) naturesBoonOnAutoAttack(ctx, attacker);
+    // Weapon coats (the rogue poisons) land their rider on the struck target
+    // here, on the LANDED arm only: a miss, dodge or parry returned above, so
+    // a whiffed swing carries no poison. Draws no rng.
+    applyPoisonCoats(ctx, attacker, target);
   }
   // thorns / lightning shield: melee attackers take damage back. Charge-limited
   // thorns (Lightning Shield) consume a charge and gate on an internal cooldown.
@@ -704,6 +767,13 @@ export function meleeSwing(
   // dual-wield bug). Ability strikes (autoAttackHand undefined) use the mainhand.
   const procWeaponId =
     opts.autoAttackHand === 'offhand' ? attacker.offhandItemId : attacker.mainhandItemId;
-  runWeaponProcs(ctx, attacker, target, 'weaponHit', procWeaponId);
+  runWeaponProcs(
+    ctx,
+    attacker,
+    target,
+    'weaponHit',
+    procWeaponId,
+    opts.autoAttackHand === 'offhand' ? 'offhand' : 'mainhand',
+  );
   return true;
 }

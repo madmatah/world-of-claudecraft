@@ -10,6 +10,7 @@
 // the item def) purely as a courtesy: the server re-validates every listing.
 
 import { ITEMS } from '../sim/data';
+import { effectiveQuality } from '../sim/equipment_rules';
 import {
   exchangeCategoryUsesQualityFloor,
   exchangeHardLock,
@@ -130,6 +131,9 @@ export interface WocSettlementView {
   createdAtMs: number;
 }
 
+/** How a sale closed, for the Sales History tab. */
+export type WocSaleType = 'auction' | 'buy_now' | 'directed';
+
 export interface WocSaleView {
   id: number;
   itemId: string;
@@ -137,6 +141,10 @@ export interface WocSaleView {
   sellerName: string;
   buyerName: string;
   atMs: number;
+  /** The Sales History columns, absent on the detail/seller sale rows and on
+   *  an older server; saleType null renders the "unknown type" label. */
+  saleType?: WocSaleType | null;
+  quality?: string;
 }
 
 export interface WocActivityView {
@@ -148,7 +156,7 @@ export interface WocActivityView {
   walletLinked: boolean;
 }
 
-export type WocMarketTab = 'browse' | 'sell' | 'activity';
+export type WocMarketTab = 'browse' | 'sell' | 'activity' | 'history';
 
 export interface WocMarketViewInput {
   /** Feature capability on this client build (platform gate). */
@@ -170,6 +178,15 @@ export interface WocMarketViewInput {
     detail: WocListingView | null;
     estimate: WocEstimateView | null;
     sales: readonly WocSaleView[] | null;
+  };
+  /** The Sales History tab: realm-wide completed sales, most-recent-first
+   *  (server order), paged, sharing the Browse filter state. */
+  history: {
+    sales: readonly WocSaleView[];
+    hasMore: boolean;
+    page: number;
+    loading: boolean;
+    failed: boolean;
   };
   /** The live inventory (IWorld read) for the sell tab. */
   inventory: readonly InvSlot[];
@@ -238,6 +255,28 @@ export interface WocSellRowModel {
   instance: ItemInstancePayload | undefined;
 }
 
+/** One row of the Sales History tab. quality frames the item icon (resolved
+ *  from the def, sales carry no instance); saleType labels the type column,
+ *  null for a pre-feature sale. */
+export interface WocSaleRowModel {
+  id: number;
+  itemId: string;
+  quality: string;
+  sellerName: string;
+  buyerName: string;
+  atMs: number;
+  priceCents: number;
+  saleType: WocSaleType | null;
+}
+
+export interface WocHistoryModel {
+  rows: WocSaleRowModel[];
+  hasMore: boolean;
+  page: number;
+  loading: boolean;
+  failed: boolean;
+}
+
 export interface WocActivityModel {
   listings: WocListingRowModel[];
   bids: (WocBidView & { bondQuoteRemainingMs: number | null })[];
@@ -302,6 +341,7 @@ export type WocMarketViewModel =
         pendingTtlSeconds: number;
       } | null;
       activity: WocActivityModel | null;
+      history: WocHistoryModel;
     };
 
 const QUALITY_RANK: Record<string, number> = {
@@ -367,7 +407,13 @@ function rowsPassing(
     if (category === 'other') return;
     if (category === 'mount' && !categories.mounts) return;
     if (category === 'mech_chroma' && !categories.mechChromas) return;
-    const quality = slot.instance?.rolled?.quality ?? def.quality ?? 'common';
+    // The sim's one precedence rule (the rolled override, else the def's),
+    // never a hand-rolled copy. Deliberately NOT the tooltip's tier-narrowing
+    // wrapper: a legacy unknown-tier rolled quality must keep ranking as
+    // itself here (QUALITY_RANK's own miss answers 0), not collapse to the
+    // def's tier and pass a floor it never passed before (the fresh-reader
+    // finding on the first QA fix).
+    const quality = effectiveQuality(def, slot.instance) ?? 'common';
     if (exchangeCategoryUsesQualityFloor(category) && (QUALITY_RANK[quality] ?? 0) < floor) return;
     rows.push({ index, itemId: slot.itemId, quality, instance: slot.instance });
   });
@@ -558,6 +604,26 @@ export function buildWocMarketView(input: WocMarketViewInput): WocMarketViewMode
     },
     bondSchedule: status.bond ?? null,
     activity,
+    history: {
+      // Server order is already most-recent-first; the row just resolves the
+      // display quality (a sale carries no instance, so the def quality is the
+      // frame; the wire quality, when present, wins as the rolled figure the
+      // listing was stamped with).
+      rows: input.history.sales.map((s) => ({
+        id: s.id,
+        itemId: s.itemId,
+        quality: s.quality ?? ITEMS[s.itemId]?.quality ?? 'common',
+        sellerName: s.sellerName,
+        buyerName: s.buyerName,
+        atMs: s.atMs,
+        priceCents: s.priceCents,
+        saleType: s.saleType ?? null,
+      })),
+      hasMore: input.history.hasMore,
+      page: input.history.page,
+      loading: input.history.loading,
+      failed: input.history.failed,
+    },
   };
 }
 
@@ -629,6 +695,16 @@ export function wocMarketViewSig(model: WocMarketViewModel): string {
         `${model.activity.strikes}:${model.activity.suspendedRemainingMs === null ? '' : Math.floor(model.activity.suspendedRemainingMs / 60_000)}:${model.activity.termsAccepted ? 1 : 0}`,
       ].join('|')
     : '';
+  // Sale rows are immutable, so their ids alone digest the list; page and the
+  // loading/failed flags ride too, or a player-asked refresh (same page, new
+  // rows or a failure) would never repaint.
+  const history = [
+    model.history.page,
+    model.history.hasMore ? 1 : 0,
+    model.history.loading ? 1 : 0,
+    model.history.failed ? 1 : 0,
+    model.history.rows.map((r) => r.id).join(','),
+  ].join(':');
   return [
     model.tab,
     model.paused ? 1 : 0,
@@ -642,5 +718,39 @@ export function wocMarketViewSig(model: WocMarketViewModel): string {
     detail,
     sell,
     activity,
+    history,
   ].join('#');
+}
+
+/**
+ * The scroll containers the window's rebuild replaces, each with the state key
+ * that decides whether a saved position still refers to the same content. The
+ * keeper is load-bearing rather than cosmetic: the slow-band poll rebuilds on
+ * every countdown bucket change, once a minute at rest and once a SECOND
+ * inside the anti-snipe window, and without it the browse list yanked itself
+ * back to the top while the player was reading it. Keyed, so a genuine change
+ * of view still starts at the top: the body resets when the tab changes; the
+ * detail pane also resets when a different listing is selected, since its old
+ * offset means nothing in another listing's content.
+ */
+export interface WocMarketScrollKeys {
+  body: string;
+  detail: string;
+}
+
+export const WOC_MARKET_SCROLL_KEEPERS: ReadonlyArray<
+  readonly [keyof WocMarketScrollKeys, string]
+> = [
+  ['body', '.wm-body'],
+  ['detail', '.wm-detail'],
+];
+
+/** What each preserved scroll offset refers to. The detail key folds in the
+ *  selected listing as well as the tab, because an offset taken in one
+ *  listing's pane means nothing in another's. */
+export function wocMarketScrollKeys(
+  tab: WocMarketTab,
+  detailListingId: number | undefined,
+): WocMarketScrollKeys {
+  return { body: tab, detail: `${tab}:${detailListingId ?? ''}` };
 }

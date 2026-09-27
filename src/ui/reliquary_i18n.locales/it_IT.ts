@@ -142,6 +142,10 @@ export const table: ReliquaryLocaleTable = {
     name: 'Armeria di Guerra',
     desc: 'Gioielli e armi di Guerra acquistati con onore sudato.',
   },
+  conquerors_vanguard_gallery: {
+    name: 'Galleria dell’Avanguardia',
+    desc: 'I set di specializzazione e le armi della stagione 2 di Guerra, acquistati con l’onore.',
+  },
   horizons_vault_of_ages: {
     name: 'Camera del Tesoro delle Ere',
     desc: "Tesori ritirati di un'epoca passata. Queste reliquie non si possono più conquistare; la camera rende onore ai veterani che le conservano.",
@@ -151,19 +155,31 @@ export const table: ReliquaryLocaleTable = {
     desc: 'Gli anelli dello Squarcio personali, coniati per ogni campione del gruppo che ottiene la prima conquista di uno Squarcio classificato. Ogni personaggio può possedere solo il proprio.',
   },
   conquerors_ignivar: {
-    name: 'Crucible of the Last Spring',
-    desc: 'Bottini epici di Ignivar, Herald of the Last Flame.',
+    name: 'Crogiolo dell’Ultima Fonte',
+    desc: 'Bottini epici di Ignivar, Araldo dell’Ultima Fiamma.',
   },
   conquerors_ignivar_heroic: {
-    name: 'Eroico: Crucible of the Last Spring',
-    desc: 'Armi esclusive della modalità eroica di Ignivar, Herald of the Last Flame.',
+    name: 'Eroico: Crogiolo dell’Ultima Fonte',
+    desc: 'Armi esclusive della modalità eroica e monili dell’incursione di Ignivar, Araldo dell’Ultima Fiamma.',
   },
   conquerors_varkhul: {
-    name: 'The Inner Crucible',
-    desc: 'Bottini epici di Varkhul, Forgefather of the Last Flame.',
+    name: 'Il Crogiolo Interiore',
+    desc: 'Bottini epici di Varkhul, Padre della Forgia dell’Ultima Fiamma.',
   },
   conquerors_varkhul_heroic: {
-    name: 'Eroico: The Inner Crucible',
-    desc: 'Scudi e armi esclusivi della modalità eroica di Varkhul, Forgefather of the Last Flame.',
+    name: 'Eroico: Il Crogiolo Interiore',
+    desc: 'Scudi e armi esclusivi della modalità eroica e monili dell’incursione di Varkhul, Padre della Forgia dell’Ultima Fiamma.',
+  },
+  conquerors_set_bramblehide: {
+    name: 'Pelle di Rovo di Roots',
+    desc: 'La famiglia completa in cuoio Pelle di Rovo di Roots.',
+  },
+  professions_crucible: {
+    name: 'Artigianato del Crogiolo',
+    desc: 'Undici collezioni create nelle incursioni, ciascuna con un pezzo per il petto, la vita e i piedi. Manuali e formule sono conoscenze, non reliquie.',
+  },
+  professions_forgebreaker: {
+    name: 'Forgiaspezza',
+    desc: 'La voce dell’Ultima Fonte, liberata dalla forgia e portata in un martello costruito con le tue mani.',
   },
 };

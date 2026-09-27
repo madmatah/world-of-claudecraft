@@ -8,6 +8,8 @@ import {
   localDiagnosticsCaptureEnabled,
   PerfDiagnosticsPanel,
 } from '../src/game/perf_diagnostics_panel';
+import { shaderWarmAuditSnapshot } from '../src/render/shader_warm_audit';
+import { shaderWarmSnapshot } from '../src/render/shader_warm_client';
 
 function digest(value = 0) {
   return { count: 600, avg: value, p95: value, max: value };
@@ -17,8 +19,10 @@ function snapshot(): PerfSnapshot {
   const frameMs = { avg: 16, p50: 16, p95: 16, p99: 18, max: 22, long50: 0 };
   return {
     seconds: 20,
+    visibleSeconds: 20,
     frames: 1200,
     hiddenPresentSkips: 0,
+    cadence: null,
     fps: 60,
     frameMs,
     windows: {
@@ -43,6 +47,9 @@ function snapshot(): PerfSnapshot {
     netPipeline: null,
     heapSawtooth: null,
     hitchForensics: [],
+    postRevealLinks: null,
+    shaderWarmAudit: shaderWarmAuditSnapshot(),
+    shaderWarm: shaderWarmSnapshot(),
     input: {
       intents: 0,
       lastKind: '',

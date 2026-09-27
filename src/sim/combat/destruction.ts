@@ -9,6 +9,7 @@
 import { createDemonPet } from '../pet/pet_commands';
 import type { PlayerMeta, ResolvedAbility } from '../sim';
 import type { SimContext } from '../sim_context';
+import { petOffenseMultiplier } from '../spec_output_tuning';
 import type { AbilityDef, Aura, Entity } from '../types';
 import { grantShadowCredit } from './warlock_talents';
 
@@ -25,8 +26,16 @@ export const RUINOUS_BRAND_DURATION = 15;
 export const PYRE_COLOSSUS_DURATION = 30;
 export const PYRE_AURA_INTERVAL = 2;
 export const PYRE_AURA_RADIUS = 8;
-export const PYRE_AURA_DAMAGE = 60;
 export const PYRE_RUIN_INTERVAL = 1;
+// v0.42.0 Ruination: tickPyreGuardian deals this flat nova directly via
+// ctx.dealDamage, bypassing hunterPetDamageMultiplier (the shared reader of
+// global.petDmgPct every other owned pet uses), so destruction's paired pet
+// bonus never reaches it on its own. This is the explicit destruction-only
+// fix the design doc calls for: 60 -> 66 (docs/design/class-balance-v042.md).
+const PYRE_AURA_BASE_DAMAGE = 60;
+export const PYRE_AURA_DAMAGE = Math.round(
+  PYRE_AURA_BASE_DAMAGE * petOffenseMultiplier('warlock', 'destruction'),
+);
 
 const RUIN_AURA_ID = 'destruction_ruin';
 const DESOLATION_AURA_ID = 'desolation';
@@ -122,14 +131,21 @@ export function spendRuin(ctx: SimContext, player: Entity, amount: number): bool
   return true;
 }
 
-export function hasBurningPact(player: Entity, target: Entity | null): boolean {
+/** Structural so the action bar can ask it too (its aura input carries the same
+ *  id / kind / sourceId / remaining fields the live Aura does). */
+export function hasBurningPact(
+  player: { id: number },
+  target: {
+    auras: readonly { id?: string; kind: string; sourceId?: number; remaining?: number }[];
+  } | null,
+): boolean {
   return (
     target?.auras.some(
       (aura) =>
         aura.id === 'immolate' &&
         aura.kind === 'dot' &&
         aura.sourceId === player.id &&
-        aura.remaining > 0,
+        (aura.remaining ?? 0) > 0,
     ) ?? false
   );
 }
@@ -450,7 +466,9 @@ function copyRuinousBrandDamage(
     player,
     branded,
     amount,
-    false,
+    // The copied amount already includes Ruinbolt's critical multiplier.
+    // This flag records that outcome; resolvedHpLoss below prevents new procs.
+    ability.id === 'chaos_bolt',
     ability.school,
     'Ruinous Brand',
     'hit',

@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { ITEMS } from '../src/sim/data';
 import type { EquipSlot } from '../src/sim/types';
 import {
+  buildCharacterSidebarView,
   buildPaperdollView,
+  CHARACTER_SIDEBAR_TABS,
   PAPERDOLL_LEFT_SLOTS,
   PAPERDOLL_RIGHT_SLOTS,
+  PAPERDOLL_WEAPON_SLOTS,
 } from '../src/ui/char_view';
 
 const FULL: Partial<Record<EquipSlot, string>> = {
@@ -20,44 +23,25 @@ const FULL: Partial<Record<EquipSlot, string>> = {
 };
 
 describe('char_view: paperdoll data model', () => {
-  it('lays two balanced 6/6 columns: head/neck/shoulder/chest/mainhand/offhand, then hands/waist/legs/feet/rings', () => {
-    // Showcase redesign: the offhand moved from the tail of the RIGHT column to
-    // the end of the LEFT column (under Main Hand), balancing the paperdoll to
-    // 6/6 so both bands flank the fixed-width model stage evenly. Inspect inherits
-    // this since it reuses these arrays via buildPaperdollView.
-    expect(PAPERDOLL_LEFT_SLOTS).toEqual([
-      'helmet',
-      'neck',
-      'shoulder',
-      'chest',
-      'mainhand',
-      'offhand',
-    ]);
-    expect(PAPERDOLL_RIGHT_SLOTS).toEqual(['gloves', 'waist', 'legs', 'feet', 'ring1', 'ring2']);
+  it('lays two 5/5 armor columns (head to hands, waist to rings) with the weapon hands in their own row', () => {
+    // Showcase redesign: the weapon hands left the columns for a centered row
+    // under the model stage, so the two armor bands flank the stage evenly at
+    // 5/5. Inspect inherits this since it reuses these arrays via buildPaperdollView.
+    expect(PAPERDOLL_LEFT_SLOTS).toEqual(['helmet', 'neck', 'shoulder', 'chest', 'gloves']);
+    expect(PAPERDOLL_RIGHT_SLOTS).toEqual(['waist', 'legs', 'feet', 'ring1', 'ring2']);
+    expect(PAPERDOLL_WEAPON_SLOTS).toEqual(['mainhand', 'offhand', 'trinket']);
   });
 
   it('resolves every equipped slot to its item, in column order', () => {
     const view = buildPaperdollView(FULL, ITEMS);
-    expect(view.left.map((c) => c.slot)).toEqual([
-      'helmet',
-      'neck',
-      'shoulder',
-      'chest',
-      'mainhand',
-      'offhand',
-    ]);
-    expect(view.right.map((c) => c.slot)).toEqual([
-      'gloves',
-      'waist',
-      'legs',
-      'feet',
-      'ring1',
-      'ring2',
-    ]);
+    expect(view.left.map((c) => c.slot)).toEqual(['helmet', 'neck', 'shoulder', 'chest', 'gloves']);
+    expect(view.right.map((c) => c.slot)).toEqual(['waist', 'legs', 'feet', 'ring1', 'ring2']);
+    expect(view.weapons.map((c) => c.slot)).toEqual(['mainhand', 'offhand', 'trinket']);
     expect(view.left[0].item).toBe(ITEMS.cryptbone_helm);
-    expect(view.left[4].item).toBe(ITEMS.worn_sword);
-    expect(view.left[5].item).toBeNull(); // offhand: unequipped in FULL, now the left tail
-    expect(view.right[3].item).toBe(ITEMS.oiled_boots);
+    expect(view.weapons[0].item).toBe(ITEMS.worn_sword);
+    expect(view.weapons[1].item).toBeNull(); // offhand: unequipped in FULL
+    expect(view.weapons[2].item).toBeNull(); // trinket: present even when empty
+    expect(view.right[2].item).toBe(ITEMS.oiled_boots);
   });
 
   it('resolves jewelry slots: neck in the left column, both rings in the right', () => {
@@ -70,8 +54,8 @@ describe('char_view: paperdoll data model', () => {
       ITEMS,
     );
     expect(view.left[1].item).toBe(ITEMS.yumis_keepsake_locket);
-    expect(view.right[4].item).toBe(ITEMS.seal_of_the_nine_oaths);
-    expect(view.right[5].item).toBe(ITEMS.nielas_coldlight_band);
+    expect(view.right[3].item).toBe(ITEMS.seal_of_the_nine_oaths);
+    expect(view.right[4].item).toBe(ITEMS.nielas_coldlight_band);
   });
 
   it('renders an empty cell for an unequipped slot or an unknown item id', () => {
@@ -82,6 +66,68 @@ describe('char_view: paperdoll data model', () => {
     expect(view.left[3].item).toBeNull(); // chest: id present but unknown -> empty
     // every right-column slot is empty when nothing is equipped there
     expect(view.right.every((c) => c.item === null)).toBe(true);
+  });
+
+  it('carries each slot its OWN worn payload, PROJECTED to worn identity (phase 13)', () => {
+    // The instance rides the cell so the painter's row can describe the worn
+    // COPY (a promoted legendary's color and chosen name). Slot-keyed, never
+    // smeared: the helmet's payload must not leak onto the mainhand. The cell
+    // holds the wornTooltipInstance PROJECTION, never the raw payload: the
+    // cosmetic fields survive and the bond fields (boundTo, bindOnTrade) are
+    // trimmed, so a future cell reader cannot diverge the offline host from
+    // the eqi-trimmed online mirror.
+    const promoted = {
+      name: 'Dawnbreaker',
+      rolled: { quality: 'legendary' as const },
+      boundTo: 7,
+    };
+    const view = buildPaperdollView(FULL, ITEMS, { helmet: promoted });
+    expect(view.left[0].instance).toEqual({
+      name: 'Dawnbreaker',
+      rolled: { quality: 'legendary' },
+    });
+    expect(view.left[0].instance).not.toBe(promoted); // a projection, not the raw handle
+    expect(view.weapons[0].instance).toBeNull(); // mainhand: worn, no payload
+    // The def-only negative: no instances argument (a caller with no payloads
+    // in hand) resolves every cell payload-free, byte for byte the old model.
+    const defOnly = buildPaperdollView(FULL, ITEMS);
+    expect(defOnly.left.every((c) => c.instance === null)).toBe(true);
+    expect(defOnly.right.every((c) => c.instance === null)).toBe(true);
+    expect(defOnly.weapons.every((c) => c.instance === null)).toBe(true);
+    // An empty slot never carries a payload, even if the record has a stale
+    // entry for it (the item gate runs first).
+    const stale = buildPaperdollView({ chest: 'no_such_item' }, ITEMS, {
+      chest: promoted,
+    });
+    expect(stale.left[3].item).toBeNull();
+    expect(stale.left[3].instance).toBeNull();
+  });
+});
+
+describe('char_view: sidebar tabs', () => {
+  it('models the Stats, Progression, and Skills tabs with one selected tab', () => {
+    expect(CHARACTER_SIDEBAR_TABS).toEqual([
+      'stats',
+      'reputation',
+      'currencies',
+      'progression',
+      'skills',
+    ]);
+    expect(buildCharacterSidebarView('progression')).toEqual({
+      selected: 'progression',
+      tabs: [
+        { id: 'stats', selected: false },
+        { id: 'reputation', selected: false },
+        { id: 'currencies', selected: false },
+        { id: 'progression', selected: true },
+        { id: 'skills', selected: false },
+      ],
+    });
+  });
+
+  it('fails closed to Stats for an absent or stale tab id', () => {
+    expect(buildCharacterSidebarView(null).selected).toBe('stats');
+    expect(buildCharacterSidebarView('not-a-tab').selected).toBe('stats');
   });
 });
 

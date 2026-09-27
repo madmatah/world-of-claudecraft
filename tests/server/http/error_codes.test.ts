@@ -133,9 +133,11 @@ const EXPECTED_CODES = [
   'woc_market.stepup_wallet_mismatch',
   'woc_market.stepup_binding_mismatch',
   'woc_market.stepup_signature_invalid',
+  'discord.invalid_input',
   'deeds.invalid_input',
   'guilds.invalid_roster_name',
   'guilds.unknown',
+  'world_quests.unknown_board',
   'steam.disabled',
   'steam.invalid_ticket',
   'steam.banned',
@@ -153,6 +155,9 @@ const EXPECTED_CODES = [
   'cheater_mark.reason_required',
   'cheater_mark.invalid_duration',
   'cheater_mark.not_marked',
+  'kick.reason_required',
+  'kick.admin_target',
+  'kick.target_offline',
 ];
 
 describe('ERROR_CODES catalog', () => {
@@ -175,7 +180,14 @@ describe('ERROR_CODES catalog', () => {
     const keys = [...literal.matchAll(/^\s{2}'([a-z0-9_.]+)': \{/gm)].map((m) => m[1]);
     expect(keys.length).toBe(Object.keys(ERROR_CODES).length);
     const seen = new Set<string>();
-    const dupes = keys.filter((k) => (seen.has(k) ? true : (seen.add(k), false)));
+    const dupes: string[] = [];
+    for (const k of keys) {
+      if (seen.has(k)) {
+        dupes.push(k);
+      } else {
+        seen.add(k);
+      }
+    }
     expect(dupes).toEqual([]);
   });
 

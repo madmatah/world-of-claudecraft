@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GuildPledgeSettingsInput } from '../server/guild_pledge_settings_cmd';
 import { resolveRealm } from '../server/realm';
 import {
   type CharInfo,
   type CharRef,
-  GUILD_MEMBER_LIMIT,
   type GuildEventRow,
   type GuildRank,
+  type GuildRosterPurchase,
   PLEDGE_REPLEDGE_COOLDOWN_MS,
   type Presence,
   type SocialDb,
@@ -15,7 +16,20 @@ import {
   validateGuildName,
 } from '../server/social';
 import type { ChatSenderFlair } from '../src/sim/account_flair';
+import {
+  defaultGuildRankLadder,
+  type GuildRankDef,
+  resolveGuildRankLadder,
+} from '../src/sim/guild_ranks';
+import {
+  GUILD_ROSTER_BASE_MEMBERS,
+  GUILD_ROSTER_MAX_MEMBERS,
+  GUILD_ROSTER_MAX_PAGES,
+  GUILD_ROSTER_PAGE_PRICES,
+  guildRosterCap,
+} from '../src/sim/guild_roster';
 import type { SimEvent } from '../src/sim/types';
+import type { GuildPledgeSettings } from '../src/world_api/social_graph';
 
 // ---------------------------------------------------------------------------
 // In-memory fakes — let us exercise the full SocialService logic (friends,
@@ -26,10 +40,39 @@ class FakeDb implements SocialDb {
   private chars = new Map<number, CharInfo & { activeTitle: string | null }>();
   // guild pledges (docs/prd/guild-pledge-board.md)
   pledges = new Map<number, { guildId: number; sinceMs: number }>();
-  pledgeSettingsByGuild = new Map<number, { enabled: boolean; minLevel: number; note: string }>();
+  pledgeSettingsByGuild = new Map<number, GuildPledgeSettings>();
   ladder = new Map<string, { rejectCount: number; rejectedAtMs: number }>();
   accountOf = new Map<number, number>();
   guildXpTotals = new Map<number, number>();
+  // guild roster expansion (docs/prd/guild-roster-expansion.md): pages bought
+  rosterPages = new Map<number, number>();
+  // guild custom ranks (docs/prd/guild-custom-ranks.md): the stored ladder
+  // (absent = NULL = the default ladder, like the guilds.ranks column)
+  ladders = new Map<number, GuildRankDef[]>();
+
+  async guildRanks(guildId: number): Promise<GuildRankDef[]> {
+    return resolveGuildRankLadder(this.ladders.get(guildId) ?? null);
+  }
+  async setGuildRankLadder(
+    guildId: number,
+    leaderCharId: number,
+    ladder: readonly GuildRankDef[],
+  ): Promise<boolean> {
+    // Mirrors the real compare-and-set: the caller must STILL lead this guild,
+    // and holders of a dropped rank fall back to the joining rank in the same
+    // write.
+    const leader = this.members.get(leaderCharId);
+    if (!leader || leader.guildId !== guildId || leader.rank !== 'leader') return false;
+    this.ladders.set(
+      guildId,
+      ladder.map((r) => ({ ...r, perms: [...r.perms] })),
+    );
+    const kept = new Set(ladder.map((r) => r.id));
+    for (const m of this.members.values()) {
+      if (m.guildId === guildId && !kept.has(m.rank)) m.rank = 'member';
+    }
+    return true;
+  }
 
   async guildByName(name: string): Promise<{ id: number; name: string } | null> {
     for (const [id, gname] of this.guilds) {
@@ -37,14 +80,24 @@ class FakeDb implements SocialDb {
     }
     return null;
   }
-  async guildPledgeSettings(guildId: number) {
-    return this.pledgeSettingsByGuild.get(guildId) ?? { enabled: true, minLevel: 1, note: '' };
+  async guildPledgeSettings(guildId: number): Promise<GuildPledgeSettings> {
+    return (
+      this.pledgeSettingsByGuild.get(guildId) ?? {
+        enabled: true,
+        minLevel: 1,
+        note: '',
+        newPlayerFriendly: false,
+      }
+    );
   }
-  async setGuildPledgeSettings(
-    guildId: number,
-    settings: { enabled: boolean; minLevel: number; note: string },
-  ) {
-    this.pledgeSettingsByGuild.set(guildId, settings);
+  async setGuildPledgeSettings(guildId: number, settings: GuildPledgeSettingsInput) {
+    // The Postgres store merges an absent flag inside its UPDATE (COALESCE);
+    // the fake does the same over its stored row.
+    const current = await this.guildPledgeSettings(guildId);
+    this.pledgeSettingsByGuild.set(guildId, {
+      ...settings,
+      newPlayerFriendly: settings.newPlayerFriendly ?? current.newPlayerFriendly,
+    });
   }
   async guildPledges(guildId: number) {
     const rows: (CharInfo & { sinceMs: number })[] = [];
@@ -99,7 +152,7 @@ class FakeDb implements SocialDb {
   blocks = new Map<number, Set<number>>();
   ignores = new Map<number, Set<number>>();
   private guilds = new Map<number, string>();
-  private members = new Map<number, { guildId: number; rank: GuildRank }>();
+  private members = new Map<number, { guildId: number; rank: string }>();
   private nextGuildId = 1;
 
   addChar(id: number, name: string, cls = 'warrior', level = 10, realm = 'Claudemoon'): void {
@@ -189,23 +242,56 @@ class FakeDb implements SocialDb {
     this.guilds.delete(id);
     for (const [cid, m] of [...this.members]) if (m.guildId === id) this.members.delete(cid);
   }
-  async guildMembership(
-    c: number,
-  ): Promise<{ guildId: number; guildName: string; rank: GuildRank } | null> {
+  async guildMembership(c: number): Promise<{
+    guildId: number;
+    guildName: string;
+    rank: string;
+    rosterPages: number;
+    ranks: GuildRankDef[];
+  } | null> {
     const m = this.members.get(c);
-    return m ? { guildId: m.guildId, guildName: this.guilds.get(m.guildId)!, rank: m.rank } : null;
+    return m
+      ? {
+          guildId: m.guildId,
+          guildName: this.guilds.get(m.guildId)!,
+          rank: m.rank,
+          rosterPages: this.rosterPages.get(m.guildId) ?? 0,
+          ranks: await this.guildRanks(m.guildId),
+        }
+      : null;
+  }
+  /** Test helper: seat a character at an arbitrary rank id. */
+  setRankRaw(c: number, rank: string): void {
+    const m = this.members.get(c);
+    if (m) m.rank = rank;
+  }
+  async buyGuildRosterPage(
+    guildId: number,
+    expectedPages: number,
+    leaderCharId: number,
+  ): Promise<'ok' | 'stale' | 'no_guild'> {
+    if (!this.guilds.has(guildId)) return 'no_guild';
+    // Mirrors the real compare-and-set: the floored count must still match,
+    // the ladder must have a page left, and the buyer must STILL be leader.
+    const pages = Math.max(0, this.rosterPages.get(guildId) ?? 0);
+    const buyer = this.members.get(leaderCharId);
+    if (pages !== expectedPages || pages >= GUILD_ROSTER_MAX_PAGES) return 'stale';
+    if (!buyer || buyer.guildId !== guildId || buyer.rank !== 'leader') return 'stale';
+    this.rosterPages.set(guildId, pages + 1);
+    return 'ok';
   }
   async addGuildMemberAtomic(
     guildId: number,
     c: number,
-    rank: GuildRank,
-    limit: number,
+    rank: string,
     requirePledge = false,
   ): Promise<'ok' | 'full' | 'already_member' | 'no_guild' | 'no_pledge'> {
     if (!this.guilds.has(guildId)) return 'no_guild';
     if (this.members.has(c)) return 'already_member';
     const count = [...this.members.values()].filter((m) => m.guildId === guildId).length;
-    if (count >= limit) return 'full';
+    // Mirrors the real transaction: the cap is the guild's OWN (base seats
+    // plus bought pages), read from the guild row, never caller-supplied.
+    if (count >= guildRosterCap(this.rosterPages.get(guildId) ?? 0)) return 'full';
     // Mirrors the real transaction: the pledge is consumed with the seat, and
     // a missing pledge to THIS guild refuses the whole seat.
     if (requirePledge) {
@@ -219,7 +305,7 @@ class FakeDb implements SocialDb {
   async removeGuildMember(c: number): Promise<void> {
     this.members.delete(c);
   }
-  async setGuildRank(c: number, guildId: number, rank: GuildRank): Promise<boolean> {
+  async setGuildRank(c: number, guildId: number, rank: string): Promise<boolean> {
     // Mirrors the real predicate: character AND guild must both match, and the
     // caller learns whether a row actually moved (false = refused, stamp nothing).
     const m = this.members.get(c);
@@ -231,6 +317,7 @@ class FakeDb implements SocialDb {
     guildId: number,
     fromCharId: number,
     toCharId: number,
+    stepDownRank: string,
   ): Promise<'ok' | 'not_leader' | 'not_member' | 'no_guild'> {
     if (!this.guilds.has(guildId)) return 'no_guild';
     const fromM = this.members.get(fromCharId);
@@ -238,7 +325,7 @@ class FakeDb implements SocialDb {
     const toM = this.members.get(toCharId);
     if (!toM || toM.guildId !== guildId) return 'not_member';
     toM.rank = 'leader';
-    fromM.rank = 'officer';
+    fromM.rank = stepDownRank;
     return 'ok';
   }
   private lastLogins = new Map<number, string>();
@@ -253,7 +340,7 @@ class FakeDb implements SocialDb {
   }
   async guildMembers(guildId: number): Promise<
     (CharInfo & {
-      rank: GuildRank;
+      rank: string;
       lastLogin: string | null;
       activeTitle: string | null;
       joinedAt: number | null;
@@ -331,6 +418,49 @@ class FakeTransport implements SocialTransport {
   renamed: { id: number; guildId: number; oldName: string; newName: string }[] = [];
   blockSets = new Map<number, number[]>();
   ignoreSets = new Map<number, number[]>();
+  // Roster expansion purse half (docs/prd/guild-roster-expansion.md): a
+  // character with no purse entry is "offline" (nothing live to charge).
+  purse = new Map<number, number>();
+  refunds: { characterId: number; copper: number }[] = [];
+  rosterExpansions: { characterId: number; guildId: number; pages: number; copper: number }[] = [];
+  // The purchase seam, mirroring the real coordinator's arms
+  // (server/guild_roster_transport.ts) over the in-memory purse and the fake
+  // compare-and-set: a character with no purse entry has no live session,
+  // a short purse is refunded and refused, a refusal from the write refunds,
+  // and a landed page records the expansion the audit line would carry.
+  async buyRosterPage(
+    characterId: number,
+    guildId: number,
+    expectedPages: number,
+    price: number,
+  ): Promise<GuildRosterPurchase> {
+    const have = this.purse.get(characterId);
+    if (have === undefined) return { outcome: 'session_lost' };
+    const took = Math.min(have, price);
+    this.purse.set(characterId, have - took);
+    if (took < price) {
+      this.refundPurse(characterId, took);
+      return { outcome: 'cannotAfford' };
+    }
+    let result: 'ok' | 'stale' | 'no_guild';
+    try {
+      result = await this.db.buyGuildRosterPage(guildId, expectedPages, characterId);
+    } catch (error) {
+      this.refundPurse(characterId, price);
+      return { outcome: 'retry', error };
+    }
+    if (result !== 'ok') {
+      this.refundPurse(characterId, price);
+      return { outcome: result };
+    }
+    const pages = expectedPages + 1;
+    this.rosterExpansions.push({ characterId, guildId, pages, copper: price });
+    return { outcome: 'ok', pages };
+  }
+  private refundPurse(characterId: number, copper: number): void {
+    this.refunds.push({ characterId, copper });
+    this.purse.set(characterId, (this.purse.get(characterId) ?? 0) + copper);
+  }
 
   constructor(private db: FakeDb) {}
 
@@ -1154,19 +1284,24 @@ describe('guilds', () => {
     expect((await h.svc.snapshot(4)).guild?.name).toBe('Raiders');
   });
 
-  it('hard-bounds malformed admin member lists to the guild member cap', () => {
-    for (let id = 1; id <= 120; id++) h.tx.setOnline(id);
+  it('hard-bounds malformed admin member lists to the largest roster a guild can buy', () => {
+    // The bound is the ABSOLUTE roster ceiling (base seats plus every ladder
+    // page), not any one guild's bought cap: the admin transaction already
+    // bounded the ids, and this re-applies the same ceiling independently.
+    const beyond = GUILD_ROSTER_MAX_MEMBERS + 20;
+    for (let id = 1; id <= beyond; id++) h.tx.setOnline(id);
     h.tx.clear();
 
     h.svc.guildRenamed(
       1,
       'Knights',
       'Dawn Guard',
-      Array.from({ length: 120 }, (_, index) => index + 1),
+      Array.from({ length: beyond }, (_, index) => index + 1),
     );
 
-    expect(h.tx.renamed).toHaveLength(100);
-    expect(h.tx.renamed.at(-1)?.id).toBe(100);
+    expect(GUILD_ROSTER_MAX_MEMBERS).toBe(1000);
+    expect(h.tx.renamed).toHaveLength(GUILD_ROSTER_MAX_MEMBERS);
+    expect(h.tx.renamed.at(-1)?.id).toBe(GUILD_ROSTER_MAX_MEMBERS);
   });
 
   it('only officers and leaders may invite', async () => {
@@ -1182,7 +1317,7 @@ describe('guilds', () => {
     await h.svc.guildCreate(h.actor(1), 'Knights');
     await h.svc.guildInvite(h.actor(1), 'Bet');
     await h.svc.guildAccept(h.actor(2));
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     expect((await h.svc.snapshot(2)).guild?.rank).toBe('officer');
     await h.svc.guildInvite(h.actor(2), 'Gimel');
     expect(h.tx.eventsFor(3).some((e) => e.type === 'guildInvite')).toBe(true);
@@ -1194,7 +1329,7 @@ describe('guilds', () => {
     await h.svc.guildAccept(h.actor(2));
     h.tx.clear();
     // Force the member lookup that broadcastGuild/pushGuild depend on to resolve
-    // on a later macrotask. If guildSetRank fails to await the broadcast, the
+    // on a later macrotask. If the rank step fails to await the broadcast, the
     // promote notice will not have been delivered by the time the call resolves.
     const realMembers = h.db.guildMembers.bind(h.db);
     h.db.guildMembers = (guildId: number) =>
@@ -1203,7 +1338,7 @@ describe('guilds', () => {
           void realMembers(guildId).then(resolve);
         }, 0);
       });
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     expect(h.tx.textFor(2).join()).toMatch(/Bet is now Officer/);
   });
 
@@ -1327,7 +1462,7 @@ describe('guilds', () => {
     const plain = h.tx.eventsFor(2).find((e) => e.type === 'chat')!;
     expect('fromTitle' in plain).toBe(false);
     // officer chat stamps the same way, and omits the key untitled
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     h.tx.clear();
     expect(await h.svc.officerChat(titled, 'ranks')).toBe(true);
     const officer = h.tx.eventsFor(2).find((e) => e.type === 'chat')!;
@@ -1368,7 +1503,7 @@ describe('guilds', () => {
     expect(await h.svc.guildChat(h.actor(1), 'no live meta')).toBe(true);
     const noMeta = h.tx.eventsFor(2).find((e) => e.type === 'chat')!;
     expect('classId' in noMeta).toBe(false);
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     h.tx.clear();
     expect(await h.svc.officerChat(withClass, 'ranks')).toBe(true);
     const officer = h.tx.eventsFor(2).find((e) => e.type === 'chat')!;
@@ -1397,7 +1532,7 @@ describe('guilds', () => {
     await h.svc.guildCreate(h.actor(1), 'Knights');
     await h.svc.guildInvite(h.actor(1), 'Bet');
     await h.svc.guildAccept(h.actor(2));
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     // Bet ignores the Guild Master Aleph
     await h.svc.blockAdd(h.actor(2), 'Aleph');
     h.tx.clear();
@@ -1434,7 +1569,7 @@ describe('guilds', () => {
     await h.svc.guildCreate(h.actor(1), 'Knights');
     await h.svc.guildInvite(h.actor(1), 'Bet');
     await h.svc.guildAccept(h.actor(2));
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     await h.svc.ignoreAdd(h.actor(2), 'Aleph');
     h.tx.clear();
 
@@ -1487,7 +1622,7 @@ describe('guilds', () => {
     await h.svc.guildCreate(h.actor(1), 'Knights');
     await h.svc.guildInvite(h.actor(1), 'Bet');
     await h.svc.guildAccept(h.actor(2));
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     h.tx.flair.set(1, { ...SPEAKER_FLAIR });
     h.tx.clear();
 
@@ -1502,7 +1637,7 @@ describe('guilds', () => {
     await h.svc.guildCreate(h.actor(1), 'Knights');
     await h.svc.guildInvite(h.actor(1), 'Bet');
     await h.svc.guildAccept(h.actor(2));
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     // No h.tx.flair entry for Aleph: an ordinary player.
     h.tx.clear();
 
@@ -1567,7 +1702,7 @@ describe('guilds', () => {
     expect(await h.svc.officerChat(h.actor(2), 'secret')).toBe(false);
     expect(h.tx.errorsFor(2).join()).toMatch(/officers and the Guild Master/i);
     // promote Bet, then officer chat reaches both officers/leader
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     h.tx.clear();
     expect(await h.svc.officerChat(h.actor(1), 'officers only')).toBe(true);
     expect(
@@ -1660,21 +1795,21 @@ describe('guild membership stamps (onGuildMembershipChanged)', () => {
     await h.svc.guildCreate(h.actor(1), 'Iron Vanguard');
     await joinBet();
     h.tx.membershipStamps = [];
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     expect(h.tx.membershipStamps).toEqual([{ id: 2, membership: { ...G, rank: 'officer' } }]);
     h.tx.membershipStamps = [];
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'member');
+    await h.svc.guildDemote(h.actor(1), 'Bet');
     expect(h.tx.membershipStamps).toEqual([{ id: 2, membership: { ...G, rank: 'member' } }]);
     h.tx.membershipStamps = [];
-    await h.svc.guildSetRank(h.actor(2), 'Aleph', 'member'); // not the leader: refused
-    await h.svc.guildSetRank(h.actor(1), 'Gimel', 'officer'); // not in the guild: refused
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'member'); // already member: refused
+    await h.svc.guildDemote(h.actor(2), 'Aleph'); // not the leader: refused
+    await h.svc.guildPromote(h.actor(1), 'Gimel'); // not in the guild: refused
+    await h.svc.guildDemote(h.actor(1), 'Bet'); // already member: refused
     expect(h.tx.membershipStamps).toEqual([]);
   });
 
   it('a promote whose UPDATE matched no row (target left mid-flight) stamps NOTHING', async () => {
     // The privilege-escalation race the predicated setGuildRank closes: the
-    // leader promotes Bet, but Bet's guildLeave commits between guildSetRank's
+    // leader promotes Bet, but Bet's guildLeave commits between the rank step's
     // membership read and its UPDATE. The write matches zero rows, so the
     // service must refuse and never stamp the officer rank the DB refused
     // (the guild bank's officer gate honors the stamp, and a removed
@@ -1687,7 +1822,7 @@ describe('guild membership stamps (onGuildMembershipChanged)', () => {
       return realSetGuildRank(c, guildId, rank);
     };
     h.tx.membershipStamps = [];
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     // Only the leave's own null stamp: no officer stamp may follow it.
     expect(h.tx.membershipStamps).toEqual([{ id: 2, membership: null }]);
     expect(await h.db.guildMembership(2)).toBeNull();
@@ -1706,14 +1841,14 @@ describe('guild membership stamps (onGuildMembershipChanged)', () => {
       return realSetGuildRank(c, guildId, rank);
     };
     h.tx.membershipStamps = [];
-    await h.svc.guildSetRank(h.actor(1), 'Bet', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Bet');
     // The leave's null stamp and the create's leader stamp for guild B, and
     // nothing else: no officer-in-A stamp, and B's row keeps its leader rank.
     expect(h.tx.membershipStamps).toEqual([
       { id: 2, membership: null },
       { id: 2, membership: { guildId: 2, guildName: 'Second Banner', rank: 'leader' } },
     ]);
-    expect(await h.db.guildMembership(2)).toEqual({
+    expect(await h.db.guildMembership(2)).toMatchObject({
       guildId: 2,
       guildName: 'Second Banner',
       rank: 'leader',
@@ -1892,7 +2027,7 @@ describe('guild calendar events', () => {
     await h.svc.guildAccept(h.actor(2));
     await h.svc.guildInvite(h.actor(1), 'Member');
     await h.svc.guildAccept(h.actor(3));
-    await h.svc.guildSetRank(h.actor(1), 'Officer', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Officer');
     h.tx.clear();
     return h;
   }
@@ -2013,7 +2148,7 @@ describe('guild billboard (motd)', () => {
     await h.svc.guildAccept(h.actor(2));
     await h.svc.guildInvite(h.actor(1), 'Member');
     await h.svc.guildAccept(h.actor(3));
-    await h.svc.guildSetRank(h.actor(1), 'Officer', 'officer');
+    await h.svc.guildPromote(h.actor(1), 'Officer');
     h.tx.clear();
     return h;
   }
@@ -2128,8 +2263,8 @@ async function deedSetup() {
   for (const id of [1, 2, 3, 4, 5]) h.tx.setOnline(id);
   const created = await h.db.createGuildWithLeader('Bookbinders', 1);
   if ('error' in created) throw new Error('guild seed failed');
-  await h.db.addGuildMemberAtomic(created.guildId, 2, 'member', 50);
-  await h.db.addGuildMemberAtomic(created.guildId, 3, 'officer', 50);
+  await h.db.addGuildMemberAtomic(created.guildId, 2, 'member');
+  await h.db.addGuildMemberAtomic(created.guildId, 3, 'officer');
   await h.db.addFriend(4, 1); // 4 put the earner on THEIR list
   return h;
 }
@@ -2456,8 +2591,8 @@ describe('guild pledges', () => {
     h.add(4, 'Aspirant', { level: 10 });
     const created = await h.db.createGuildWithLeader('Bookbinders', 1);
     if ('error' in created) throw new Error('guild seed failed');
-    await h.db.addGuildMemberAtomic(created.guildId, 2, 'officer', 50);
-    await h.db.addGuildMemberAtomic(created.guildId, 3, 'member', 50);
+    await h.db.addGuildMemberAtomic(created.guildId, 2, 'officer');
+    await h.db.addGuildMemberAtomic(created.guildId, 3, 'member');
     return { ...h, guildId: created.guildId };
   }
 
@@ -2485,13 +2620,28 @@ describe('guild pledges', () => {
 
   it('refuses a closed guild, an under-level pledger, and a member', async () => {
     const h = await seed();
-    await h.db.setGuildPledgeSettings(h.guildId, { enabled: false, minLevel: 1, note: '' });
+    await h.db.setGuildPledgeSettings(h.guildId, {
+      enabled: false,
+      minLevel: 1,
+      note: '',
+      newPlayerFriendly: false,
+    });
     await h.svc.guildPledge(h.actor(4), 'Bookbinders');
     expect(await h.db.pledgeOf(4)).toBeNull();
-    await h.db.setGuildPledgeSettings(h.guildId, { enabled: true, minLevel: 20, note: '' });
+    await h.db.setGuildPledgeSettings(h.guildId, {
+      enabled: true,
+      minLevel: 20,
+      note: '',
+      newPlayerFriendly: false,
+    });
     await h.svc.guildPledge(h.actor(4), 'Bookbinders');
     expect(await h.db.pledgeOf(4)).toBeNull();
-    await h.db.setGuildPledgeSettings(h.guildId, { enabled: true, minLevel: 1, note: '' });
+    await h.db.setGuildPledgeSettings(h.guildId, {
+      enabled: true,
+      minLevel: 1,
+      note: '',
+      newPlayerFriendly: false,
+    });
     await h.svc.guildPledge(h.actor(3), 'Bookbinders');
     expect(await h.db.pledgeOf(3)).toBeNull();
   });
@@ -2617,10 +2767,10 @@ describe('guild pledges', () => {
     const h = await seed();
     await h.svc.guildPledge(h.actor(4), 'Bookbinders');
     // Fill the roster to the real service cap (the seed already added 3).
-    for (let i = 0; i < GUILD_MEMBER_LIMIT - 3; i++) {
+    for (let i = 0; i < GUILD_ROSTER_BASE_MEMBERS - 3; i++) {
       const id = 100 + i;
       h.add(id, `Filler${i}`);
-      await h.db.addGuildMemberAtomic(h.guildId, id, 'member', GUILD_MEMBER_LIMIT);
+      await h.db.addGuildMemberAtomic(h.guildId, id, 'member');
     }
     await h.svc.guildPledgeDecide(h.actor(2), 'Aspirant', true);
     expect(h.tx.errorsFor(2).at(-1)).toBe('Your guild is full.');
@@ -2634,7 +2784,7 @@ describe('guild pledges', () => {
     h.add(5, 'Scribe');
     const other = await h.db.createGuildWithLeader('Inkwrights', 5);
     if ('error' in other) throw new Error('guild seed failed');
-    await h.db.addGuildMemberAtomic(other.guildId, 4, 'member', 50);
+    await h.db.addGuildMemberAtomic(other.guildId, 4, 'member');
     await h.svc.guildPledgeDecide(h.actor(2), 'Aspirant', true);
     expect(h.tx.errorsFor(2).at(-1)).toBe('Aspirant is already in a guild.');
     expect(await h.db.pledgeOf(4)).toBeNull();
@@ -2686,7 +2836,7 @@ describe('guild pledges', () => {
     h.add(5, 'Scribe');
     const other = await h.db.createGuildWithLeader('Inkwrights', 5);
     if ('error' in other) throw new Error('guild seed failed');
-    await h.db.addGuildMemberAtomic(other.guildId, 4, 'member', 50);
+    await h.db.addGuildMemberAtomic(other.guildId, 4, 'member');
     await h.svc.guildPledgeDecide(h.actor(2), 'Aspirant', true);
     expect(h.tx.errorsFor(2).at(-1)).toBe('Aspirant is already in a guild.');
     expect(await h.db.pledgeOf(4)).toBeNull();
@@ -2697,10 +2847,10 @@ describe('guild pledges', () => {
     const h = await seed();
     h.tx.setOnline(4);
     await h.svc.guildPledge(h.actor(4), 'Bookbinders');
-    for (let i = 0; i < GUILD_MEMBER_LIMIT - 3; i++) {
+    for (let i = 0; i < GUILD_ROSTER_BASE_MEMBERS - 3; i++) {
       const id = 100 + i;
       h.add(id, `Filler${i}`);
-      await h.db.addGuildMemberAtomic(h.guildId, id, 'member', GUILD_MEMBER_LIMIT);
+      await h.db.addGuildMemberAtomic(h.guildId, id, 'member');
     }
     await h.svc.guildPledgeDecide(h.actor(2), 'Aspirant', true);
     expect(h.tx.errorsFor(2).at(-1)).toBe('Your guild is full.');
@@ -2793,9 +2943,9 @@ describe('guild pledges', () => {
     // The pledger's withdraw lands after the officer's pledge read but before
     // the seat transaction: the consent is gone, so the seat must refuse.
     const realSeat = h.db.addGuildMemberAtomic.bind(h.db);
-    h.db.addGuildMemberAtomic = async (guildId, charId, rank, limit, requirePledge) => {
+    h.db.addGuildMemberAtomic = async (guildId, charId, rank, requirePledge) => {
       await h.db.deletePledge(4);
-      return realSeat(guildId, charId, rank, limit, requirePledge);
+      return realSeat(guildId, charId, rank, requirePledge);
     };
     await h.svc.guildPledgeDecide(h.actor(2), 'Aspirant', true);
     expect(await h.db.guildMembership(4)).toBeNull();
@@ -2824,6 +2974,45 @@ describe('guild pledges', () => {
     expect(after.enabled).toBe(false);
     expect(after.minLevel).toBe(5);
     expect(after.note).toHaveLength(90);
+  });
+
+  it('persists the new-player-friendly opt-in, keeps it for an older client, and gates it', async () => {
+    const h = await seed();
+    await h.svc.setGuildPledgeSettings(h.actor(1), {
+      enabled: true,
+      minLevel: 1,
+      note: '',
+      newPlayerFriendly: true,
+    });
+    expect((await h.db.guildPledgeSettings(h.guildId)).newPlayerFriendly).toBe(true);
+    // An older client's write carries no flag (guild_pledge_settings_cmd.ts):
+    // the stored opt-in survives the other fields changing around it.
+    await h.svc.setGuildPledgeSettings(h.actor(1), { enabled: false, minLevel: 3, note: 'x' });
+    expect(await h.db.guildPledgeSettings(h.guildId)).toEqual({
+      enabled: false,
+      minLevel: 3,
+      note: 'x',
+      newPlayerFriendly: true,
+    });
+    // Officer-plus gated like every other setting: a plain member's write is refused whole.
+    await h.svc.setGuildPledgeSettings(h.actor(3), {
+      enabled: false,
+      minLevel: 3,
+      note: 'x',
+      newPlayerFriendly: false,
+    });
+    expect((await h.db.guildPledgeSettings(h.guildId)).newPlayerFriendly).toBe(true);
+    // Every member's snapshot carries the flag (the social window's editor reads it).
+    const plain = await h.svc.snapshot(3);
+    expect(plain.guild?.pledgeSettings.newPlayerFriendly).toBe(true);
+    // Clearing it writes false, never a default.
+    await h.svc.setGuildPledgeSettings(h.actor(1), {
+      enabled: true,
+      minLevel: 1,
+      note: '',
+      newPlayerFriendly: false,
+    });
+    expect((await h.db.guildPledgeSettings(h.guildId)).newPlayerFriendly).toBe(false);
   });
 
   it('refuses a board note the chat filter hard tier hits, storing nothing', async () => {
@@ -2858,5 +3047,503 @@ describe('guild pledges', () => {
     expect(plain.guild?.pledgeSettings.enabled).toBe(true);
     const mine = await h.svc.snapshot(4);
     expect(mine.myPledge?.guildName).toBe('Bookbinders');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guild roster expansion (docs/prd/guild-roster-expansion.md): the Guild
+// Master buys 20-seat pages from their OWN purse, reserve-at-gate like the
+// creation fee, priced from the guild row by pages already bought.
+// ---------------------------------------------------------------------------
+
+describe('guild roster expansion', () => {
+  const GOLD = 10_000;
+  const PAGE_ONE = GUILD_ROSTER_PAGE_PRICES[0];
+  const PAGE_TWO = GUILD_ROSTER_PAGE_PRICES[1];
+
+  // The two GuildRosterResultCode declarations (server/social.ts and
+  // src/sim/types.ts, which cannot import each other) must stay identical:
+  // this fails to COMPILE if either side adds or renames a code alone.
+  type ServerCode = import('../server/social').GuildRosterResultCode;
+  type SimCode = import('../src/sim/types').GuildRosterResultCode;
+  type Same = [ServerCode] extends [SimCode]
+    ? [SimCode] extends [ServerCode]
+      ? true
+      : false
+    : false;
+  const codesInLockstep: Same = true;
+
+  function rosterEvents(h: ReturnType<typeof setup>, id: number): SocialEvent[] {
+    return h.tx
+      .eventsFor(id)
+      .filter((e) => e.type === 'guildRosterResult' || e.type === 'guildRosterExpanded');
+  }
+
+  async function founded() {
+    const h = setup();
+    h.add(1, 'Aleph');
+    h.add(2, 'Bet');
+    h.add(3, 'Gimel');
+    h.add(4, 'Aspirant');
+    h.tx.setOnline(1);
+    h.tx.setOnline(2);
+    h.tx.setOnline(4);
+    await h.svc.guildCreate(h.actor(1), 'Knights');
+    const guildId = (await h.db.guildMembership(1))!.guildId;
+    await h.db.addGuildMemberAtomic(guildId, 2, 'officer');
+    await h.db.addGuildMemberAtomic(guildId, 3, 'member');
+    h.tx.clear();
+    return { ...h, guildId };
+  }
+
+  it('keeps the server and sim result-code unions in lockstep', () => {
+    expect(codesInLockstep).toBe(true);
+  });
+
+  it('refuses a guildless buyer with notInGuild and never touches a purse', async () => {
+    const h = setup();
+    h.add(9, 'Loner');
+    h.tx.setOnline(9);
+    h.tx.purse.set(9, 100 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(9));
+    expect(rosterEvents(h, 9)).toEqual([{ type: 'guildRosterResult', code: 'notInGuild' }]);
+    expect(h.tx.purse.get(9)).toBe(100 * GOLD);
+    expect(h.tx.rosterExpansions).toEqual([]);
+  });
+
+  it('refuses an officer with notLeader and never touches their purse', async () => {
+    const h = await founded();
+    h.tx.purse.set(2, 100 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(2));
+    expect(rosterEvents(h, 2)).toEqual([{ type: 'guildRosterResult', code: 'notLeader' }]);
+    expect(h.tx.purse.get(2)).toBe(100 * GOLD);
+    expect(await h.db.guildMembership(2)).toMatchObject({ rosterPages: 0 });
+  });
+
+  it('sells the Guild Master the first page for 40 gold, widens the cap, and tells the guild', async () => {
+    const h = await founded();
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    // The page price left the purse; the commit hook saw exactly that charge.
+    expect(PAGE_ONE).toBe(40 * GOLD);
+    expect(h.tx.purse.get(1)).toBe(10 * GOLD);
+    expect(h.tx.refunds).toEqual([]);
+    expect(h.tx.rosterExpansions).toEqual([
+      { characterId: 1, guildId: h.guildId, pages: 1, copper: PAGE_ONE },
+    ]);
+    // Every ONLINE member heard the success line (the buyer included); the
+    // offline member did not, and a stranger did not.
+    const line = { type: 'guildRosterExpanded', byName: 'Aleph', cap: 120 };
+    expect(rosterEvents(h, 1)).toEqual([line]);
+    expect(rosterEvents(h, 2)).toEqual([line]);
+    expect(rosterEvents(h, 3)).toEqual([]);
+    expect(rosterEvents(h, 4)).toEqual([]);
+    // The snapshot re-pushed to the online members carries the new cap and
+    // the NEXT page's price (120 gold: the ramp's second step).
+    expect(h.tx.snapshotCount.get(1)).toBe(1);
+    expect(h.tx.snapshotCount.get(2)).toBe(1);
+    const snap = await h.svc.snapshot(1);
+    expect(snap.guild?.memberCap).toBe(120);
+    expect(snap.guild?.nextRosterPrice).toBe(PAGE_TWO);
+    expect(PAGE_TWO).toBe(120 * GOLD);
+  });
+
+  it('prices the next page from the row and refuses a short purse with the price, refunding the partial charge', async () => {
+    const h = await founded();
+    h.db.rosterPages.set(h.guildId, 1);
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([
+      { type: 'guildRosterResult', code: 'cannotAfford', price: PAGE_TWO },
+    ]);
+    // Whatever the gate took came straight back: the purse is whole.
+    expect(h.tx.purse.get(1)).toBe(50 * GOLD);
+    expect(h.tx.refunds).toEqual([{ characterId: 1, copper: 50 * GOLD }]);
+    expect(h.tx.rosterExpansions).toEqual([]);
+    expect(await h.db.guildMembership(1)).toMatchObject({ rosterPages: 1 });
+  });
+
+  it('a Guild Master whose live session is gone gets no answer and no charge', async () => {
+    const h = await founded();
+    // No purse entry at all: the transport has no live session to charge, so
+    // the purchase reports session_lost and there is nobody to message.
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([]);
+    expect(h.tx.refunds).toEqual([]);
+    expect(h.tx.rosterExpansions).toEqual([]);
+    expect(await h.db.guildMembership(1)).toMatchObject({ rosterPages: 0 });
+  });
+
+  it('refuses a complete ladder with maxed and charges nothing', async () => {
+    const h = await founded();
+    h.db.rosterPages.set(h.guildId, GUILD_ROSTER_MAX_PAGES);
+    h.tx.purse.set(1, 100_000 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([{ type: 'guildRosterResult', code: 'maxed' }]);
+    expect(h.tx.purse.get(1)).toBe(100_000 * GOLD);
+    const snap = await h.svc.snapshot(1);
+    expect(snap.guild?.memberCap).toBe(1000);
+    expect(snap.guild?.nextRosterPrice).toBeNull();
+  });
+
+  it('refunds and asks for a retry when another purchase landed first (stale compare-and-set)', async () => {
+    const h = await founded();
+    h.db.buyGuildRosterPage = async () => 'stale';
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([{ type: 'guildRosterResult', code: 'retry' }]);
+    expect(h.tx.purse.get(1)).toBe(50 * GOLD);
+    expect(h.tx.refunds).toEqual([{ characterId: 1, copper: PAGE_ONE }]);
+    expect(h.tx.rosterExpansions).toEqual([]);
+    expect(rosterEvents(h, 2)).toEqual([]);
+  });
+
+  it('refunds and reports notInGuild when the guild vanished under the buy', async () => {
+    const h = await founded();
+    h.db.buyGuildRosterPage = async () => 'no_guild';
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([{ type: 'guildRosterResult', code: 'notInGuild' }]);
+    expect(h.tx.purse.get(1)).toBe(50 * GOLD);
+    expect(h.tx.rosterExpansions).toEqual([]);
+  });
+
+  it('refunds and rethrows when the page write throws', async () => {
+    const h = await founded();
+    h.db.buyGuildRosterPage = async () => {
+      throw new Error('boom');
+    };
+    h.tx.purse.set(1, 50 * GOLD);
+    await expect(h.svc.guildBuyRosterPage(h.actor(1))).rejects.toThrow('boom');
+    expect(h.tx.purse.get(1)).toBe(50 * GOLD);
+    expect(h.tx.refunds).toEqual([{ characterId: 1, copper: PAGE_ONE }]);
+    // The buyer is not left staring at a button that did nothing: the retry
+    // line lands before the cause goes to the dispatcher's log.
+    expect(rosterEvents(h, 1)).toEqual([{ type: 'guildRosterResult', code: 'retry' }]);
+    expect(h.tx.rosterExpansions).toEqual([]);
+  });
+
+  it('a Guild Master demoted between the read and the write is refunded and told to retry', async () => {
+    const h = await founded();
+    const realBuy = h.db.buyGuildRosterPage.bind(h.db);
+    h.db.buyGuildRosterPage = async (guildId, expectedPages, leaderCharId) => {
+      // The leadership hand-off lands after the service's membership read
+      // but before its compare-and-set: the seat of consent is gone.
+      await h.db.transferGuildLeader(guildId, 1, 2, 'officer');
+      return realBuy(guildId, expectedPages, leaderCharId);
+    };
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    expect(rosterEvents(h, 1)).toEqual([{ type: 'guildRosterResult', code: 'retry' }]);
+    expect(h.tx.purse.get(1)).toBe(50 * GOLD);
+    expect(h.tx.rosterExpansions).toEqual([]);
+    expect(await h.db.guildMembership(1)).toMatchObject({ rank: 'officer', rosterPages: 0 });
+  });
+
+  it('the invite gate and the atomic seat both honour the bought cap', async () => {
+    const h = await founded();
+    // Fill the base roster (the founder, the officer, and the member are 3).
+    for (let i = 0; i < GUILD_ROSTER_BASE_MEMBERS - 3; i++) {
+      const id = 100 + i;
+      h.add(id, `Filler${i}`);
+      expect(await h.db.addGuildMemberAtomic(h.guildId, id, 'member')).toBe('ok');
+    }
+    h.add(999, 'Overflow');
+    expect(await h.db.addGuildMemberAtomic(h.guildId, 999, 'member')).toBe('full');
+    await h.svc.guildInvite(h.actor(1), 'Aspirant');
+    expect(h.tx.errorsFor(1).at(-1)).toBe('Your guild is full.');
+    expect(h.tx.eventsFor(4).some((e) => e.type === 'guildInvite')).toBe(false);
+    // One page later both gates open, at the new cap and no further.
+    h.tx.purse.set(1, 50 * GOLD);
+    await h.svc.guildBuyRosterPage(h.actor(1));
+    h.tx.clear();
+    expect(await h.db.addGuildMemberAtomic(h.guildId, 999, 'member')).toBe('ok');
+    await h.svc.guildInvite(h.actor(1), 'Aspirant');
+    expect(h.tx.errorsFor(1)).toEqual([]);
+    expect(h.tx.eventsFor(4).some((e) => e.type === 'guildInvite')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guild custom ranks (docs/prd/guild-custom-ranks.md): the Guild Master's rank
+// ladder drives EVERY rank gate (invite, remove, promote/demote, the bank
+// stamp, officer chat, billboard, calendar, pledge notifications), the save is
+// Guild-Master-only and validated whole, and every member's live bank stamp
+// follows a ladder edit immediately.
+// ---------------------------------------------------------------------------
+
+describe('guild custom ranks', () => {
+  const G = { guildId: 1, guildName: 'Iron Vanguard' };
+  const ALL = [
+    'invite',
+    'remove',
+    'promote',
+    'bank',
+    'officerChat',
+    'motd',
+    'events',
+  ] as GuildRankDef['perms'];
+  // Leader Lead (1), officer Offi (2), members Vet (3) and Rook (4), all
+  // online; Out (5) is online and unguilded.
+  async function seated(cfg: Parameters<typeof setup>[0] = {}) {
+    const h = setup(cfg);
+    for (const [id, name] of [
+      [1, 'Lead'],
+      [2, 'Offi'],
+      [3, 'Vet'],
+      [4, 'Rook'],
+      [5, 'Out'],
+    ] as const) {
+      h.add(id, name);
+      h.tx.setOnline(id);
+    }
+    await h.svc.guildCreate(h.actor(1), 'Iron Vanguard');
+    for (const name of ['Offi', 'Vet', 'Rook']) {
+      await h.svc.guildInvite(h.actor(1), name);
+      const id = name === 'Offi' ? 2 : name === 'Vet' ? 3 : 4;
+      await h.svc.guildAccept(h.actor(id));
+    }
+    await h.svc.guildPromote(h.actor(1), 'Offi');
+    h.tx.clear();
+    h.tx.membershipStamps = [];
+    return h;
+  }
+  // A ladder with a bank-holding Veteran rank between the officer and the
+  // joining rank, and an untitled custom rank below it.
+  const ladder = (officerPerms: GuildRankDef['perms'] = ['invite', 'remove', 'promote']) => [
+    { id: 'leader', name: '', perms: ALL },
+    { id: 'officer', name: '', perms: officerPerms },
+    { id: 'r1', name: 'Veteran', perms: ['bank', 'officerChat'] as GuildRankDef['perms'] },
+    { id: 'r2', name: '', perms: [] as GuildRankDef['perms'] },
+    { id: 'member', name: '', perms: [] as GuildRankDef['perms'] },
+  ];
+
+  it('the snapshot carries the default ladder until the Guild Master edits it', async () => {
+    const h = await seated();
+    const snap = await h.svc.snapshot(3);
+    expect(snap.guild?.ranks).toEqual(defaultGuildRankLadder());
+    expect(snap.guild?.members.map((m) => [m.name, m.rank])).toEqual([
+      ['Lead', 'leader'],
+      ['Offi', 'officer'],
+      ['Rook', 'member'],
+      ['Vet', 'member'],
+    ]);
+  });
+
+  it('only the Guild Master may save ranks; an officer is refused and nothing changes', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(2), ladder());
+    expect(h.tx.errorsFor(2)).toEqual(['Only the Guild Master may change ranks.']);
+    expect(await h.db.guildRanks(1)).toEqual(defaultGuildRankLadder());
+    expect(h.tx.membershipStamps).toEqual([]);
+  });
+
+  it('a malformed ladder is dropped silently (the client validates first)', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), [{ id: 'member', name: '', perms: [] }]);
+    await h.svc.guildSetRanks(h.actor(1), 'not a ladder');
+    expect(h.tx.eventsFor(1)).toEqual([]);
+    expect(await h.db.guildRanks(1)).toEqual(defaultGuildRankLadder());
+  });
+
+  it('a title that trips the hard-word screen is refused before any write', async () => {
+    const h = await seated({ findHardHit: (t) => (t.includes('Vile') ? 'vile' : null) });
+    const bad = ladder();
+    bad[2].name = 'Vile Rank';
+    await h.svc.guildSetRanks(h.actor(1), bad);
+    expect(h.tx.errorsFor(1)).toEqual(['That rank title is not allowed.']);
+    expect(await h.db.guildRanks(1)).toEqual(defaultGuildRankLadder());
+  });
+
+  it('a saved ladder is announced, lands in every snapshot, and restamps every member', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), ladder());
+    for (const id of [1, 2, 3, 4]) {
+      expect(h.tx.textFor(id)).toContain('The guild ranks have been updated.');
+    }
+    expect(h.tx.textFor(5)).toEqual([]);
+    expect((await h.svc.snapshot(4)).guild?.ranks.map((r) => r.id)).toEqual([
+      'leader',
+      'officer',
+      'r1',
+      'r2',
+      'member',
+    ]);
+    // The officer lost the default ladder's bank permission: its live stamp
+    // drops to the read-only tier in the same call (never a stale officer).
+    expect(h.tx.membershipStamps).toContainEqual({ id: 2, membership: { ...G, rank: 'member' } });
+    expect(h.tx.membershipStamps).toContainEqual({ id: 1, membership: { ...G, rank: 'leader' } });
+  });
+
+  it('a Guild Master who lost leadership mid-save is refused by the compare-and-set', async () => {
+    const h = await seated();
+    const real = h.db.setGuildRankLadder.bind(h.db);
+    h.db.setGuildRankLadder = async (guildId, leaderId, next) => {
+      await h.db.transferGuildLeader(guildId, 1, 2, 'officer');
+      return real(guildId, leaderId, next);
+    };
+    await h.svc.guildSetRanks(h.actor(1), ladder());
+    expect(h.tx.errorsFor(1)).toEqual(['Only the Guild Master may change ranks.']);
+    expect(await h.db.guildRanks(1)).toEqual(defaultGuildRankLadder());
+    expect(h.tx.membershipStamps).toEqual([]);
+  });
+
+  it('promoting onto a bank-holding custom rank stamps the officer tier and names the title', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), ladder());
+    h.tx.clear();
+    h.tx.membershipStamps = [];
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // member -> r2 (untitled)
+    expect(h.tx.textFor(4)).toContain('Vet is now [Rank 3].');
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // r2 -> r1 (Veteran, holds the bank)
+    expect(h.tx.textFor(4)).toContain('Vet is now [Veteran].');
+    expect(h.tx.membershipStamps).toEqual([
+      { id: 3, membership: { ...G, rank: 'member' } },
+      { id: 3, membership: { ...G, rank: 'officer' } },
+    ]);
+    expect((await h.db.guildMembership(3))?.rank).toBe('r1');
+  });
+
+  it('an officer granted Promote lifts members up to one rank below its own, never beside it', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), ladder());
+    h.tx.clear();
+    await h.svc.guildPromote(h.actor(2), 'Vet'); // member -> r2
+    await h.svc.guildPromote(h.actor(2), 'Vet'); // r2 -> r1
+    expect((await h.db.guildMembership(3))?.rank).toBe('r1');
+    await h.svc.guildPromote(h.actor(2), 'Vet'); // r1 -> officer would be its own rank
+    expect(h.tx.errorsFor(2)).toEqual(['You can only do that to members below your own rank.']);
+    expect((await h.db.guildMembership(3))?.rank).toBe('r1');
+    h.tx.clear();
+    await h.svc.guildDemote(h.actor(2), 'Lead'); // the Guild Master is out of reach
+    expect(h.tx.errorsFor(2)).toEqual(['You can only do that to members below your own rank.']);
+  });
+
+  it('the default ladder keeps the pre-ladder rank-change refusals word for word', async () => {
+    const h = await seated();
+    await h.svc.guildPromote(h.actor(2), 'Rook'); // officers cannot change ranks
+    expect(h.tx.errorsFor(2)).toEqual(['Only the Guild Master may change ranks.']);
+    await h.svc.guildPromote(h.actor(1), 'Offi'); // only a transfer goes higher
+    await h.svc.guildDemote(h.actor(1), 'Rook'); // already at the bottom
+    expect(h.tx.errorsFor(1)).toEqual(['Offi is already Officer.', 'Rook is already Member.']);
+  });
+
+  it('deleting a held rank drops its holders to the joining rank and restamps them', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), ladder());
+    await h.svc.guildPromote(h.actor(1), 'Vet');
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // Vet -> r1 (bank)
+    h.tx.membershipStamps = [];
+    const without = ladder().filter((r) => r.id !== 'r1');
+    await h.svc.guildSetRanks(h.actor(1), without);
+    expect((await h.db.guildMembership(3))?.rank).toBe('member');
+    expect(h.tx.membershipStamps).toContainEqual({ id: 3, membership: { ...G, rank: 'member' } });
+  });
+
+  it('invite follows the ladder: a granted custom rank may, a revoked officer may not', async () => {
+    const h = await seated();
+    const next = ladder([]);
+    next[3].perms = ['invite']; // the untitled r2 may recruit
+    await h.svc.guildSetRanks(h.actor(1), next);
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // Vet -> r2
+    h.tx.clear();
+    await h.svc.guildInvite(h.actor(2), 'Out');
+    expect(h.tx.errorsFor(2)).toEqual(['Only officers and the Guild Master may invite.']);
+    expect(await h.svc.guildInvite(h.actor(3), 'Out')).toBe('sent');
+  });
+
+  it('remove follows the ladder and reaches strictly lower ranks only', async () => {
+    const h = await seated();
+    const next = ladder(['remove']);
+    await h.svc.guildSetRanks(h.actor(1), next);
+    await h.svc.guildPromote(h.actor(1), 'Vet');
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // Vet -> r1 (no remove)
+    h.tx.clear();
+    await h.svc.guildKick(h.actor(3), 'Rook');
+    expect(h.tx.errorsFor(3)).toEqual(['Only officers and the Guild Master may remove members.']);
+    await h.svc.guildKick(h.actor(2), 'Vet'); // officer (remove) over r1
+    expect(await h.db.guildMembership(3)).toBeNull();
+  });
+
+  it('officer chat follows the ladder for speakers AND listeners', async () => {
+    const h = await seated();
+    await h.svc.guildSetRanks(h.actor(1), ladder(['invite']));
+    await h.svc.guildPromote(h.actor(1), 'Vet');
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // Vet -> r1 (officerChat)
+    h.tx.clear();
+    expect(await h.svc.officerChat(h.actor(2), 'hello')).toBe(false);
+    expect(h.tx.errorsFor(2)).toEqual(['Only officers and the Guild Master can use officer chat.']);
+    expect(await h.svc.officerChat(h.actor(3), 'veterans only')).toBe(true);
+    const heard = (id: number) =>
+      h.tx.eventsFor(id).some((e) => e.type === 'chat' && e.text === 'veterans only');
+    expect([1, 2, 3, 4].map(heard)).toEqual([true, false, true, false]);
+  });
+
+  it('the billboard and calendar follow their own permissions', async () => {
+    const h = await seated();
+    const next = ladder(['motd']);
+    next[4].perms = ['events']; // every joining member may book events
+    await h.svc.guildSetRanks(h.actor(1), next);
+    h.tx.clear();
+    await h.svc.guildSetMotd(h.actor(2), 'Raid at eight');
+    await h.svc.guildSetMotd(h.actor(4), 'nope');
+    await h.svc.guildEventCreate(h.actor(4), {
+      day: new Date(h.now()).toISOString().slice(0, 10),
+      hour: 20,
+      title: 'Raid',
+      note: '',
+    });
+    await h.svc.guildEventCreate(h.actor(2), {
+      day: new Date(h.now()).toISOString().slice(0, 10),
+      hour: 21,
+      title: 'Officers',
+      note: '',
+    });
+    const codes = (id: number, type: string) =>
+      h.tx
+        .eventsFor(id)
+        .filter((e) => e.type === type)
+        .map((e: any) => e.code);
+    expect(codes(2, 'motdResult')).toEqual(['set']);
+    expect(codes(4, 'motdResult')).toEqual(['notOfficer']);
+    expect(codes(4, 'calendarResult')).toEqual(['created']);
+    expect(codes(2, 'calendarResult')).toEqual(['notOfficer']);
+  });
+
+  it('pledge notifications reach the ranks that may invite', async () => {
+    const h = await seated();
+    const next = ladder([]);
+    next[2].perms = ['invite']; // Veteran recruits; the officer no longer does
+    await h.svc.guildSetRanks(h.actor(1), next);
+    await h.svc.guildPromote(h.actor(1), 'Vet');
+    await h.svc.guildPromote(h.actor(1), 'Vet'); // Vet -> r1
+    h.tx.clear();
+    await h.svc.guildPledge(h.actor(5), 'Iron Vanguard');
+    const told = (id: number) => h.tx.textFor(id).includes('Out has pledged to your guild.');
+    expect([1, 2, 3, 4].map(told)).toEqual([true, false, true, false]);
+    // The officer dashboard follows the same permission.
+    expect((await h.svc.snapshot(3)).guild?.pledges.map((p) => p.name)).toEqual(['Out']);
+    expect((await h.svc.snapshot(2)).guild?.pledges).toEqual([]);
+  });
+
+  it('a transfer steps the old leader down to the most senior remaining rank', async () => {
+    const h = await seated();
+    const next = ladder().filter((r) => r.id !== 'officer');
+    await h.svc.guildSetRanks(h.actor(1), next); // Offi falls back to member
+    h.tx.membershipStamps = [];
+    await h.svc.guildTransferLeader(h.actor(1), 'Rook');
+    expect((await h.db.guildMembership(1))?.rank).toBe('r1');
+    // r1 holds the bank, so the stepped-down leader keeps vault access.
+    expect(h.tx.membershipStamps).toContainEqual({ id: 1, membership: { ...G, rank: 'officer' } });
+  });
+
+  it('an id the ladder does not know reads as the joining rank everywhere', async () => {
+    const h = await seated();
+    h.db.setRankRaw(2, 'r42'); // a rank deleted under a racing write
+    const snap = await h.svc.snapshot(2);
+    expect(snap.guild?.rank).toBe('member');
+    expect(snap.guild?.members.find((m) => m.name === 'Offi')?.rank).toBe('member');
+    await h.svc.guildInvite(h.actor(2), 'Out');
+    expect(h.tx.errorsFor(2)).toEqual(['Only officers and the Guild Master may invite.']);
   });
 });

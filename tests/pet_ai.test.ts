@@ -379,6 +379,77 @@ describe('pet_ai module (P1a) — direct unit tests', () => {
     petFollow(sim.ctx, pet, owner);
     expect(pet.petPath).toEqual([]);
   });
+
+  // Bug: a defensive/aggressive pet kept fighting (and could newly acquire) a mob
+  // that is mid-evade: leashed home, damage/threat-immune, and untargetable by every
+  // other combat entry point (enterCombat/aggroMob on Sim, the player's own auto-attack
+  // engage in combat/auto_attack.ts, dealDamage's evade-immunity gate). Worst case: a
+  // raid boss sets aiState 'evade' the instant a wipe empties the room (see
+  // encounters/ignivar.ts), but its aggroTargetId/threat entry can still name a player
+  // who has not been pruned yet. The moment that player's pet is restored on revive, a
+  // stale aggroTargetId match made the pet lunge at the "boss" with the owner given no
+  // chance to react (the pet comes back already fighting). Pet AI must honor the same
+  // evade exclusion every other attack path already does.
+  it('drops the current target and returns to heel the instant it starts evading, at zero rng cost', () => {
+    const { sim, pid, owner } = world();
+    const pet = adopt(sim, pid);
+    pet.petMode = 'defensive';
+    const target = wildHostile(sim, [pet.id]);
+    isolate(sim, [pid, pet.id, target.id]);
+    place(owner, 0, 30);
+    place(pet, owner.pos.x + 20, owner.pos.z);
+    place(target, pet.pos.x + 1, pet.pos.z); // in melee range of the pet
+    pet.aggroTargetId = target.id;
+    pet.inCombat = true;
+    pet.autoAttack = true;
+    target.aiState = 'evade'; // the raid boss just wiped the room and is walking home
+    syncGrid(sim);
+    const d0 = dist2d(pet.pos, owner.pos);
+    let draws = 0;
+    sim.rng.setObserver(() => draws++);
+    updatePet(sim.ctx, pet);
+    sim.rng.setObserver(null);
+    expect(pet.aggroTargetId).toBeNull();
+    expect(pet.inCombat).toBe(false);
+    expect(pet.autoAttack).toBe(false);
+    expect(dist2d(pet.pos, owner.pos)).toBeLessThan(d0); // fell through to the heel arm
+    // The old (pre-fix) path swung at the evading target every interval: dealDamage
+    // voided the hit downstream, but Sim.mobSwing still drew rng for the roll first.
+    // Dropping the target before any swing means this tick costs nothing.
+    expect(draws).toBe(0);
+  });
+
+  it('cancels an in-progress Water Jet channel the instant its target starts evading', () => {
+    const { sim, pid, owner } = world();
+    const pet = adopt(sim, pid);
+    const target = wildHostile(sim, [pet.id]);
+    pet.templateId = 'water_elemental';
+    pet.petMode = 'defensive';
+    pet.aggroTargetId = target.id;
+    isolate(sim, [pid, pet.id, target.id]);
+    place(owner, 0, 0);
+    place(pet, 1, 0);
+    place(target, 10, 0);
+    startWaterJet(sim.ctx, pet, target, {
+      total: 30,
+      duration: 4,
+      interval: 1,
+      slow: 0.6,
+      cooldown: 8,
+    });
+    expect(pet.channeling).toBe(true);
+    sim.drainEvents();
+
+    target.aiState = 'evade';
+    updatePet(sim.ctx, pet);
+    expect(pet.castingAbility).toBeNull();
+    expect(pet.channeling).toBe(false);
+    expect(
+      sim
+        .drainEvents()
+        .some((e) => e.type === 'spellfx' && e.fx === 'bubbleBeam' && e.duration === 0),
+    ).toBe(true); // the same cancel-fx arm a normal out-of-range break uses
+  });
 });
 
 describe('pet proximity pull: a pet drags idle wild mobs like its owner', () => {
@@ -441,6 +512,73 @@ describe('pet proximity pull: a pet drags idle wild mobs like its owner', () => 
     updatePet(sim.ctx, pet);
     expect(egg.aggroTargetId).toBe(pet.id);
     expect(egg.aiState).not.toBe('idle');
+  });
+
+  it('never body-pulls a boss from its proximity scan; deliberate orders still engage it', () => {
+    // Field report (v0.42.1): a DEFENSIVE pet attacked the raid boss as the group
+    // walked into the room. The pet-side pull and the boss's own idle scan share the
+    // max(4, min(20, aggroRadius + level delta)) formula (Nythraxis: aggroRadius 22,
+    // clamped to 20), so a heeling pet standing a few yards ahead of its owner sits
+    // inside that radius before any player does. Before this guard the pet pulled
+    // the boss, the boss targeted the pet, and the defensive stance then "defended"
+    // against a fight the pet itself started.
+    const { sim, pid, owner } = world();
+    const pet = adopt(sim, pid);
+    const boss = wildHostile(sim, [pet.id]);
+    boss.templateId = 'nythraxis_scourge_of_thornpeak';
+    boss.level = 40;
+    pet.level = 40;
+    boss.aiState = 'idle';
+    boss.aggroTargetId = null;
+    boss.inCombat = false;
+    isolate(sim, [owner.id, pet.id, boss.id]);
+    // Owner a step OUTSIDE the boss's 20 yd cap; the heeling pet two yards ahead, INSIDE.
+    place(owner, 100, 100);
+    place(pet, 102, 100);
+    place(boss, 121, 100);
+    syncGrid(sim);
+    expect(pet.petMode).toBe('defensive');
+
+    updatePet(sim.ctx, pet);
+    expect(boss.aiState).toBe('idle');
+    expect(boss.aggroTargetId).toBeNull();
+    expect(pet.aggroTargetId).toBeNull();
+    expect(pet.inCombat).toBe(false);
+
+    // Closer still (15 yd, inside the 18 yd aggressive reach): the defensive pet's
+    // proximity scan stays silent at any range.
+    place(boss, 117, 100);
+    syncGrid(sim);
+    updatePet(sim.ctx, pet);
+    expect(boss.aiState).toBe('idle');
+    expect(pet.aggroTargetId).toBeNull();
+
+    // Control 1: AGGRESSIVE stance is the opt-in "attack anything in reach" order, so
+    // the same pet in the same spot DOES acquire the boss (owner active, inside
+    // PET_AGGRESSIVE_RANGE). Pinned so the surviving path reads as deliberate.
+    const meta = expectDefined(sim.players.get(pid));
+    meta.lastActiveTick = sim.tickCount;
+    pet.petMode = 'aggressive';
+    expect(petPickTarget(sim.ctx, pet, owner)?.id).toBe(boss.id);
+    pet.petMode = 'defensive';
+    expect(petPickTarget(sim.ctx, pet, owner)).toBeNull();
+
+    // Control 2: a deliberate assist order still engages the boss for real. The owner
+    // targeting it and swinging is the assist signal; the next pet tick must not only
+    // pick the boss but drive the engagement through to the boss's hate table.
+    owner.targetId = boss.id;
+    owner.autoAttack = true;
+    expect(petPickTarget(sim.ctx, pet, owner)?.id).toBe(boss.id);
+    updatePet(sim.ctx, pet);
+    expect(pet.aggroTargetId).toBe(boss.id);
+    expect(pet.inCombat).toBe(true);
+    // The pet walks in from 15 yd, so a few more ticks close the gap and land the swing.
+    for (let i = 0; i < 200 && boss.aiState === 'idle'; i++) {
+      sim.grid.refresh(sim.entities.values());
+      updatePet(sim.ctx, pet);
+    }
+    expect(boss.aiState).not.toBe('idle');
+    expect(boss.threat.has(pet.id)).toBe(true);
   });
 });
 
@@ -568,6 +706,25 @@ describe('petPickTarget: grid scan preserves the selection contract', () => {
     syncGrid(sim);
     // The mob is well outside a 50yd query centered on the owner; it is selected only
     // because the scan is centered on pet.pos. Guards against a pet.pos -> owner.pos slip.
+    expect(petPickTarget(sim.ctx, pet, owner)?.id).toBe(mob.id);
+  });
+
+  it('never selects an evading mob, even when engagingUs would otherwise admit it', () => {
+    const { sim, pid, owner } = world();
+    const pet = adopt(sim, pid);
+    pet.petMode = 'defensive';
+    const mob = wildHostile(sim, [pet.id]);
+    isolate(sim, [pid, pet.id, mob.id]);
+    place(owner, 0, 0);
+    place(pet, 0, 0);
+    place(mob, 5, 0);
+    mob.aggroTargetId = owner.id; // stale engagingUs signal (a wiped boss's last target)
+    mob.aiState = 'evade'; // ...but the mob is mid-reset: immune, not a real threat
+    syncGrid(sim);
+    expect(petPickTarget(sim.ctx, pet, owner)).toBeNull();
+    // control: the same mob IS selected once it drops out of evade
+    mob.aiState = 'chase';
+    syncGrid(sim);
     expect(petPickTarget(sim.ctx, pet, owner)?.id).toBe(mob.id);
   });
 

@@ -163,9 +163,19 @@ const GUARDED_SCRIPTS = [
   'scripts/bank_guild_pane_seed.mjs',
   'scripts/admin_professions_shot.mjs',
   'scripts/catalog_program_census.mjs',
+  'scripts/charselect_zone_shot.mjs',
   'scripts/chat_mute_resume_shot.mjs',
+  'scripts/spectate_action_bar_shot.mjs',
   'scripts/geared_arrival_bench.mjs',
   'scripts/guild_pledge_shot.mjs',
+  // The kick-then-clear-then-retry operator E2E (Masterwrought phase 18): it
+  // registers accounts, grants a STAFF role by shelling out to grant_admin.mjs,
+  // and seeds then reads back the persisted character blob through a pg.Pool of
+  // its own, so it guards its server URL and its connection string. Both, not
+  // one: the grant reaches Postgres through another script, and the seed reaches
+  // it directly, and each target is a place a non-loopback value would take a
+  // staff grant or a blob rewrite somewhere it must never go.
+  'scripts/kick_clear_retry_e2e.mjs',
   'scripts/nythraxis_hitch_bench.mjs',
   'scripts/lib/perf_hitch_scenarios.mjs',
   'scripts/load_players.mjs',
@@ -189,7 +199,11 @@ const URL_GUARDED_SCRIPTS = [
   // state from a file the seed step wrote.
   'scripts/bank_guild_pane_probe.mjs',
   'scripts/crowd_fps_bench.mjs',
+  'scripts/form_adornment_shot.mjs',
   'scripts/gpu_hitch_capture.mjs',
+  // The druid cat form acceptance drive: offline commands against a local Vite
+  // server, no database of its own.
+  'scripts/druid_cat_game_check.mjs',
 ] as const;
 
 // Full-line // comments are stripped before the scan: this file's own subject

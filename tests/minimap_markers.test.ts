@@ -10,16 +10,32 @@
 // canvas no-magic-values guard is in tests/minimap_painter.test.ts.
 
 import { describe, expect, it } from 'vitest';
-import { DELVE_X_MIN, GATHER_NODES, ITEMS, QUESTS, STATIONS, YUMI_MAZE_X } from '../src/sim/data';
+import { FARM_PATCHES } from '../src/sim/content/farm_patches';
+import {
+  DELVE_X_MIN,
+  GATHER_NODES,
+  ITEMS,
+  QUESTS,
+  STATIONS,
+  WORLD_QUESTS_BY_ID,
+  YUMI_MAZE_X,
+  zoneAt,
+} from '../src/sim/data';
+import { isProfessionQuest } from '../src/sim/quests/ambient_quest_marker';
 import { isQuestTurnInNpc } from '../src/sim/types';
+import { WORLD_BOSSES, worldBossLockoutId } from '../src/sim/world_boss';
 import { STABLE_MAP_NAVIGATION_LANDMARKS } from '../src/ui/map_navigation_landmarks_core';
 import {
   createMinimapMarkers,
+  FARM_PATCH_MARKER_SIZE,
+  FARM_PATCH_MARKER_SIZE_COMPACT,
   MINIMAP_CLIP_INSET,
   type MinimapMarker,
   minimapMode,
   minimapPaintedMarkerClearance,
   minimapSafeCenterRadius,
+  minimapWorldObjectiveMarkerAt,
+  minimapWorldQuestMarkerAt,
 } from '../src/ui/minimap_markers';
 import type { IWorld } from '../src/world_api';
 import { assertAllocationStable } from './util/alloc_probe';
@@ -27,7 +43,7 @@ import { assertAllocationStable } from './util/alloc_probe';
 // A real quest whose giver is also a turn-in npc, so a single npc can carry both the
 // 'available' ('!') and 'ready' ('?') glyph branches against real content.
 function requireQuestWithGiver() {
-  const quest = Object.values(QUESTS).find((q) => q.giverNpcId);
+  const quest = Object.values(QUESTS).find((q) => q.giverNpcId && !isProfessionQuest(q));
   if (!quest) throw new Error('expected a quest with a giverNpcId');
   return quest;
 }
@@ -85,6 +101,10 @@ function makeWorld(shape: 'sim' | 'client'): IWorld {
     [10, ent({ id: 10, kind: 'object', lootable: true, pos: { x: 11, z: PZ } })],
     [11, ent({ id: 11, kind: 'mob', hostile: true, aggroTargetId: 1, pos: { x: 12, z: PZ } })],
     [12, ent({ id: 12, kind: 'mob', hostile: true, aggroTargetId: null, pos: { x: 13, z: PZ } })],
+    // A corpse holding ordinary loot for the viewer: untapped, so the shared
+    // pool is open to everyone (the mob-loot marker keys on WHAT THIS VIEWER
+    // MAY TAKE, never on the lootable flag alone, which a harvest-only body
+    // keeps true through its grace window).
     [
       13,
       ent({
@@ -93,6 +113,9 @@ function makeWorld(shape: 'sim' | 'client'): IWorld {
         hostile: true,
         dead: true,
         lootable: true,
+        loot: { copper: 4, items: [] },
+        tappedById: null,
+        harvestClaimedBy: null,
         pos: { x: 14, z: PZ },
       }),
     ],
@@ -140,6 +163,7 @@ function makeWorld(shape: 'sim' | 'client'): IWorld {
     cfg: { seed: 42, playerClass: 'warrior' },
     playerId: 1,
     stationPlacements: STATIONS,
+    farmPatches: [],
     questState: (q: string) => (q === GIVER_QUEST.id ? 'available' : 'unavailable'),
     // The gather-node reads. This scenario is not about gathering, but the core
     // consults both members for any node inside the rim, and whether one IS
@@ -150,6 +174,8 @@ function makeWorld(shape: 'sim' | 'client'): IWorld {
     // itself whatever the map looks like.
     inventory: [],
     nodeHarvestableByMe: () => true,
+    raidLockouts: () => [],
+    worldBossActive: () => false,
     // The quest-marker inputs both worlds expose (the phase 23 classifier):
     // questsDone always, and the crafting identity whose cadenceBlockedQuests
     // mirror drives the cooldown variant. The sim shape carries a fuller
@@ -203,6 +229,151 @@ describe('minimapMode (delve vs overworld discriminator)', () => {
 });
 
 describe('createMinimapMarkers: the discriminated union per draw kind', () => {
+  it.each(['sim', 'client'] as const)(
+    'centers the glider emblem on its instructor (%s)',
+    (shape) => {
+      const world = makeWorld(shape);
+      world.player.level = 20;
+      world.player.pos.x = 203;
+      world.player.pos.z = 557;
+      Object.assign(world, { worldQuestCycle: '2026-08-31', worldQuestLog: new Map() });
+      const model = buildMarkers(world);
+      const marker = model.find(
+        (entry) => entry.kind === 'world-quest' && entry.questId === 'wq_galecrest_slalom',
+      );
+      expect(marker).toMatchObject({ mx: S / 2, my: S / 2 });
+    },
+  );
+  it('shows a nearby available world quest as a hit-testable small marker', () => {
+    const quest = WORLD_QUESTS_BY_ID.wq_eastbrook_bandits;
+    const world = makeWorld('sim') as unknown as {
+      player: { level: number; pos: { x: number; z: number } };
+      worldQuestCycle: string;
+      worldQuestLog: ReadonlyMap<string, never>;
+    };
+    world.player.level = quest.minLevel;
+    world.player.pos.x = quest.area.x;
+    world.player.pos.z = quest.area.z;
+    world.worldQuestCycle = '2026-08-31';
+    world.worldQuestLog = new Map<string, never>();
+
+    const markers = buildMarkers(world as unknown as IWorld);
+    const marker = markers.find((candidate) => candidate.kind === 'world-quest');
+    expect(marker).toMatchObject({ questId: quest.id, zoneId: quest.zoneId, state: 'available' });
+    if (!marker || marker.kind !== 'world-quest') throw new Error('missing world quest marker');
+    expect(minimapWorldQuestMarkerAt(markers, marker.mx, marker.my, 10)).toBe(marker);
+  });
+
+  it('pins the icon to the rim before entry when the objective area is approaching', () => {
+    const quest = WORLD_QUESTS_BY_ID.wq_eastbrook_bandits;
+    const world = makeWorld('client') as unknown as {
+      player: { level: number; pos: { x: number; z: number } };
+      worldQuestCycle: string;
+      worldQuestLog: ReadonlyMap<string, never>;
+    };
+    world.player.level = quest.minLevel;
+    world.player.pos.x = quest.area.x + quest.area.radius + 25;
+    world.player.pos.z = quest.area.z;
+    world.worldQuestCycle = '2026-08-31';
+    world.worldQuestLog = new Map<string, never>();
+
+    const marker = buildMarkers(world as unknown as IWorld).find(
+      (candidate) => candidate.kind === 'world-quest',
+    );
+    expect(marker).toMatchObject({ questId: quest.id, state: 'available' });
+    if (!marker || marker.kind !== 'world-quest') throw new Error('missing rim marker');
+    expect(Math.hypot(marker.mx - S / 2, marker.my - S / 2)).toBeCloseTo(
+      minimapSafeCenterRadius(S, 7),
+      5,
+    );
+  });
+
+  it('hides below-level, completed, inactive-rotation, and distant world quests', () => {
+    const quest = WORLD_QUESTS_BY_ID.wq_eastbrook_bandits;
+    const world = makeWorld('sim') as unknown as {
+      player: { level: number; pos: { x: number; z: number } };
+      worldQuestCycle: string;
+      worldQuestLog: ReadonlyMap<string, { questId: string; count: number; state: string }>;
+    };
+    const worldQuestMarkers = () =>
+      buildMarkers(world as unknown as IWorld).filter((marker) => marker.kind === 'world-quest');
+    world.player.pos.x = quest.area.x;
+    world.player.pos.z = quest.area.z;
+    world.worldQuestCycle = '2026-08-31';
+
+    world.player.level = quest.minLevel - 1;
+    world.worldQuestLog = new Map();
+    expect(worldQuestMarkers()).toEqual([]);
+
+    world.player.level = quest.minLevel;
+    world.worldQuestLog = new Map([
+      [quest.id, { questId: quest.id, count: quest.count, state: 'completed' }],
+    ]);
+    expect(worldQuestMarkers()).toEqual([]);
+
+    world.worldQuestCycle = '2026-09-03';
+    world.worldQuestLog = new Map();
+    expect(worldQuestMarkers()).toEqual([]);
+
+    world.worldQuestCycle = '2026-08-31';
+    world.player.pos.x = quest.area.x + quest.area.radius + 1_000;
+    expect(worldQuestMarkers()).toEqual([]);
+  });
+
+  it('marks an entered objective active while keeping the same small emblem', () => {
+    const quest = WORLD_QUESTS_BY_ID.wq_eastbrook_bandits;
+    const world = makeWorld('client') as unknown as {
+      player: { level: number; pos: { x: number; z: number } };
+      worldQuestCycle: string;
+      worldQuestLog: ReadonlyMap<string, { questId: string; count: number; state: string }>;
+    };
+    world.player.level = quest.minLevel;
+    world.player.pos.x = quest.area.x;
+    world.player.pos.z = quest.area.z;
+    world.worldQuestCycle = '2026-08-31';
+    world.worldQuestLog = new Map([[quest.id, { questId: quest.id, count: 1, state: 'active' }]]);
+
+    expect(
+      buildMarkers(world as unknown as IWorld).find((marker) => marker.kind === 'world-quest'),
+    ).toMatchObject({ questId: quest.id, state: 'active' });
+  });
+
+  it('shows the fixed world boss as a hit-testable objective until its loot lockout lands', () => {
+    const boss = WORLD_BOSSES[0];
+    const world = makeWorld('sim') as unknown as {
+      player: { pos: { x: number; z: number } };
+      raidLockouts(): Array<{ id: string; msRemaining: number }>;
+      worldBossActive(bossId: string): boolean;
+    };
+    world.player.pos.x = boss.pos.x;
+    world.player.pos.z = boss.pos.z;
+    world.raidLockouts = () => [];
+    world.worldBossActive = (bossId) => bossId === boss.templateId;
+
+    const markers = buildMarkers(world as unknown as IWorld);
+    const marker = markers.find((candidate) => candidate.kind === 'world-boss');
+    expect(marker).toMatchObject({
+      bossId: boss.templateId,
+      zoneId: zoneAt(boss.pos.x, boss.pos.z).id,
+    });
+    if (!marker || marker.kind !== 'world-boss') throw new Error('missing world boss marker');
+    expect(minimapWorldObjectiveMarkerAt(markers, marker.mx, marker.my, 10)).toBe(marker);
+
+    world.raidLockouts = () => [{ id: worldBossLockoutId(boss.templateId), msRemaining: 60_000 }];
+    expect(
+      buildMarkers(world as unknown as IWorld).filter(
+        (candidate) => candidate.kind === 'world-boss',
+      ),
+    ).toEqual([]);
+
+    world.raidLockouts = () => [];
+    world.worldBossActive = () => false;
+    expect(
+      buildMarkers(world as unknown as IWorld).filter(
+        (candidate) => candidate.kind === 'world-boss',
+      ),
+    ).toEqual([]);
+  });
   it('keeps a painted marker full-corner-safe at the circular clip in both profiles', () => {
     for (const size of [16, 18, 20, 22, 24, 26]) {
       const clearance = minimapPaintedMarkerClearance(size);
@@ -470,6 +641,67 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
     expect(markers.filter((marker) => marker.kind === 'mob-loot')).toHaveLength(1);
   });
 
+  describe('the corpse marker distinguishes ordinary loot from an open harvest', () => {
+    // forest_wolf carries mapped componentTags: harvestable while unclaimed.
+    // The seeded corpse (id 13) is re-shaped per case; every other seeded
+    // marker is unaffected, so the kinds list is filtered to the two corpse
+    // markers.
+    type CorpseShape = {
+      templateId: string;
+      loot: { copper: number; items: unknown[] } | null;
+      tappedById: number | null;
+      lootFfaTimer?: number;
+      harvestClaimedBy: number | null;
+      ownerId?: number | null;
+      corpseTimer?: number;
+    };
+    function corpseMarkers(shape: Partial<CorpseShape>, partyPids?: number[]) {
+      const world = makeWorld('sim') as unknown as {
+        entities: Map<number, Record<string, unknown>>;
+        partyInfo: { members: { pid: number }[] } | null;
+      };
+      const body = world.entities.get(13);
+      if (!body) throw new Error('expected the seeded corpse');
+      Object.assign(body, shape);
+      if (partyPids) world.partyInfo = { members: partyPids.map((pid) => ({ pid })) };
+      return buildMarkers(world as unknown as IWorld)
+        .map((m) => m.kind)
+        .filter((kind) => kind === 'mob-loot' || kind === 'mob-harvest');
+    }
+
+    it('keeps the loot square while ordinary loot remains, even with the harvest open', () => {
+      expect(corpseMarkers({ templateId: 'forest_wolf', loot: { copper: 4, items: [] } })).toEqual([
+        'mob-loot',
+      ]);
+    });
+
+    it('swaps to the harvest marker on a harvest-only body, and drops it once claimed', () => {
+      expect(corpseMarkers({ templateId: 'forest_wolf', loot: null })).toEqual(['mob-harvest']);
+      expect(corpseMarkers({ templateId: 'forest_wolf', loot: null, harvestClaimedBy: 9 })).toEqual(
+        [],
+      );
+    });
+
+    it("never advertises a stranger's owner-locked loot as mine", () => {
+      const locked = {
+        loot: { copper: 4, items: [] },
+        tappedById: 9,
+        lootFfaTimer: 60,
+        harvestClaimedBy: 9,
+      };
+      expect(corpseMarkers(locked)).toEqual([]);
+      // The lock lapses into FFA: the square returns.
+      expect(corpseMarkers({ ...locked, lootFfaTimer: 0 })).toEqual(['mob-loot']);
+      // A party mate's tap reads as mine through the viewer roster.
+      expect(corpseMarkers({ ...locked, tappedById: 5 }, [1, 5])).toEqual(['mob-loot']);
+    });
+
+    it('shows neither marker for an owned pet body or an expired body', () => {
+      expect(corpseMarkers({ ownerId: 1, loot: { copper: 4, items: [] } })).toEqual([]);
+      expect(corpseMarkers({ corpseTimer: 0, loot: { copper: 4, items: [] } })).toEqual([]);
+    });
+  });
+
   it('preserves each gathering node type for the painter', () => {
     const nodes = buildMarkers(makeWorld('sim')).filter((marker) => marker.kind === 'gather-node');
 
@@ -635,15 +867,8 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
     expect(npcs[0].marker).toBe('ready');
   });
 
-  it('stamps the repeat and cooldown variants identically for both world shapes', () => {
-    // The phase 23 blue "!" at the minimap surface, from a real cadenced work
-    // order re-pointed onto the seeded npc: after one completion the offer
-    // stamps 'repeat'; inside the window (the cadenceBlockedQuests mirror)
-    // it stamps 'cooldown' where the npc previously showed the neutral dot.
-    // Driven through BOTH stub shapes (acceptance (a)'s both-worlds arm).
-    // This pins the CLASSIFIER over each world's data shape; true
-    // world-to-world parity of the inputs themselves rests on the online
-    // cadence/attunement suites pinning the qdone and cprof mirrors.
+  it('hides profession repeat and cooldown offers for both world shapes', () => {
+    // Both offline and online-shaped inputs keep ambient profession offers quiet.
     const workOrder = Object.values(QUESTS).find((q) => q.repeatable && q.repeatCadenceTicks);
     if (!workOrder) throw new Error('expected a cadenced work order');
     for (const shape of ['sim', 'client'] as const) {
@@ -662,16 +887,16 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
       const offered = buildMarkers(world as unknown as IWorld).filter(
         (m) => m.kind === 'npc',
       ) as Extract<MinimapMarker, { kind: 'npc' }>[];
-      expect(offered[0].glyph, `${shape}: offered again`).toBe('!');
-      expect(offered[0].marker, `${shape}: offered again`).toBe('repeat');
+      expect(offered[0].glyph, `${shape}: offered again`).toBe('•');
+      expect(offered[0].marker, `${shape}: offered again`).toBe('none');
 
       world.questState = () => 'unavailable';
       world.craftingIdentity.cadenceBlockedQuests = [workOrder.id];
       const blocked = buildMarkers(world as unknown as IWorld).filter(
         (m) => m.kind === 'npc',
       ) as Extract<MinimapMarker, { kind: 'npc' }>[];
-      expect(blocked[0].glyph, `${shape}: inside the window`).toBe('!');
-      expect(blocked[0].marker, `${shape}: inside the window`).toBe('cooldown');
+      expect(blocked[0].glyph, `${shape}: inside the window`).toBe('•');
+      expect(blocked[0].marker, `${shape}: inside the window`).toBe('none');
 
       // The negative arm: the same unavailable state WITHOUT the mirror set
       // keeps the pre-phase neutral dot (an older server payload degrades to
@@ -874,8 +1099,11 @@ describe('station markers (Professions 2.0)', () => {
       cfg: { seed: 42, playerClass: 'warrior' },
       playerId: 1,
       stationPlacements: STATIONS,
+      farmPatches: [],
       questState: () => 'unavailable',
       nodeHarvestableByMe: () => true,
+      raidLockouts: () => [],
+      worldBossActive: () => false,
       // Paired with nodeHarvestableByMe above: both gather-node reads, both
       // needed by any viewer with a node inside the rim, which the "field
       // viewer" case below now is (wood_eastbrook_5 is 12 yards from (0, 150)).
@@ -893,7 +1121,8 @@ describe('station markers (Professions 2.0)', () => {
       const markers = stationMarkers(makeStationWorld(shape));
       // The four Eastbrook stations; the two other-zone stations are culled.
       expect(markers, shape).toHaveLength(4);
-      // The forge (STATIONS[0], x -5.80, z -123.90) lands at the projected px:
+      // The forge (STATIONS[0]; coordinates read live from STATIONS[0].pos)
+      // lands at the projected px:
       // mx = half - dx * pxPerYard, my = half - dz * pxPerYard.
       const half = S / 2;
       const forge = STATIONS[0];
@@ -959,6 +1188,105 @@ describe('station markers (Professions 2.0)', () => {
     const lastStation = markers.map((m) => m.kind).lastIndexOf('station');
     expect(lastStation).toBeGreaterThanOrEqual(0);
     expect(lastStation).toBeLessThan(markers.length - 1);
+  });
+
+  // Farm patches ride the same static-content doctrine as the stations above:
+  // one pin per site, no per-viewer state, identical on both hosts.
+  function farmMarkers(world: IWorld): MinimapMarker[] {
+    return buildMarkers(world).filter((m) => m.kind === 'farm-patch');
+  }
+
+  // The Eastbrook allotments (-21.5, -81.5) sit 20 yd from the civic center,
+  // inside the rim from VIEW_POS; the tier-2 Mirefen site (z 341) is far
+  // beyond it.
+  const NEAR_PATCH = FARM_PATCHES.find((patch) => patch.id === 'patch_eastbrook');
+  const FAR_PATCH = FARM_PATCHES.find((patch) => patch.id === 'patch_mirefen');
+
+  it('projects one marker per in-range patch anchor at the exact canvas px (both shapes)', () => {
+    expect(NEAR_PATCH).toBeDefined();
+    if (!NEAR_PATCH) return;
+    for (const shape of ['sim', 'client'] as const) {
+      const markers = farmMarkers(makeStationWorld(shape, { farmPatches: FARM_PATCHES }));
+      expect(markers, shape).toEqual([
+        {
+          kind: 'farm-patch',
+          patchId: 'patch_eastbrook',
+          mx: S / 2 - (NEAR_PATCH.x - VIEW_POS.x) * PPY,
+          my: S / 2 - (NEAR_PATCH.z - VIEW_POS.z) * PPY,
+        },
+      ]);
+    }
+  });
+
+  it('culls a patch beyond the rim and a zone with no patch at all', () => {
+    expect(FAR_PATCH).toBeDefined();
+    if (!FAR_PATCH) return;
+    expect(farmMarkers(makeStationWorld('sim', { farmPatches: [FAR_PATCH] }))).toEqual([]);
+    expect(farmMarkers(makeStationWorld('sim', { farmPatches: [] }))).toEqual([]);
+  });
+
+  it('sizes the pin from its own painted footprint, not a marker-art row', () => {
+    // Literals, not a re-read of the constant production uses: the pin has no
+    // MapMarkerArtId, so these two numbers are the whole size contract.
+    expect(FARM_PATCH_MARKER_SIZE).toBe(16);
+    expect(FARM_PATCH_MARKER_SIZE_COMPACT).toBe(22);
+  });
+
+  it('drops a patch whose painted footprint would cross the minimap rim', () => {
+    expect(NEAR_PATCH).toBeDefined();
+    if (!NEAR_PATCH) return;
+    // Straddle the exact safe-centre radius for a standard-profile pin. The
+    // margin is deliberately far smaller than the gap to any neighbouring
+    // marker size, so drawing this cull from the wrong footprint flips an arm.
+    const clearance = minimapPaintedMarkerClearance(FARM_PATCH_MARKER_SIZE);
+    const safeYards = minimapSafeCenterRadius(S, clearance) / PPY;
+    const at = (yards: number) => ({ ...NEAR_PATCH, x: VIEW_POS.x, z: VIEW_POS.z + yards });
+    expect(
+      farmMarkers(makeStationWorld('sim', { farmPatches: [at(safeYards - 0.01)] })),
+    ).toHaveLength(1);
+    expect(farmMarkers(makeStationWorld('sim', { farmPatches: [at(safeYards + 0.01)] }))).toEqual(
+      [],
+    );
+  });
+
+  it('gives the compact touch profile its own larger clearance', () => {
+    expect(NEAR_PATCH).toBeDefined();
+    if (!NEAR_PATCH) return;
+    const compactClearance = minimapPaintedMarkerClearance(FARM_PATCH_MARKER_SIZE_COMPACT);
+    const compactSafeYards = minimapSafeCenterRadius(S, compactClearance) / PPY;
+    // A patch just outside the COMPACT safe radius but inside the standard one:
+    // the standard profile keeps it, the compact profile culls it.
+    const patch = { ...NEAR_PATCH, x: VIEW_POS.x, z: VIEW_POS.z + compactSafeYards + 0.01 };
+    const world = makeStationWorld('sim', { farmPatches: [patch] });
+    expect(farmMarkers(world)).toHaveLength(1);
+    const compact = createMinimapMarkers()
+      .build(world, S, PPY, 'compact')
+      .markers.filter((m) => m.kind === 'farm-patch');
+    expect(compact).toEqual([]);
+  });
+
+  it('is viewer-invariant: quest, social, and profession state never change the set', () => {
+    const base = farmMarkers(makeStationWorld('sim', { farmPatches: FARM_PATCHES }));
+    expect(base).toHaveLength(1);
+    const busy = makeStationWorld('client', {
+      farmPatches: FARM_PATCHES,
+      questState: () => 'available',
+      nodeHarvestableByMe: () => false,
+      socialInfo: {
+        friends: [{ id: 20, name: 'Friend', online: true }],
+        blocks: [],
+        guild: { id: 1, name: 'G', rank: 'member', members: [] },
+      },
+    });
+    expect(farmMarkers(busy)).toEqual(base);
+  });
+
+  it('draws patches before the player arrow (draw order: the arrow stays on top)', () => {
+    const markers = buildMarkers(makeStationWorld('sim', { farmPatches: FARM_PATCHES }));
+    expect(markers[markers.length - 1].kind).toBe('player');
+    const lastPatch = markers.map((m) => m.kind).lastIndexOf('farm-patch');
+    expect(lastPatch).toBeGreaterThanOrEqual(0);
+    expect(lastPatch).toBeLessThan(markers.length - 1);
   });
 });
 
@@ -1030,10 +1358,13 @@ describe('gather-node markers: the locked dimension', () => {
       cfg: { seed: 42, playerClass: 'warrior' },
       playerId: 1,
       stationPlacements: STATIONS,
+      farmPatches: [],
       inventory: opts.inventory ?? [],
       gatheringProficiency: opts.gatheringProficiency ?? {},
       nodeHarvestableByMe: opts.harvestable ?? (() => true),
       questState: () => 'unavailable',
+      raidLockouts: () => [],
+      worldBossActive: () => false,
     } as unknown as IWorld;
   }
 
@@ -1065,13 +1396,13 @@ describe('gather-node markers: the locked dimension', () => {
     // (centre): the pick unlocks the ores alone; the wood stand and the herb
     // patch both stay locked without their own implements.
     expect(tooled.map((m) => m.locked)).toEqual([false, false, true, true, false]);
-    // The R22 arm: the SAME pick with the counter short is unusable, so
-    // every ore row stays locked on the map exactly as the sim's wield
-    // denial would refuse the harvest (owned is not earned).
+    // The R22 degrade arm: the SAME pick with the counter short works as its
+    // best wieldable lower tier, so the tier-1 ores open and the tier-2
+    // centre vein still locks (owned is not fully earned).
     const unearned = gatherMarkers(
       makeGatherWorld('sim', { inventory: [{ itemId: 'iron_mining_pick', count: 1 }] }),
     );
-    expect(unearned.map((m) => m.locked)).toEqual([true, true, true, true, true]);
+    expect(unearned.map((m) => m.locked)).toEqual([false, false, true, true, true]);
     // Locked composes WITH the respawn dimension, never replaces it: a
     // cooling locked vein keeps ready=false (the silhouette the painter keeps
     // readable under the locked tint).
@@ -1117,16 +1448,15 @@ describe('gather-node markers: the locked dimension', () => {
     // assertion either: each shape's locked vector is pinned literally, so a
     // pair that agreed on a WRONG vector still reds.
     const PICK = [{ itemId: 'iron_mining_pick', count: 1 }];
-    // Covering but unwieldable (R22): mining 0 puts nothing to work, so every
-    // node in the rim stays locked, the tier-1 ores included, even though the
-    // bags hold a pick that covers them.
+    // Covering but not fully wieldable (R22): mining 0 degrades the pick to
+    // tier 1, so tier-1 ore opens while the tier-2 centre vein stays locked.
     const unearnedSim = gatherMarkers(
       makeGatherWorld('sim', { inventory: PICK, gatheringProficiency: { mining: 0 } }),
     );
     const unearnedClient = gatherMarkers(
       makeGatherWorld('client', { inventory: PICK, gatheringProficiency: { mining: 0 } }),
     );
-    expect(unearnedSim.map((m) => m.locked)).toEqual([true, true, true, true, true]);
+    expect(unearnedSim.map((m) => m.locked)).toEqual([false, false, true, true, true]);
     expect(unearnedClient).toEqual(unearnedSim);
     // The same pick at the pick's own requirement flips the ore rows open
     // (rim order: ore t1, ore t1, wood t1, herb t1, ore t2 at the centre);
@@ -1174,10 +1504,13 @@ describe('gather-node markers scale with the rim, not the node table (phase 16)'
       cfg: { seed: 42, playerClass: 'warrior' },
       playerId: 1,
       stationPlacements: [],
+      farmPatches: [],
       inventory: [],
       gatheringProficiency: {},
       nodeHarvestableByMe: () => true,
       questState: () => 'unavailable',
+      raidLockouts: () => [],
+      worldBossActive: () => false,
     } as unknown as IWorld;
   }
   function nodeMarkersAt(x: number, z: number) {
@@ -1221,5 +1554,32 @@ describe('gather-node markers scale with the rim, not the node table (phase 16)'
 
   it('a viewer far from every node draws zero node markers regardless of the table size', () => {
     expect(nodeMarkersAt(99000, 99000)).toHaveLength(0);
+  });
+});
+
+describe('harvest marker full silhouette at the circular rim', () => {
+  it.each([
+    { profile: 'standard' as const, radius: 3.5, outline: 1.25 },
+    { profile: 'compact' as const, radius: 5.25, outline: 1.75 },
+  ])('contains the bottom miter corners in $profile mode', ({ profile, radius, outline }) => {
+    const world = makeWorld('client');
+    const corpse = world.entities.get(13)!;
+    corpse.templateId = 'forest_wolf';
+    corpse.loot = null;
+    // The painter's triangle has vertices (0,-r), (r,0.7r), (-r,0.7r).
+    // Its widest radial stroke point is a bottom miter, not the top apex.
+    const cornerX = radius + (outline / 2) * ((Math.hypot(1, 1.7) + 1) / 1.7);
+    const cornerY = radius * 0.7 + outline / 2;
+    const envelope = Math.hypot(cornerX, cornerY);
+    const safeCenter = S / 2 - MINIMAP_CLIP_INSET - envelope;
+    corpse.pos.x = world.player.pos.x - (safeCenter + 0.01);
+    corpse.pos.z = world.player.pos.z;
+    const harvest = () =>
+      createMinimapMarkers()
+        .build(world, S, 1, profile)
+        .markers.filter((marker) => marker.kind === 'mob-harvest');
+    expect(harvest()).toEqual([]);
+    corpse.pos.x = world.player.pos.x - (safeCenter - 0.01);
+    expect(harvest()).toHaveLength(1);
   });
 });

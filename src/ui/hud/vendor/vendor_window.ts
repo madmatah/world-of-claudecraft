@@ -7,6 +7,7 @@
 // stays in Hud because it needs Hud's private state; this module only renders
 // one panel and reports clicks back through the injected callbacks.
 
+import { factionDisplayName, STANDING_TIER_LABELS } from '../../../sim/factions';
 import type { ItemInstancePayload } from '../../../sim/types';
 import type { VendorBuyOptions } from '../../../sim/vendor_buy_stack';
 import { currencyIconHtml } from '../../currency_art';
@@ -14,10 +15,12 @@ import { markDialogRoot } from '../../dialog_root';
 import { itemDisplayName } from '../../entity_i18n';
 import { esc } from '../../esc';
 import { focusedWithin, restoreFirstEnabled } from '../../focus_restore';
-import { gatheringProfessionNameKey } from '../../gathering_profession_name';
 import { formatMoney as formatLocalizedMoney, formatNumber, t } from '../../i18n';
+import { itemNameColor } from '../../item_name_color';
 import type { PainterHostPresentation } from '../../painter_host';
 import { svgIcon } from '../../ui_icons';
+import { wornItemCellParts } from '../../worn_item_cell_view';
+import { gatheringProfessionNameKey } from '../professions/gathering_profession_name';
 import { showBuyQuantityPrompt } from './buy_quantity_prompt_window';
 import {
   VENDOR_MULTIPLES,
@@ -89,6 +92,11 @@ function goodsPriceText(price: VendorPrice): string {
  *  merchant. Empty string for a profession with no display-name key, matching
  *  every other consumer of that table: no name is printable, so no line is. */
 function requirementText(row: VendorGoodsRow): string {
+  if (row.factionRequirement) {
+    const tier = STANDING_TIER_LABELS[row.factionRequirement.standingTier];
+    const faction = factionDisplayName(row.factionRequirement.factionId);
+    return `Requires ${tier} with ${faction}`;
+  }
   const requirement = row.requirement;
   if (!requirement) return '';
   const nameKey = gatheringProfessionNameKey(requirement.professionId);
@@ -138,7 +146,7 @@ export function renderVendorWindow(
     : -1;
   const scrollTop = el.scrollTop;
   markDialogRoot(el, { label: t('itemUi.vendor.goodsTitle', { name: vendorName }) });
-  el.innerHTML = `<div class="panel-title"><span>${esc(t('itemUi.vendor.goodsTitle', { name: vendorName }))}</span><button type="button" class="x-btn" data-close data-focus-key="close" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
+  el.innerHTML = `<div class="panel-title ui-win-head"><span class="ui-win-title">${esc(t('itemUi.vendor.goodsTitle', { name: vendorName }))}</span><button type="button" class="x-btn ui-x-btn" data-close data-focus-key="close" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
 
   if (view.hasHonorGoods) {
     const balance = document.createElement('div');
@@ -157,13 +165,13 @@ export function renderVendorWindow(
   // (the fixed multiples are the gamepad-complete path, Q24).
   if (view.goods.length > 0) {
     const qtyRow = document.createElement('div');
-    qtyRow.className = 'vendor-qty-row';
+    qtyRow.className = 'vendor-qty-row ui-seg';
     qtyRow.setAttribute('role', 'group');
     qtyRow.setAttribute('aria-label', t('itemUi.vendor.qtyRowAria'));
     for (const m of VENDOR_MULTIPLES) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'vendor-qty-btn';
+      btn.className = `vendor-qty-btn ui-seg-tab${view.multiple === m ? ' is-on' : ''}`;
       // The selected state rides aria-pressed alone; the stylesheet keys off
       // the attribute so style and semantics cannot drift apart.
       btn.setAttribute('aria-pressed', view.multiple === m ? 'true' : 'false');
@@ -196,7 +204,9 @@ export function renderVendorWindow(
     // the requirement sub-line so the number reads as "not yet met" rather
     // than decoration. Never disabled for it: the sale is real, the gate is
     // at the harvest.
-    row.className = goods.requirementUnmet ? 'vendor-item vendor-locked' : 'vendor-item';
+    row.className = goods.requirementUnmet
+      ? 'vendor-item ui-card vendor-locked'
+      : 'vendor-item ui-card';
     // Item identity for the island coach's press-this-next glow (bootcamp.ts
     // toggles .qd-coach by this attribute; distinct from the focus-key
     // namespace, which stays focus_restore's alone).
@@ -205,7 +215,8 @@ export function renderVendorWindow(
     // gates on the whole-count total; force-1 and custom rows keep the 1x
     // baseline (the custom prompt's typed amount decides the rest).
     const countBuy = goods.countBuy;
-    row.disabled = countBuy ? !countBuy.affordable : !goods.affordable;
+    const lockedByFaction = goods.requirementUnmet && !!goods.factionRequirement;
+    row.disabled = lockedByFaction || (countBuy ? !countBuy.affordable : !goods.affordable);
     const price = countBuy ? formatLocalizedMoney(countBuy.copper) : goodsPriceText(goods.price);
     const itemName = itemDisplayName(item);
     const stack =
@@ -254,7 +265,7 @@ export function renderVendorWindow(
       ? `<span class="vi-qty">${esc(t('itemUi.vendor.qtyMultiple', { count: countText as string }))}</span>`
       : '';
     const priceHtml = countBuy ? deps.moneyHtml(countBuy.copper) : goodsPriceHtml(goods, deps);
-    row.innerHTML = `${deps.itemIcon(item)}<span class="vi-name">${esc(itemName)}${esc(stack)}${requirement ? `<span class="vi-sub">${esc(requirement)}</span>` : ''}</span><span class="vi-price">${qtyChip}${priceHtml}</span>`;
+    row.innerHTML = `<span class="ui-socket ui-socket--bag">${deps.itemIcon(item)}</span><span class="vi-name" style="color:${itemNameColor(item)}">${esc(itemName)}${esc(stack)}${requirement ? `<span class="vi-sub ui-muted">${esc(requirement)}</span>` : ''}</span><span class="vi-price ui-money">${qtyChip}${priceHtml}</span>`;
     row.dataset.focusKey = `buy:${itemId}`;
     // Ctrl/Cmd-click requests a bulk purchase (#2374) and wins over the
     // selected multiple (an explicit stack request), the desktop mirror of
@@ -294,7 +305,7 @@ export function renderVendorWindow(
     if (goods.bulkQuantity !== undefined && goods.bulkQuantity > 1) {
       const bulkRow = document.createElement('button');
       bulkRow.type = 'button';
-      bulkRow.className = 'vendor-item vendor-item-bulk';
+      bulkRow.className = 'vendor-item vendor-item-bulk ui-card';
       bulkRow.disabled = !goods.bulkAffordable;
       const bulkCount = formatNumber(goods.bulkQuantity, { maximumFractionDigits: 0 });
       const bulkCopper = Math.max(0, item.buyValue ?? 0) * goods.bulkQuantity;
@@ -303,7 +314,7 @@ export function renderVendorWindow(
         'aria-label',
         t('itemUi.vendor.buyStackAria', { item: itemName, count: bulkCount, price: bulkPrice }),
       );
-      bulkRow.innerHTML = `${deps.itemIcon(item)}<span class="vi-name">${esc(t('itemUi.vendor.buyStack', { count: bulkCount }))}</span><span class="vi-price">${deps.moneyHtml(bulkCopper)}</span>`;
+      bulkRow.innerHTML = `<span class="ui-socket ui-socket--bag">${deps.itemIcon(item)}</span><span class="vi-name" style="color:${itemNameColor(item)}">${esc(t('itemUi.vendor.buyStack', { count: bulkCount }))}</span><span class="vi-price ui-money">${deps.moneyHtml(bulkCopper)}</span>`;
       // Its own focus key: a keyboard bulk buy rebuilds the grid under the
       // finger exactly like the ordinary row's buy, and without a key the
       // restore ladder cannot find the tile again (focus fell to <body>).
@@ -321,7 +332,7 @@ export function renderVendorWindow(
 
   const sellJunk = document.createElement('button');
   sellJunk.type = 'button';
-  sellJunk.className = 'vendor-sell-junk';
+  sellJunk.className = 'vendor-sell-junk ui-btn ui-btn--red';
   sellJunk.disabled = !deps.sellJunk.enabled;
   sellJunk.innerHTML = `<span class="vi-name">${esc(t('itemUi.vendor.sellJunk'))}</span>${deps.sellJunk.enabled ? `<span class="vi-price">${deps.moneyHtml(deps.sellJunk.proceeds)}</span>` : ''}`;
   sellJunk.setAttribute(
@@ -365,11 +376,15 @@ export function renderVendorWindow(
   } of view.buyback) {
     const row = document.createElement('button');
     row.type = 'button';
-    row.className = 'vendor-item';
+    row.className = 'vendor-item ui-card';
     const price = formatLocalizedMoney(priceCopper);
-    const itemName = itemDisplayName(item);
-    row.setAttribute('aria-label', t('itemUi.vendor.buybackAria', { item: itemName, price }));
-    row.innerHTML = `${deps.itemIcon(item)}<span class="vi-name">${esc(itemName)}${count > 1 ? ` ${esc(t('itemUi.bags.stackCount', { count: formatNumber(count, { maximumFractionDigits: 0 }) }))}` : ''}</span><span class="vi-price">${deps.moneyHtml(priceCopper)}</span>`;
+    // A vendored promoted copy sits here under its chosen name and its own
+    // rim (the cell authority; a bound copy CAN be vendored, so this row is
+    // reachable, the phase 13 QA round-2 frontend finding).
+    const parts = wornItemCellParts(item, instance);
+    const itemName = parts.name;
+    row.setAttribute('aria-label', t('itemUi.vendor.buybackAria', { item: parts.ariaName, price }));
+    row.innerHTML = `<span class="ui-socket ui-socket--bag">${deps.itemIcon(item, parts.quality)}${parts.qualityBadge}</span><span class="vi-name" style="color:${itemNameColor({ kind: item.kind, quality: parts.quality })}">${esc(itemName)}${count > 1 ? ` ${esc(t('itemUi.bags.stackCount', { count: formatNumber(count, { maximumFractionDigits: 0 }) }))}` : ''}</span><span class="vi-price ui-money">${deps.moneyHtml(priceCopper)}</span>`;
     // POSITIONAL by design, unlike the identity-keyed goods rows: after a
     // buyback the list shifts and focus stays at the same SLOT (the next
     // item to reclaim), which is the useful landing for repeated buybacks.
@@ -382,7 +397,13 @@ export function renderVendorWindow(
     );
     buybackGrid.appendChild(row);
   }
-  if (view.buyback.length > 0) el.appendChild(buybackGrid);
+  for (let index = view.buyback.length; index < 2; index++) {
+    const empty = document.createElement('div');
+    empty.className = 'vendor-buyback-empty ui-card';
+    empty.innerHTML = '<span class="ui-socket ui-socket--bag empty" aria-hidden="true"></span>';
+    buybackGrid.appendChild(empty);
+  }
+  el.appendChild(buybackGrid);
 
   const hint = document.createElement('div');
   hint.className = 'vendor-hint';

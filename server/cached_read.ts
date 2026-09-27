@@ -31,11 +31,43 @@ export interface CachedReadOptions {
   now?: () => number;
 }
 
+/**
+ * Freeze a cache snapshot WHOLE (every nested object and array) and return
+ * it. Object.freeze alone is shallow, so a tenant that froze only its top
+ * level left the rows the serialize-once memo (server/ok_response_memo.ts)
+ * depends on mutable; a consumer poisoning a shared row would then desync the
+ * memoized bytes from the object.
+ *
+ * The recursion terminates on a VISITED set, never on Object.isFrozen: a
+ * frozen-check short-circuit refuses exactly the input this helper exists to
+ * repair (a shallow-frozen wrapper around mutable rows) and returns having
+ * frozen nothing. The visited set also makes a shared child cheap on its second
+ * sighting and tolerates a cycle, which a frozen check only did by accident.
+ */
+export function deepFreezeSnapshot<T>(value: T): T {
+  freezeInto(value, new WeakSet<object>());
+  return value;
+}
+
+function freezeInto(value: unknown, seen: WeakSet<object>): void {
+  if (typeof value !== 'object' || value === null) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  Object.freeze(value);
+  for (const child of Object.values(value as Record<string, unknown>)) freezeInto(child, seen);
+}
+
 export interface CachedRead<T> {
   /** Serve fresh-within-TTL from cache; otherwise refresh (single-flight). */
   read(): Promise<T>;
   /** Last installed value regardless of freshness, null when cold or busted. */
   peek(): T | null;
+  /** Refresh NOW regardless of freshness (the warm loops, which run on the
+   *  same cadence as the TTL and would find the value still fresh on every
+   *  other tick through read()): single-flight with any in-flight refresh
+   *  and under the same epoch guard. Rejects when the refresh fails; never
+   *  stale-serves (a warm loop logs and moves on). */
+  refresh(): Promise<T>;
   /** Drop the cached value and bump the epoch so an in-flight refresh declines to install. */
   bust(): void;
 }
@@ -117,6 +149,9 @@ export function createCachedRead<T>(
     },
     peek(): T | null {
       return installed === null ? null : installed.value;
+    },
+    refresh(): Promise<T> {
+      return refreshShared();
     },
     bust(): void {
       epoch++;

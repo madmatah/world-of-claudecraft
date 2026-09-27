@@ -162,6 +162,9 @@ function scanFiles(
 const FAMILY_ALLOWANCES: ReadonlyArray<[file: string, value: number, anchor: string]> = [
   ['src/ui/guild_bank_view.ts', 10000, 'COPPER_PER_GOLD'],
   ['src/net/guild_bank_log_wire.ts', 10000, 'GUILD_BANK_LOG_TTL_MS'],
+  // The weekly vault opening's door-clear milestone: a duration in ms on a
+  // choreography core that only carries "vault" in its name, never a price.
+  ['src/ui/weekly_vault_burst_core.ts', 1000, 'DOOR_CLEAR_MS'],
 ];
 // One factory builds every anchored allow fn, so the positive control below
 // exercises the exact operator the real scans use while recording into its
@@ -194,10 +197,12 @@ const TREE_ALLOWANCES: ReadonlyArray<[file: string, value: number, anchor: strin
   // The /dev gold prompt's input bound (dev-gated tooling, not a price render).
   ['src/ui/dev_command_view.ts', 100000, 'boundedInteger'],
   // The millions threshold and divisor of the meter number formatter.
-  ['src/ui/meters.ts', 1000000, 'v >= 1000000'],
-  ['src/ui/meters.ts', 1000000, 'v / 1000000'],
+  ['src/ui/meters_format.ts', 1000000, 'v >= 1000000'],
+  ['src/ui/meters_format.ts', 1000000, 'v / 1000000'],
   // The census millions divisor.
   ['src/render/scene_census_core.ts', 1000000, 'const M = 1000000'],
+  // A render megapixel unit, not money.
+  ['src/render/post_pixel_budget_core.ts', 1000000, 'MEGAPIXEL'],
   // A memo-size cap, not money.
   ['src/render/shore_water_gate_core.ts', 400000, 'PROBE_MEMO_LIMIT'],
   // The WIRE-BOUNDARY cap on a client-declared cost, not a price and not from
@@ -209,6 +214,10 @@ const TREE_ALLOWANCES: ReadonlyArray<[file: string, value: number, anchor: strin
   // tests/purchase_intent_durability.test.ts pins the two equal, so this
   // allowance cannot hide a drift.
   ['src/ui/purchase_intent_record.ts', 1000000, 'PURCHASE_INTENT_MAX_COST_CLAUDIUM'],
+  // The world-quest cannon result validator's shot-count sanity bound, not money.
+  ['src/ui/hud/vehicle/cannon_tactics_view.ts', 1000000, 'result.shotsFired > 1000000'],
+  // The vehicle session wire decoder's finite-number bound, not money.
+  ['src/net/vehicle_session_wire.ts', 1000000, 'Math.abs(value) <='],
 ];
 const usedTreeAnchors = new Set<string>();
 const treeAllowed: AllowFn = anchoredAllow(TREE_ALLOWANCES, usedTreeAnchors);
@@ -403,6 +412,7 @@ describe('arm (b): the bank/vault/bags/guild_bank family renders no table value'
     expect([...used].sort()).toEqual([
       'src/net/guild_bank_log_wire.ts:10000',
       'src/ui/guild_bank_view.ts:10000',
+      'src/ui/weekly_vault_burst_core.ts:1000',
     ]);
     expect([...usedFamilyAnchors].sort()).toEqual(
       FAMILY_ALLOWANCES.map((entry) => entry.join(':')).sort(),
@@ -423,7 +433,7 @@ describe('arm (c): distinctive table values (>= 100000) appear nowhere in any wa
     );
     // Every allowance is exercised: a stale entry (the constant moved, was
     // renamed, or changed value) reds here and gets deleted instead of
-    // lingering as a silent hole. The file:value keys dedupe (meters.ts
+    // lingering as a silent hole. The file:value keys dedupe (meters_format.ts
     // carries two anchored lines for one value); the ANCHOR set is pinned
     // exactly, per entry.
     expect([...used].sort()).toEqual(

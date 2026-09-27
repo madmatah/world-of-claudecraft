@@ -16,14 +16,25 @@
 
 import { t } from './i18n';
 import {
+  anchorAdjustedMeterFrame,
+  type DockSide,
   initialMeterFrame,
   METER_FRAME_LIMITS,
   type MeterFrameGeometry,
   type MeterFrameLimits,
+  oppositeDockSide,
   parseMeterFrame,
   placeMeterFrame,
+  type SnapTarget,
   serializeMeterFrame,
+  snapFrameToTargets,
+  syncDockedResize,
 } from './meters_frame_core';
+
+/** Delay for the trailing post-resize re-derive, long enough for a fullscreen
+ *  transition's window metrics to settle (mirrors MovableFrame's / the chat
+ *  box's own RESIZE_SETTLE_MS). */
+const METER_FRAME_RESIZE_SETTLE_MS = 200;
 
 export interface MeterFrameConfig {
   /** The panel being positioned. */
@@ -43,6 +54,8 @@ export interface MeterFrameConfig {
   limits?: MeterFrameLimits;
   /** Optional interaction gate for a panel that exposes an explicit lock toggle. */
   canInteract?(): boolean;
+  /** Optional extra snap targets (e.g. main damage window). */
+  externalSnapTargets?(): readonly SnapTarget[];
 }
 
 export interface MeterFrameDeps {
@@ -75,11 +88,19 @@ const DRAGGING_BODY_CLASS = 'meter-frame-dragging';
 const HANDLE_CONTROL_SELECTOR = 'button, a, input, select, textarea';
 
 export class MeterFrame {
+  private static readonly activeFrames = new Set<MeterFrame>();
+
+  static clearActiveFrames(): void {
+    MeterFrame.activeFrames.clear();
+  }
+
   private geo: MeterFrameGeometry | null = null;
   private gesture: Gesture | null = null;
-  private grip: HTMLElement | null = null;
+  private dockedPeer: { frame: MeterFrame; side: DockSide } | null = null;
   /** Where the panel lives in the HUD stack, so reset() can put it back. */
   private home: { parent: Node; next: Node | null } | null = null;
+  /** Coalesces the trailing post-resize re-derive (METER_FRAME_RESIZE_SETTLE_MS). */
+  private resizeSettleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly cfg: MeterFrameConfig,
@@ -88,6 +109,7 @@ export class MeterFrame {
 
   init(): void {
     const { el, handles } = this.cfg;
+    MeterFrame.activeFrames.add(this);
     this.home = { parent: el.parentNode as Node, next: el.nextSibling };
     // The grip is built here rather than in index.html (the chat box does the
     // same) so a detached window's markup stays a plain panel.
@@ -96,11 +118,11 @@ export class MeterFrame {
     grip.title = t('hudChrome.meters.resize');
     grip.setAttribute('aria-hidden', 'true');
     el.appendChild(grip);
-    this.grip = grip;
 
     for (const handle of handles) {
       handle.classList.add('mt-move-handle');
-      handle.setAttribute('title', t('hudChrome.meters.move'));
+      const title = handle === el ? handle.querySelector<HTMLElement>('.panel-title') : handle;
+      title?.setAttribute('title', t('hudChrome.meters.move'));
       // A container's title is inherited by every descendant that has none of
       // its own, so on the tabbed window "Dmg" / "Heal" / "Threat" would each
       // advertise a drag that pressing them does NOT perform. An empty title is
@@ -117,7 +139,17 @@ export class MeterFrame {
     this.deps.document.addEventListener('pointerup', end);
     this.deps.document.addEventListener('pointercancel', end);
     this.deps.window.addEventListener('resize', () => {
-      if (this.geo) this.apply();
+      // Once now and once after the metrics settle: a resize event fired
+      // mid-transition (an OS fullscreen exit, emulated viewports) can still
+      // observe the OLD innerWidth/Height, making the re-anchor a silent
+      // no-op with no follow-up event to correct it. The trailing pass
+      // re-derives from storage again, which is idempotent.
+      this.rederiveFromSaved();
+      clearTimeout(this.resizeSettleTimer);
+      this.resizeSettleTimer = setTimeout(
+        () => this.rederiveFromSaved(),
+        METER_FRAME_RESIZE_SETTLE_MS,
+      );
     });
 
     let saved: string | null = null;
@@ -127,12 +159,43 @@ export class MeterFrame {
       // Storage can be unavailable in private browsing modes.
     }
     this.geo = parseMeterFrame(saved);
-    if (this.geo) this.apply();
+    if (this.geo) {
+      const legacy = this.geo.vw === undefined;
+      this.apply();
+      // One-time migration, exactly as MovableFrame / the chat box do it: a
+      // pre-stamp save cannot re-anchor, so the apply above stamps the
+      // current viewport and the persist upgrades the save in place.
+      if (legacy) this.persist();
+      this.reconnectDock();
+    }
   }
 
   /** Re-clamp after the panel is shown (a box saved at another viewport). */
   refresh(): void {
-    if (this.geo) this.apply();
+    this.rederiveFromSaved();
+  }
+
+  // Re-clamp into view when the viewport changes, deriving from the SAVED box
+  // rather than the last render: leaving fullscreen clamps a panel into the
+  // smaller window, and re-clamping from the already-clamped value would make
+  // that shrink permanent. From storage, growing the window back restores the
+  // exact saved location. A mid-gesture resize is left alone (the live drag
+  // owns the geometry; its drop re-applies and persists anyway), and a panel
+  // whose box never reached storage keeps its in-memory one.
+  private rederiveFromSaved(): void {
+    if (!this.geo || this.gesture) return;
+    let savedNow: string | null = null;
+    try {
+      savedNow = this.deps.storage.getItem(this.cfg.storageKey);
+    } catch {
+      // Storage can be unavailable in private browsing modes.
+    }
+    const parsed = parseMeterFrame(savedNow);
+    // A payload without the viewport stamp cannot re-anchor honestly; the
+    // in-memory geo carries the stamp of the viewport it was last applied
+    // under (the pre-change one), so it is the better basis then.
+    if (parsed?.vw !== undefined) this.geo = parsed;
+    this.apply();
   }
 
   /** Change only the panel width, preserving a saved position and height. */
@@ -163,14 +226,32 @@ export class MeterFrame {
     this.persist();
   }
 
+  restoreSavedLayout(): void {
+    this.gesture = null;
+    this.deps.document.body.classList.remove(DRAGGING_BODY_CLASS);
+    this.clearAppliedGeometry();
+    try {
+      this.geo = parseMeterFrame(this.deps.storage.getItem(this.cfg.storageKey));
+    } catch {
+      this.geo = null;
+    }
+    this.apply();
+  }
+
   /** Drop the custom box and return the panel to its stylesheet anchor. */
   reset(): void {
+    this.clearDock();
+    MeterFrame.activeFrames.delete(this);
     this.geo = null;
     try {
       this.deps.storage.removeItem(this.cfg.storageKey);
     } catch {
       // Storage can be unavailable in private browsing modes.
     }
+    this.clearAppliedGeometry();
+  }
+
+  private clearAppliedGeometry(): void {
     const el = this.cfg.el;
     const wasOpen = el.style.display === 'block' || el.style.display === 'flex';
     const { style } = el;
@@ -180,9 +261,69 @@ export class MeterFrame {
     el.classList.remove('mt-framed');
     // Back into the HUD stack it came from, at its original slot.
     if (this.home && el.parentNode !== this.home.parent) {
-      this.home.parent.insertBefore(el, this.home.next);
+      this.home.parent.insertBefore(
+        el,
+        this.home.next?.parentNode === this.home.parent ? this.home.next : null,
+      );
     }
     if (wasOpen) style.display = 'block';
+  }
+
+  get storageKey(): string {
+    return this.cfg.storageKey;
+  }
+
+  get geometry(): MeterFrameGeometry | null {
+    return this.geo ? { ...this.geo } : null;
+  }
+
+  get hasCustomGeometry(): boolean {
+    return this.geo !== null;
+  }
+
+  getDockedPeer(): { frame: MeterFrame; side: DockSide } | null {
+    return this.dockedPeer;
+  }
+
+  clearDock(): void {
+    if (this.dockedPeer) {
+      const peer = this.dockedPeer.frame;
+      this.dockedPeer = null;
+      if (peer.dockedPeer?.frame === this) {
+        peer.dockedPeer = null;
+      }
+    }
+  }
+
+  updateGeometry(geo: MeterFrameGeometry): void {
+    if (this.blocked()) return;
+    this.geo = { ...geo };
+    this.apply();
+    this.persist();
+  }
+
+  placeAt(geo: MeterFrameGeometry): void {
+    if (this.blocked()) return;
+    this.geo = { ...geo };
+    this.apply();
+    this.persist();
+  }
+
+  private reconnectDock(): void {
+    if (!this.geo) return;
+    for (const peer of MeterFrame.activeFrames) {
+      if (!peer.cfg.el.isConnected) {
+        MeterFrame.activeFrames.delete(peer);
+        continue;
+      }
+      if (peer === this || !peer.geo) continue;
+      const snap = snapFrameToTargets(this.geo, [{ id: peer.storageKey, geo: peer.geo }], 2);
+      if (snap.dockedTo) {
+        this.dockedPeer = { frame: peer, side: oppositeDockSide(snap.dockedTo.side) };
+        peer.dockedPeer = { frame: this, side: snap.dockedTo.side };
+        break;
+      }
+    }
   }
 
   /**
@@ -266,19 +407,57 @@ export class MeterFrame {
     const gesture = this.gesture;
     if (!gesture || event.pointerId !== gesture.pointerId || !this.geo) return;
     if (gesture.kind === 'move') {
-      this.geo = {
+      const rawGeo: MeterFrameGeometry = {
         ...this.geo,
         left: event.clientX - gesture.grabX,
         top: event.clientY - gesture.grabY,
       };
+
+      const targets: SnapTarget[] = [];
+      for (const peer of MeterFrame.activeFrames) {
+        if (!peer.cfg.el.isConnected) {
+          MeterFrame.activeFrames.delete(peer);
+          continue;
+        }
+        if (peer !== this && peer.geo) {
+          targets.push({ id: peer.storageKey, geo: peer.geo });
+        }
+      }
+      if (this.cfg.externalSnapTargets) {
+        for (const ext of this.cfg.externalSnapTargets()) {
+          targets.push(ext);
+        }
+      }
+
+      const snap = snapFrameToTargets(rawGeo, targets);
+      this.geo = snap.geo;
+
+      if (snap.dockedTo) {
+        const peer = [...MeterFrame.activeFrames].find(
+          (f) => f.storageKey === snap.dockedTo?.id && f.cfg.el.isConnected,
+        );
+        if (peer) {
+          this.dockedPeer = { frame: peer, side: oppositeDockSide(snap.dockedTo.side) };
+          peer.dockedPeer = { frame: this, side: snap.dockedTo.side };
+        }
+      } else {
+        this.clearDock();
+      }
+
+      this.apply();
     } else {
       this.geo = {
         ...this.geo,
         width: gesture.startW + (event.clientX - gesture.startX),
         height: gesture.startH + (event.clientY - gesture.startY),
       };
+      this.apply();
+
+      if (this.dockedPeer?.frame.geo) {
+        const synced = syncDockedResize(this.geo, this.dockedPeer.frame.geo, this.dockedPeer.side);
+        this.dockedPeer.frame.updateGeometry(synced);
+      }
     }
-    this.apply();
   }
 
   private onPointerEnd(event: PointerEvent): void {
@@ -286,17 +465,24 @@ export class MeterFrame {
     this.gesture = null;
     this.deps.document.body.classList.remove(DRAGGING_BODY_CLASS);
     this.persist();
+    if (this.dockedPeer) {
+      this.dockedPeer.frame.persist();
+    }
   }
 
   private apply(): void {
     if (!this.geo || this.blocked()) return;
+    const viewport = { w: this.deps.window.innerWidth, h: this.deps.window.innerHeight };
+    // A box saved under a different viewport re-anchors per axis first, so a
+    // bottom-parked panel rides the bottom edge across a fullscreen exit; the
+    // applied geometry is stamped with the CURRENT viewport for the next save.
     const placement = placeMeterFrame(
-      this.geo,
-      { w: this.deps.window.innerWidth, h: this.deps.window.innerHeight },
+      anchorAdjustedMeterFrame(this.geo, viewport),
+      viewport,
       this.deps.uiScale(),
       this.cfg.limits ?? METER_FRAME_LIMITS,
     );
-    this.geo = placement.geo;
+    this.geo = { ...placement.geo, vw: viewport.w, vh: viewport.h };
     const { css } = placement;
     const el = this.cfg.el;
     // left/top are viewport coordinates, so the panel must hang off a

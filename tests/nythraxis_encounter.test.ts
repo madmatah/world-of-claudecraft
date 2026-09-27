@@ -11,7 +11,7 @@ import * as nythraxis from '../src/sim/encounters/nythraxis';
 import { createMob } from '../src/sim/entity';
 import { Sim } from '../src/sim/sim';
 import type { SimContext } from '../src/sim/sim_context';
-import { dist2d, type Entity, NYTHRAXIS_BOSS_ID } from '../src/sim/types';
+import { dist2d, type Entity, NYTHRAXIS_BOSS_ID, NYTHRAXIS_ROOM_RADIUS } from '../src/sim/types';
 import { groundHeight } from '../src/sim/world';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
@@ -96,13 +96,26 @@ describe('Nythraxis encounter module (N1)', () => {
   });
 
   it('transitions to phase two at 70%: room War Stomp stun + Aldric + lit wardstones', () => {
-    const { ctx, boss, tank } = setup();
+    const { sim, ctx, boss, tank } = setup();
     boss.hp = Math.floor(boss.maxHp * 0.69);
     nythraxis.updateNythraxisEncounter(ctx, boss);
     expect(boss.nythraxis?.phase).toBe('transition');
     expect(tank.auras.find((a) => a.id === 'nythraxis_transition_stun')).toMatchObject({
       unbreakableControl: true,
     });
+    // The transition slam carries its VFX routing id: with none, the render
+    // side could never resolve this cue to a spec (see the constant's header
+    // for why it is not the display string 'Shuddering Stomp').
+    expect(sim.events).toContainEqual(
+      expect.objectContaining({
+        type: 'spellfx',
+        sourceId: boss.id,
+        targetId: boss.id,
+        school: 'physical',
+        fx: 'nova',
+        ability: nythraxis.NYTHRAXIS_SHUDDERING_STOMP_CAST_ID,
+      }),
+    );
     const aldric = [...ctx.entities.values()].find(
       (e) => e.templateId === 'brother_aldric_raid' && !e.dead,
     );
@@ -554,31 +567,125 @@ describe('Nythraxis encounter module (N1)', () => {
     expect(boss.auras.some((a) => a.id === 'nythraxis_deathless_stun')).toBe(true);
   });
 
-  it('heroic Dread Curse stacks on the active tank and resets on a tank swap', () => {
-    const { ctx, boss, tank, dps } = setup({ difficulty: 'heroic' });
-    const st = nythraxis.initNythraxisEncounter(boss);
-    st.phase = 1;
-    st.dreadCurseTimer = 0.01;
-    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
-    let curse = tank.auras.find((a) => a.id === 'nythraxis_dread_curse');
-    expect(curse?.stacks).toBe(1);
-    expect(curse?.value).toBeCloseTo(0.1);
+  it('Dread Curse stacks on the aggro holder on BOTH difficulties and survives a tank swap', () => {
+    for (const difficulty of ['normal', 'heroic'] as const) {
+      const { sim, ctx, boss, tank, dps } = setup({ difficulty });
+      const st = nythraxis.initNythraxisEncounter(boss);
+      st.phase = 1;
+      const perStack = difficulty === 'heroic' ? 0.45 : 0.35;
+      st.dreadCurseTimer = 0.01;
+      nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+      let curse = tank.auras.find((a) => a.id === 'nythraxis_dread_curse');
+      expect(curse?.stacks, difficulty).toBe(1);
+      expect(curse?.value, difficulty).toBeCloseTo(perStack);
+      expect(curse?.kind, difficulty).toBe('vuln_source');
+      expect(curse?.encounterOwned, difficulty).toBe(true);
+      expect(st.dreadCurseTimer, difficulty).toBe(12);
 
-    st.dreadCurseTimer = 0.01;
-    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
-    curse = tank.auras.find((a) => a.id === 'nythraxis_dread_curse');
-    expect(curse?.stacks).toBe(2);
-    expect(curse?.value).toBeCloseTo(0.2);
+      st.dreadCurseTimer = 0.01;
+      nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+      curse = tank.auras.find((a) => a.id === 'nythraxis_dread_curse');
+      expect(curse?.stacks, difficulty).toBe(2);
+      expect(curse?.value, difficulty).toBeCloseTo(perStack * 2);
+      // The second stack is the swap point: the raid gets the callout once.
+      const swapCalls = (sim.events as Array<{ type: string; call?: string }>).filter(
+        (e) => e.type === 'nythraxisCallout' && e.call === 'dreadCurseSwap',
+      );
+      expect(swapCalls.length, difficulty).toBeGreaterThan(0);
 
-    boss.aggroTargetId = dps[0].id;
-    st.dreadCurseTimer = 0.01;
-    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
-    const swapped = dps[0].auras.find((a) => a.id === 'nythraxis_dread_curse');
-    expect(swapped?.stacks).toBe(1);
-    expect(swapped?.value).toBeCloseTo(0.1);
+      // The swap: the new tank starts at zero while the old tank KEEPS his
+      // stacks (they expire on their own), which is what forces the rotation.
+      boss.aggroTargetId = dps[0].id;
+      teleport(sim, dps[0], boss.pos.x, boss.pos.z - 4, boss.pos.y);
+      st.dreadCurseTimer = 0.01;
+      nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+      const swapped = dps[0].auras.find((a) => a.id === 'nythraxis_dread_curse');
+      expect(swapped?.stacks, difficulty).toBe(1);
+      expect(tank.auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks, difficulty).toBe(2);
+    }
   });
 
-  it('heroic wardstone interrupt leads to a three second add summon channel', () => {
+  it('Dread Curse swap holds: a decoy taunt cannot hand the boss back to a still-cursed tank', () => {
+    const { sim, ctx, boss, tank, dps } = setup();
+    const st = nythraxis.initNythraxisEncounter(boss);
+    st.phase = 1;
+
+    // First application lands on the tank, who has held aggro from the start.
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    const tankCurse = tank.auras.find((a) => a.id === 'nythraxis_dread_curse');
+    expect(tankCurse?.stacks).toBe(1);
+    const tankRemaining = tankCurse?.remaining;
+
+    // A decoy (any taunt-capable raider, not the assigned off tank) actually
+    // takes the boss for a pass, then the tank immediately taunts back.
+    // Into melee reach first: setup() parks dps back at range, and a taunt
+    // does not by itself walk anyone in.
+    teleport(sim, dps[0], boss.pos.x, boss.pos.z - 4, boss.pos.y);
+    ctx.applyTaunt(dps[0], boss);
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(boss.aggroTargetId).toBe(dps[0].id);
+    ctx.applyTaunt(tank, boss);
+    expect(boss.aggroTargetId).toBe(tank.id); // the taunt itself always lands...
+
+    // ...but the swap sticks: the tank still carries a live stack, so the
+    // very next Dread Curse pass refuses the re-taunt and settles the boss
+    // back on the decoy, who takes the next scheduled application instead.
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(boss.aggroTargetId).toBe(dps[0].id);
+    expect(dps[0].auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks).toBe(1);
+
+    // The tank's original stack is left completely alone: nothing refreshed
+    // or reapplied it, so it is free to fall off on its own clock rather than
+    // reading to the raid as the debuff "resetting".
+    expect(tank.auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks).toBe(1);
+    expect(tank.auras.find((a) => a.id === 'nythraxis_dread_curse')?.remaining).toBe(tankRemaining);
+
+    // A second application on the decoy reaches the swap point in turn: the
+    // boss now genuinely depends on them, exactly like it did the tank.
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(dps[0].auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks).toBe(2);
+  });
+
+  it('Dread Curse swap ignores a prior clean holder who has left the room', () => {
+    const { sim, ctx, boss, tank, dps } = setup();
+    const st = nythraxis.initNythraxisEncounter(boss);
+    st.phase = 1;
+
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(tank.auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks).toBe(1);
+
+    teleport(sim, dps[0], boss.pos.x, boss.pos.z - 4, boss.pos.y);
+    ctx.applyTaunt(dps[0], boss);
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(st.dreadCurseHolderId).toBe(dps[0].id);
+
+    teleport(sim, dps[0], boss.spawnPos.x + NYTHRAXIS_ROOM_RADIUS + 5, boss.spawnPos.z, boss.pos.y);
+    ctx.applyTaunt(tank, boss);
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+
+    expect(boss.aggroTargetId).toBe(tank.id);
+    expect(st.dreadCurseHolderId).toBe(tank.id);
+    expect(tank.auras.find((a) => a.id === 'nythraxis_dread_curse')?.stacks).toBe(2);
+    expect(dps[0].auras.some((a) => a.id === 'nythraxis_dread_curse')).toBe(false);
+  });
+
+  it('Dread Curse holds while the aggro holder is out of melee reach', () => {
+    const { sim, ctx, boss, tank } = setup();
+    const st = nythraxis.initNythraxisEncounter(boss);
+    st.phase = 1;
+    teleport(sim, tank, boss.pos.x, boss.pos.z - 30, boss.pos.y);
+    st.dreadCurseTimer = 0.01;
+    nythraxis.updateNythraxisDreadCurse(ctx, boss, st);
+    expect(tank.auras.some((a) => a.id === 'nythraxis_dread_curse')).toBe(false);
+    expect(st.dreadCurseTimer).toBe(1);
+  });
+
+  it('heroic wardstone interrupt raises no court while the redo fields no adds', () => {
     const { sim, ctx, boss, dps } = setup({ difficulty: 'heroic' });
     const st = nythraxis.initNythraxisEncounter(boss);
     st.phase = 2;
@@ -600,12 +707,20 @@ describe('Nythraxis encounter module (N1)', () => {
     nythraxis.updateNythraxisDeathlessRage(ctx, boss, st);
     expect(st.deathlessStunRemaining).toBeGreaterThan(0);
 
+    // Owner playtest call 2026-09-04 (NYTHRAXIS_ADDS_ENABLED in types.ts): the
+    // encounter loop never starts the court summon behind the interrupt stun.
     st.deathlessStunRemaining = 0.01;
+    const before = boss.summonedIds.length;
     nythraxis.updateNythraxisEncounter(ctx, boss);
+    expect(st.heroicSummonChannelRemaining ?? 0).toBe(0);
+    expect(boss.castingAbility).not.toBe('nythraxis_heroic_summon');
+    expect(boss.summonedIds).toHaveLength(before);
+
+    // The three second channel itself stays authored for the day the switch
+    // flips back: started directly, it still resolves into the three court members.
+    nythraxis.startNythraxisHeroicSummon(ctx, boss, st);
     expect(st.heroicSummonChannelRemaining).toBeGreaterThan(0);
     expect(boss.castingAbility).toBe('nythraxis_heroic_summon');
-
-    const before = boss.summonedIds.length;
     for (let i = 0; i < 20 * 3 + 1; i++) nythraxis.updateNythraxisHeroicSummon(ctx, boss, st);
     const spawned = boss.summonedIds
       .slice(before)

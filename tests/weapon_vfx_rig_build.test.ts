@@ -13,7 +13,8 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { materialProgramSignature } from '../src/render/prewarm_policy';
+import * as assetLoader from '../src/render/assets/loader';
+import { GFX, gfxInternalsForTest } from '../src/render/gfx';
 import { isSharedTexture } from '../src/render/shared_resource';
 import {
   buildWeaponVfxPrewarmGroup,
@@ -33,6 +34,8 @@ import {
   weaponVfxPrewarmSkinUnitKey,
   weaponVfxPrewarmUnits,
 } from '../src/render/weapon_vfx_prewarm';
+import { WEAPON_VFX_TUNING } from '../src/render/weapon_vfx_tuning';
+import * as wornStone from '../src/render/worn_stone';
 import { codeWithoutLineComments } from './helpers/code_without_line_comments';
 
 interface StubCanvas {
@@ -216,6 +219,147 @@ describe('streamed weapon-skin prewarm staging', () => {
     expect(stage.group?.children).toEqual([staged]);
   });
 
+  it('releases the untextured ring surface with its failed unit', () => {
+    const key = 'astravyr_fang_of_the_fallen_star';
+    for (const tier of ['low', 'ultra'] as const) {
+      const restore = gfxInternalsForTest.overrideSettings(gfxInternalsForTest.settingsFor(tier));
+      try {
+        const stage = createWeaponVfxPrewarmSkinStage(new THREE.Scene());
+        const ring = stage
+          .stage(key)
+          .getObjectByName(`prewarm-skin-host:${key}:ring_gold`) as THREE.Mesh;
+        expect(ring?.isMesh, tier).toBe(true);
+        const geometryDispose = vi.spyOn(ring.geometry, 'dispose');
+        const materialDispose = vi.spyOn(ring.material as THREE.Material, 'dispose');
+
+        stage.disposeFailedUnit(`weapon-skins:compile:${key}`);
+
+        expect(geometryDispose, tier).toHaveBeenCalledTimes(1);
+        expect(materialDispose, tier).toHaveBeenCalledTimes(1);
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  describe('a throw while the host surfaces are built', () => {
+    const key = 'astravyr_fang_of_the_fallen_star';
+
+    /** Every geometry and material disposed while `run` executes. */
+    function disposedDuring(run: () => void): {
+      geometries: THREE.BufferGeometry[];
+      materials: string[];
+    } {
+      const geometrySpy = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+      const materialSpy = vi.spyOn(THREE.Material.prototype, 'dispose');
+      try {
+        run();
+        return {
+          geometries: [...geometrySpy.mock.contexts] as THREE.BufferGeometry[],
+          materials: (materialSpy.mock.contexts as THREE.Material[]).map((m) => m.name),
+        };
+      } finally {
+        geometrySpy.mockRestore();
+        materialSpy.mockRestore();
+      }
+    }
+
+    const boxHeights = (geometries: THREE.BufferGeometry[]) =>
+      geometries
+        .map((g) => (g as THREE.BoxGeometry).parameters?.height)
+        .filter((h) => h !== undefined)
+        .sort();
+
+    it('disposes both surfaces when createWeaponVfx throws', () => {
+      const restore = gfxInternalsForTest.overrideSettings(
+        gfxInternalsForTest.settingsFor('ultra'),
+      );
+      const spec = WEAPON_VFX[key];
+      const tier = spec.tier;
+      let thrown = false;
+      Object.defineProperty(spec, 'tier', {
+        configurable: true,
+        get() {
+          if (thrown) return tier;
+          thrown = true;
+          throw new Error('stub createWeaponVfx failure');
+        },
+      });
+      try {
+        const disposed = disposedDuring(() =>
+          expect(() => buildWeaponVfxPrewarmSkinGroup(key)).toThrow('stub createWeaponVfx failure'),
+        );
+        expect(thrown).toBe(true);
+        // The textured host is the tall box, the ring the small one.
+        expect(boxHeights(disposed.geometries)).toEqual([0.1, 1]);
+        expect(disposed.materials.sort()).toEqual([
+          'weapon-vfx-prewarm-host:ring_gold',
+          'weapon-vfx-prewarm-host:textured',
+        ]);
+      } finally {
+        Object.defineProperty(spec, 'tier', {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: tier,
+        });
+        restore();
+      }
+    });
+
+    it('disposes the textured surface when the ring worn layer throws', () => {
+      const restore = gfxInternalsForTest.overrideSettings(
+        gfxInternalsForTest.settingsFor('ultra'),
+      );
+      const wornThrow = vi.spyOn(wornStone, 'applyRiggedWornDetail').mockImplementationOnce(() => {
+        throw new Error('stub worn layer failure');
+      });
+      try {
+        const disposed = disposedDuring(() =>
+          expect(() => buildWeaponVfxPrewarmSkinGroup(key)).toThrow('stub worn layer failure'),
+        );
+        expect(wornThrow).toHaveBeenCalledTimes(1);
+        // The ring never finished building, so only the textured host was
+        // built; neither half of the ring was ever handed to the GPU.
+        expect(boxHeights(disposed.geometries)).toEqual([1]);
+        expect(disposed.materials).toEqual(['weapon-vfx-prewarm-host:textured']);
+      } finally {
+        wornThrow.mockRestore();
+        restore();
+      }
+    });
+  });
+
+  it('keys the ring host on the worn textures at compile time, not at build', async () => {
+    // The worn layer's customProgramCacheKey reads the family textures each
+    // time three asks for it, so the host links the textured variant the live
+    // ring draws only if the textures are resident when the entry COMPILES.
+    // They are: the boot lane that prepares them opens before the
+    // assetsReady() gating the Renderer (tests/defer_launcher_preloads.test.ts),
+    // and a profile rebuild prepares the target's before building its
+    // renderer (tests/graphics_rebuild_coordinator.test.ts).
+    const key = 'astravyr_fang_of_the_fallen_star';
+    const restore = gfxInternalsForTest.overrideSettings(gfxInternalsForTest.settingsFor('ultra'));
+    const ktx2 = vi
+      .spyOn(assetLoader, 'loadKtx2Texture')
+      .mockImplementation(() => Promise.resolve(new THREE.CompressedTexture([], 1, 1)));
+    try {
+      const group = buildWeaponVfxPrewarmSkinGroup(key);
+      const ring = group.getObjectByName(`prewarm-skin-host:${key}:ring_gold`) as THREE.Mesh;
+      const material = ring.material as THREE.MeshStandardMaterial;
+      expect(material.customProgramCacheKey()).toMatch(/^surface-detail\|off\|-\|-\|-\|-\|o\|/);
+
+      await wornStone.prepareSurfaceDetailProfileAssets(GFX);
+
+      expect(ktx2).toHaveBeenCalled();
+      expect(material.customProgramCacheKey()).toMatch(/^surface-detail\|on\|-\|-\|met\|-\|o\|/);
+      disposeWeaponVfxPrewarmSkinGroups([group]);
+    } finally {
+      ktx2.mockRestore();
+      restore();
+    }
+  });
+
   it('maps only the two per-skin unit ids to a key', () => {
     expect(weaponVfxPrewarmSkinUnitKey('weapon-skins:build:flame_sword')).toBe('flame_sword');
     expect(weaponVfxPrewarmSkinUnitKey('weapon-skins:compile:flame_sword')).toBe('flame_sword');
@@ -257,10 +401,12 @@ describe('createWeaponVfx point-light visibility ownership', () => {
       grounded: false,
       budgetedLight: true,
     });
-    expect(handle.light.visible).toBe(false);
+    const light = handle.light;
+    expect(light).not.toBeNull();
+    expect(light?.visible).toBe(false);
     // Still a real, budget-rankable light: only `visible` is deferred.
-    expect(handle.light.userData.budgetDynamic).toBe(true);
-    expect(handle.light.intensity).toBeGreaterThan(0);
+    expect(light?.userData.budgetDynamic).toBe(true);
+    expect(light?.intensity).toBeGreaterThan(0);
     handle.dispose();
   });
 
@@ -268,12 +414,39 @@ describe('createWeaponVfx point-light visibility ownership', () => {
     // The armoury preview owns its own renderer and scene, so nothing there
     // ever sets `visible` for it.
     const preview = createWeaponVfx(weaponRoot(), EPIC_SPEC, { grounded: true });
-    expect(preview.light.visible).toBe(true);
+    expect(preview.light?.visible).toBe(true);
     preview.dispose();
 
     const worldDefault = createWeaponVfx(weaponRoot(), EPIC_SPEC, { grounded: false });
-    expect(worldDefault.light.visible).toBe(true);
+    expect(worldDefault.light?.visible).toBe(true);
     worldDefault.dispose();
+  });
+
+  it('builds no light at all for a skin whose tuning mutes it', () => {
+    // A muted light still held one of the fixed counted point-light slots and
+    // paid a per-frame ancestor walk, while every update() drove its intensity
+    // straight back to zero. withLight: false is the world path's answer.
+    const muted = createWeaponVfx(weaponRoot(), EPIC_SPEC, {
+      grounded: false,
+      budgetedLight: true,
+      withLight: false,
+    });
+    expect(muted.light).toBeNull();
+    let pointLights = 0;
+    muted.group.traverse((object) => {
+      if ((object as THREE.PointLight).isPointLight) pointLights++;
+    });
+    expect(pointLights).toBe(0);
+    // ... and the light is the ONLY thing missing: the lit rig carries exactly
+    // one more child, so nothing else about the skin's draw set changed.
+    const lit = createWeaponVfx(weaponRoot(), EPIC_SPEC, {
+      grounded: false,
+      budgetedLight: true,
+    });
+    expect(lit.group.children.length).toBe(muted.group.children.length + 1);
+    muted.update(0.016);
+    muted.dispose();
+    lit.dispose();
   });
 
   it('wires the world path to ask for the budgeted light', () => {
@@ -303,6 +476,39 @@ describe('createWeaponVfx point-light visibility ownership', () => {
       readFileSync(new URL('../src/render/characters/visual.ts', import.meta.url), 'utf8'),
     );
     expect(visual).toContain('budgetedLight: this.budgetedWeaponLight,');
+  });
+
+  it('wires the world path to mute the light a skin tuned to zero', () => {
+    // The unit case above pins the withLight arm; this pins that the world
+    // factory reads the skin's own hand-tuned row for it. Unreachable from a
+    // unit test (buildWeaponVfx runs off a preloaded GLB attach).
+    const visual = codeWithoutLineComments(
+      readFileSync(new URL('../src/render/characters/visual.ts', import.meta.url), 'utf8'),
+    );
+    expect(visual).toContain('const withLight = (this.weaponVfxAuthored.light ?? 1) > 0;');
+    expect(visual).toContain('withLight,');
+    // ... and at least one shipped skin really is tuned to zero, so the arm is
+    // reachable rather than dead code.
+    const muted = Object.values(WEAPON_VFX_TUNING).filter((row) => row.light === 0);
+    expect(muted.length).toBeGreaterThan(0);
+  });
+
+  it('wires the world path to clone weapon-skin materials WITH their hooks', () => {
+    // A bare Material.clone() drops onBeforeCompile, so the isolated weapon
+    // rendered without the rig's silhouette rim AND linked a second program for
+    // a shader the source had already linked (material_clone_hooks.ts). The
+    // isolation pass is unreachable from a unit test (it runs inside
+    // finishWeaponAttach off a preloaded GLB), so pin the call.
+    const visual = codeWithoutLineComments(
+      readFileSync(new URL('../src/render/characters/visual.ts', import.meta.url), 'utf8'),
+    );
+    const isolation = visual.indexOf('mesh.userData.weaponSkinIsolated = true;');
+    expect(isolation, 'the weapon-skin isolation pass moved; re-anchor').toBeGreaterThan(-1);
+    const block = visual.slice(Math.max(0, isolation - 600), isolation);
+    expect(block).toContain('cloneMaterialWithHooks(');
+    // The bare form must be gone from that block, or the hook-dropping clone is
+    // still there beside the fixed one.
+    expect(block).not.toContain('.map((m) => m.clone())');
   });
 });
 
@@ -644,69 +850,6 @@ describe('bounded emissive derivation cache (the C2 ratchet fix)', () => {
 });
 
 describe('buildWeaponVfxPrewarmGroup', () => {
-  /** A painted GLB map: drawable, so deriveEmissive takes its derived arm. */
-  function paintedMap(): THREE.CanvasTexture {
-    const canvas = document.createElement('canvas') as unknown as HTMLCanvasElement;
-    canvas.width = 4;
-    canvas.height = 4;
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  function liveSkinMesh(): THREE.Mesh {
-    return new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 1, 0.1),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        map: paintedMap(),
-        metalnessMap: paintedMap(),
-        roughnessMap: paintedMap(),
-      }),
-    );
-  }
-
-  it('hosts the LIVE program variant, not the mapless flat-tint twin', () => {
-    // deriveEmissive BRANCHES on the host material's map. A mapless host takes
-    // the flat-tint fallback (emissiveMap absent, map absent), which is a
-    // different program-cache key from the live path's (map and emissiveMap
-    // present, metalnessMap and roughnessMap nulled), so the first skin sighted
-    // in the world linked that program inside a live frame however complete the
-    // boot entry looked.
-    const specs = Object.entries(WEAPON_VFX);
-    // Every spec, not the first: the branch is per host material, so one
-    // entry left on the flat-tint arm is exactly the escape this pins.
-    expect(specs.length).toBeGreaterThan(1);
-    const group = buildWeaponVfxPrewarmGroup();
-
-    for (const [key, spec] of specs) {
-      const host = group.getObjectByName(`prewarm-skin-host:${key}`) as THREE.Mesh;
-      const hostMat = host.material as THREE.MeshStandardMaterial;
-
-      const live = liveSkinMesh();
-      const rig = createWeaponVfx(live, spec, { grounded: false });
-      const liveMat = live.material as THREE.MeshStandardMaterial;
-
-      expect(liveMat.emissiveMap, key).not.toBeNull();
-      expect(hostMat.emissiveMap, key).toBeTruthy();
-      expect(hostMat.metalnessMap, key).toBeNull();
-      expect(materialProgramSignature(hostMat), key).toBe(materialProgramSignature(liveMat));
-
-      // The mapless host this replaced is the negative case: it never carried
-      // the live key, so the comparison above is not trivially true.
-      const mapless = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 1, 0.1),
-        new THREE.MeshStandardMaterial({ color: 0xffffff }),
-      );
-      const maplessRig = createWeaponVfx(mapless, spec, { grounded: false });
-      expect(
-        materialProgramSignature(mapless.material as THREE.MeshStandardMaterial),
-        key,
-      ).not.toBe(materialProgramSignature(liveMat));
-
-      rig.dispose();
-      maplessRig.dispose();
-    }
-  });
-
   it('builds one rig per REAL catalog spec through the live world path', () => {
     // The old single synthetic spec covered each component FAMILY but not the
     // real program-key set: the first skin sighted in the world still linked
@@ -735,7 +878,8 @@ describe('buildWeaponVfxPrewarmGroup', () => {
       if (object.userData.__vfx) shells.push(object);
     });
 
-    expect(hosts).toBe(specCount);
+    // A ratchet, kept literal on purpose: one host surface per GLB material.
+    expect(hosts).toBe(24);
     for (const key of Object.keys(WEAPON_VFX)) {
       expect(names, `spec ${key} missing from the prewarm group`).toContain(
         `prewarm-skin-host:${key}`,

@@ -154,10 +154,13 @@ describe('selfHotPctMax effect (effect_dispatch)', () => {
 
 describe('offhand surfacing (paperdoll, player card, chat readout)', () => {
   it('shows the offhand cell on the character sheet paperdoll', async () => {
-    // Showcase redesign: the offhand moved to the LEFT column (under Main Hand) to
-    // balance the paperdoll 6/6. It is still surfaced on the sheet, now on the left.
-    const { PAPERDOLL_LEFT_SLOTS, PAPERDOLL_RIGHT_SLOTS } = await import('../src/ui/char_view');
-    expect(PAPERDOLL_LEFT_SLOTS).toContain('offhand');
+    // Showcase redesign: the offhand sits in the weapons row under the model stage
+    // beside the main hand. It is still surfaced on the sheet, in neither column.
+    const { PAPERDOLL_LEFT_SLOTS, PAPERDOLL_RIGHT_SLOTS, PAPERDOLL_WEAPON_SLOTS } = await import(
+      '../src/ui/char_view'
+    );
+    expect(PAPERDOLL_WEAPON_SLOTS).toContain('offhand');
+    expect(PAPERDOLL_LEFT_SLOTS).not.toContain('offhand');
     expect(PAPERDOLL_RIGHT_SLOTS).not.toContain('offhand');
   });
 
@@ -211,6 +214,7 @@ describe('parry stat surfacing (stat_tooltip + warrior_hit_table)', () => {
   it('builds the parry tooltip cell as a percent with a Strength source line', async () => {
     const { buildStatTooltip, buildStatSources } = await import('../src/ui/stat_tooltip');
     const { warriorParryChance } = await import('../src/sim/combat/warrior_hit_table');
+    const { spellCritChance } = await import('../src/sim/combat/spell_combat');
     const sim = new Sim({ seed: 1234, playerClass: 'warrior' });
     const p = sim.player;
     const input = {
@@ -219,7 +223,9 @@ describe('parry stat surfacing (stat_tooltip + warrior_hit_table)', () => {
       level: p.level,
       attackPower: p.attackPower,
       spellPower: p.spellPower,
+      healPower: p.healPower,
       critChance: p.critChance,
+      spellCritChance: spellCritChance(p),
       dodgeChance: p.dodgeChance,
       critRating: p.critRating,
       hasteRating: p.hasteRating,

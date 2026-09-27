@@ -12,11 +12,18 @@
 // domain to get a rectangle clamped. The two stay independent on purpose; if a
 // third movable panel appears, THAT is the moment to lift one shared core.
 
+import { anchorAxis } from './target_frame_pos';
+
 export interface MeterFrameGeometry {
   left: number;
   top: number;
   width: number;
   height: number;
+  /** The visual viewport the box was saved under (both or neither), so a
+   *  later apply can re-anchor it when the window size changes (fullscreen
+   *  exit): see anchorAdjustedMeterFrame. */
+  vw?: number;
+  vh?: number;
 }
 
 export interface MeterFrameLimits {
@@ -124,12 +131,25 @@ export function placeMeterFrame(
 }
 
 export function serializeMeterFrame(geo: MeterFrameGeometry): string {
-  return JSON.stringify({ left: geo.left, top: geo.top, width: geo.width, height: geo.height });
+  const out: Record<string, number> = {
+    left: geo.left,
+    top: geo.top,
+    width: geo.width,
+    height: geo.height,
+  };
+  // The viewport the box was saved under, so a later apply can re-anchor it
+  // when the window size changes (anchorAdjustedMeterFrame).
+  if (geo.vw !== undefined && geo.vh !== undefined) {
+    out.vw = Math.round(geo.vw);
+    out.vh = Math.round(geo.vh);
+  }
+  return JSON.stringify(out);
 }
 
 /**
  * Parse persisted geometry, returning null for missing or corrupt data so the
- * caller falls back to the CSS default anchor. Every field must be finite.
+ * caller falls back to the CSS default anchor. Every field must be finite;
+ * the saved-viewport pair is optional (older payloads), both fields or neither.
  */
 export function parseMeterFrame(raw: string | null | undefined): MeterFrameGeometry | null {
   if (!raw) return null;
@@ -138,10 +158,42 @@ export function parseMeterFrame(raw: string | null | undefined): MeterFrameGeome
     const nums = ['left', 'top', 'width', 'height'].map((key) => parsed[key]);
     if (nums.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return null;
     const [left, top, width, height] = nums as number[];
-    return { left, top, width, height };
+    const out: MeterFrameGeometry = { left, top, width, height };
+    if (
+      typeof parsed.vw === 'number' &&
+      Number.isFinite(parsed.vw) &&
+      parsed.vw > 0 &&
+      typeof parsed.vh === 'number' &&
+      Number.isFinite(parsed.vh) &&
+      parsed.vh > 0
+    ) {
+      out.vw = parsed.vw;
+      out.vh = parsed.vh;
+    }
+    return out;
   } catch {
     return null;
   }
+}
+
+/** Re-anchor a saved panel box to the CURRENT viewport, exactly as
+ *  anchorAdjustedPos does for the movable frames and anchorAdjustedChatBox
+ *  does for the chat box (the shared anchorAxis rule: each axis keeps its
+ *  distance to whichever of start / center / end it sat closest to when
+ *  saved). A box saved by an older build carries no viewport and returns
+ *  unchanged. */
+export function anchorAdjustedMeterFrame(
+  geo: MeterFrameGeometry,
+  viewport: { w: number; h: number },
+): MeterFrameGeometry {
+  const { vw, vh } = geo;
+  if (vw === undefined || vh === undefined) return geo;
+  if (vw === viewport.w && vh === viewport.h) return geo;
+  return {
+    ...geo,
+    left: anchorAxis(geo.left, geo.width, vw, viewport.w),
+    top: anchorAxis(geo.top, geo.height, vh, viewport.h),
+  };
 }
 
 /**
@@ -158,4 +210,148 @@ export function initialMeterFrame(
   return usable
     ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
     : { ...fallback };
+}
+
+export type DockSide = 'right' | 'left' | 'bottom' | 'top';
+
+export interface SnapTarget {
+  id: string;
+  geo: MeterFrameGeometry;
+}
+
+export interface SnapResult {
+  geo: MeterFrameGeometry;
+  dockedTo: { id: string; side: DockSide } | null;
+}
+
+export const SNAP_THRESHOLD = 18;
+
+export function oppositeDockSide(side: DockSide): DockSide {
+  switch (side) {
+    case 'right':
+      return 'left';
+    case 'left':
+      return 'right';
+    case 'bottom':
+      return 'top';
+    case 'top':
+      return 'bottom';
+  }
+}
+
+/**
+ * Snap a moving frame geometry to adjacent target geometries within SNAP_THRESHOLD.
+ * When snapped side-by-side (right/left), matches top and height.
+ * When snapped stacked (bottom/top), matches left and width.
+ */
+export function snapFrameToTargets(
+  moving: MeterFrameGeometry,
+  targets: readonly SnapTarget[],
+  threshold = SNAP_THRESHOLD,
+): SnapResult {
+  let bestDist = threshold + 1;
+  let bestDock: { id: string; side: DockSide } | null = null;
+  let bestGeo: MeterFrameGeometry = { ...moving };
+
+  for (const target of targets) {
+    const t = target.geo;
+
+    // Check RIGHT of target (moving left near target right)
+    const distRight = Math.abs(moving.left - (t.left + t.width));
+    if (distRight < bestDist && Math.abs(moving.top - t.top) < threshold * 2) {
+      bestDist = distRight;
+      bestDock = { id: target.id, side: 'right' };
+      bestGeo = {
+        ...moving,
+        left: t.left + t.width,
+        top: Math.abs(moving.top - t.top) <= threshold ? t.top : moving.top,
+        height: Math.abs(moving.top - t.top) <= threshold ? t.height : moving.height,
+      };
+    }
+
+    // Check LEFT of target (moving right near target left)
+    const distLeft = Math.abs(moving.left + moving.width - t.left);
+    if (distLeft < bestDist && Math.abs(moving.top - t.top) < threshold * 2) {
+      bestDist = distLeft;
+      bestDock = { id: target.id, side: 'left' };
+      bestGeo = {
+        ...moving,
+        left: t.left - moving.width,
+        top: Math.abs(moving.top - t.top) <= threshold ? t.top : moving.top,
+        height: Math.abs(moving.top - t.top) <= threshold ? t.height : moving.height,
+      };
+    }
+
+    // Check BOTTOM of target (moving top near target bottom)
+    const distBottom = Math.abs(moving.top - (t.top + t.height));
+    if (distBottom < bestDist && Math.abs(moving.left - t.left) < threshold * 2) {
+      bestDist = distBottom;
+      bestDock = { id: target.id, side: 'bottom' };
+      bestGeo = {
+        ...moving,
+        top: t.top + t.height,
+        left: Math.abs(moving.left - t.left) <= threshold ? t.left : moving.left,
+        width: Math.abs(moving.left - t.left) <= threshold ? t.width : moving.width,
+      };
+    }
+
+    // Check TOP of target (moving bottom near target top)
+    const distTop = Math.abs(moving.top + moving.height - t.top);
+    if (distTop < bestDist && Math.abs(moving.left - t.left) < threshold * 2) {
+      bestDist = distTop;
+      bestDock = { id: target.id, side: 'top' };
+      bestGeo = {
+        ...moving,
+        top: t.top - moving.height,
+        left: Math.abs(moving.left - t.left) <= threshold ? t.left : moving.left,
+        width: Math.abs(moving.left - t.left) <= threshold ? t.width : moving.width,
+      };
+    }
+  }
+
+  return { geo: bestGeo, dockedTo: bestDock };
+}
+
+/**
+ * When frame A is resized, update docked frame B's geometry to stay attached and match size.
+ * - If B is on the right of A: sync height and align top, shift B.left to A.left + A.width.
+ * - If B is on the left of A: sync height and align top, shift B.left to A.left - B.width.
+ * - If B is on the bottom of A: sync width and align left, shift B.top to A.top + A.height.
+ * - If B is on the top of A: sync width and align left, shift B.top to A.top - B.height.
+ */
+export function syncDockedResize(
+  parentGeo: MeterFrameGeometry,
+  childGeo: MeterFrameGeometry,
+  side: DockSide,
+): MeterFrameGeometry {
+  if (side === 'right') {
+    return {
+      ...childGeo,
+      left: parentGeo.left + parentGeo.width,
+      top: parentGeo.top,
+      height: parentGeo.height,
+    };
+  }
+  if (side === 'left') {
+    return {
+      ...childGeo,
+      left: parentGeo.left - childGeo.width,
+      top: parentGeo.top,
+      height: parentGeo.height,
+    };
+  }
+  if (side === 'bottom') {
+    return {
+      ...childGeo,
+      top: parentGeo.top + parentGeo.height,
+      left: parentGeo.left,
+      width: parentGeo.width,
+    };
+  }
+  return {
+    ...childGeo,
+    top: parentGeo.top - childGeo.height,
+    left: parentGeo.left,
+    width: parentGeo.width,
+  };
 }

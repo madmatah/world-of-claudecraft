@@ -29,7 +29,11 @@ the `SimContext` seam) runs at the very end of the tick tail (grant
 evaluation over dirty players only, plus a 1 Hz proximity sweep that sets
 visit marks), draws zero rng, grants into `PlayerMeta.deedsEarned`, maintains
 the `renown` sum and the persisted `deedStats` lifetime counters, and emits
-the id-based `deedUnlocked` event (never English text); on world join it
+the id-based `deedUnlocked` event (never English text). Meters read
+already-persisted state rather than a counter: faction standing, for
+example, is the `standing*` meter family over `PlayerMeta.factions`
+(thresholds are the live `STANDING_THRESHOLDS` of `src/sim/factions.ts`),
+marked dirty by the sites that call `awardFactionReputation`. On world join it
 re-evaluates every predicate against loaded state and grants with
 `retro: true`, so veterans get credit for anything their character verifiably
 already did. The same join pass carries the fallback heals
@@ -79,6 +83,25 @@ server store always canonical.
    Pinned by `tests/storage_charters.test.ts` (the deed arm); revisit
    deliberately before any deed meter that a paid grant could move joins the
    registry.
+   A second recorded consequence, of retiring a renown-bearing deed to a Feat
+   (the seven `pvp_fiesta_*` deeds, maintainer-vetoable): converting them
+   dropped their renown to 0, which this rule's own scale requires for every
+   Feat, so an existing earner's account Renown total (`recomputeRenown` in
+   `src/sim/deeds.ts`, which re-derives from the live catalog on every load)
+   and their Renown board score (`server/deeds_board.ts`, same re-derivation)
+   both fall by up to 65 on their next login. The ruling is to ALLOW the
+   decrease for a genuine retirement-to-Feat conversion under rule 5: the
+   never-decrease guarantee exists to stop a deed that stays live and
+   obtainable from being re-balanced or nerfed out from under players still
+   earning it, not to freeze a deed's score after the content it measures is
+   gone. The earned RECORD is untouched regardless: the id keeps its `pvp_`
+   prefix rather than moving to `feat_` (an off-prefix feat, the
+   `col_reliquary_complete` precedent), so `PlayerMeta.deedsEarned` never
+   drops it. Pinned by `tests/deeds_content.test.ts` (the `OFF_PREFIX_FEATS`
+   allowlist and the Fiesta-desc arms); revisit deliberately before retiring
+   another renown-bearing deed, and
+   record the account-side fallout (Renown board entry floor and
+   completion-time tie-break, `server/deeds_board.ts`) in the PR that does it.
 3. **Closed trigger vocabulary.** Every trigger is one of the `DeedTrigger`
    kinds in `src/sim/types.ts`: a predicate over persisted state (`level`,
    `lifetimeXp`, `quest`/`quests`, `arenaRating`, `craftSkill`, `gathering`,
@@ -131,9 +154,9 @@ and it surfaces as Renown, never as a count.
 
 | Readout | Set | Scope |
 |---|---|---|
-| Book of Deeds header pair (earned/total) | Completion | Character |
-| Book of Deeds category counts | Visible deeds per display bucket (the Feats shelf shows its own bucket) | Character |
-| Book of Deeds Renown stat | Scoring set, summed (the evaluator's denormalized sum) | Character |
+| Book of Deeds header pair (earned/total) | Completion | Account (own earns unioned with the account ledger; labeled by `hudChrome.deeds.accountScopeNote`) |
+| Book of Deeds category counts | Visible deeds per display bucket (the Feats shelf shows its own bucket) | Account |
+| Book of Deeds Renown stat | Scoring set, summed (the evaluator's own sum plus the Renown of every deed only an alt earned) | Account |
 | Character sheet `deeds.earnedCount` (JSON sheet + companion OAuth) | Completion | Character |
 | Renown board score | Scoring set, summed | Account |
 | Renown board tie-break | Scoring set, max over each deed's earliest earn | Account |
@@ -188,6 +211,14 @@ as the score and tie-break on that row. Cross-surface agreement is pinned by
    `ACH_<UPPER_SNAKE>` mapping in `server/steam/achievement_map.ts` (hard
    cap 100 registered names; API names are stable forever).
 
+A deed whose reward is a TITLE carries a same-change twin: its `DeedDef` in
+`src/sim/content/deeds.ts` AND a slot on the `horizons_titles` page in
+`src/sim/content/reliquary.ts`. The coupling is pinned bidirectionally by
+`tests/reliquary_content.test.ts` (the page must list exactly the live
+non-hidden title rewards, with `col_reliquary_complete` as the one pinned
+exclusion), so a title deed without its Reliquary slot reds the pin rather
+than shipping unlisted.
+
 Every new piece of conquerable content (a dungeon, delve, raid, world boss,
 zone, or rare) authors its deeds in the SAME change that adds the content;
 the root `CLAUDE.md` content rule points here.
@@ -200,21 +231,155 @@ completionist trap that drags veterans back through the tutorial. If the
 island ever gains real conquerable content (a rare, a delve), that content
 authors deeds like any other.
 
+## The account ledger (the Book is account-wide)
+
+The Book of Deeds is shared across every character on an account, and every
+earned deed remembers which characters earned it. The mechanism is the
+account ledger (`src/sim/account_ledger.ts`), and its scope model is fixed:
+
+- **The evaluator stays per character, with one account-wide family.** Every
+  deed whose trigger is an accomplishment (a kill, a quest, a craft, a level)
+  is decided from the acting character's own state, so its earners all did
+  the thing themselves. The Reliquary-derived deeds (Curator rank bridges,
+  the completion ladder, Illumination) are the exception, by maintainer
+  ruling (recorded on the review thread of
+  [PR #3978](https://github.com/levy-street/world-of-claudecraft/pull/3978),
+  matching jgyy's PR #3933): they are decided over the ACCOUNT union
+  (`accountReliquaryOwnership`, the ONE ownership read every grant path
+  uses) and granted to every character on the account. The character whose
+  find tipped the read earns them in its fill chain, live (the one
+  celebration: its banner, guild marquee, and feed card). A live sibling
+  receives them in the same tick (`syncAccountRelicGrants`, re-run by the
+  server fan-out when the sibling's ledger gains a relic or a Horizons title
+  deed, the only growth that can move a rank or completion read) and an
+  offline alt at its next join (`retroFallbackGrants`, whose rank, ladder,
+  and illumination syncs read the union); both of those grants are
+  retro-flagged, so neither banners nor marquees a find another character
+  made. Each recipient is recorded as an earner in its own right, so the
+  card lists every character that holds the deed. A relic an alt already
+  found moves no rank count when this character finds it too, so no rank
+  crossing is faked (`tests/account_ledger_sim.test.ts`,
+  `tests/account_ledger_wire.test.ts`, `tests/server/account_ledger_service.test.ts`).
+  A sibling's first own relic on a page an alt completed mid-session does
+  illuminate the page for the sibling (the join sweep folds a page completed
+  before the join in silently); pinned in `tests/reliquary_state.test.ts`.
+- **The display lane is account-wide.** The Book's earned state, header pair,
+  category counts, Renown, recent strip, and the title and border pickers all
+  read the union of `deedsEarned` and the ledger (`IWorldDeeds.accountDeeds`),
+  and each card names its earners with their earn dates
+  (`hudChrome.deeds.earnedBy`). The sim's title and border validators accept
+  any deed on the ledger, so a cosmetic an alt earned is wearable everywhere.
+- **The ledger is input, not sim truth.** The server assembles it per join
+  from `character_deeds` (deeds) and `account_relic_finds` (relics, the
+  Reliquary half) joined to `characters` for names (`loadAccountLedger`,
+  `server/account_ledger_db.ts`), hands it to `Sim.addPlayer`, and fans a
+  live earn out to the account's other sessions in the same tick
+  (`server/account_ledger_service.ts`). It rides the heavy `acct` self key
+  and is never serialized into `CharacterState`. Offline the one sandbox
+  character fills its own ledger, so both hosts read the same shape
+  (`tests/account_ledger_sim.test.ts`, `tests/account_ledger_wire.test.ts`).
+- **Watching stays per character.** A deed an alt earned reads as earned in
+  this character's Book, but it stays watchable here and the HUD tracker keeps
+  tracking it (`watchable` and the prune read `deedsEarned`, not the union):
+  this character can still earn it and be listed as an earner too.
+- **The public sheets read an ids-only, cached view.** `/c/`, the public JSON
+  sheet, and the owner sheet take `accountLedgerKeysFor`
+  (`server/account_ledger_keys_cache.ts`, a keyed single-flight TTL cache the
+  two record observers bust when a row lands), so no earner detail enters an
+  anonymous handler and no request re-walks the account's rows.
+- **Character deletion.** `account_relic_finds` carries no character FK and
+  snapshots the finder's name and class, so a relic find outlives the
+  character that made it (the account keeps its Reliquary; the idea follows
+  jgyy's account-only keying in PR #3933). `character_deeds` still cascades
+  on the character row, so a deleted character's DEED earns leave the
+  account's Book exactly as they leave the Renown board today; lifting that
+  cascade is a schema change for a maintainer.
+- **Decode is catalog-bounded** (also from PR #3933): a stored row or wire
+  entry for a deed or relic the live catalog no longer knows is dropped on the
+  way in, so content removals can never leave a phantom entry in a book.
+- **The public character sheet reads the ledger** (`/c/`, the owner and public
+  JSON sheets): its Reliquary pair is the same account-wide union the window
+  shows, degrading to the character's own fills when the read fails. Its
+  `deeds.earnedCount` stays character-scoped (the table above).
+
 ## Deliberately deferred (do not "fix" these by shipping them)
 
-- **Account-level deeds** (`prog_three_paths`, `prog_ninefold`, and the
-  seven server-assisted `feat_*` world/realm firsts): the v1 evaluator is
-  strictly per-character and `server/deeds_records.ts` is observer-only; an
-  account-level grant lane must exist first.
-- **`prog_ringwright`**: jewelcrafting and inscription have zero recipes
-  today (their depth arrives with the post-level-20 zone expansion, per
-  `docs/design/professions.md`), so the ten-craft ring cannot complete and
-  the deed would be visible yet unearnable. Their per-craft milestone and
-  Grandmaster deeds stay deferred with it. Enchanting is no longer a
-  blocker: it is player-wired (disenchant, apply-enchant, salvage) and its
-  deeds shipped.
+- **Account-level GRANTS beyond the Reliquary family** (`prog_three_paths`,
+  `prog_ninefold`, and the seven server-assisted `feat_*` world/realm
+  firsts): the Book is account-wide for display and cosmetics through the
+  account ledger above, and the Reliquary-derived deeds grant from the union,
+  but the evaluator is otherwise strictly per-character and
+  `server/deeds_records.ts` is observer-only; a deed whose trigger reads
+  ACROSS characters' accomplishments still needs an account-level grant lane.
+- **`prog_ringwright`**: every ring craft now has a live gain path (the
+  Masterwrought phase 06 inscription catalog closed the last gap, and its
+  milestone and Grandmaster deeds shipped with it), so the old
+  engine-surface blocker is gone. The deed stays deferred on a DIFFERENT
+  ground: no design for it is recorded anywhere (no trigger shape, no
+  threshold, no name text, no renown), and its reserved companions
+  `prog_three_paths` and `prog_ninefold` are equally unspecced, so shipping
+  it means inventing design numbers. It waits on a maintainer ruling
+  (queued at the phase 06 QA), not on content. Jewelcrafting is no longer a
+  blocker and no longer deferred at all: its base catalog shipped the
+  rare-tier milestone `prog_jewelcrafting_rare`, and the phase 05 QA ruling
+  (2026-08-10) authored its skill-50 and Grandmaster pair, completing the
+  craft's milestone family. The 125 cap is reachable on the base catalog
+  alone for an unattuned character, and post-attunement when jewelcrafting
+  is the pair or the hobby, the same reachability shape as every shipped
+  craft pair (the switchHobby quest keeps it open to everyone); earnability
+  is pinned by derivation in `tests/deeds_content.test.ts`. Enchanting is
+  not a blocker either: it is player-wired (disenchant, apply-enchant,
+  salvage) and its deeds shipped.
 - **`pvp_vcup_bet_flex`**: cut; no betting-adjacent deeds ship, even at 0
   Renown.
+
+### Farming capstone earnability
+
+- **`prog_farming_100` (the Harvestmaster title)** is earnable. Farmer Hollis
+  stocks the four tier-3 seeds and Farmer Verbena stocks the four tier-4 seeds,
+  each with a positive `buyValue`, so farming teaches through the profession cap
+  of 100. `feat_book_complete` therefore remains earnable too. The derivation in
+  `tests/deeds_content.test.ts` fails if either high-tier seed faucet disappears.
+
+### A recorded rule-2 exception (Masterwrought Phase 11e, `col_farm_roster`)
+
+- **`col_farm_roster` ("Every Furrow Filled") carries Renown 5 with a DERIVED
+  requirement set.** Its `markIds` are generated from `FARM_CROP_IDS`, so it is
+  the catalog's first `visits` deed whose requirements grow with content, and
+  rule 2 above says ZERO Renown for exactly that shape. The exception is
+  deliberate and was ruled explicitly (masterwrought DECISION E), so the ruling
+  stands; it is recorded HERE, beside the rule, because this file is what an
+  author reads before authoring the next one.
+- **Why it does not violate rule 2's stated reason.** That reason is that the
+  account score must never be able to decrease on a content patch, and it
+  cannot here: `deedsEarned` is sticky and `character_deeds` is insert-only, so
+  a player who has closed the roster keeps the 5 when a thirteenth crop ships.
+  What widens is an UNFINISHED collection, which has scored nothing yet.
+- **The one-line change that would resolve it the other way** is dropping the
+  row's `renown` to 0. Do not take it without re-opening DECISION E.
+- **For the next author:** a growing-requirement deed is still the wrong default.
+  Take this exception only where the earn is sticky and the score cannot fall.
+
+### A recorded rule-2 reading (Masterwrought Phase 13, `prog_legendmaker`)
+
+- **`prog_legendmaker` ("The Legendmaker") carries Renown 50 on a feeder whose
+  ATTEMPTS roll.** The deed counts orange promotions, and a promotion needs a
+  Perfected copy, which is reached through a four-rank fail-forward track at 0.8
+  per attempt: a failed attempt spends materials and never loses a rank, so the
+  OUTCOME is certain under effort and only the attempt count varies (expected
+  five attempts for four ranks). The promotion itself draws nothing. Rule 2's
+  "luck-dependent" set is the one whose outcome hinges on a roll with an
+  unbounded expected time (`col_first_rare`, `col_golden_harvest`,
+  `hid_roll_hundred`); this is luck-PACED, not luck-gated, the same reading that
+  scores `prog_masterwright` (a rolled proc) at 25.
+- **The honest weak clause:** rule 2 also says the luck-free guarantee covers the
+  board's completion-time tie-break, and this deed's earn DATE varies with the
+  rolls in week-sized units (the ember faucet is weekly), larger than a
+  masterwork proc's minutes. Recorded here so the next rolled-feeder deed is
+  judged against the same distinction rather than re-deriving it.
+- **The storefront decision** for this deed follows the Masterwrought family:
+  none of its deeds has a Steam or Epic achievement row, so its absence from
+  `achievement_map.ts` is deliberate, not an omission against step 7 above.
 
 The reviewed design blocks for all of these live in the deed catalog's
 authoring history; a deferred deed stays out of `DEED_ORDER` and off Steam

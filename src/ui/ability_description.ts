@@ -8,6 +8,11 @@
 // injector) go through abilityDisplayDescription, and the field CHOICE is a pure
 // core (abilityDescriptionField) a vitest drives directly.
 
+import {
+  TEMPORAL_ECHO_AREA_CONVERSION,
+  TEMPORAL_ECHO_ROTATION_CONVERSION_MULTIPLIER,
+  TEMPORAL_ECHO_SINGLE_CONVERSION,
+} from '../sim/content/chronomancy_tuning';
 import type { ResolvedAbility } from '../sim/sim';
 import {
   type AbilityEffect,
@@ -21,11 +26,17 @@ import {
   abilityDurationValue,
   abilityOverTimeEffect,
   abilityPrimaryEffect,
+  abilityPrimaryHealingTotal,
   abilitySecondaryEffect,
   abilityTemporalHourglassValues,
   auraBuffDisplayValue,
 } from './ability_damage';
+import { formatAbilityImbueDamage } from './ability_imbue_text';
 import type { AuraEffectInput } from './aura_effect';
+import {
+  dawnreaverTooltipValues,
+  primaryDamageTooltipRange,
+} from './dawnreaver_damage_tooltip_core';
 import { type AbilitySpecNoteField, tEntity, tEntityOptional } from './entity_i18n';
 import { formatNumber, type InterpolationValues, t } from './i18n';
 
@@ -47,11 +58,22 @@ export function abilityEffectText(res: ResolvedAbility, scaling?: AbilityScaling
   };
   const primary = abilityPrimaryEffect(res);
   if (primary) {
+    if ((res.outputScaling?.primaryDamage ?? 1) !== 1) {
+      const combined = primaryDamageTooltipRange(res, primary, scaling);
+      if (combined) return abilityAmountRange(combined.min, combined.max);
+    }
     switch (primary.type) {
-      case 'directDamage':
+      case 'directDamage': {
+        const mult = primary.damageMult ?? 1;
+        const bonus = scaling ? abilityDamageBonus(res, primary, scaling) * mult : 0;
+        return (
+          abilityAmountRange(primary.min * mult, primary.max * mult) +
+          (bonus > 0
+            ? ` ${t('hudChrome.abilityScaling.bonus', { value: formatAbilityNumber(bonus) })}`
+            : '')
+        );
+      }
       case 'aoeDamage':
-      case 'aoeHeal':
-      case 'chainHeal':
       case 'aoeRoot':
       case 'chainDamage':
       case 'groundAoE':
@@ -59,10 +81,27 @@ export function abilityEffectText(res: ResolvedAbility, scaling?: AbilityScaling
       case 'valkyrsCalling':
       case 'hunterStampede':
         return abilityAmountRange(primary.min, primary.max) + suffix(primary);
-      case 'heal':
-        return primary.casterMaxHpPct === undefined
-          ? abilityAmountRange(primary.min, primary.max) + suffix(primary)
-          : formatAbilityNumber(primary.casterMaxHpPct * 100);
+      case 'aoeHeal':
+      case 'chainHeal': {
+        // v0.42 (docs/design/class-balance-v042.md): a Spiritmend/Sunmender/
+        // Groveheart primary-healing factor scales the WHOLE completed
+        // packet, so it cannot be shown as a separate "(+N)" badge on top of
+        // the unscaled base range without double-counting; show the
+        // combined range instead when the factor is live.
+        const combined = scaling ? abilityPrimaryHealingTotal(res, primary, scaling) : null;
+        return combined
+          ? abilityAmountRange(combined.min, combined.max)
+          : abilityAmountRange(primary.min, primary.max) + suffix(primary);
+      }
+      case 'heal': {
+        if (primary.casterMaxHpPct !== undefined) {
+          return formatAbilityNumber(primary.casterMaxHpPct * 100);
+        }
+        const combined = scaling ? abilityPrimaryHealingTotal(res, primary, scaling) : null;
+        return combined
+          ? abilityAmountRange(combined.min, combined.max)
+          : abilityAmountRange(primary.min, primary.max) + suffix(primary);
+      }
       case 'repositionToAim':
         return primary.landingAoe
           ? abilityAmountRange(primary.landingAoe.min, primary.landingAoe.max)
@@ -72,12 +111,15 @@ export function abilityEffectText(res: ResolvedAbility, scaling?: AbilityScaling
           return abilityAmountRange(primary.deal.min, primary.deal.max) + suffix(primary);
         }
         if (primary.heal) {
-          return abilityAmountRange(primary.heal.min, primary.heal.max) + suffix(primary);
+          const combined = scaling ? abilityPrimaryHealingTotal(res, primary, scaling) : null;
+          return combined
+            ? abilityAmountRange(combined.min, combined.max)
+            : abilityAmountRange(primary.heal.min, primary.heal.max) + suffix(primary);
         }
         return '';
       case 'weaponDamage':
       case 'weaponStrike':
-        return formatAbilityNumber(primary.bonus);
+        return formatAbilityNumber(primary.bonus * (res.outputScaling?.primaryDamage ?? 1));
       case 'sunder':
         return formatAbilityNumber(
           SUNDER_ARMOR_PCT_PER_STACK *
@@ -116,15 +158,32 @@ export function abilityEffectText(res: ResolvedAbility, scaling?: AbilityScaling
           }) + suffix(secondary)
         );
       }
+      if (
+        secondary.perComboTotal === undefined &&
+        secondary.perComboDuration === undefined &&
+        secondary.directPct === undefined &&
+        secondary.interval > 0
+      ) {
+        const ticks = secondary.duration / secondary.interval;
+        const total = Math.max(1, Math.round(secondary.total / ticks)) * ticks;
+        return formatAbilityNumber(total) + suffix(secondary);
+      }
       return formatAbilityNumber(secondary.total) + suffix(secondary);
-    case 'hot':
-      return formatAbilityNumber(secondary.total) + suffix(secondary);
+    case 'hot': {
+      // v0.42 (docs/design/class-balance-v042.md): a pure-HoT $d (Wildbloom
+      // has no primary hit, so its total renders here, not in the primary
+      // switch above) takes the same combined-total treatment as $o.
+      const combined = scaling ? abilityPrimaryHealingTotal(res, secondary, scaling) : null;
+      return combined
+        ? formatAbilityNumber(combined.min)
+        : formatAbilityNumber(secondary.total) + suffix(secondary);
+    }
     case 'absorb':
       return secondary.casterMaxHpPct === undefined
         ? formatAbilityNumber(secondary.amount) + suffix(secondary)
         : formatAbilityNumber(secondary.casterMaxHpPct * 100);
     case 'imbue':
-      return formatAbilityNumber(secondary.bonus);
+      return formatAbilityImbueDamage(secondary);
     default:
       return '';
   }
@@ -158,6 +217,14 @@ export function abilityEffectAuraInput(effect: AbilityEffect): AuraEffectInput |
 function abilityOverTimeText(res: ResolvedAbility, scaling?: AbilityScaling): string {
   const eff = abilityOverTimeEffect(res);
   if (!eff) return '';
+  // v0.42 (docs/design/class-balance-v042.md): a live Groveheart/Spiritmend
+  // HoT snapshot factor scales the whole per-tick amount before it is
+  // multiplied out to the total, so it replaces the total outright rather
+  // than layering the ordinary "(+N)" bonus badge on the unscaled figure.
+  if (eff.type === 'hot' && scaling) {
+    const combined = abilityPrimaryHealingTotal(res, eff, scaling);
+    if (combined) return formatAbilityNumber(combined.min);
+  }
   const b = scaling ? abilityDamageBonus(res, eff, scaling) : 0;
   const bonus =
     b > 0 ? ` ${t('hudChrome.abilityScaling.bonus', { value: formatAbilityNumber(b) })}` : '';
@@ -204,6 +271,12 @@ export function abilityDisplayDescription(
   const buff = auraOverride ? auraBuffDisplayValue(auraOverride) : abilityBuffValue(res);
   const duration = abilityDurationValue(res);
   const hourglass = abilityTemporalHourglassValues(res);
+  const directHeal = res.effects.find((effect) => effect.type === 'heal');
+  const healingText = hourglass
+    ? formatAbilityNumber(hourglass.healing)
+    : directHeal
+      ? abilityEffectText({ ...res, effects: [directHeal] }, scaling)
+      : '';
   // {rage} splices the RESOLVED gainResource total, so a talent that raises the
   // granted amount (Blood Offering on Blood Toll) shows in the tooltip.
   const rageGained = res.effects.reduce(
@@ -229,12 +302,14 @@ export function abilityDisplayDescription(
   // any bonusCharges rows), so Conflagrate's "Holds N charges" line reads 3
   // for Ruincaller 2pc wearers and the base 2 for everyone else.
   const charges = res.charges;
+  const echoSingle = res.echoConvertSingle ?? TEMPORAL_ECHO_SINGLE_CONVERSION;
+  const dawnreaver = dawnreaverTooltipValues(res, scaling);
   const values: InterpolationValues = {
     damage: damageText,
     overTime: abilityOverTimeText(res, scaling),
     buff: buff === null ? '' : formatAbilityNumber(buff),
     duration: duration === null ? '' : formatAbilityNumber(duration),
-    healing: hourglass === null ? '' : formatAbilityNumber(hourglass.healing),
+    healing: healingText,
     selfCooldownRecovery:
       hourglass === null ? '' : formatAbilityNumber(hourglass.selfCooldownRecovery),
     allyCooldownRecovery:
@@ -246,6 +321,28 @@ export function abilityDisplayDescription(
     absorbPerRage: absorbPerRage === undefined ? '' : formatAbilityNumber(absorbPerRage),
     needleDoom: needleDoom === undefined ? '' : formatAbilityNumber(needleDoom),
     charges: charges === undefined ? '' : formatAbilityNumber(charges),
+    echoSinglePct: formatAbilityNumber(echoSingle * 100),
+    echoAreaPct: formatAbilityNumber(TEMPORAL_ECHO_AREA_CONVERSION * 100),
+    echoDriverPct: formatAbilityNumber(
+      echoSingle * TEMPORAL_ECHO_ROTATION_CONVERSION_MULTIPLIER * 100,
+    ),
+    weaponPercent:
+      dawnreaver.weaponPercent === undefined ? '' : formatAbilityNumber(dawnreaver.weaponPercent),
+    edictExplosion: dawnreaver.explosion
+      ? ` ${t('abilityUi.tooltip.edictExplosion', {
+          damage: abilityAmountRange(dawnreaver.explosion.min, dawnreaver.explosion.max),
+          radius: formatAbilityNumber(dawnreaver.explosionRadius ?? 0),
+          cap: formatAbilityNumber(dawnreaver.explosionCap ?? 0),
+        })}`
+      : '',
+    verdictSingleDamage: dawnreaver.verdict
+      ? abilityAmountRange(dawnreaver.verdict.singleMin, dawnreaver.verdict.singleMax)
+      : '',
+    verdictAreaDamage: dawnreaver.verdict
+      ? abilityAmountRange(dawnreaver.verdict.areaMin, dawnreaver.verdict.areaMax)
+      : '',
+    verdictAreaRadius: dawnreaver.verdict ? formatAbilityNumber(dawnreaver.verdict.radius) : '',
+    verdictAreaCap: dawnreaver.verdict ? formatAbilityNumber(dawnreaver.verdict.cap) : '',
   };
   // Cheap Trick retires Gut Punch's stealth requirement. When the RESOLVED ability
   // has dropped it, prefer the stealth-free description variant so the prose stops
@@ -263,9 +360,15 @@ export function abilityDisplayDescription(
   // Spec-aware teaching line: a shared button explains its interaction ONLY
   // for the player's current spec, so a new player never reads another
   // spec's rules on their own tooltip.
+  const description =
+    res.def.id === 'final_edict'
+      ? `${text} ${t('abilityUi.tooltip.edictDamage', values)}${values.edictExplosion}`
+      : dawnreaver.verdict
+        ? `${text} ${t('abilityUi.tooltip.verdictDamage', values)}`
+        : text;
   const note = spec ? res.def.specNotes?.[spec] : undefined;
-  if (!note) return text;
-  return `${text} ${tEntity({
+  if (!note) return description;
+  return `${description} ${tEntity({
     kind: 'ability',
     id: res.def.id,
     field: `specNote_${spec}` as AbilitySpecNoteField,

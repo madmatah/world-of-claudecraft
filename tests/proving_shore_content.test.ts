@@ -42,11 +42,10 @@ describe('proving shore placement', () => {
     expect(ZONES.some((zn) => zn.id === 'proving_shore')).toBe(true);
   });
 
-  it('pins the town landing literally, beside the harbor return bell', () => {
-    // The home ride's destination as bare literals (the ferry_prewarm suite
+  it('pins the town landing literally beside the return ferry bell', () => {
+    // The home ride's destination as a bare literal (the ferry_prewarm suite
     // compares constant to constant, which a bad edit moves in lockstep).
-    // Moved with the New Eastbrook rebuild: the dock road's crafts lane,
-    // beside the return bell at (-7.5, -100), facing the mailbox.
+    // The revised handoff keeps the landing here and guides into the square.
     expect(FERRY_BELL_TOWN_LANDING).toEqual({ x: -4.5, z: -101.5, facing: -0.87 });
   });
 
@@ -398,5 +397,18 @@ describe('proving shore placement', () => {
     expect(
       PROVING_SHORE_OBJECTS.find((o) => o.itemId === 'ps_castaway_crate')?.positions,
     ).toHaveLength(6);
+  });
+});
+
+describe('proving shore welcome copy', () => {
+  // The zone welcome is the banner a player reads the first time the island
+  // loads, and it doubles as the Guide's zone blurb. It names both ways off
+  // the shore: Odo's crossing at the end of the rail, and the ferry bell,
+  // which is clickable from the moment they land.
+  it('names Ferryman Odo AND the bell as ways across to the vale', () => {
+    const welcome = PROVING_SHORE_ZONE.welcome ?? '';
+    expect(welcome).toMatch(/Ferryman Odo/);
+    expect(welcome).toMatch(/\bbell\b/);
+    expect(welcome).toMatch(/vale/);
   });
 });

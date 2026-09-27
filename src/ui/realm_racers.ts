@@ -534,25 +534,26 @@ export class RealmRacersUi {
     if (this.speedEl)
       w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(view.speed) }));
     if (this.wardEl) {
-      // Written even while hidden, so the two writes elide independently and a
-      // locale flip lands on both (the same shape the limits line below uses).
+      // Written even while hidden, so a locale flip lands on the text. Visibility
+      // rides setStyleProp, whose own (element, 'display') slot keeps the two
+      // writes eliding independently (the same shape the limits line below uses).
       w.setText(this.wardEl, t('hudChrome.rally.wardHeld'));
-      w.setDisplay(this.wardEl, view.warded ? 'block' : 'none');
+      w.setStyleProp(this.wardEl, 'display', view.warded ? 'block' : 'none');
     }
     if (this.wrongWayEl) {
       w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
-      w.setDisplay(this.wrongWayEl, view.wrongWay ? 'block' : 'none');
+      w.setStyleProp(this.wrongWayEl, 'display', view.wrongWay ? 'block' : 'none');
     }
     if (this.limitsEl) {
-      // The text is written even while the line is hidden, so the two writes
-      // elide independently and a locale flip lands on both.
+      // The text is written even while the line is hidden, so a locale flip
+      // lands on it; visibility rides its own setStyleProp slot.
       w.setText(
         this.limitsEl,
         view.trackLimit === 'cutReturned'
           ? t('hudChrome.rally.cutReturned')
           : t('hudChrome.rally.offTrack', { seconds: num(view.offTrackIn) }),
       );
-      w.setDisplay(this.limitsEl, view.trackLimit === 'none' ? 'none' : 'block');
+      w.setStyleProp(this.limitsEl, 'display', view.trackLimit === 'none' ? 'none' : 'block');
     }
     if (this.resetEl) {
       w.setText(this.resetEl, t('hudChrome.rally.reset'));

@@ -16,7 +16,7 @@
 //
 // WRITE ROUTING: every per-frame DOM write goes through
 // the writer facet (setStyleProp for the icon, toggleClass for the debuff class,
-// setText for the duration + stacks, setDisplay for the stacks badge visibility); no
+// setText for the duration + stacks, setStyleProp for both badges' visibility); no
 // raw style / textContent / className / setAttribute. The only DOM construction (the
 // node + its children) happens once per pooled node in createNode(); the icon data-URL
 // is resolved only when an aura's icon key changes (the expensive part).
@@ -40,8 +40,9 @@ import type { PainterHostWriters } from './painter_host';
 
 // Class / property names the painter drives. Named, not inlined, so the painter
 // references no bare DOM string literal.
-const BUFF_CLASS = 'buff';
+const BUFF_CLASS = 'buff ui-aura';
 const DEBUFF_CLASS = 'debuff';
+const UI_DEBUFF_CLASS = 'ui-aura--debuff';
 // Marks a node the local player may right-click to cancel (a helpful own buff). The
 // stylesheet draws the affordance (context-menu cursor + hover border); the class is
 // toggled per frame so a recycled node never keeps a stale affordance.
@@ -50,6 +51,7 @@ const CANCELABLE_CLASS = 'cancelable';
 // stylesheet renders it larger so your dots/hots read at a glance among other
 // casters'. Toggled per frame so a recycled node never keeps stale prominence.
 const OWN_CLASS = 'own';
+const UI_OWN_CLASS = 'ui-aura--own';
 // Marks an aura in its final seconds (auras_view isAuraExpiring): the stylesheet
 // blinks the icon so an expiring DoT/buff reads at a glance, with a steady
 // brightness fallback under prefers-reduced-motion. Toggled per frame so a
@@ -58,8 +60,9 @@ const EXPIRING_CLASS = 'expiring';
 // Carries the debuff's magic school so the stylesheet tints the border per school
 // (WoW-style poison/magic/curse reads); '' on a buff, so no school selector matches.
 const SCHOOL_ATTR = 'data-school';
-const DUR_CLASS = 'dur';
-const STACKS_CLASS = 'stacks';
+const DUR_CLASS = 'dur ui-aura-time';
+const DUR_DEBUFF_CLASS = 'ui-aura-time--debuff';
+const STACKS_CLASS = 'stacks ui-badge ui-badge--corner';
 const BACKGROUND_IMAGE_PROP = 'background-image';
 // Pool-key separator for same-id auras. The core keys a slot by the aura id, but one
 // entity can legitimately carry several auras with the SAME id from different sources
@@ -74,6 +77,11 @@ const DUP_KEY_SEP = '#';
 // appended the badge only when stacks > 1).
 const STACKS_SHOWN = '';
 const STACKS_HIDDEN = 'none';
+// Visibility for BOTH badges below rides setStyleProp rather than setDisplay, because
+// each of those nodes also carries its own text: two single-slot writers on one element
+// share a cache entry and defeat elision for both (painter_host.ts, and the scan in
+// tests/painter_single_slot_collision_guard.test.ts). See the writes at the paint sites.
+const DISPLAY_PROP = 'display';
 // The overflow badge class + display pair. Unlike the stacks badge (default shown,
 // `''` reverts to it), the overflow badge's CSS default is display:none (it is absent far
 // more often than present), so revealing it needs an explicit value, not a revert.
@@ -100,8 +108,17 @@ export interface AurasPainterDeps {
    *  stealth, Ghost Wolf, the carried flag): the host omits the seconds-remaining
    *  line for it, because the long finite duration the sim backs those with is
    *  scaffolding, not information, and printing it is the same lie the suppressed
-   *  countdown label avoids. */
-  renderTooltip(name: string, remaining: number, effectHtml: string, toggle: boolean): string;
+   *  countdown label avoids. `sourceId` is the caster's entity id (0/undefined when
+   *  unknown); the host resolves it to a name and, gated on the player's own
+   *  "show aura caster" preference, appends a caster line so multiple casters of
+   *  the same buff (e.g. several paladins' blessings) are told apart. */
+  renderTooltip(
+    name: string,
+    remaining: number,
+    effectHtml: string,
+    toggle: boolean,
+    sourceId: number | undefined,
+  ): string;
   /** Attach a lazily-built tooltip to a node (host: Hud.attachTooltip). Called ONCE per
    *  pooled node; the closure reads the live record. */
   attachTooltip(el: HTMLElement, html: () => string): void;
@@ -136,6 +153,9 @@ interface PooledAura {
    *  read live by the tooltip closure so a recycled node never keeps the previous
    *  aura's answer. */
   toggle: boolean;
+  /** The caster's entity id (undefined when the aura carries none), read live by
+   *  the tooltip closure so a recycled node never keeps the previous aura's caster. */
+  sourceId: number | undefined;
   /** The last icon key written, so the expensive data-URL resolve + write fire only on
    *  change. null until the first paint (never equals a real key). */
   lastIconKey: string | null;
@@ -255,6 +275,7 @@ export class AurasPainter {
       rec.cancelable = s.cancelable;
       rec.effectHtml = s.effectHtml;
       rec.toggle = s.toggle;
+      rec.sourceId = s.sourceId;
       rec.seen = this.frame;
       // Cancel affordance: only when this painter has an attachCancel dep (the player buff bar)
       // and the view marked the aura as cancelable. Read live by the contextmenu closure.
@@ -271,13 +292,24 @@ export class AurasPainter {
       // The buff/debuff distinction is a structural class (not an inline color); the
       // stylesheet renders it as a border the icon meaning does not depend on.
       this.writers.toggleClass(rec.el, DEBUFF_CLASS, s.isDebuff);
+      this.writers.toggleClass(rec.el, UI_DEBUFF_CLASS, s.isDebuff);
+      this.writers.toggleClass(rec.dur, DUR_DEBUFF_CLASS, s.isDebuff);
       this.writers.setAttr(rec.el, SCHOOL_ATTR, s.school);
       this.writers.toggleClass(rec.el, CANCELABLE_CLASS, rec.cancelable);
       this.writers.toggleClass(rec.el, OWN_CLASS, s.own);
+      this.writers.toggleClass(rec.el, UI_OWN_CLASS, s.own);
       this.writers.toggleClass(rec.el, EXPIRING_CLASS, s.expiring);
       this.writers.setText(rec.dur, s.durationText);
       const hasStacks = s.stacksText !== '';
-      this.writers.setDisplay(rec.stacks, hasStacks ? STACKS_SHOWN : STACKS_HIDDEN);
+      // The badge node needs TWO INDEPENDENT FACETS, its text and its visibility, and
+      // the single-slot cache holds ONE (kind, value) entry per element. Routing both
+      // through single-slot writers flips that entry on every call, so BOTH bypass
+      // elision forever: every frame, for every stacking aura, which in combat is most
+      // of them. Visibility therefore takes a slot of its own, keyed (element,
+      // 'display'); the DOM write is the same inline display it always was. TWO
+      // SEPARATE NODES would have worked equally well, and a second cache slot is
+      // simply cheaper than a second node.
+      this.writers.setStyleProp(rec.stacks, DISPLAY_PROP, hasStacks ? STACKS_SHOWN : STACKS_HIDDEN);
       if (hasStacks) this.writers.setText(rec.stacks, s.stacksText);
       this.ordered.push(rec);
     }
@@ -302,7 +334,14 @@ export class AurasPainter {
     // with no overflowEl (the debuff bar, the target strip) skips this entirely.
     if (this.overflowEl) {
       const show = shed > 0;
-      this.writers.setDisplay(this.overflowEl, show ? OVERFLOW_SHOWN : OVERFLOW_HIDDEN);
+      // Display through setStyleProp, not setDisplay: this node also takes setText just
+      // below, and two single-slot writers on one element flip the shared cache entry so
+      // BOTH stop eliding (the stacks badge above, same fix, same reason).
+      this.writers.setStyleProp(
+        this.overflowEl,
+        DISPLAY_PROP,
+        show ? OVERFLOW_SHOWN : OVERFLOW_HIDDEN,
+      );
       this.writers.setText(this.overflowEl, show ? this.overflowText.label(shed) : '');
       this.writers.setAttr(
         this.overflowEl,
@@ -335,11 +374,12 @@ export class AurasPainter {
       remaining: 0,
       effectHtml: '',
       toggle: false,
+      sourceId: undefined,
       lastIconKey: null,
       seen: 0,
     };
     this.deps.attachTooltip(el, () =>
-      this.deps.renderTooltip(rec.name, rec.remaining, rec.effectHtml, rec.toggle),
+      this.deps.renderTooltip(rec.name, rec.remaining, rec.effectHtml, rec.toggle, rec.sourceId),
     );
     // Right-click-cancel: attached ONCE per pooled node via the injected helper (the
     // buff-bar painter only). The closure reads the live record so a recycled node cancels

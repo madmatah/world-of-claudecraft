@@ -88,8 +88,9 @@ export const table: DeedLocaleTable = {
     desc: 'Vytez rudnou zilu, drevni porost a bylinny zahon v Nightbloomu.',
   },
   chr_nightbloom_first_cast: {
-    name: 'Vlna na mesicni studni',
     desc: 'Chyt rybu ve vodach Nightbloomu.',
+
+    name: 'První hod v noci',
   },
   chr_wraithwood_gatherer: {
     name: 'Sklizen pod korunami',
@@ -183,7 +184,8 @@ export const table: DeedLocaleTable = {
   prog_herbalism_100: { name: 'Mistr lučin', desc: 'Dosáhni zdatnosti 100 v bylinkářství.' },
   prog_master_gatherer: {
     name: 'Mistr sběrač',
-    desc: 'Dosáhni zdatnosti 100 ve třech z Hornictví, Dřevorubectví, Bylinkářství a Rybaření.',
+
+    desc: 'Dosáhni dovednosti 100 v libovolných třech sběratelských řemeslech.',
   },
   prog_first_craft: { name: 'Vlastníma rukama', desc: 'Dokonči svou první úspěšnou výrobu.' },
   prog_craft_specialist: {
@@ -291,8 +293,9 @@ export const table: DeedLocaleTable = {
     title: 'Drakobijce',
   },
   dgn_sanctum_speed: {
-    name: 'Sprint svatyní',
     desc: 'Poraz Korzula Hrobodraka do 15 minut od chvíle, kdy si tvá skupina zabrala Svatyni Hrobodraka.',
+
+    name: 'Rychlý průchod svatyní',
   },
   dgn_nythraxis_gravebreaker: {
     name: 'Před králem nepokleknu',
@@ -357,7 +360,7 @@ export const table: DeedLocaleTable = {
   },
   dlv_varric_ringers: {
     name: 'Zvony umlkly',
-    desc: 'Poraz Diákona Varrica poté, co pobiješ každého Pohřebního zvoníka, kterého pozvedne.',
+    desc: 'Poraz Diákona Vandrica poté, co pobiješ každého Pohřebního zvoníka, kterého pozvedne.',
   },
   dlv_nhalia_bells: {
     name: 'Tišitel zvonů',
@@ -370,7 +373,6 @@ export const table: DeedLocaleTable = {
   },
   chr_vale_chapter_ii: {
     name: 'Kronika Údolí, kapitola II',
-    desc: 'Dokonči druhou kapitolu Saulovy kroniky: bandité, murloci i důlní havěť pobiti, zápas na Prasečím poli odehrán a Relikviář zdolán.',
   },
   chr_vale_chapter_iii: {
     name: 'Kronika Údolí',
@@ -388,7 +390,6 @@ export const table: DeedLocaleTable = {
   chr_vale_packbreaker: { name: 'Postrach smeček', desc: 'Zab 3 Lesní vlky během 10 sekund.' },
   chr_vale_cup_debut: {
     name: 'Uchazeč o Měděné vědro',
-    desc: 'Nastup na hřiště a dotkni se míče v zápase Poháru Údolí na Prasečím poli.',
   },
   chr_vale_rares: {
     name: 'Hrůzy Údolí',
@@ -433,12 +434,13 @@ export const table: DeedLocaleTable = {
   },
   chr_peaks_chapter_iii: {
     name: 'Kronika Thornpeaku',
-    desc: 'Doveď příběh hory až do konce: kult draka rozprášen, Svatyně umlčena, Probouzející se štít sražen a všechny pojmenované hrůzy skalisek pobity.',
     title: 'z Thornpeaku',
+
+    desc: 'Dokonči celý příběh Výšin: odhal Nekromanta Plemene draků, očisti Svatyni Gravewyrma a poraz každý pojmenovaný děs Výšin.',
   },
   chr_peaks_sparring: {
     name: 'Dril na hradbách',
-    desc: 'Uštědři celkem 1 000 poškození Cvičnému panákovi nad Highwatchem.',
+    desc: 'Uštědři celkem 1 000 poškození cvičnému panákovi.',
   },
   chr_peaks_glimmer_cast: {
     name: 'Studená voda, chladnější světlo',
@@ -522,7 +524,7 @@ export const table: DeedLocaleTable = {
   },
   col_quartermaster_buyout: {
     name: 'Věrný zákazník',
-    desc: 'Objev všech deset kusů z nabídky Zásobovače Vexe.',
+    desc: 'Objev všech deset kusů výstroje z nabídky Zásobovače Vexe.',
   },
   col_glimmerfin: {
     name: 'Třpyt naděje',
@@ -573,66 +575,51 @@ export const table: DeedLocaleTable = {
   pvp_duel_grace: { name: 'Lekce pokory', desc: 'Prohraj duel s důstojností víceméně nedotčenou.' },
   pvp_vcup_first_match: {
     name: 'Kopačky na hřišti',
-    desc: 'Odehraj celý zápas Poháru údolí na Prasečím poli, ať vyhraješ, nebo prohraješ.',
   },
-  pvp_vcup_first_win: { name: 'První trofej', desc: 'Vyhraj hodnocený zápas Poháru údolí.' },
+  pvp_vcup_first_win: { name: 'První trofej' },
   pvp_vcup_wins_10: {
     name: 'Ostřílený kančbalista',
-    desc: 'Vyhraj 10 hodnocených zápasů Poháru údolí.',
   },
   pvp_vcup_wins_25: {
     name: 'Legenda kančbalu',
-    desc: 'Vyhraj 25 hodnocených zápasů Poháru údolí.',
     title: 'Legenda kančbalu',
   },
   pvp_vcup_first_goal: {
     name: 'Střelecký účet otevřen',
-    desc: 'Vstřel gól v hodnoceném zápase Poháru údolí.',
   },
   pvp_vcup_hat_trick: {
     name: 'Hrdina hattricku',
-    desc: 'Vstřel tři góly v jediném hodnoceném zápase Poháru údolí, v kategorii 3 na 3 nebo větší.',
   },
   pvp_vcup_golden_goal: {
     name: 'Zlatý okamžik',
-    desc: 'Vstřel zlatý gól, který rozhodne hodnocený zápas Poháru údolí.',
   },
   pvp_vcup_first_save: {
     name: 'Jisté ruce',
-    desc: 'Předveď zákrok jako brankář v hodnoceném zápase Poháru údolí.',
   },
   pvp_vcup_clean_sheet: {
     name: 'Přese mě nic neprojde',
-    desc: 'Vyhraj hodnocený zápas Poháru údolí jako brankář bez inkasovaného gólu.',
   },
   pvp_vcup_guild_win: {
     name: 'Za zástavu',
-    desc: 'Vyhraj hodnocený zápas Poháru údolí odehraný pod zástavou tvého cechu.',
   },
   pvp_fiesta_first_bout: {
     name: 'Nezvaný host',
-    desc: 'Odehraj celý souboj Fiesty 2 na 2, ať vyhraješ, nebo prohraješ.',
   },
-  pvp_fiesta_first_win: { name: 'Duše Fiesty', desc: 'Vyhraj souboj Fiesty 2 na 2.' },
+  pvp_fiesta_first_win: { name: 'Duše Fiesty' },
   pvp_fiesta_double: {
     name: 'Dvojitý malér',
-    desc: 'Zaznamenej dvě eliminace ve Fiestě během čtyř sekund.',
   },
   pvp_fiesta_shutdown: {
     name: 'Kazič zábavy',
-    desc: 'Sejmi soupeře ve Fiestě, který je na sérii tří a více.',
   },
   pvp_fiesta_full_build: {
     name: 'Ve velké parádě',
-    desc: 'Vyhraj souboj Fiesty s vylepšením zajištěným ze všech tří vln.',
   },
   pvp_fiesta_powerups: {
     name: 'Od každého jednou',
-    desc: 'Seber alespoň jednou každý ze čtyř power-upů v ringu: Démona rychlosti, Kolosa, Měsíční boty a Berserkera.',
   },
   pvp_fiesta_five_kills: {
     name: 'Tahoun párty',
-    desc: 'Zaznamenej pět eliminací v jediném souboji Fiesty.',
   },
   soc_first_party: {
     name: 'Ve dvou se to lépe táhne',
@@ -1022,7 +1009,7 @@ export const table: DeedLocaleTable = {
   },
   dgn_ignivar: {
     name: 'Posel padá',
-    desc: 'Poraz Ignivara, posla posledního plamene, v tavírně posledního pramene.',
+    desc: 'Poraz Ignivara, posla posledního plamene, v Tavicím kelímku Posledního pramene.',
   },
   dgn_ignivar_heroic: {
     name: 'Hrdinská: Posel padá',
@@ -1030,7 +1017,7 @@ export const table: DeedLocaleTable = {
   },
   dgn_varkhul: {
     name: 'Výheň chladne',
-    desc: 'Poraz Varkhula, kovotce posledního plamene, ve vnitřní tavírně.',
+    desc: 'Poraz Varkhula, kovotce posledního plamene, ve Vnitřním tavicím kelímku.',
   },
   dgn_varkhul_heroic: {
     name: 'Hrdinská: Výheň chladne',
@@ -1040,5 +1027,172 @@ export const table: DeedLocaleTable = {
     name: 'Ani jiskřička nazmar',
     desc: 'Poraz Varkhula, kovotce posledního plamene, na hrdinské obtížnosti, aniž by jediný člen raidu zemřel.',
     title: 'Nespálený',
+  },
+  col_set_bramblehide: {
+    name: 'Rootsova ostružinová kůže',
+    desc: 'Objev každý kus Rootsovy ostružinové kůže.',
+  },
+  prog_jewelcrafting_rare: {
+    desc: 'Vytvoř svůj první vzácný předmět v klenotnictví.',
+
+    name: 'Vybroušeno do vzácnosti',
+  },
+  prog_jewelcrafting_50: {
+    desc: 'Dosáhni dovednosti 50 v klenotnictví.',
+    name: 'Fazety a filigrán',
+  },
+  prog_grandmaster_jewelcrafting: {
+    desc: 'Dosáhni dovednosti 125 v klenotnictví, samotného vrcholu řemesla.',
+
+    name: 'Velmistr klenotnictví',
+    title: 'Velmistr klenotnictví',
+  },
+  prog_inscription_rare: {
+    desc: 'Vytvoř svůj první vzácný předmět v písařství.',
+
+    name: 'Psáno jemným inkoustem',
+  },
+  prog_inscription_50: { desc: 'Dosáhni dovednosti 50 v písařství.', name: 'Pero a pigment' },
+  prog_grandmaster_inscription: {
+    desc: 'Dosáhni dovednosti 125 v písařství, samotného vrcholu řemesla.',
+
+    name: 'Velmistr písařství',
+    title: 'Velmistr písařství',
+  },
+  col_deepest_cast: {
+    desc: 'Získej rybářský prut Clockreel, jediný prut, který dosáhne k nejhlubším úlovkům.',
+
+    name: 'Nejhlubší hod',
+  },
+  prog_first_planting: {
+    desc: 'Zasaď svou první plodinu na zahradním záhonu.',
+    name: 'Tady začíná setí',
+  },
+  chr_vale_first_harvest: {
+    desc: 'Sklid svou první prospívající plodinu ze zahradního záhonu v Eastbrookském údolí.',
+
+    name: 'Údolní prvotiny',
+  },
+  chr_marsh_first_harvest: {
+    desc: 'Sklid svou první prospívající plodinu ze zahradního záhonu v Mirefenském močálu.',
+
+    name: 'Výhonky v rašelině',
+  },
+  chr_peaks_first_harvest: {
+    desc: 'Sklid svou první prospívající plodinu ze zahradního záhonu v Thornpeakských výšinách.',
+
+    name: 'Sklizeň mezi útesy',
+  },
+  chr_evergarden_first_harvest: {
+    desc: 'Sklid svou první prospívající plodinu ze zahradního záhonu v Evergardenu.',
+
+    name: 'Políčko v ráji',
+  },
+  col_golden_harvest: {
+    desc: 'Sklid zlatou úrodu a nech o ní vědět celou zónu.',
+
+    name: 'Zlatá úroda',
+  },
+  prog_farming_100: {
+    desc: 'Dosáhni zdatnosti 100 v zemědělství.',
+    name: 'Mistr sklizně',
+    title: 'Mistr sklizně',
+  },
+  col_farm_roster: {
+    desc: 'Sklid každou plodinu, kterou vypěstují čtyři zahrady.',
+
+    name: 'Každá brázda plná',
+  },
+  prog_field_to_feast: {
+    desc: 'Uvař vrcholnou hostinu, ze které se nají celý raid.',
+
+    name: 'Z pole na hostinu',
+  },
+  prog_legendmaker: {
+    desc: 'Pozvedni dokonalé dílo na legendární úroveň pomocí Listiny tvorby a dej mu vlastní jméno.',
+
+    name: 'Tvůrce legend',
+  },
+  hid_forgebreaker: {
+    desc: 'Ukovej si sám Drtič kovárny a vrať se k Maelinovi s hotovým kladivem.',
+
+    name: 'Osvobozený pramen',
+  },
+  exp_arcane_calligraphy: {
+    name: 'Pevná ruka',
+    desc: 'Dokonči Éterickou kaligrafii v Eastbrookském údolí.',
+  },
+  exp_arcane_calligraphy_gold: {
+    name: 'Psáno hvězdným svitem',
+    desc: 'Získej zlaté hodnocení v Éterické kaligrafii.',
+    title: 'Sesilatel run',
+  },
+  exp_forge_helper: {
+    name: 'Pomocné kladivo',
+    desc: 'Pomoz Kovářce Maře dokončit štít ve Wyrmwatchi.',
+  },
+  exp_last_barricade: {
+    name: 'Poslední barikáda',
+    desc: 'Udrž lesní průsmyk proti hordě nemrtvých.',
+  },
+  exp_borrowed_face: {
+    name: 'Vypůjčená tvář',
+    desc: 'Odhal a poraz vetřelce v řadách hlídky Fenbridge.',
+  },
+  exp_windrider_slalom: {
+    name: 'Vichrojezdecký slalom',
+    desc: 'Dokonči sestup na mechanickém kluzáku kaňonem Vichrného hřebene.',
+  },
+  exp_duskweave_dispatches: {
+    name: 'Soumračné depeše',
+    desc: 'Získej zpět loupežnické depeše v očarovaném plášti Valerie.',
+  },
+  exp_wisp_maze: {
+    name: 'Světlo v bludišti',
+    desc: 'Zachraň ukradené měšce s mincemi a unikni z bludiště Věčné zahrady.',
+  },
+  prog_rift_watch_trusted: {
+    name: 'Důvěra Hlídky trhlin',
+    desc: 'Dosáhni postavení Důvěryhodného u Hlídky trhlin.',
+  },
+  prog_church_order_trusted: {
+    name: 'Důvěra Církevního řádu',
+    desc: 'Dosáhni postavení Důvěryhodného u Církevního řádu.',
+  },
+  prog_automatons_trusted: {
+    name: 'Důvěra Automatů',
+    desc: 'Dosáhni postavení Důvěryhodného u Automatů.',
+  },
+  prog_rift_watch_champion: {
+    name: 'Šampion Hlídky trhlin',
+    desc: 'Dosáhni postavení Šampiona u Hlídky trhlin.',
+    title: 'Trhlinostrážce',
+  },
+  prog_church_order_champion: {
+    name: 'Šampion Církevního řádu',
+    desc: 'Dosáhni postavení Šampiona u Církevního řádu.',
+    title: 'Úsvitostrážce',
+  },
+  prog_automatons_champion: {
+    name: 'Šampion Automatů',
+    desc: 'Dosáhni postavení Šampiona u Automatů.',
+    title: 'Kovmistr',
+  },
+  prog_faction_champion_all: {
+    name: 'Šampion každého praporu',
+    desc: 'Dosáhni postavení Šampiona u Hlídky trhlin, Církevního řádu a Automatů.',
+  },
+  exp_clue_first_casket: {
+    name: 'Poklad nalezen',
+    desc: 'Otevři Truhlu s pokladem vykopanou na konci pátrání s Hádankovým svitkem.',
+  },
+  exp_clue_ten_caskets: {
+    name: 'Lovec pokladů',
+    desc: 'Otevři 10 Truhel s pokladem vykopaných na konci pátrání s Hádankovými svitky.',
+    title: 'Lovec pokladů',
+  },
+  exp_harbor_to_harbor: {
+    name: 'Z přístavu do přístavu',
+    desc: 'Popluj oběma přívozy tam a zpět: z Eastbrooku do Moonrestu a z Wickharboru do Wyrmwatche.',
   },
 };

@@ -3,6 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { computeTalentModifiers } from '../src/sim/content/talents';
 import { abilitiesKnownAt, BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
+import { mobCombatProfile } from '../src/sim/mob/combat_profile';
 import { petPickTarget } from '../src/sim/pet/pet_ai';
 import { Sim } from '../src/sim/sim';
 import {
@@ -20,7 +21,6 @@ import { expectDefined } from './helpers/defined';
 
 interface SimPrivateHarness {
   applyHeal(source: Entity, target: Entity, amount: number, ability: string): void;
-  mobMeleeRange(mob: Entity): number;
   effectiveArmor(entity: Entity): number;
   effectiveAttackPower(entity: Entity): number;
   moveSpeedMult(entity: Entity): number;
@@ -192,8 +192,8 @@ describe('threat from damage', () => {
     const wolf = nearestMob(sim, 'forest_wolf');
     beefUp(wolf);
     hit(sim, sim.player, wolf, 100, 'holy');
-    // Oathward threatPct 0.4 scaled by the level-16 mastery ramp (16/20).
-    const protectionMasteryThreat = 1.32;
+    // Oathward threatPct 1.0 scaled by the level-16 mastery ramp (16/20).
+    const protectionMasteryThreat = 1.8;
     expect(wolf.threat.get(sim.playerId)).toBeCloseTo(
       100 * protectionMasteryThreat * RIGHTEOUS_FURY_THREAT_MULT + 1,
       5,
@@ -265,9 +265,9 @@ describe('threat from damage', () => {
     sim.dealDamage(sim.player, wolf, 100, false, 'physical', 'Shieldcrack', 'hit', true, slamOpts);
     const primed = wolf.threat.get(sim.playerId) ?? 0;
     sim.dealDamage(sim.player, wolf, 100, false, 'physical', 'Shieldcrack', 'hit', true, slamOpts);
-    // Recompense grants +80% threat, at full value once the level-20 mastery
+    // Recompense grants +110% threat, at full value once the level-20 mastery
     // ramp (min(1, level / 20)) is complete.
-    const recompense = 1.8;
+    const recompense = 2.1;
     expect((wolf.threat.get(sim.playerId) ?? 0) - primed).toBeCloseTo(
       (100 * 3.5 + 110) * recompense,
       5,
@@ -439,7 +439,7 @@ describe('classic pull-over rules (110% melee / 130% ranged)', () => {
     // size-scaled reach) was misclassified as ranged and forced to clear 130%.
     const { sim, a, b, wolf } = aggroSetup();
     wolf.scale = 3; // a boss-sized creature
-    const reach = asHarness(sim).mobMeleeRange(wolf);
+    const reach = mobCombatProfile(wolf).meleeRange;
     expect(reach).toBeGreaterThan(6); // scaled reach exceeds the old flat 6yd gate
     // 8yd is inside the big reach (~11yd) but beyond the old flat 6yd check
     teleport(sim, b, wolf.pos.x - 8, wolf.pos.z);
@@ -919,7 +919,7 @@ describe('rogue stealth', () => {
     expect(wolf.threat.has(rogue.id)).toBe(false);
   });
 
-  it('Smokestep allows out-of-combat rogue actions after escaping', () => {
+  it('Smokefade allows out-of-combat rogue actions after escaping', () => {
     const sim = makeSim('rogue');
     sim.setPlayerLevel(20);
     const wolf = nearestMob(sim, 'forest_wolf');
@@ -931,7 +931,7 @@ describe('rogue stealth', () => {
     hit(sim, sim.player, wolf, 30);
     sim.castAbility('vanish');
     expect(sim.player.inCombat).toBe(false);
-    expect(sim.player.auras.some((a) => a.name === 'Smokestep' && a.kind === 'stealth')).toBe(true);
+    expect(sim.player.auras.some((a) => a.name === 'Smokefade' && a.kind === 'stealth')).toBe(true);
 
     sim.targetEntity(wolf.id);
     sim.player.resource = sim.player.maxResource;
@@ -942,7 +942,7 @@ describe('rogue stealth', () => {
     expect(sim.player.auras.some((a) => a.kind === 'stealth')).toBe(true);
   });
 
-  it('Smokestep clears focus and stops incoming attacks from a single Ridge Stalker', () => {
+  it('Smokefade clears focus and stops incoming attacks from a single Ridge Stalker', () => {
     const sim = makeSim('rogue');
     sim.setPlayerLevel(20);
     const rogue = sim.player;
@@ -966,7 +966,7 @@ describe('rogue stealth', () => {
     const hpAfterEscape = rogue.hp;
     sim.castAbility('vanish');
 
-    expect(rogue.auras.some((a) => a.name === 'Smokestep' && a.kind === 'stealth')).toBe(true);
+    expect(rogue.auras.some((a) => a.name === 'Smokefade' && a.kind === 'stealth')).toBe(true);
     expect(rogue.cooldowns.has('vanish')).toBe(true);
     expect(rogue.autoAttack).toBe(false);
     expect(rogue.targetId).toBeNull();
@@ -1484,7 +1484,7 @@ describe('hunter pets', () => {
 });
 
 describe('druid forms', () => {
-  it('wolf form runs on energy, bear on rage, and mana is restored on shift-out', () => {
+  it('cat form runs on energy, bear on rage, and mana is restored on shift-out', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(12);
     const manaBefore = sim.player.resource;
@@ -1528,7 +1528,7 @@ describe('druid forms', () => {
     expect(sim.player.attackPower).toBeGreaterThan(apBefore + 15);
   });
 
-  it('wolf form raises attack power', () => {
+  it('cat form raises attack power', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(20);
     sim.tick();
@@ -1554,7 +1554,12 @@ describe('druid forms', () => {
     expect(sim.player.resource).toBeCloseTo(1, 5);
   });
 
-  it('bear charge is learned with Bruin Form and only works while shifted', () => {
+  // v0.43: Bruin Rush no longer REFUSES out of form, it ENTERS Bruin Form as
+  // part of the press (combat/druid_form_entry.ts). The old arm of this test
+  // asserted the refusal, which is the behavior the change deliberately
+  // removed; what still has to hold is that the rush itself is unchanged once
+  // the druid is a bear, by either route.
+  it('bear charge is learned with Bruin Form and enters it on use', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(10);
     expect(abilitiesKnownAt('druid', 10).some((a) => a.def.id === 'bear_charge')).toBe(true);
@@ -1562,10 +1567,27 @@ describe('druid forms', () => {
     beefUp(wolf);
     teleport(sim, sim.player, wolf.pos.x + 12, wolf.pos.z);
     sim.targetEntity(wolf.id);
+    expect(sim.player.auras.some((a) => a.kind === 'form_bear')).toBe(false);
 
     sim.castAbility('bear_charge');
-    expect(sim.tick().some((e) => e.type === 'error' && /Bruin Form/.test(e.text))).toBe(true);
-    expect(sim.player.chargeTargetId).toBe(null);
+    expect(sim.tick().some((e) => e.type === 'error' && /Bruin Form/.test(e.text))).toBe(false);
+
+    // The press shifted the druid AND ran the rush.
+    expect(sim.player.auras.some((a) => a.kind === 'form_bear')).toBe(true);
+    expect(sim.player.resourceType).toBe('rage');
+    expect(sim.player.chargeTargetId).toBe(wolf.id);
+    expect(sim.player.resource).toBe(9);
+    expect(sim.player.cooldowns.get('bear_charge') ?? 0).toBeGreaterThan(0);
+    expect(wolf.auras.some((a) => a.kind === 'stun')).toBe(true);
+  });
+
+  it('bear charge from inside Bruin Form is unchanged', () => {
+    const sim = makeSim('druid');
+    sim.setPlayerLevel(10);
+    const wolf = nearestMob(sim, 'forest_wolf');
+    beefUp(wolf);
+    teleport(sim, sim.player, wolf.pos.x + 12, wolf.pos.z);
+    sim.targetEntity(wolf.id);
 
     sim.castAbility('bear_form');
     sim.tick();
@@ -1574,13 +1596,14 @@ describe('druid forms', () => {
     sim.player.gcdRemaining = 0;
     sim.castAbility('bear_charge');
 
+    expect(sim.player.auras.filter((a) => a.kind === 'form_bear')).toHaveLength(1);
     expect(sim.player.chargeTargetId).toBe(wolf.id);
     expect(sim.player.resource).toBe(9);
     expect(sim.player.cooldowns.get('bear_charge') ?? 0).toBeGreaterThan(0);
     expect(wolf.auras.some((a) => a.kind === 'stun')).toBe(true);
   });
 
-  it('claw needs wolf form, builds combo points, and ferocious bite spends them', () => {
+  it('claw needs cat form, builds combo points, and ferocious bite spends them', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(14);
     const wolf = nearestMob(sim, 'forest_wolf');
@@ -1590,7 +1613,7 @@ describe('druid forms', () => {
     sim.player.facing = Math.atan2(wolf.pos.x - sim.player.pos.x, wolf.pos.z - sim.player.pos.z);
     sim.castAbility('claw');
     const events = sim.tick();
-    expect(events.some((e) => e.type === 'error' && /Wolf Form/.test(e.text))).toBe(true);
+    expect(events.some((e) => e.type === 'error' && /Cat Form/.test(e.text))).toBe(true);
     sim.castAbility('cat_form');
     sim.tick();
     let guard = 0;
@@ -1630,7 +1653,7 @@ describe('druid forms', () => {
     expect(events.some((e) => e.type === 'error' && /shapeshifted/.test(e.text))).toBe(true);
   });
 
-  it('bear and wolf forms can only use their own form kits', () => {
+  it('bear and cat forms can only use their own form kits', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(14);
     const wolf = nearestMob(sim, 'forest_wolf');
@@ -1657,7 +1680,7 @@ describe('druid forms', () => {
     sim.player.resource = 100;
     sim.castAbility('claw');
     events = sim.tick();
-    expect(events.some((e) => e.type === 'error' && /Wolf Form/.test(e.text))).toBe(true);
+    expect(events.some((e) => e.type === 'error' && /Cat Form/.test(e.text))).toBe(true);
   });
 
   it('bear form learns demoralizing roar at level 10 and lowers nearby mob attack power', () => {
@@ -1678,7 +1701,7 @@ describe('druid forms', () => {
     expect(wolf.threat.get(sim.playerId)).toBeGreaterThan(0);
   });
 
-  it('wolf form gains agility/AP and can build with Flense outside stealth', () => {
+  it('cat form gains agility/AP and can build with Flense outside stealth', () => {
     const sim = makeSim('druid');
     sim.setPlayerLevel(12);
     expect(sim.known.map((k) => k.def.id)).toEqual(
@@ -2170,7 +2193,7 @@ describe('warlock demon summons', () => {
     expect(sim.entities.has(demon.id)).toBe(true);
   });
 
-  it('Summon Gloomshade replaces the emberkin with a tank demon that Growls', () => {
+  it('Summon Duskmurk replaces the emberkin with a tank demon that Growls', () => {
     const sim = makeSim('warlock');
     sim.setPlayerLevel(10);
     const imp = summonImp(sim);
@@ -2180,7 +2203,7 @@ describe('warlock demon summons', () => {
     for (let i = 0; i < 20 * 6; i++) sim.tick();
     const voidwalker = expectDefined(sim.petOf(sim.playerId));
     expect(voidwalker.templateId).toBe('gloomshade');
-    expect(voidwalker.name).toBe('Gloomshade');
+    expect(voidwalker.name).toBe('Duskmurk');
     expect(voidwalker.id).not.toBe(imp.id);
     expect(sim.entities.has(imp.id)).toBe(false);
     expect(voidwalker.maxHp).toBeGreaterThan(imp.maxHp);

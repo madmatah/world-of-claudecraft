@@ -1,7 +1,8 @@
 // Opt-in real-Postgres roundtrip for insertClientPerfReport and the phase 03
-// dimension columns plus the phase 05 suggestion_ids array. The insert's 44
-// positional parameters are the one place a renumbering slip lands values in
-// the wrong columns while every mocked-pool suite stays green, so this
+// dimension columns, the phase 05 suggestion_ids array, the GPU model block,
+// and the shader warm-up columns. The insert's positional parameter list is the
+// one place a renumbering slip lands values in the wrong columns while every
+// mocked-pool suite stays green, so this
 // roundtrip is the ONLY decisive guard: it writes a row of pairwise-distinct
 // values through the real statement, reads every column back by name, and
 // asserts each landed where it was aimed. It also proves the boot DDL applied
@@ -10,6 +11,7 @@
 // (npm run db:up) to exercise it.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PERF_SUMMARY_MIN_GROUP_SAMPLES } from '../server/client_perf_summary_shape';
 
 const DB_URL = process.env.TEST_DATABASE_URL;
 const describeDb = DB_URL ? describe : describe.skip;
@@ -87,10 +89,22 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
       deviceMemory: 8.5,
       hardwareConcurrency: 12,
       mobileTouch: false,
+      // TRUE beside mobile_touch false and gl_laptop false, so a positional
+      // slip between the boolean columns flips an assertion.
+      desktopShell: true,
       browserFamily: 'safari',
       osFamily: 'macos',
       glVendor: 'RoundtripVendor',
       glRendererBucket: 'apple-m3-pro',
+      glBackend: 'd3d11',
+      // The GPU model block. Pairwise-distinct like every value above, and
+      // gl_laptop is deliberately FALSE rather than null here so a positional
+      // slip into another boolean column (auto_governor is true, mobile_touch
+      // is false) still flips an assertion.
+      glRendererRaw: 'ANGLE (Roundtrip, Roundtrip Renderer, D3D11-1.2.3.4)',
+      glModel: 'roundtrip-model',
+      glLaptop: false,
+      gpuHpAdapter: 'roundtrip-hp-adapter',
       zoneOrScenario: 'dungeon:hollow_crypt',
       source: 'gameplay',
       crowdBucket: '25-49',
@@ -100,6 +114,33 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
       worst10sFrameP95Ms: 180.5,
       suggestionIds: ['hardware-acceleration', 'high-dpi'],
       rawSummary: { roundtrip: true, seconds: 77 },
+      shaderWarmWorkerActive: true,
+      shaderWarmRefusal: 'extension-drift:ext_roundtrip',
+      frameCapIntent: 30,
+      cadenceDivisor: 4,
+      refreshHz: 144,
+      // The host-essentials block, appended LAST to both halves of the
+      // statement. The numbers are pairwise distinct. Three booleans cannot all
+      // differ from each other AND from the pre-existing gl_laptop (false)
+      // with only two values, so the pattern chosen is: every ADJACENT pair in
+      // COLUMN ORDER differs, which is what a slipped placeholder actually
+      // produces. In column order the block runs
+      //   ... app_gpu_ws_mb, host_on_battery, host_power_plan, host_power_mode,
+      //       host_hags, host_game_mode
+      // so host_on_battery is TRUE (its neighbours are a number and a string,
+      // and it differs from gl_laptop false), and host_hags FALSE beside
+      // host_game_mode TRUE. The only same-valued pair, host_on_battery and
+      // host_game_mode, is the furthest-apart pair in the whole appended run.
+      hostMemTotalMb: 32512,
+      hostMemFreeMb: 9088,
+      appWorkingSetMb: 1733,
+      appRendererWsMb: 911,
+      appGpuWsMb: 407,
+      hostOnBattery: true,
+      hostPowerPlan: 'high_performance',
+      hostPowerMode: 'best_performance',
+      hostHags: false,
+      hostGameMode: true,
     });
 
     const res = await db.pool.query('SELECT * FROM client_perf_reports WHERE session_id = $1', [
@@ -141,6 +182,11 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
     expect(r.os_family).toBe('macos');
     expect(r.gl_vendor).toBe('RoundtripVendor');
     expect(r.gl_renderer_bucket).toBe('apple-m3-pro');
+    expect(r.gl_backend).toBe('d3d11');
+    expect(r.gl_renderer_raw).toBe('ANGLE (Roundtrip, Roundtrip Renderer, D3D11-1.2.3.4)');
+    expect(r.gl_model).toBe('roundtrip-model');
+    expect(r.gl_laptop).toBe(false);
+    expect(r.gpu_hp_adapter).toBe('roundtrip-hp-adapter');
     expect(r.zone_or_scenario).toBe('dungeon:hollow_crypt');
     expect(r.source).toBe('gameplay');
     expect(r.crowd_bucket).toBe('25-49');
@@ -151,6 +197,26 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
     // The pg driver maps a JS string array to TEXT[]; order must survive.
     expect(r.suggestion_ids).toEqual(['hardware-acceleration', 'high-dpi']);
     expect(r.raw_summary).toEqual({ roundtrip: true, seconds: 77 });
+    expect(r.shader_warm_worker_active).toBe(true);
+    expect(r.shader_warm_refusal).toBe('extension-drift:ext_roundtrip');
+    expect(r.desktop_shell).toBe(true);
+    // Last in the column list: a slipped placeholder would land them elsewhere.
+    expect(r.frame_cap_intent).toBe(30);
+    expect(r.cadence_divisor).toBe(4);
+    expect(r.refresh_hz).toBe(144);
+    // The host-essentials block, now last in the column list: every one read
+    // back BY NAME, so a slipped placeholder anywhere in the appended run
+    // lands a value in the wrong column and flips at least one of these.
+    expect(r.host_mem_total_mb).toBe(32512);
+    expect(r.host_mem_free_mb).toBe(9088);
+    expect(r.app_working_set_mb).toBe(1733);
+    expect(r.app_renderer_ws_mb).toBe(911);
+    expect(r.app_gpu_ws_mb).toBe(407);
+    expect(r.host_on_battery).toBe(true);
+    expect(r.host_power_plan).toBe('high_performance');
+    expect(r.host_power_mode).toBe('best_performance');
+    expect(r.host_hags).toBe(false);
+    expect(r.host_game_mode).toBe(true);
   });
 
   it('serves the row back through clientPerfRaw with the dimensions and suggestion ids mapped', async () => {
@@ -165,6 +231,31 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
     expect(row?.worst10sFrameP95Ms).toBeCloseTo(180.5, 5);
     expect(row?.zoneOrScenario).toBe('dungeon:hollow_crypt');
     expect(row?.suggestionIds).toEqual(['hardware-acceleration', 'high-dpi']);
+    expect(row?.glBackend).toBe('d3d11');
+    // The raw renderer string has a READER, so it is not collected without a
+    // consumer: per-report forensics behind the admin gate. It is client text
+    // and is served verbatim, so any future rendering of it must escape it.
+    expect(row?.glRendererRaw).toBe('ANGLE (Roundtrip, Roundtrip Renderer, D3D11-1.2.3.4)');
+    expect(row?.glModel).toBe('roundtrip-model');
+    expect(row?.glLaptop).toBe(false);
+    expect(row?.gpuHpAdapter).toBe('roundtrip-hp-adapter');
+    expect(row?.targetFps).toBe(61);
+    expect(row?.frameCapIntent).toBe(30);
+    expect(row?.cadenceDivisor).toBe(4);
+    expect(row?.refreshHz).toBe(144);
+    // The admin raw reader's explicit SELECT list and mapper carry the
+    // host-essentials columns too: a column added to the insert but forgotten
+    // there reads back undefined here.
+    expect(row?.hostMemTotalMb).toBe(32512);
+    expect(row?.hostMemFreeMb).toBe(9088);
+    expect(row?.appWorkingSetMb).toBe(1733);
+    expect(row?.appRendererWsMb).toBe(911);
+    expect(row?.appGpuWsMb).toBe(407);
+    expect(row?.hostOnBattery).toBe(true);
+    expect(row?.hostPowerPlan).toBe('high_performance');
+    expect(row?.hostPowerMode).toBe('best_performance');
+    expect(row?.hostHags).toBe(false);
+    expect(row?.hostGameMode).toBe(true);
   });
 
   it('aggregates suggestionCounts through clientPerfSummary from the live rows', async () => {
@@ -177,13 +268,84 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
     expect(byId.get('high-dpi') ?? 0).toBeGreaterThanOrEqual(1);
   });
 
+  it('rolls the GPU model dimensions up through clientPerfSummary against real SQL', async () => {
+    // The one place the model statement's two grouping sets, its HAVING bound,
+    // and its pre-window rank actually execute. The mocked-pool suite can only
+    // pin SQL text, and every defect this guards against reads correctly there:
+    // a filter moved after the window function, a mismatch arm dropped, or a
+    // floor that quietly swallows the whole list.
+    const adminDb = await import('../server/admin_db');
+    // The keys carry a test-only vendor segment ('rt...') so this suite's rows
+    // can never be confused with a real fleet key, but their SHAPE is the real
+    // one the predicate reads: vendor first, model after.
+    //
+    // Clear the sample floor for the mismatch group, and seed the groups that
+    // must NOT appear: one below the floor, one whose adapter agrees outright,
+    // one in the DEFAULT-CHROME shape (a vendor-only adapter beside a
+    // model-level renderer, which is a single-GPU machine and the false
+    // positive a whole-key comparison produced), and one whose renderer could
+    // not be parsed at all.
+    const rows: [string, string, string, string][] = [];
+    for (let i = 0; i < PERF_SUMMARY_MIN_GROUP_SAMPLES; i++) {
+      rows.push([`${MARKER}-hp-${i}`, 'macos', 'rtintel-iris-xe', 'rtnvidia']);
+      rows.push([`${MARKER}-agree-${i}`, 'macos', 'rtagree', 'rtagree']);
+      rows.push([`${MARKER}-chrome-${i}`, 'macos', 'rtapple-m4-pro', 'rtapple']);
+      rows.push([`${MARKER}-unparsed-${i}`, 'macos', 'other', 'rtnvidia']);
+    }
+    rows.push([`${MARKER}-rare`, 'macos', 'rtrare-model', 'rtnvidia']);
+    for (const [session, os, model, adapter] of rows) {
+      await db.pool.query(
+        `INSERT INTO client_perf_reports (session_id, os_family, gl_model, gpu_hp_adapter)
+         VALUES ($1, $2, $3, $4)`,
+        [session, os, model, adapter],
+      );
+    }
+
+    const summary = await adminDb.clientPerfSummary(24);
+    const model = summary.byModel.find(
+      (b) => b.osFamily === 'macos' && b.glModel === 'rtintel-iris-xe',
+    );
+    expect(model?.sampleCount).toBeGreaterThanOrEqual(PERF_SUMMARY_MIN_GROUP_SAMPLES);
+    const mismatch = summary.byHpMismatch.find(
+      (b) => b.glModel === 'rtintel-iris-xe' && b.gpuHpAdapter === 'rtnvidia',
+    );
+    expect(mismatch?.sampleCount).toBeGreaterThanOrEqual(PERF_SUMMARY_MIN_GROUP_SAMPLES);
+    // A group that AGREES is not a mismatch, however high its volume: without
+    // the vendor-comparison arm it would outrank every real one.
+    expect(summary.byHpMismatch.some((b) => b.glModel === 'rtagree')).toBe(false);
+    // The default-Chrome shape: adapter 'rtapple' beside model 'rtapple-m4-pro'
+    // is ONE GPU, and a whole-key comparison filed every such client here. The
+    // row is still counted in byModel, which is the denominator.
+    expect(summary.byHpMismatch.some((b) => b.glModel === 'rtapple-m4-pro')).toBe(false);
+    expect(summary.byModel.some((b) => b.glModel === 'rtapple-m4-pro')).toBe(true);
+    // An unparsed renderer is an absence of evidence, not a disagreement.
+    expect(summary.byHpMismatch.some((b) => b.glModel === 'other')).toBe(false);
+    // The legacy and no-evidence rows carry gpu_hp_adapter = '' and never reach
+    // the list; nor does a row with an adapter but NO renderer string, which
+    // without the gl_model <> '' arm would read as a mismatch against nothing.
+    expect(summary.byHpMismatch.some((b) => b.gpuHpAdapter === '')).toBe(false);
+    expect(summary.byHpMismatch.some((b) => b.glModel === '')).toBe(false);
+    // Below the floor, so it is aggregated away rather than sorted: this is the
+    // bound that keeps a wide spread of client-derived keys from making the
+    // server materialize hundreds of thousands of groups to return 100 rows.
+    expect(summary.byHpMismatch.some((b) => b.glModel === 'rtrare-model')).toBe(false);
+    expect(summary.byModel.some((b) => b.glModel === 'rtrare-model')).toBe(false);
+  });
+
   it('leaves an existing pre-phase row on the column defaults the mapper folds', async () => {
     await db.pool.query(
       'INSERT INTO client_perf_reports (session_id, zone_or_scenario) VALUES ($1, $2)',
       [`${MARKER}-legacy`, 'gameplay'],
     );
     const res = await db.pool.query(
-      'SELECT crowd_bucket, sim_entities, active_views, visible_views, worst_10s_frame_p95_ms, suggestion_ids FROM client_perf_reports WHERE session_id = $1',
+      `SELECT crowd_bucket, sim_entities, active_views, visible_views, worst_10s_frame_p95_ms,
+              suggestion_ids, gl_backend, gl_renderer_raw, gl_model, gl_laptop, gpu_hp_adapter,
+              shader_warm_worker_active, shader_warm_refusal, desktop_shell,
+              frame_cap_intent, cadence_divisor, refresh_hz,
+              host_mem_total_mb, host_mem_free_mb, app_working_set_mb, app_renderer_ws_mb,
+              app_gpu_ws_mb, host_on_battery, host_power_plan, host_power_mode,
+              host_hags, host_game_mode
+         FROM client_perf_reports WHERE session_id = $1`,
       [`${MARKER}-legacy`],
     );
     expect(res.rows[0]).toEqual({
@@ -193,7 +355,76 @@ describeDb('client perf report insert roundtrip (real Postgres)', () => {
       visible_views: 0,
       worst_10s_frame_p95_ms: 0,
       suggestion_ids: [],
+      gl_backend: '',
+      // The GPU model block on a row inserted WITHOUT it: the additive DDL
+      // gave every pre-column row these defaults, and '' plus NULL is exactly
+      // what the summary reads as "no evidence".
+      gl_renderer_raw: '',
+      gl_model: '',
+      gl_laptop: null,
+      gpu_hp_adapter: '',
+      shader_warm_worker_active: false,
+      shader_warm_refusal: '',
+      desktop_shell: false,
+      // A row older than the frame rate ceiling had none: no intent, every
+      // refresh rendered, display rate never read.
+      frame_cap_intent: 0,
+      cadence_divisor: 1,
+      refresh_hz: 0,
+      // A row older than the host-essentials block, and equally every web and
+      // mobile row: NULL is "could not be read / not collected", '' is the
+      // unknown member of the two closed vocabularies.
+      host_mem_total_mb: null,
+      host_mem_free_mb: null,
+      app_working_set_mb: null,
+      app_renderer_ws_mb: null,
+      app_gpu_ws_mb: null,
+      host_on_battery: null,
+      host_power_plan: '',
+      host_power_mode: '',
+      host_hags: null,
+      host_game_mode: null,
     });
+  });
+
+  it('proves the NUL rule the ingest sanitizer exists for, on the text column AND on jsonb', async () => {
+    // Postgres itself, not a mock. The failure this guards is not a lost field
+    // but a lost REPORT: one NUL anywhere in a beacon aborts the whole INSERT.
+    // Both arms are checked because the second one is easy to miss: raw_summary
+    // is jsonb, which rejects the escaped form with its own message.
+    const nul = String.fromCharCode(0);
+    await expect(
+      db.pool.query(
+        'INSERT INTO client_perf_reports (session_id, gl_renderer_raw) VALUES ($1, $2)',
+        [`${MARKER}-nul-text`, `ANGLE${nul}(NVIDIA)`],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      db.pool.query('INSERT INTO client_perf_reports (session_id, raw_summary) VALUES ($1, $2)', [
+        `${MARKER}-nul-json`,
+        JSON.stringify({ [`zone${nul}`]: `east${nul}brook` }),
+      ]),
+    ).rejects.toThrow();
+
+    // What the ingest puts between a beacon and that failure
+    // (server/perf_report_text.ts, wired into textIn and rawSummary).
+    const text = await import('../server/perf_report_text');
+    await db.pool.query(
+      'INSERT INTO client_perf_reports (session_id, gl_renderer_raw, raw_summary) VALUES ($1, $2, $3)',
+      [
+        `${MARKER}-nul-clean`,
+        text.stripControlChars(`ANGLE${nul}(NVIDIA)`),
+        JSON.stringify(
+          text.stripJsonControlChars({ [`zone${nul}`]: `east${nul}brook`, seconds: 30 }),
+        ),
+      ],
+    );
+    const res = await db.pool.query(
+      'SELECT gl_renderer_raw, raw_summary FROM client_perf_reports WHERE session_id = $1',
+      [`${MARKER}-nul-clean`],
+    );
+    expect(res.rows[0].gl_renderer_raw).toBe('ANGLE(NVIDIA)');
+    expect(res.rows[0].raw_summary).toEqual({ zone: 'eastbrook', seconds: 30 });
   });
 
   it('built the worst-10s concurrent index and it is valid', async () => {

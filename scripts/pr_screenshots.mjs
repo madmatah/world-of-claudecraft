@@ -118,12 +118,16 @@ async function clearIntentionalPageCloseProbe(page) {
 // One guarded shot: a failure in one frame must not lose the others, so the run always
 // keeps whatever it managed to capture. `clip` is an optional CSS selector; when given
 // and found, the shot is cropped to that element (plus a small margin) instead of full frame.
+// A capture whose subject spans several elements (the unit frames plus the player menu)
+// hands back a viewport-space `{ x, y, width, height }` region instead of a selector.
 async function shoot(page, name, clip) {
   try {
     await new Promise((r) => setTimeout(r, 300));
     const file = `${OUT}/${name}.png`;
     let region;
-    if (clip) {
+    if (clip && typeof clip === 'object') {
+      region = clip;
+    } else if (clip) {
       region = await page.evaluate((sel) => {
         const el = document.querySelector(sel);
         if (!el) return null;
@@ -190,7 +194,13 @@ async function shootSpecific(targets) {
                 hasTouch: true,
                 deviceScaleFactor: 2,
               },
+              // A variant may override the emulated phone UA. The default
+              // iPhone UA lands gfx.ts's iOS memory profile, whose Lambert
+              // material tier never applies the day/night grade outdoors, so
+              // a target whose subject needs the graded look emulates an
+              // Android phone instead (the p16 regalia target).
               userAgent:
+                variant.userAgent ??
                 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
             });
           }
@@ -203,7 +213,9 @@ async function shootSpecific(targets) {
             // wait for network idleness: the marketing shell polls presence
             // and project-stat endpoints, so an absent local API otherwise
             // burns the full navigation timeout before every static UI frame.
-            waitUntil: variant.landing ? 'domcontentloaded' : 'networkidle0',
+            waitUntil:
+              variant.navigationWaitUntil ??
+              (variant.landing ? 'domcontentloaded' : 'networkidle0'),
             timeout: NAV_TIMEOUT,
           });
           if (variant.mobile)

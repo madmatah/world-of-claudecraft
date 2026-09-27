@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { audio } from '../src/game/audio';
 import type { SimEvent } from '../src/sim/types';
 import { type BannerVariant, Hud } from '../src/ui/hud';
-import { professionImageUrl } from '../src/ui/profession_art';
+import { professionImageUrl } from '../src/ui/hud/professions/profession_art';
 import {
   advanceSkillLevelObservation,
   buildSkillLevelCelebrationPlan,
@@ -21,7 +21,7 @@ import {
   SKILL_PLATE_MILESTONE_STEP,
   skillDisplayLevel,
   skillLevelArtId,
-} from '../src/ui/skill_level_toast_view';
+} from '../src/ui/hud/professions/skill_level_toast_view';
 
 describe('skillDisplayLevel', () => {
   it('floors a fractional skill to the player-visible level', () => {
@@ -269,10 +269,11 @@ describe('skillLevelArtId', () => {
   it('maps gathering ids to the profession art registry prefix', () => {
     expect(skillLevelArtId('mining')).toBe('gather_mining');
     expect(skillLevelArtId('fishing')).toBe('gather_fishing');
+    expect(skillLevelArtId('farming')).toBe('gather_farming');
   });
 
   it('resolves to shipped art URLs for every gathering profession', () => {
-    for (const id of ['mining', 'logging', 'herbalism', 'fishing'] as const) {
+    for (const id of ['mining', 'logging', 'herbalism', 'fishing', 'farming'] as const) {
       expect(professionImageUrl(skillLevelArtId(id))).toMatch(
         new RegExp(`/ui/professions/gather_${id}\\.webp$`),
       );
@@ -471,6 +472,7 @@ interface DrainHarness {
     craftingIdentity: { synced: boolean };
     craftSkills: Record<string, number>;
     gatheringProficiency: Record<string, number>;
+    factions: Record<string, number>;
   };
   bannerEl: HTMLElement;
   bannerTimer: number | undefined;
@@ -480,6 +482,7 @@ interface DrainHarness {
   craftTierUpDrains: number;
   prevCraftSkillLevels: Record<string, number> | null;
   prevGatheringSkillLevels: Record<string, number> | null;
+  prevFactionStanding: Record<string, number> | null;
   handleEvents(events: SimEvent[]): void;
 }
 
@@ -490,6 +493,8 @@ function drainHud(synced: boolean): DrainHarness {
     craftingIdentity: { synced },
     craftSkills: {},
     gatheringProficiency: {},
+    // The faction tier observer rides the same drain tail (and sync flag).
+    factions: { rift_watch: 0, church_order: 0, automatons: 0 },
     // The concrete worlds carry far more; handleEvents with an empty drain
     // reads only this slice (the six sibling harnesses are the precedent).
   };
@@ -500,6 +505,7 @@ function drainHud(synced: boolean): DrainHarness {
   hud.prevCraftSkills = null;
   hud.craftTierUpDrains = 0;
   hud.prevCraftSkillLevels = null;
+  hud.prevFactionStanding = null;
   hud.prevGatheringSkillLevels = null;
   return hud;
 }
@@ -601,7 +607,11 @@ describe('skill plate tokens and CSS contract', () => {
   });
 
   it('keeps the plate rules and the variant-agnostic art+subtext layout', () => {
-    expect(hudCss).toMatch(/#banner\.banner-skill\s*\{[^}]*background: var\(--skill-banner-bg\)/);
+    // The redesign routes the skill plate through ui-panel-strong and sets its
+    // variant background through the primitive's host input.
+    expect(hudCss).toMatch(
+      /#banner\.banner-skill\s*\{[^}]*--panel-bg-strong: var\(--skill-banner-bg\)/,
+    );
     expect(hudCss).toMatch(/#banner\.banner-with-art\.has-subtext\s*\{[^}]*flex-direction: row/);
     expect(hudCss).toMatch(
       /#banner\.banner-with-art\.has-subtext \.banner-art-copy\s*\{[^}]*flex-direction: column/,

@@ -6,20 +6,32 @@ import { QUESTS } from '../../../sim/data';
 import type { QuestObjectiveRef } from '../../../sim/quest_targets';
 import { questObjectiveRequired } from '../../../sim/types';
 import type { IWorld } from '../../../world_api';
-import { stationNameText } from '../../crafting_window';
 import { tEntity } from '../../entity_i18n';
 import { esc } from '../../esc';
 import { gatherNodeTooltipHtml } from '../../gather_node_tooltip_controller';
-import { buildGatherNodeTooltip } from '../../gathering_view';
 import { formatNumber, t } from '../../i18n';
 import { type MapGatherTipMemo, resolveGatherTipMemo } from '../../map_gather_tip_memo';
 import type {
+  MapFarmPatchMarker,
   MapGatherNodeMarker,
   MapNpcMarker,
   MapServiceMarker,
   MapStationMarker,
+  MapWorldBossMarker,
+  MapWorldQuestMarker,
 } from '../../map_window_view';
 import { questMarkerTooltipTag } from '../../quest_marker_tags';
+import {
+  worldQuestDef,
+  worldQuestDisplayName,
+  worldQuestFactionLine,
+  worldQuestObjectiveLabel,
+  worldQuestRewardLine,
+  worldQuestStatusText,
+  worldQuestTimeRemainingText,
+} from '../../world_quest_view';
+import { stationNameText } from '../professions/crafting_window';
+import { buildGatherNodeTooltip } from '../professions/gathering_view';
 
 function questTitle(questId: string): string {
   return tEntity({ kind: 'quest', id: questId, field: 'title' });
@@ -82,6 +94,13 @@ export class MapMarkerTooltipContent {
     return `<div class="tt-title">${esc(t(key))}</div>`;
   }
 
+  // Every farming patch is the same kind of place, one per farming hub, so the
+  // pin needs no per-site name: the zone map is already zone-scoped, which is
+  // what tells the four sites apart. Same shape as service() above.
+  farm(_marker: MapFarmPatchMarker): string {
+    return `<div class="tt-title">${esc(t('worldContent.farmPatchName'))}</div>`;
+  }
+
   navigation(text: string): string {
     return `<div class="tt-title">${esc(text)}</div>`;
   }
@@ -92,6 +111,56 @@ export class MapMarkerTooltipContent {
       return model ? gatherNodeTooltipHtml(model) : '';
     });
     return this.gatherMemo.html;
+  }
+
+  worldQuest(marker: MapWorldQuestMarker, nowMs: number): string {
+    const quest = worldQuestDef(marker.questId);
+    if (!quest) return '';
+    const progress = this.world.worldQuestLog.get(marker.questId);
+    const current = Math.min(progress?.count ?? 0, quest.count);
+    const timeRemaining = worldQuestTimeRemainingText(this.world.worldQuestExpiresAtMs, nowMs);
+    return (
+      `<div class="tt-title">${esc(worldQuestDisplayName(marker.questId))}</div>` +
+      `<div>${esc(worldQuestFactionLine(quest))}</div>` +
+      `<div>${esc(worldQuestStatusText(marker.state))}</div>` +
+      `<div>${esc(
+        questProgressText(worldQuestObjectiveLabel(marker.questId), current, quest.count),
+      )}</div>` +
+      `<div>${esc(
+        worldQuestRewardLine(quest, {
+          level: this.world.player.level,
+          cls: this.world.cfg.playerClass,
+          cycle: this.world.worldQuestCycle,
+        }),
+      )}</div>` +
+      (timeRemaining ? `<div>${esc(timeRemaining)}</div>` : '')
+    );
+  }
+
+  /** Plain-text counterpart used by the map's always-present screen-reader summary. */
+  worldQuestSemantic(questId: string, nowMs: number): string {
+    const quest = worldQuestDef(questId);
+    if (!quest) return questId;
+    const progress = this.world.worldQuestLog.get(questId);
+    const current = Math.min(progress?.count ?? 0, quest.count);
+    const values = {
+      name: worldQuestDisplayName(questId),
+      progress: questProgressText(worldQuestObjectiveLabel(questId), current, quest.count),
+      reward: worldQuestRewardLine(quest, {
+        level: this.world.player.level,
+        cls: this.world.cfg.playerClass,
+        cycle: this.world.worldQuestCycle,
+      }),
+    };
+    const time = worldQuestTimeRemainingText(this.world.worldQuestExpiresAtMs, nowMs);
+    return time
+      ? t('questUi.worldQuest.semanticSummaryTimed', { ...values, time })
+      : t('questUi.worldQuest.semanticSummary', values);
+  }
+
+  worldBoss(marker: MapWorldBossMarker): string {
+    const name = tEntity({ kind: 'mob', id: marker.bossId, field: 'name' });
+    return `<div class="tt-title">${esc(name)}</div>`;
   }
 
   questArea(refs: readonly QuestObjectiveRef[], activeCount: number): string {

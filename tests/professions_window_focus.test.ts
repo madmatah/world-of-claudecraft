@@ -9,26 +9,23 @@
 // writes. Drives the real ProfessionsWindow over jsdom with stub deps.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProfessionsWindow, type ProfessionsWindowDeps } from '../src/ui/professions_window';
+import {
+  ProfessionsWindow,
+  type ProfessionsWindowDeps,
+} from '../src/ui/hud/professions/professions_window';
 
 // jsdom ships no 2D canvas, so the procedural icon compositor cannot run here;
 // the painter only ever uses the returned string as an <img src>.
-vi.mock('../src/ui/icons', () => ({
+vi.mock('../src/ui/icons', async (importOriginal) => ({
+  // Additive, never bare (the reliquary_window_behavior lesson): the real
+  // module passes through, QUALITY_COLOR included (the hand-mirrored copy the
+  // bare form needed is retired: a real record cannot drift), and only the
+  // two resolvers below stay stubbed.
+  ...(await importOriginal<typeof import('../src/ui/icons')>()),
   iconDataUrl: () => 'data:,',
   // Echo the requested id into the URL so painter tests catch a wrong or
   // hardcoded profession/gathering resolver argument.
   professionIconUrl: (id: string) => `/test-professions/${id}.webp`,
-  // The tool-effect hover card (tool_effect_tooltip.ts) colors its title by
-  // item quality; mirror the full record so wiring the card does not crash
-  // here and a partial-mock miss cannot bite a later quality.
-  QUALITY_COLOR: {
-    poor: '#9d9d9d',
-    common: '#ffffff',
-    uncommon: '#1eff00',
-    rare: '#0070dd',
-    epic: '#a335ee',
-    legendary: '#ff8000',
-  },
 }));
 
 interface WorldState {
@@ -59,6 +56,8 @@ interface WorldState {
   // input. Defaults to empty: no charms, no buttons, so the existing cases
   // keep asserting the button-free surface.
   inventory?: { itemId: string; count: number }[];
+  // The viewer's planted beds (IWorld `myFarmPlots`); none by default.
+  farmPlots?: unknown[];
 }
 
 // An attuned, tiered identity so the window opens in full mode (ring, ten
@@ -110,6 +109,7 @@ function makeWindow(
         ),
         toolEffectSlots: state.toolEffects ?? [],
         inventory: state.inventory ?? [],
+        myFarmPlots: state.farmPlots ?? [],
         player: { name: 'Testchar' },
       }) as never,
     closeOthers: () => {},
@@ -117,6 +117,7 @@ function makeWindow(
     consumePeek: () => false,
     captureFocus: () => null,
     restoreFocus: () => {},
+    openWiki: () => {},
     itemIcon: () => '',
     moneyHtml: () => '',
     itemTooltip: () => '',
@@ -190,20 +191,32 @@ describe('ProfessionsWindow: focus and scroll survive rebuilds', () => {
     expect(document.activeElement).toBe(el);
   });
 
-  it('keeps Close the only focusable control on the CHARM-LESS surface', () => {
+  it('keeps only Close and the tutorial link focusable on the CHARM-LESS surface', () => {
     // The pre-craft default: with no charms and no slot the window has no
-    // action buttons, so Close is the whole refocus story for that state.
+    // action buttons, so only the window escape and the standing tutorial
+    // disclosure participate in keyboard navigation.
     // The acquisition craft's buttons are the inner controls the old version
     // of this pin predicted; their own refocus behavior is the two arms
     // below.
-    const { el } = makeWindow(baseState());
+    const openWiki = vi.fn();
+    const { el } = makeWindow(baseState(), { openWiki });
     const focusables = [
       ...el.querySelectorAll<HTMLElement>(
         'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       ),
     ];
-    expect(focusables).toHaveLength(1);
+    expect(focusables).toHaveLength(2);
     expect(focusables[0].hasAttribute('data-close')).toBe(true);
+    // Pin moved: the tutorial disclosure was a raw <a href="/wiki/professions"
+    // target="_blank">, which the desktop shell silently drops (the client is
+    // served from app:// and non-http navigation is denied) and which also
+    // offers a ctrl-click past the confirm-first wiki hop. It is now a button on
+    // the shared launcher.
+    expect(focusables[1].matches('button[data-wiki-link]')).toBe(true);
+    expect(el.querySelector('a[href]')).toBeNull();
+
+    focusables[1].click();
+    expect(openWiki).toHaveBeenCalledOnce();
   });
 
   it('carries focus across a rebuild to the SAME action button by its key', () => {
@@ -347,7 +360,7 @@ describe('ProfessionsWindow: mode and row gating', () => {
     // Fishing joined the name table with Professions 2.0, so the unknown-id
     // example is skinning (documented in gathering.ts as deliberately NOT a
     // gathering profession): an id with no GATHERING_PROFESSION_NAME_KEYS
-    // entry (src/ui/gathering_profession_name.ts, the extracted shared
+    // entry (src/ui/hud/professions/gathering_profession_name.ts, the extracted shared
     // table) renders no row BY DESIGN, while the known ids beside it still
     // render.
     const state = baseState();

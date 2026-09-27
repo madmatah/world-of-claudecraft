@@ -10,23 +10,27 @@
 //   settles in mortar lines / plank seams while raised faces lighten a touch,
 //   so the surface reads worn rather than just dirty),
 // - roughness lerps partway toward the set's roughness map,
-// - on ULTRA and above, a multi-tap parallax (3 taps on ultra, 4 on insane;
-//   also available through the Advanced Surface Detail dial) walks the
-//   projection along the view ray using the family's
-//   Displacement map (per-family amplitude and clamp: deep on stone/rock/
-//   bark, shallow on plaster/fabric) so surfaces gain clearly per-pixel
-//   height response against both the light AND the camera, and the sampled
-//   height also shades the diffuse (recesses darken, crests lighten) so the
-//   relief reads even head-on.
+// - on ULTRA and above (also through the Advanced Surface Detail dial), a
+//   two-read, offset-limited parallax (a height read plus one refinement,
+//   averaged) shifts the projection along the view ray by the family's
+//   Displacement map (per-family amplitude and clamp:
+//   deep on stone/rock/bark, shallow on plaster/fabric) so surfaces gain a
+//   gentle height response against the camera, and the sampled height also
+//   shades the diffuse (recesses darken, crests lighten) so the relief reads
+//   even head-on.
 // Seven families (stone: Bricks076A dressed masonry, rock: Rock026 natural
 // geological fracture, wood: MedievalWood, plaster: Plaster007, bark: Bark012,
 // fabric: Fabric030, metal: Metal013 with a real Metalness map), shared
 // textures loaded once; zero per-frame work; the Lambert (low) tier is
 // skipped entirely. The fragment cost is distance-graded: near-axis surfaces
-// collapse to single-plane sampling, the parallax walk fades out where its
-// offset drops sub-pixel, and the whole detail layer eases to its measured
+// collapse to single-plane sampling, the parallax offset fades out where it
+// drops sub-pixel, and the whole detail layer eases to its measured
 // mip-mean constants where distance has averaged the maps flat (the fade
-// blocks below), so a distant facade costs no taps at all. The
+// blocks below), so a distant facade costs no taps at all. The fragment is
+// also written for the ANGLE D3D11 compiler, which prices every GLSL branch
+// at link time on the player's main thread: the layer spends four branches
+// in total (the fade gate, one flat-or-corner plane split, one parallax gate
+// per arm) instead of a seven-way plane selector per map read. The
 // stone/rock split matters: masonry carries running-bond mortar lines that
 // look absurd on a boulder, so anything geological routes to rock. The layer
 // must stay SUBTLE: the game's look is cozy low-poly, the detail suggests
@@ -35,9 +39,10 @@ import type * as THREE from 'three';
 import { ktx2SiblingUrl } from './assets/ktx2_sibling';
 import { loadKtx2Texture } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
-import { GFX, type GfxSettings, type SurfaceMatOpts, surfaceMat } from './gfx';
+import { GFX, type GfxSettings, type SurfaceMatOpts, sharedUniforms, surfaceMat } from './gfx';
 import { renderLayerDisabled } from './render_dev_flags';
 import { markSharedMaterial } from './shared_resource';
+import { applyTextureAnisotropy } from './texture_anisotropy';
 
 export type SurfaceFamily = 'stone' | 'rock' | 'wood' | 'plaster' | 'bark' | 'fabric' | 'metal';
 
@@ -251,18 +256,18 @@ const FAMILIES: Record<SurfaceFamily, FamilyDef> = {
   },
 };
 
-/** View-ray refinement taps and offset-clamp share come from the derived
- *  gfx.ts knobs (GFX.surfaceDetailTaps / GFX.surfaceDetailClampK, one source
- *  for the tier ladder AND the Advanced Surface Detail dial): insane takes 4
- *  taps at the full clamp (the pre-round-10 ultra execution, kept exactly),
- *  ultra 3 at 0.85, and high 0. The normalized amplitudes walk real depth,
- *  and the deeper clamps need the extra refinement to stay swim-free,
- *  which is why the 3-tap execution shrinks its clamp (the round-10
- *  screenshot A/B on the keep wall / boulder / town street reads the 3-tap
- *  0.85-clamp walk as the same relief while dropping the fourth dependent
- *  fetch). Ultra shipped at 6 taps originally; round 9 measured 4 at full
- *  clamp indistinguishable from 6, round 10 moved that execution to the
- *  opt-in insane tier. */
+/** The parallax request and offset-clamp share come from the derived gfx.ts
+ *  knobs (GFX.surfaceDetailTaps / GFX.surfaceDetailClampK, one source for the
+ *  tier ladder AND the Advanced Surface Detail dial): high requests 0 (no
+ *  walk compiled), ultra and insane request a walk at 0.85 and the full
+ *  clamp. The walk itself is TWO height reads whatever the request (a first
+ *  read and one refinement, averaged; the branch-gated 3-tap ultra and 4-tap
+ *  insane walks were the layer's largest compile cost under ANGLE D3D11, and
+ *  their close-range result read as a smooth, slightly metallic sheen that
+ *  fought the cozy low-poly intent); the request still
+ *  keys the program and feeds the live shed (min(taps, 1) fades the offset,
+ *  clamp(taps - 1, 0, 1) weighs the refinement, the clamp share scales the
+ *  clamp). */
 const parallaxTierTaps = (): number => GFX.surfaceDetailTaps;
 const parallaxTierClampK = (): number => GFX.surfaceDetailClampK;
 /** Offset clamp as a multiple of the family's target depth (2.2 sd of height
@@ -400,7 +405,7 @@ function prepareFamilyTexture(
   const task = loadKtx2Texture(ktx2SiblingUrl(url), { repeat: true })
     .then((tex) => {
       const clone = tex.clone();
-      clone.anisotropy = 4;
+      applyTextureAnisotropy(clone, 'normal');
       clone.needsUpdate = true;
       fam.tex[channel] = clone;
     })
@@ -626,6 +631,17 @@ export function riggedWornFamilyFor(materialName: string): WornFamilyPick | null
 }
 
 /**
+ * The worn layer a standard RIG material takes by its name: characters/assets.ts
+ * buildTintedClone applies it to every rig material, and the weapon-skin
+ * prewarm host (weapon_vfx.ts) applies it to its untextured part, so both key
+ * the same hook and the host links the program the worn weapon draws.
+ */
+export function applyRiggedWornDetail(mat: THREE.MeshStandardMaterial): void {
+  const worn = riggedWornFamilyFor(mat.name);
+  if (worn) applySurfaceDetail(mat, worn.family, { strength: worn.strength, objectSpace: true });
+}
+
+/**
  * Attach the triplanar surface-detail layer for a material family to a
  * standard material. Composes with any existing onBeforeCompile hook (runs it
  * first) and is additive over the material's own map/vertexColors path, so
@@ -702,12 +718,20 @@ export function applySurfaceDetail(
     // world-space view ray.
     const taps = !objectSpace && fam.tex.disp !== null ? parallaxTierTaps() : 0;
     const parallax = taps > 0;
+    // A second, refining height read at the first read's offset, averaged
+    // with it: the one-read offset overshoots along steep ridges at grazing
+    // angles (stacked contour echoes on fractured boulders); the average kept the
+    // old walk smooth, and one refinement recovers most of it without a
+    // branch. Compiled for any request of two or more taps (ultra, insane);
+    // the live shed weighs it by clamp(taps - 1, 0, 1).
+    const refine = taps >= 2;
     // Normalized amplitude: one sd of height walks the projection by the
     // family's target depth, whatever the map's dynamic range (the shipped
     // sds span 10x, so a global amplitude can never read evenly).
     const parallaxAmp = fam.parallaxDepth / fam.dispSd;
     // The 3-tap tiers take a shallower clamp: depth they cannot refine would
     // otherwise swim at grazing angles (insane's 4 taps keep the full clamp).
+    // The live shed scales this baked clamp by its 0..1 share (uWornClampK).
     const parallaxClamp = PARALLAX_CLAMP_K * fam.parallaxDepth * parallaxTierClampK();
     // Distance-fade bands from the EFFECTIVE tile scale (opts override
     // included). Object-space projections have no world position to measure
@@ -724,7 +748,36 @@ export function applySurfaceDetail(
     shader.uniforms.uWornRoughMix = { value: roughMix };
     if (hasMetal) shader.uniforms.uWornMetal = { value: fam.tex.metal };
     if (hasMetal) shader.uniforms.uWornMetalMix = { value: metalMix };
-    if (parallax) shader.uniforms.uWornDisp = { value: fam.tex.disp };
+    if (parallax) {
+      shader.uniforms.uWornDisp = { value: fam.tex.disp };
+      // The live terrain-detail shed (terrain_detail_shed_core.ts) by shared
+      // reference: it gates taps and scales the clamp at draw time, never the
+      // compiled tap count, so the program key is untouched.
+      shader.uniforms.uWornTaps = sharedUniforms.uWornDetailTaps;
+      shader.uniforms.uWornClampK = sharedUniforms.uWornDetailClampK;
+    }
+    // Per-family scalars: carried as uniforms rather than baked GLSL literals so
+    // families that share a STRUCTURE collapse to one compiled program. The
+    // uniform carries the UNROUNDED value; the literal it replaced was emitted
+    // through toFixed, so the rounding was the approximation, and the shift is
+    // sub-perceptual. The cache key stays sound because every structural token
+    // still rides customProgramCacheKey.
+    shader.uniforms.uWornRoughMean = { value: fam.roughMean };
+    if (!objectSpace) {
+      shader.uniforms.uWornDetStart = { value: fade.detStart };
+      shader.uniforms.uWornDetEnd = { value: fade.detEnd };
+    }
+    if (hasAo) shader.uniforms.uWornAoMean = { value: fam.aoMean };
+    if (hasMetal) shader.uniforms.uWornMetalMean = { value: fam.metalMean ?? 0 };
+    if (parallax) {
+      shader.uniforms.uWornParStart = { value: fade.parStart };
+      shader.uniforms.uWornParEnd = { value: fade.parEnd };
+      shader.uniforms.uWornDispCenter = { value: fam.dispCenter };
+      shader.uniforms.uWornParallaxAmp = { value: parallaxAmp };
+      shader.uniforms.uWornParallaxClamp = { value: parallaxClamp };
+      shader.uniforms.uWornHeightNorm = { value: 1 / fam.dispSd };
+      shader.uniforms.uWornHeightShade = { value: fam.heightShade };
+    }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -750,6 +803,91 @@ export function applySurfaceDetail(
         vWornWorldPos = ( modelMatrix * wornPos ).xyz;
         vWornWorldNormal = normalize( mat3( modelMatrix ) * wornNrm );`,
       );
+    // The fragment layer is built for the compiler as much as for the GPU:
+    // ANGLE on Direct3D 11 translates every GLSL branch into HLSL flow the
+    // D3D compiler then has to optimize, and the old layer paid for a
+    // seven-way plane selector inside every map read plus one such selector
+    // per parallax tap. This one samples EVERY map in one block behind the
+    // distance fade, splits exactly once between the dominant-plane path (a
+    // flat facet: one fetch per map, the town-kit common case) and the
+    // corner path (three weighted fetches per map), and walks the parallax
+    // with two height reads (a first and one refinement, averaged) whose
+    // offset is clamped. The later chunks
+    // (roughness, metalness, normal) only mix the sampled locals, with no
+    // branch of their own.
+    const planeSelect = (x: string, y: string, z: string): string =>
+      `${x} * wornW.x + ${y} * wornW.y + ${z} * wornW.z`;
+    const parallaxClampExpr = 'uWornParallaxClamp * uWornClampK';
+    const flatSampling = `// Snap to the EXACT one-hot: the arm admits a dominant weight from
+          // 0.999 up, and a minor weight of even 0.001 times a world-scale UV
+          // would shift the projection by a fraction of a repeat and draw a
+          // seam along the 33 degree contour of a smooth-normal boulder.
+          wornW = step( vec3( 0.999 ), wornW );
+          vec2 wornUv = ${planeSelect('wornUvX', 'wornUvY', 'wornUvZ')};
+          ${
+            parallax
+              ? `if ( wornParK > 0.0 ) {
+            wornH = texture2D( uWornDisp, wornUv ).r - uWornDispCenter;
+            vec2 wornVd = ${planeSelect('wornV.zy', 'wornV.xz', 'wornV.xy')};
+            ${
+              refine
+                ? `wornH = mix( wornH, texture2D( uWornDisp,
+              wornUv + wornVd * ( wornH * uWornParallaxAmp ) ).r - uWornDispCenter, wornRefK );`
+                : ''
+            }
+            wornUv += clamp( wornVd * ( wornH * uWornParallaxAmp ),
+              vec2( -${parallaxClampExpr} ), vec2( ${parallaxClampExpr} ) ) * wornParK;
+          }`
+              : ''
+          }
+          ${hasAo ? 'wornAoV = texture2D( uWornAo, wornUv ).r;' : ''}
+          wornRoughV = texture2D( uWornRough, wornUv ).r;
+          ${hasMetal ? 'wornMetalV = texture2D( uWornMetal, wornUv ).r;' : ''}
+          ${
+            objectSpace
+              ? ''
+              : `vec3 wornN = texture2D( uWornNormal, wornUv ).xyz * 2.0 - 1.0;
+          // The one-hot weight picks the plane's reorientation without a
+          // second selector: the same whiteout as the corner path, once.
+          wornN = vec3( wornN.xy + ${planeSelect('wornGN.zy', 'wornGN.xz', 'wornGN.xy')},
+            abs( wornN.z ) * dot( wornGN, wornW ) );
+          wornWorldN = ${planeSelect('wornN.zyx', 'wornN.xzy', 'wornN.xyz')};`
+          }`;
+    const cornerSampling = `${
+      parallax
+        ? `if ( wornParK > 0.0 ) {
+            wornH = wornTri3( uWornDisp, wornUvX, wornUvY, wornUvZ, wornW ) - uWornDispCenter;
+            ${
+              refine
+                ? `{
+              vec3 wornOff1 = wornV * ( wornH * uWornParallaxAmp );
+              wornH = mix( wornH, wornTri3( uWornDisp, wornUvX + wornOff1.zy,
+                wornUvY + wornOff1.xz, wornUvZ + wornOff1.xy, wornW ) - uWornDispCenter, wornRefK );
+            }`
+                : ''
+            }
+            vec3 wornOff = clamp( wornV * ( wornH * uWornParallaxAmp ),
+              vec3( -${parallaxClampExpr} ), vec3( ${parallaxClampExpr} ) ) * wornParK;
+            wornUvX += wornOff.zy;
+            wornUvY += wornOff.xz;
+            wornUvZ += wornOff.xy;
+          }`
+        : ''
+    }
+          ${hasAo ? 'wornAoV = wornTri3( uWornAo, wornUvX, wornUvY, wornUvZ, wornW );' : ''}
+          wornRoughV = wornTri3( uWornRough, wornUvX, wornUvY, wornUvZ, wornW );
+          ${hasMetal ? 'wornMetalV = wornTri3( uWornMetal, wornUvX, wornUvY, wornUvZ, wornW );' : ''}
+          ${
+            objectSpace
+              ? ''
+              : `vec3 wornNx = texture2D( uWornNormal, wornUvX ).xyz * 2.0 - 1.0;
+          vec3 wornNy = texture2D( uWornNormal, wornUvY ).xyz * 2.0 - 1.0;
+          vec3 wornNz = texture2D( uWornNormal, wornUvZ ).xyz * 2.0 - 1.0;
+          wornNx = vec3( wornNx.xy + wornGN.zy, abs( wornNx.z ) * wornGN.x );
+          wornNy = vec3( wornNy.xy + wornGN.xz, abs( wornNy.z ) * wornGN.y );
+          wornNz = vec3( wornNz.xy + wornGN.xy, abs( wornNz.z ) * wornGN.z );
+          wornWorldN = ${planeSelect('wornNx.zyx', 'wornNy.xzy', 'wornNz.xyz')};`
+          }`;
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
@@ -761,38 +899,28 @@ export function applySurfaceDetail(
         uniform float uWornStrength;
         uniform float uWornTile;
         uniform float uWornRoughMix;
-        ${hasAo ? 'uniform sampler2D uWornAo; uniform float uWornAoLo; uniform float uWornAoSpan;' : ''}
-        ${hasMetal ? 'uniform sampler2D uWornMetal; uniform float uWornMetalMix;' : ''}
-        ${parallax ? 'uniform sampler2D uWornDisp;' : ''}
-        float wornTriR(
+        uniform float uWornRoughMean;
+        ${!objectSpace ? 'uniform float uWornDetStart; uniform float uWornDetEnd;' : ''}
+        ${hasAo ? 'uniform sampler2D uWornAo; uniform float uWornAoLo; uniform float uWornAoSpan; uniform float uWornAoMean;' : ''}
+        ${hasMetal ? 'uniform sampler2D uWornMetal; uniform float uWornMetalMix; uniform float uWornMetalMean;' : ''}
+        ${parallax ? 'uniform sampler2D uWornDisp; uniform float uWornTaps; uniform float uWornClampK; uniform float uWornParStart; uniform float uWornParEnd; uniform float uWornDispCenter; uniform float uWornParallaxAmp; uniform float uWornParallaxClamp; uniform float uWornHeightNorm; uniform float uWornHeightShade;' : ''}
+        // Three-plane weighted read, no branch: the corner path only. A plane
+        // whose weight collapsed to zero still costs its fetch here; the flat
+        // path below is what keeps an axis-aligned facet at one fetch per map.
+        float wornTri3(
           sampler2D tex,
-          const in vec3 p,
-          const in vec3 w,
-          const in vec3 axis
+          const in vec2 uvX,
+          const in vec2 uvY,
+          const in vec2 uvZ,
+          const in vec3 w
         ) {
-          // Dominant-plane fast path: the weight collapse below makes any
-          // surface within ~33deg of a projection axis exactly one-hot, so a
-          // flat wall pays one tap instead of three. The branch is coherent
-          // per surface (weights are constant across a facet).
-          if ( w.x >= 0.999 ) return texture2D( tex, p.zy ).r;
-          if ( w.y >= 0.999 ) return texture2D( tex, p.xz ).r;
-          if ( w.z >= 0.999 ) return texture2D( tex, p.xy ).r;
-          // Exact geometric-axis zeroes are coherent across the flat facets
-          // used by town kits. Preserve the two active terms in their
-          // original order and omit only the fetch multiplied by exact zero.
-          if ( axis.x <= 0.0 )
-            return texture2D( tex, p.xz ).r * w.y + texture2D( tex, p.xy ).r * w.z;
-          if ( axis.y <= 0.0 )
-            return texture2D( tex, p.zy ).r * w.x + texture2D( tex, p.xy ).r * w.z;
-          if ( axis.z <= 0.0 )
-            return texture2D( tex, p.zy ).r * w.x + texture2D( tex, p.xz ).r * w.y;
-          return texture2D( tex, p.zy ).r * w.x + texture2D( tex, p.xz ).r * w.y
-            + texture2D( tex, p.xy ).r * w.z;
+          return texture2D( tex, uvX ).r * w.x + texture2D( tex, uvY ).r * w.y
+            + texture2D( tex, uvZ ).r * w.z;
         }`,
       )
       .replace(
-        // color_fragment runs before the roughness and normal chunks, so the
-        // shared projection locals declared here are in scope for both.
+        // color_fragment runs before the roughness, metalness and normal
+        // chunks, so every sampled local declared here is in scope for them.
         '#include <color_fragment>',
         `#include <color_fragment>
         vec3 wornP = vWornWorldPos * uWornTile;
@@ -802,10 +930,9 @@ export function applySurfaceDetail(
         wornW /= ( wornW.x + wornW.y + wornW.z );
         // Dominant-plane collapse: minor weights below the cutoff fade to
         // zero and the rest renormalize, so near-axis surfaces reach an EXACT
-        // one-hot weight continuously and the single-tap fast paths in
-        // wornTriR (and the normal blend below) activate with no threshold
-        // discontinuity. The sum can never hit zero: the largest pow-4 weight
-        // is always at least one third.
+        // one-hot weight continuously and the flat path below activates with
+        // no threshold discontinuity. The sum can never hit zero: the largest
+        // pow-4 weight is always at least one third.
         wornW = max( wornW - ${DOMINANT_PLANE_CUTOFF.toFixed(2)}, 0.0 );
         wornW /= ( wornW.x + wornW.y + wornW.z );
         float wornCellK = 1.0;
@@ -825,131 +952,107 @@ export function applySurfaceDetail(
           objectSpace
             ? 'float wornDetK = 1.0;'
             : `float wornCamD = distance( vWornWorldPos, cameraPosition );
-        float wornDetK = 1.0 - smoothstep( ${fade.detStart.toFixed(1)}, ${fade.detEnd.toFixed(1)}, wornCamD );`
+        float wornDetK = 1.0 - smoothstep( uWornDetStart, uWornDetEnd, wornCamD );`
         }
-        ${
-          parallax
-            ? `float wornHShade = 0.0;
-        if ( wornCamD < ${fade.parEnd.toFixed(1)} ) {
-          // Multi-tap parallax (3 on ultra, 4 on insane): estimate height, then
-          // refine along the view ray, walking the projection by the averaged
-          // offset. The amplitude is sd-normalized (one sd of height = the
-          // family's target depth) and the offset clamps at 2.2 sd so tails
-          // never break the low-poly silhouette. The whole loop is
-          // branch-skipped past the fade end, where a one-sd offset projects
-          // under ${PARALLAX_FADE_PX} screen pixels; the fade band eases the
-          // offset (and its height shade) to zero so no frontier is visible.
-          float wornParK = 1.0 - smoothstep( ${fade.parStart.toFixed(1)}, ${fade.parEnd.toFixed(1)}, wornCamD );
+        // Sampled locals: each starts at the family's measured mean, the
+        // constant its mip chain converges to, so past the detail fade end
+        // (where the block is skipped) every term is exactly the far value.
+        ${hasAo ? 'float wornAoV = uWornAoMean;' : ''}
+        float wornRoughV = uWornRoughMean;
+        ${hasMetal ? 'float wornMetalV = uWornMetalMean;' : ''}
+        ${objectSpace ? '' : 'vec3 wornViewN = vec3( 0.0, 0.0, 1.0 );'}
+        ${parallax ? 'float wornHShade = 0.0;' : ''}
+        ${objectSpace ? '{' : 'if ( wornDetK > 0.0 ) {'}
+          vec2 wornUvX = wornP.zy;
+          vec2 wornUvY = wornP.xz;
+          vec2 wornUvZ = wornP.xy;
+          ${
+            objectSpace
+              ? ''
+              : `vec3 wornGN = wornUnitN * ( float( gl_FrontFacing ) * 2.0 - 1.0 );
+          vec3 wornWorldN;`
+          }
+          ${
+            parallax
+              ? `// Offset-limited parallax: the height at the unwarped projection,
+          // refined once and averaged, offsets the plane UVs along the view
+          // ray (offset-limited: the
+          // unit ray, never divided by its surface component, so grazing
+          // angles cannot smear). uWornTaps is the live terrain-detail shed:
+          // at 0 the read is skipped entirely and the walk fades by
+          // min(taps, 1); uWornClampK scales the family clamp. The fade band
+          // eases the offset (and its height shade) to zero before
+          // uWornParEnd, where a one-sd offset projects under
+          // ${PARALLAX_FADE_PX} screen pixels.
+          float wornParK = ( 1.0 - smoothstep( uWornParStart, uWornParEnd, wornCamD ) )
+            * min( uWornTaps, 1.0 );
           vec3 wornV = normalize( vWornWorldPos - cameraPosition );
-          float wornH = wornTriR( uWornDisp, wornP, wornW, wornAxis ) - ${fam.dispCenter.toFixed(3)};
-          float wornHAcc = wornH;
-          ${Array.from(
-            { length: taps - 1 },
-            () => `wornH = wornTriR( uWornDisp,
-            wornP + wornV * ( wornH * ${parallaxAmp.toFixed(3)} ), wornW, wornAxis ) - ${fam.dispCenter.toFixed(3)};
-          wornHAcc += wornH;`,
-          ).join('\n          ')}
-          wornP += clamp(
-            wornV * ( wornHAcc * ${(parallaxAmp / taps).toFixed(4)} ),
-            vec3( -${parallaxClamp.toFixed(3)} ), vec3( ${parallaxClamp.toFixed(3)} ) ) * wornParK;
-          wornHShade = clamp( wornH * ${(1 / fam.dispSd).toFixed(3)},
-            -${HEIGHT_SHADE_CLAMP_SD.toFixed(1)}, ${HEIGHT_SHADE_CLAMP_SD.toFixed(1)} ) * wornParK;
-        }`
-            : ''
+          float wornH = 0.0;
+          ${refine ? 'float wornRefK = 0.5 * clamp( uWornTaps - 1.0, 0.0, 1.0 );' : ''}`
+              : ''
+          }
+          // The ONE plane split of the layer: a facet within ~33 degrees of a
+          // projection axis is exactly one-hot after the collapse above and
+          // takes the flat path; everything else takes the corner path.
+          bool wornFlat = max( wornW.x, max( wornW.y, wornW.z ) ) >= 0.999;
+          if ( wornFlat ) {
+          ${flatSampling}
+          } else {
+          ${cornerSampling}
+          }
+          ${
+            parallax
+              ? `wornHShade = clamp( wornH * uWornHeightNorm,
+            -${HEIGHT_SHADE_CLAMP_SD.toFixed(1)}, ${HEIGHT_SHADE_CLAMP_SD.toFixed(1)} ) * wornParK;`
+              : ''
+          }
+          ${
+            objectSpace
+              ? ''
+              : 'wornViewN = normalize( ( viewMatrix * vec4( normalize( wornWorldN ), 0.0 ) ).xyz );'
+          }
         }
-        ${
-          parallax
-            ? `diffuseColor.rgb *= 1.0 + wornHShade * ${fam.heightShade.toFixed(2)} * wornCellK;`
-            : ''
-        }
+        ${parallax ? 'diffuseColor.rgb *= 1.0 + wornHShade * uWornHeightShade * wornCellK;' : ''}
         ${
           hasAo
-            ? `float wornAoV = ${fam.aoMean.toFixed(3)};
-        if ( wornDetK > 0.0 ) wornAoV = mix( ${fam.aoMean.toFixed(3)}, wornTriR( uWornAo, wornP, wornW, wornAxis ), wornDetK );
-        diffuseColor.rgb *= mix( 1.0, uWornAoLo + wornAoV * uWornAoSpan, wornCellK );`
+            ? `diffuseColor.rgb *= mix( 1.0,
+          uWornAoLo + mix( uWornAoMean, wornAoV, wornDetK ) * uWornAoSpan, wornCellK );`
             : ''
         }`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
-        // Past the detail fade the sampled roughness converges to the map's
-        // measured mean: the same constant its mips converge to, so distant
-        // sheen cannot shift; the taps are branch-skipped there.
+        // Across the detail fade the sampled roughness eases to the map's
+        // measured mean, the same constant its mips converge to, so distant
+        // sheen cannot shift; the sample itself was already skipped there.
         `#include <roughnessmap_fragment>
-        float wornRoughV = ${fam.roughMean.toFixed(3)};
-        if ( wornDetK > 0.0 ) wornRoughV = mix( ${fam.roughMean.toFixed(3)}, wornTriR( uWornRough, wornP, wornW, wornAxis ), wornDetK );
-        roughnessFactor = mix( roughnessFactor, wornRoughV, uWornRoughMix * wornCellK );`,
+        roughnessFactor = mix( roughnessFactor,
+          mix( uWornRoughMean, wornRoughV, wornDetK ), uWornRoughMix * wornCellK );`,
       );
     if (hasMetal) {
       // metalnessmap_fragment unconditionally declares `float metalnessFactor
       // = metalness;`, so the per-texel patina composes cleanly after it: rust
       // patches stay dielectric, bare metal reflects the IBL per fragment.
-      // Past the detail fade the per-texel patina converges to the measured
-      // Metalness mean (0.787), the mip-average a distant surface samples.
+      // Across the detail fade the patina eases to the measured Metalness
+      // mean, the mip-average a distant surface samples.
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <metalnessmap_fragment>',
         `#include <metalnessmap_fragment>
-        float wornMetalV = ${(fam.metalMean ?? 0).toFixed(3)};
-        if ( wornDetK > 0.0 ) wornMetalV = mix( ${(fam.metalMean ?? 0).toFixed(3)}, wornTriR( uWornMetal, wornP, wornW, wornAxis ), wornDetK );
-        metalnessFactor = mix( metalnessFactor, wornMetalV, uWornMetalMix * wornCellK );`,
+        metalnessFactor = mix( metalnessFactor,
+          mix( uWornMetalMean, wornMetalV, wornDetK ), uWornMetalMix * wornCellK );`,
       );
     }
     if (!objectSpace) {
       shader.fragmentShader = shader.fragmentShader.replace(
-        // Whiteout-blend triplanar normal (Golus), mixed into the shading
-        // normal AFTER any material normal map so the layer stays additive.
-        // The blend eases to identity across the detail fade band (a
-        // mip-flattened detail normal converges to the geometric normal
-        // anyway) and the taps are branch-skipped past its end; the one-hot
-        // weights from the dominant-plane collapse take single-tap paths.
+        // Whiteout-blend triplanar normal (Golus), sampled in the block above
+        // and mixed into the shading normal AFTER any material normal map so
+        // the layer stays additive. The blend eases to identity across the
+        // detail fade band (a mip-flattened detail normal converges to the
+        // geometric normal anyway); at weight zero mix() returns the shading
+        // normal exactly, so the skipped sample needs no branch here.
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
-        if ( wornDetK > 0.0 ) {
-          vec3 wornGN = wornUnitN * faceDirection;
-          vec3 wornWorldN;
-          if ( wornW.x >= 0.999 ) {
-            vec3 wornNx = texture2D( uWornNormal, wornP.zy ).xyz * 2.0 - 1.0;
-            wornNx = vec3( wornNx.xy + wornGN.zy, abs( wornNx.z ) * wornGN.x );
-            wornWorldN = normalize( wornNx.zyx );
-          } else if ( wornW.y >= 0.999 ) {
-            vec3 wornNy = texture2D( uWornNormal, wornP.xz ).xyz * 2.0 - 1.0;
-            wornNy = vec3( wornNy.xy + wornGN.xz, abs( wornNy.z ) * wornGN.y );
-            wornWorldN = normalize( wornNy.xzy );
-          } else if ( wornW.z >= 0.999 ) {
-            vec3 wornNz = texture2D( uWornNormal, wornP.xy ).xyz * 2.0 - 1.0;
-            wornNz = vec3( wornNz.xy + wornGN.xy, abs( wornNz.z ) * wornGN.z );
-            wornWorldN = normalize( wornNz.xyz );
-          } else if ( wornAxis.x <= 0.0 ) {
-            vec3 wornNy = texture2D( uWornNormal, wornP.xz ).xyz * 2.0 - 1.0;
-            vec3 wornNz = texture2D( uWornNormal, wornP.xy ).xyz * 2.0 - 1.0;
-            wornNy = vec3( wornNy.xy + wornGN.xz, abs( wornNy.z ) * wornGN.y );
-            wornNz = vec3( wornNz.xy + wornGN.xy, abs( wornNz.z ) * wornGN.z );
-            wornWorldN = normalize( wornNy.xzy * wornW.y + wornNz.xyz * wornW.z );
-          } else if ( wornAxis.y <= 0.0 ) {
-            vec3 wornNx = texture2D( uWornNormal, wornP.zy ).xyz * 2.0 - 1.0;
-            vec3 wornNz = texture2D( uWornNormal, wornP.xy ).xyz * 2.0 - 1.0;
-            wornNx = vec3( wornNx.xy + wornGN.zy, abs( wornNx.z ) * wornGN.x );
-            wornNz = vec3( wornNz.xy + wornGN.xy, abs( wornNz.z ) * wornGN.z );
-            wornWorldN = normalize( wornNx.zyx * wornW.x + wornNz.xyz * wornW.z );
-          } else if ( wornAxis.z <= 0.0 ) {
-            vec3 wornNx = texture2D( uWornNormal, wornP.zy ).xyz * 2.0 - 1.0;
-            vec3 wornNy = texture2D( uWornNormal, wornP.xz ).xyz * 2.0 - 1.0;
-            wornNx = vec3( wornNx.xy + wornGN.zy, abs( wornNx.z ) * wornGN.x );
-            wornNy = vec3( wornNy.xy + wornGN.xz, abs( wornNy.z ) * wornGN.y );
-            wornWorldN = normalize( wornNx.zyx * wornW.x + wornNy.xzy * wornW.y );
-          } else {
-            vec3 wornNx = texture2D( uWornNormal, wornP.zy ).xyz * 2.0 - 1.0;
-            vec3 wornNy = texture2D( uWornNormal, wornP.xz ).xyz * 2.0 - 1.0;
-            vec3 wornNz = texture2D( uWornNormal, wornP.xy ).xyz * 2.0 - 1.0;
-            wornNx = vec3( wornNx.xy + wornGN.zy, abs( wornNx.z ) * wornGN.x );
-            wornNy = vec3( wornNy.xy + wornGN.xz, abs( wornNy.z ) * wornGN.y );
-            wornNz = vec3( wornNz.xy + wornGN.xy, abs( wornNz.z ) * wornGN.z );
-            wornWorldN = normalize(
-              wornNx.zyx * wornW.x + wornNy.xzy * wornW.y + wornNz.xyz * wornW.z );
-          }
-          vec3 wornViewN = normalize( ( viewMatrix * vec4( wornWorldN, 0.0 ) ).xyz );
-          normal = normalize( mix( normal, wornViewN, uWornStrength * wornDetK ) );
-        }`,
+        normal = normalize( mix( normal, wornViewN, uWornStrength * wornDetK ) );`,
       );
     }
   };
@@ -962,7 +1065,12 @@ export function applySurfaceDetail(
   // only the dye layer's own customProgramCacheKey tells them apart).
   // The family's texture-ready state keys too
   // (before the preload resolves the hook compiles to a plain pass-through),
-  // as do the projection mode and the tier's parallax tap count.
+  // as do the projection mode and the tier's parallax tap count. The family
+  // NAME is deliberately NOT a token: every per-family scalar (fade bands,
+  // dispCenter, amplitudes, aoMean/roughMean/metalMean, heightShade) now rides
+  // a uniform, so two families with the same STRUCTURE compile byte-identical
+  // source and must share one program. What still distinguishes the source is
+  // the structural flags below (and the base material via prevSrc/prevProgramKey).
   mat.customProgramCacheKey = () => {
     const ready =
       fam.tex.normal && fam.tex.rough && (fam.aoSpan === 0 || fam.tex.ao) ? 'on' : 'off';
@@ -972,11 +1080,11 @@ export function applySurfaceDetail(
         : '-';
     const mask = cellMask ? `m${cellMask.join(',')}` : '-';
     const met = metalMix > 0 && fam.tex.metal !== null ? 'met' : '-';
-    // The distance-fade bands are baked as compile-time constants and vary
-    // with the effective tile scale (and the dev ?wornfade override).
-    const fadeBands = scaledFadeBands(fam.parallaxDepth, tileScale);
-    const fadeKey = `f${fadeBands.parStart.toFixed(1)},${fadeBands.parEnd.toFixed(1)},${fadeBands.detStart.toFixed(1)},${fadeBands.detEnd.toFixed(1)}`;
-    return `surface-detail|${family}|${ready}|${par}|${mask}|${met}|${objectSpace ? 'o' : 'w'}|${fadeKey}|${prevSrc}|${prevProgramKey()}`;
+    // The grime (AO) block is emitted only for families that ship an AO map
+    // (aoSpan > 0); metal omits it. That is a structural source difference the
+    // met token does not always cover, so it gets its own discriminant.
+    const ao = fam.aoSpan > 0 && fam.tex.ao !== null ? 'ao' : '-';
+    return `surface-detail|${ready}|${par}|${mask}|${met}|${ao}|${objectSpace ? 'o' : 'w'}|${prevSrc}|${prevProgramKey()}`;
   };
 }
 

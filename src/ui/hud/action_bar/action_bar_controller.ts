@@ -1,7 +1,17 @@
+import { DRUID_FORM_ENTRY } from '../../../sim/combat/druid_form_entry';
+import { NATURES_BOON_ABILITIES } from '../../../sim/combat/druid_natures_boon';
+import { abilityBelongsToForm, hasFormRequirement } from '../../../sim/combat/form_requirement';
 import { REALM_RACERS_ABILITIES, REALM_RACERS_BAR_SLOTS } from '../../../sim/content/realm_racers';
+import { classTalentChoiceAbilityGroups } from '../../../sim/content/talents';
 import { ABILITIES, ITEMS } from '../../../sim/data';
 import type { PlayerClass } from '../../../sim/types';
-import type { ActionBarLayout } from '../../../world_api/action_bar';
+import {
+  ACTION_BAR_LAYOUT_LEGACY_PROFILE,
+  type ActionBarLayout,
+  type ActionBarLayoutProfile,
+  type ActionBarLayoutRestore,
+  actionBarLayoutIsEmpty,
+} from '../../../world_api/action_bar';
 import { knownItemDef } from '../../known_item';
 import { isStanceBarAbilityGroup } from '../../stance_bar_view';
 import { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
@@ -9,7 +19,9 @@ import {
   actionBarFormSeededKey,
   actionBarSlotMapKey,
   actionBarStealthInitializedKey,
+  applyActionBarLayout,
   captureActionBarLayout,
+  planActionBarRestore,
 } from './action_bar_layout_sync';
 import {
   actionForAttackSlot,
@@ -34,12 +46,27 @@ import {
   ownedDruidFormDefaultAbilityIds,
   shouldSeedOwnedSpecDefault,
 } from './owned_class_spec_defaults';
+import { isUsableTrinketId } from './trinket_slot_core';
 
 export { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
 
 export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'rally';
 
 const FORM_TOGGLE_IDS = new Set(['bear_form', 'cat_form', 'travel_form']);
+// Buttons that seed onto EVERY form kit bar:
+//   - the three form toggles,
+//   - the form-entry buttons (Stalk, Lunge, Bruin Rush), which since v0.43
+//     enter their form from any form and so are reachable (and wanted) on
+//     every form bar, even though none of them is a toggle,
+//   - the two spells an armed Nature's Boon pays for (sim/combat/
+//     druid_natures_boon.ts). The window's whole point is that they are
+//     castable without leaving the form, which is unreachable on a default
+//     bar if the form kit never seeds a button for them.
+const FORM_BAR_ALWAYS_IDS = new Set([
+  ...FORM_TOGGLE_IDS,
+  ...Object.keys(DRUID_FORM_ENTRY),
+  ...NATURES_BOON_ABILITIES,
+]);
 
 // The bar slots the rally kit reserves, derived once at import: `actionForSlot`
 // asks per slot and per frame, so the membership test must not rebuild a list
@@ -56,17 +83,37 @@ export interface ActionBarControllerDeps {
   hasAura(kind: string): boolean;
   isInRealmRacers?(): boolean;
   showAttackButton(): boolean;
+  // A broader owner-presentation hold, including the first snapshot after reconnect.
+  readOnly?(): boolean;
+  // The input-surface profile this controller arranges (the desktop keyboard
+  // row or the touch ring), read LIVE like every sibling dep because the
+  // Interface Mode setting can flip the surface mid-session (syncProfile follows
+  // it). It scopes every localStorage key and every upload, so a phone's
+  // arrangement never overwrites a PC's. Absent means the legacy (desktop) keys,
+  // which is what every pre-profile device already holds.
+  profile?(): ActionBarLayoutProfile;
   // The persistence seam: called after a user-driven layout change (never during
-  // initial load) with the FULL captured layout. Offline it is a no-op
-  // (localStorage is the store); online the ClientWorld debounces a wire save.
-  // Optional so an offline/test controller with no server persistence just skips
-  // it and keeps its byte-identical localStorage behavior.
-  persistLayout?(layout: ActionBarLayout): void;
+  // initial load) with the profile and its FULL captured layout. Offline it is a
+  // no-op (localStorage is the store); online the ClientWorld debounces a wire
+  // save. Optional so an offline/test controller with no server persistence just
+  // skips it and keeps its byte-identical localStorage behavior.
+  persistLayout?(profile: ActionBarLayoutProfile, layout: ActionBarLayout): void;
+  // True while this session views ANOTHER character (a moderator's /spectate):
+  // the live deps above (spec, level, known abilities) then describe the
+  // watched character, not the owner of this bar. Every per-frame sync AND every
+  // user-driven mutator (drop, spellbook add/remove, reset, loadout apply, the
+  // saves behind them) freezes until the view returns, so a foreign kit never
+  // prunes, re-seeds, or uploads the moderator's own layout. The ClientWorld
+  // holds the flag through the exit frame until its own presentation is
+  // rebuilt, so "not spectating" always means the deps describe this bar's
+  // owner. Absent means never spectating (offline, tests).
+  spectating?(): boolean;
 }
 
 /** Owns action-bar pages, migrations, persistence, and attack-slot assignment. */
 export class ActionBarController {
   private activeFormState: HotbarForm = 'normal';
+  private activeSpecState: string | null = null;
   private actionState: HotbarAction[] = Array.from(
     { length: ACTION_BAR_ABILITY_SLOTS },
     () => null,
@@ -81,10 +128,38 @@ export class ActionBarController {
   // storage: only user-driven changes after init should upload. Flipped true at
   // the end of init()/reload().
   private ready = false;
+  // The profile whose keys are loaded; every key and upload uses it, and
+  // syncProfile moves it when the live surface changes.
+  private activeProfile: ActionBarLayoutProfile;
+  // The world-entry restore signal, kept so a profile activated for the first
+  // time mid-session reconciles against the same login document.
+  private loginRestore: ActionBarLayoutRestore | null = null;
+  // Profiles already reconciled with the login document this session. The
+  // FIRST activation of a profile reconciles it (its server copy as of login
+  // beats stale local keys from an older session); later activations keep local
+  // precedence, since only this device edits the character during the session.
+  private readonly reconciledProfiles = new Set<ActionBarLayoutProfile>();
+  // True while the in-memory bar or attack slot differs from storage (a
+  // replace* call not yet followed by a save). A surface switch uploads the
+  // outgoing profile only then, so an untouched fallback never becomes a server
+  // profile of its own (every ordinary edit already uploaded when it saved).
+  private unsavedChanges = false;
 
-  constructor(private readonly deps: ActionBarControllerDeps) {}
+  constructor(private readonly deps: ActionBarControllerDeps) {
+    // A reconnect can be read-only after the spectate label has cleared.
+    // Compose both live signals without changing the caller's dependency bag.
+    if (deps.readOnly) {
+      this.deps = {
+        ...deps,
+        spectating: () => deps.readOnly?.() === true || deps.spectating?.() === true,
+      };
+    }
+    this.activeProfile = this.resolveProfile();
+    this.activeSpecState = this.deps.talentSpec();
+  }
 
   init(): void {
+    this.activeSpecState = this.deps.talentSpec();
     this.loadActions();
     this.loadAttackAction();
     this.ready = true;
@@ -95,16 +170,120 @@ export class ActionBarController {
    *  reloading so restoring a server copy never bounces straight back up. */
   reload(): void {
     this.ready = false;
+    this.activeSpecState = this.deps.talentSpec();
     this.loadActions();
     this.loadAttackAction();
+    this.unsavedChanges = false;
     this.ready = true;
+  }
+
+  /** World-entry reconciliation of this profile's local mirror with the server
+   *  restore signal (planActionBarRestore owns the rule). A server copy or a
+   *  fallback seed is written into the mirror and the bars re-seed from it;
+   *  a first server copy is uploaded through the persistence seam. Returns true
+   *  when the bars were re-seeded, so the caller can refresh any slot views. */
+  restoreLayout(restore: ActionBarLayoutRestore): boolean {
+    this.loginRestore = restore;
+    this.reconciledProfiles.add(this.profile);
+    if (!this.reconcile(this.profile, null)) return false;
+    this.reload();
+    return true;
+  }
+
+  /** Reconcile `profile`'s local keys with the login document
+   *  (planActionBarRestore owns the rule) and write the outcome into storage.
+   *  `inView` is the bar the player is looking at during a surface flip: a
+   *  fallback seed then copies it (it is at least as new as the login copy of
+   *  that profile) and is never uploaded, since a flip is not an edit. Returns
+   *  true when the keys were written, so the caller reloads the bars. */
+  private reconcile(profile: ActionBarLayoutProfile, inView: ActionBarLayout | null): boolean {
+    const plan = planActionBarRestore(this.loginRestore ?? undefined, profile, (target) =>
+      this.captureLayout(target),
+    );
+    if (plan.action === 'none') {
+      // No server copy, no local keys, no legacy seed: the profile would load
+      // empty and the next ability sync would generate defaults. On a surface
+      // flip the bar in view is still the right seed (a phone-first character
+      // reaching a keyboard for the first time), so copy it, never uploaded.
+      if (inView === null || actionBarLayoutIsEmpty(inView)) return false;
+      if (!actionBarLayoutIsEmpty(this.captureLayout(profile))) return false;
+      applyActionBarLayout(
+        this.deps.storage,
+        this.deps.playerClass,
+        this.deps.playerName,
+        profile,
+        inView,
+      );
+      return true;
+    }
+    if (plan.action === 'seed-local') {
+      // persist() re-captures the same keys the plan just read, so it uploads
+      // exactly plan.layout under this profile.
+      this.persist();
+      return false;
+    }
+    const fromView =
+      plan.action === 'seed-profile' && inView !== null && !actionBarLayoutIsEmpty(inView);
+    applyActionBarLayout(
+      this.deps.storage,
+      this.deps.playerClass,
+      this.deps.playerName,
+      profile,
+      fromView ? inView : plan.layout,
+    );
+    if (plan.action === 'seed-profile' && plan.upload && !fromView) this.persist();
+    return true;
+  }
+
+  get profile(): ActionBarLayoutProfile {
+    return this.activeProfile;
+  }
+
+  /** Per-frame: follow a mid-session surface flip (the Interface Mode setting)
+   *  onto that profile's keys. The outgoing profile is written to storage first
+   *  (and uploaded only if it holds unsaved in-memory changes). The first
+   *  activation of a profile this session reconciles it with the login
+   *  document: its server copy as of login wins, else it starts as a copy of
+   *  the bar in view, never uploaded (the "follow until edited" rule). Later
+   *  activations reload the profile's own keys. Returns true on a switch. */
+  syncProfile(): boolean {
+    if (this.isSpectating()) return false;
+    const next = this.resolveProfile();
+    if (next === this.activeProfile) return false;
+    // Flush the outgoing profile to storage, as a form swap does, so an
+    // in-memory bar (a loadout swap resolved this frame) is never stranded.
+    this.writeActions();
+    this.writeAttackAction();
+    if (this.unsavedChanges) {
+      this.persist();
+      this.unsavedChanges = false;
+    }
+    const previous = this.activeProfile;
+    this.activeProfile = next;
+    if (!this.reconciledProfiles.has(next)) {
+      this.reconciledProfiles.add(next);
+      this.reconcile(next, this.captureLayout(previous));
+    }
+    this.reload();
+    return true;
+  }
+
+  private resolveProfile(): ActionBarLayoutProfile {
+    return this.deps.profile?.() ?? ACTION_BAR_LAYOUT_LEGACY_PROFILE;
+  }
+
+  private captureLayout(profile: ActionBarLayoutProfile): ActionBarLayout {
+    return captureActionBarLayout(
+      this.deps.storage,
+      this.deps.playerClass,
+      this.deps.playerName,
+      profile,
+    );
   }
 
   private persist(): void {
     if (!this.ready || !this.deps.persistLayout) return;
-    this.deps.persistLayout(
-      captureActionBarLayout(this.deps.storage, this.deps.playerClass, this.deps.playerName),
-    );
+    this.deps.persistLayout(this.profile, this.captureLayout(this.profile));
   }
 
   get activeForm(): HotbarForm {
@@ -116,14 +295,19 @@ export class ActionBarController {
   }
 
   replaceActions(actions: HotbarAction[]): void {
+    if (this.isSpectating()) return;
     this.actionState = sanitizeHotbarActions(actions, (id) => this.isAbilityPlacementAllowed(id));
+    this.unsavedChanges = true;
   }
 
   replaceActionsForLoadout(
     actions: HotbarAction[],
     targetKnownAbilityIds: ReadonlySet<string>,
   ): void {
+    if (this.isSpectating()) return;
+    this.activeSpecState = this.deps.talentSpec();
     this.actionState = sanitizeHotbarActions(actions, (id) => this.isAbilityPlacementAllowed(id));
+    this.unsavedChanges = true;
     this.pendingLoadoutKnownAbilityIds = new Set(targetKnownAbilityIds);
     this.knownAbilityIdsAtLastSync = new Set([
       ...this.deps.knownAbilityIds(),
@@ -136,9 +320,11 @@ export class ActionBarController {
   }
 
   replaceAttackAction(action: HotbarAction): void {
+    if (this.isSpectating()) return;
     this.attackActionState = sanitizeHotbarAction(action, (id) =>
       this.isAbilityPlacementAllowed(id),
     );
+    this.unsavedChanges = true;
   }
 
   resolveActiveForm(): HotbarForm {
@@ -155,6 +341,7 @@ export class ActionBarController {
   }
 
   syncActiveForm(): boolean {
+    if (this.isSpectating()) return false;
     const next = this.resolveActiveForm();
     if (next === this.activeFormState) return false;
     this.saveActions();
@@ -165,7 +352,25 @@ export class ActionBarController {
     return true;
   }
 
+  get activeSpec(): string | null {
+    return this.activeSpecState;
+  }
+
+  syncSpec(): boolean {
+    if (this.isSpectating()) return false;
+    const next = this.deps.talentSpec();
+    if (next === this.activeSpecState) return false;
+    this.saveActions();
+    this.saveAttackAction();
+    this.activeSpecState = next;
+    this.loadActions();
+    this.loadAttackAction();
+    this.knownAbilityIdsAtLastSync = null;
+    return true;
+  }
+
   syncKnownAbilities(): void {
+    if (this.isSpectating()) return;
     const liveKnownAbilityIds = [...this.deps.knownAbilityIds()];
     if (
       this.pendingLoadoutKnownAbilityIds &&
@@ -215,6 +420,7 @@ export class ActionBarController {
     }
     const formToggle = this.formToggleAbilityId();
     if (formToggle && knownAbilityIds.includes(formToggle)) autoPlaceAbilityIds.add(formToggle);
+    const choiceGroups = classTalentChoiceAbilityGroups(this.deps.playerClass);
     const synced = syncHotbarActions(
       this.actionState,
       knownAbilityIds,
@@ -224,12 +430,17 @@ export class ActionBarController {
       // weapon in row slot 1 and the drawn pickup effect in the first free slot
       // behind it, and either would otherwise now appear twice.
       (id) => !this.isAbilityPlacementAllowed(id) || this.activityKitSlotFor(id) !== null,
+      choiceGroups,
     );
     this.actionState = synced.actions;
     if (synced.changed) this.saveActions();
     this.knownAbilityIdsAtLastSync = knownAbilityIdSet;
     this.talentSpecAtLastSync = talentSpec;
     this.playerLevelAtLastSync = playerLevel;
+  }
+
+  private isSpectating(): boolean {
+    return this.deps.spectating?.() === true;
   }
 
   private trySeedOwnedSpecDefault(
@@ -275,6 +486,7 @@ export class ActionBarController {
   }
 
   addAbility(abilityId: string): boolean {
+    if (this.isSpectating()) return false;
     // A passive is never castable: reject a manual drag/spellbook add so it
     // cannot occupy a dead action slot (auto-place already skips passives).
     if (!this.isAbilityPlacementAllowed(abilityId)) return false;
@@ -293,6 +505,7 @@ export class ActionBarController {
   }
 
   removeAbility(abilityId: string): boolean {
+    if (this.isSpectating()) return false;
     const target = this.actionState.findIndex(
       (action) => action?.type === 'ability' && action.id === abilityId,
     );
@@ -303,12 +516,13 @@ export class ActionBarController {
   }
 
   resetActiveBar(): void {
+    if (this.isSpectating()) return;
     const knownAbilityIds = [...this.deps.knownAbilityIds()];
     const ownedSpecDefault =
       this.activeFormState === 'normal'
         ? ownedClassSpecDefaultAbilityIds(
             this.deps.playerClass,
-            this.deps.talentSpec(),
+            this.activeSpecState,
             this.deps.playerLevel(),
             new Set(knownAbilityIds),
           )
@@ -340,14 +554,29 @@ export class ActionBarController {
     // useItem dispatch a potion rides (src/sim/items.ts -> summonMountItem), so
     // reins are placeable for the same reason a potion is. Without this arm the
     // bag drag never writes a hotbar payload and the bar cannot accept them.
+    // Recipe patterns (kind 'recipe') ride that same dispatch but are DELIBERATELY
+    // not placeable (elixirs, scrolls since phase 06, and flasks since phase 10
+    // are the precedent that riding useItem does not imply a slot, though their
+    // reason differs): a pattern is a one-shot unlock consumed on its first
+    // successful use, so a hotbar slot would hold a dead button from the first
+    // press on; the bags are its home. Scrolls and flasks live on the mobile
+    // consumable tray instead.
+    // Elixirs: same useItem dispatch (kind 'elixir' -> applyAura), usable in
+    // combat with no shared potion cooldown, so they are placeable exactly
+    // like a potion; the view paints no cooldown swipe on their slot.
+    // Trinkets with a use effect: pressed through the same useItem, which uses
+    // the WORN copy (the slot state reads the equipment, trinket_slot_core.ts).
     const item = ITEMS[itemId];
     return (
+      isUsableTrinketId(itemId) ||
       item?.kind === 'food' ||
       item?.kind === 'drink' ||
       item?.kind === 'potion' ||
+      item?.kind === 'elixir' ||
       item?.kind === 'mount' ||
       item?.use?.type === 'fishing' ||
-      item?.use?.type === 'gatherTool'
+      item?.use?.type === 'gatherTool' ||
+      item?.use?.type === 'harvestPreference'
     );
   }
 
@@ -424,15 +653,28 @@ export class ActionBarController {
   }
 
   saveActions(): void {
+    if (this.isSpectating()) return;
+    this.writeActions();
+    this.persist();
+    this.unsavedChanges = false;
+  }
+
+  saveAttackAction(): void {
+    if (this.isSpectating()) return;
+    this.writeAttackAction();
+    this.persist();
+    this.unsavedChanges = false;
+  }
+
+  private writeActions(): void {
     try {
       this.deps.storage.setItem(this.slotMapKey(), JSON.stringify(this.actionState));
     } catch {
       // Storage can be unavailable in private browsing modes.
     }
-    this.persist();
   }
 
-  saveAttackAction(): void {
+  private writeAttackAction(): void {
     try {
       writeAttackSlotAction(
         this.deps.storage,
@@ -442,11 +684,19 @@ export class ActionBarController {
     } catch {
       // Storage can be unavailable in private browsing modes.
     }
-    this.persist();
   }
 
-  private slotMapKey(form: HotbarForm = this.activeFormState): string {
-    return actionBarSlotMapKey(this.deps.playerClass, this.deps.playerName, form);
+  private slotMapKey(
+    form: HotbarForm = this.activeFormState,
+    spec: string | null = this.activeSpecState,
+  ): string {
+    return actionBarSlotMapKey(
+      this.deps.playerClass,
+      this.deps.playerName,
+      this.profile,
+      form,
+      spec,
+    );
   }
 
   private shouldAutoPlaceOnForm(id: string, form: HotbarForm): boolean {
@@ -459,10 +709,11 @@ export class ActionBarController {
     }
     if (REALM_RACERS_ABILITIES[id]) return false;
     if (this.isStealthForm(form)) return false;
+    const def = ABILITIES[id];
     if (form === 'bear' || form === 'cat') {
-      return ABILITIES[id]?.requiresForm === form || FORM_TOGGLE_IDS.has(id);
+      return (def !== undefined && abilityBelongsToForm(def, form)) || FORM_BAR_ALWAYS_IDS.has(id);
     }
-    return !ABILITIES[id]?.requiresForm;
+    return def === undefined || !hasFormRequirement(def);
   }
 
   private isFormKitBar(form: HotbarForm = this.activeFormState): boolean {
@@ -588,15 +839,31 @@ export class ActionBarController {
   }
 
   private loadActions(): void {
+    const currentKey = this.slotMapKey();
     let raw: unknown = null;
     let stored = false;
     let storedRaw: string | null = null;
     try {
-      storedRaw = this.deps.storage.getItem(this.slotMapKey());
+      storedRaw = this.deps.storage.getItem(currentKey);
       raw = JSON.parse(storedRaw ?? 'null');
       stored = Array.isArray(raw);
     } catch {
       // Corrupt state is treated as an empty bar.
+    }
+    if (!stored && this.activeFormState === 'normal' && this.activeSpecState !== null) {
+      const legacyKey = this.slotMapKey(this.activeFormState, null);
+      try {
+        const legacyRaw = this.deps.storage.getItem(legacyKey);
+        const parsedLegacy = JSON.parse(legacyRaw ?? 'null');
+        if (Array.isArray(parsedLegacy) && legacyRaw !== null) {
+          storedRaw = legacyRaw;
+          raw = parsedLegacy;
+          stored = true;
+          this.deps.storage.setItem(currentKey, legacyRaw);
+        }
+      } catch {
+        // Fall through
+      }
     }
     const parsed = parseHotbarActions(
       raw,
@@ -606,7 +873,7 @@ export class ActionBarController {
     );
     if (stored && storedHotbarHasIneligibleAbility(raw, (id) => this.isStoredAbilityEligible(id))) {
       try {
-        this.deps.storage.setItem(this.slotMapKey(), JSON.stringify(parsed));
+        this.deps.storage.setItem(currentKey, JSON.stringify(parsed));
       } catch {
         // Storage can be unavailable in private browsing modes.
       }
@@ -653,6 +920,18 @@ export class ActionBarController {
     let storedRaw: string | null = null;
     try {
       storedRaw = this.deps.storage.getItem(key);
+      if (
+        storedRaw === null &&
+        this.activeFormState === 'normal' &&
+        this.activeSpecState !== null
+      ) {
+        const legacyKey = attackSlotStorageKey(this.slotMapKey(this.activeFormState, null));
+        const legacyRaw = this.deps.storage.getItem(legacyKey);
+        if (legacyRaw !== null) {
+          storedRaw = legacyRaw;
+          this.deps.storage.setItem(key, legacyRaw);
+        }
+      }
       // The freed attack slot is not scoped to any one build (unlike the 33
       // configurable slots, a SavedLoadout never captures it), so its
       // eligibility check must not require the ability to be granted by the

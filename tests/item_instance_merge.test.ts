@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canStackInstancePayloads,
+  isChargeBearingPayload,
   isMergeableInstancePayload,
   itemInstancePayloadsEqual,
 } from '../src/sim/item_instance_merge';
@@ -35,6 +36,29 @@ describe('itemInstancePayloadsEqual', () => {
     expect(itemInstancePayloadsEqual(signed, { signer: 'Ana', boundTo: 7 })).toBe(false);
     expect(
       itemInstancePayloadsEqual({ signer: 'Ana', boundTo: 7 }, { signer: 'Ana', boundTo: 9 }),
+    ).toBe(false);
+  });
+
+  it('the Perfecting fields participate: a rank or the Perfected stamp never equals its absence (phase 12)', () => {
+    // Every present key compares, so a copy one rank along the Perfecting
+    // track, or one carrying the Perfected stamp, is its own identity: a bagged
+    // head-started copy never folds into a plain signed stack of the same
+    // apex id, and two mid-track copies at different ranks stay apart.
+    const signed: ItemInstancePayload = { signer: 'Ana' };
+    expect(itemInstancePayloadsEqual(signed, { signer: 'Ana', perfecting: 1 })).toBe(false);
+    expect(itemInstancePayloadsEqual(signed, { signer: 'Ana', perfected: true })).toBe(false);
+    expect(
+      itemInstancePayloadsEqual({ signer: 'Ana', perfecting: 1 }, { signer: 'Ana', perfecting: 2 }),
+    ).toBe(false);
+    expect(
+      itemInstancePayloadsEqual({ signer: 'Ana', perfecting: 2 }, { signer: 'Ana', perfecting: 2 }),
+    ).toBe(true);
+    expect(canStackInstancePayloads(signed, { signer: 'Ana', perfecting: 1 })).toBe(false);
+    // The header's forward-compatibility claim, pinned: a field this binary
+    // has never heard of is still an identity term (an older binary can never
+    // fold a newer copy into an older-shaped stack).
+    expect(
+      itemInstancePayloadsEqual(signed, { signer: 'Ana', futureField: 1 } as ItemInstancePayload),
     ).toBe(false);
   });
 
@@ -85,6 +109,29 @@ describe('itemInstancePayloadsEqual', () => {
     ).toBe(true);
   });
 
+  it('a JSON-parsed own __proto__ key is an ordinary identity term, in both directions', () => {
+    // JSON.parse mints '__proto__' as an OWN key; reading it off the other side
+    // without an ownership check lands on Object.prototype, which has no own
+    // enumerable keys and so matched any empty object.
+    const tainted = JSON.parse('{"__proto__":{}}') as ItemInstancePayload;
+    const ordinary = JSON.parse('{"unrelated":{}}') as ItemInstancePayload;
+    expect(itemInstancePayloadsEqual(tainted, ordinary)).toBe(false);
+    expect(itemInstancePayloadsEqual(ordinary, tainted)).toBe(false);
+    // Still equal to its own shape, and still value-sensitive.
+    expect(itemInstancePayloadsEqual(tainted, JSON.parse('{"__proto__":{}}'))).toBe(true);
+    expect(
+      itemInstancePayloadsEqual(
+        JSON.parse('{"__proto__":{"a":1}}'),
+        JSON.parse('{"__proto__":{"a":2}}'),
+      ),
+    ).toBe(false);
+    // Nested, where the same read happens one level down.
+    const nested = JSON.parse('{"rolled":{"__proto__":{}}}') as ItemInstancePayload;
+    const nestedPlain = JSON.parse('{"rolled":{"unrelated":{}}}') as ItemInstancePayload;
+    expect(itemInstancePayloadsEqual(nested, nestedPlain)).toBe(false);
+    expect(itemInstancePayloadsEqual(nestedPlain, nested)).toBe(false);
+  });
+
   it('charge maps compare per-key (equal maps equal, differing maps refuse)', () => {
     expect(
       itemInstancePayloadsEqual({ charges: { fireball: 3 } }, { charges: { fireball: 3 } }),
@@ -108,13 +155,40 @@ describe('isMergeableInstancePayload', () => {
     expect(isMergeableInstancePayload(undefined)).toBe(true);
   });
 
-  // Issue #3042: a player-locked copy stays one-per-slot for the same reason
-  // charges does, a different one, so merging it into a plain or
-  // differently-locked stack never taints or launders the player's choice.
+  // Issue #3042: a player-locked copy never TOPS UP an existing slot, so
+  // merging it into a plain or differently-locked stack never taints or
+  // launders the player's choice. This is the top-up question ONLY; see
+  // isChargeBearingPayload below for the separate fresh-slot-sizing question
+  // a locked (but uncharged) payload answers differently.
   it('refuses a locked payload; locked: false is mergeable like any other shape', () => {
     expect(isMergeableInstancePayload({ locked: true })).toBe(false);
     expect(isMergeableInstancePayload({ signer: 'Ana', locked: true })).toBe(false);
     expect(isMergeableInstancePayload({ locked: false })).toBe(true);
+  });
+});
+
+describe('isChargeBearingPayload', () => {
+  // The fresh-slot-sizing question every packing core (bags.ts countFit/
+  // addStacked, material_stack_packing.ts) answers separately from
+  // isMergeableInstancePayload's top-up question: only a charge-bearing
+  // payload has real per-unit mutate-in-place identity, so only it forces
+  // one unit per fresh slot. A locked-but-uncharged payload answers false
+  // here even though it answers false to isMergeableInstancePayload too,
+  // which is the exact split the vault/bank whole-locked-stack fix rests on.
+  it('is true only for a payload carrying charges', () => {
+    expect(isChargeBearingPayload({ charges: { fireball: 3 } })).toBe(true);
+    expect(isChargeBearingPayload({ signer: 'Ana', charges: { zap: 1 } })).toBe(true);
+    expect(isChargeBearingPayload({ locked: true })).toBe(false);
+    expect(isChargeBearingPayload({ signer: 'Ana', locked: true })).toBe(false);
+    expect(isChargeBearingPayload({ signer: 'Ana' })).toBe(false);
+    expect(isChargeBearingPayload({})).toBe(false);
+    expect(isChargeBearingPayload(undefined)).toBe(false);
+  });
+
+  it('diverges from isMergeableInstancePayload on a locked-but-uncharged payload', () => {
+    const locked: ItemInstancePayload = { locked: true };
+    expect(isMergeableInstancePayload(locked)).toBe(false);
+    expect(isChargeBearingPayload(locked)).toBe(false);
   });
 });
 

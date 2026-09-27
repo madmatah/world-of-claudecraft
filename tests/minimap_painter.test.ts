@@ -9,11 +9,12 @@
 // cadence + the '#zone-label' setText preserved from the inline site.
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BG_HALF_X, BG_HALF_Z, bgFieldPlanWalls } from '../src/sim/battleground_layout';
-import { battlegroundOrigin, GATHER_NODES, QUESTS, YUMI_BAND_X_MIN } from '../src/sim/data';
+import { battlegroundOrigin, GATHER_NODES, NPCS, QUESTS, YUMI_BAND_X_MIN } from '../src/sim/data';
 import { TH_GRAVEYARDS } from '../src/sim/thornhollow_field.generated';
-import { EASTBROOK_NOTICEBOARD_TEMPLATE_ID, isQuestTurnInNpc } from '../src/sim/types';
+import { EASTBROOK_NOTICEBOARD_TEMPLATE_ID } from '../src/sim/types';
 import {
   BG_SURFACE_GRASS,
   BG_SURFACE_GRAVE,
@@ -78,6 +79,9 @@ const MINIMAP_COLOR_TOKENS = [
   '--color-minimap-party-pip',
   '--color-minimap-player',
   '--color-minimap-outline',
+  '--color-minimap-world-quest-available',
+  '--color-minimap-world-quest-active',
+  '--color-minimap-world-boss',
 ];
 
 describe('minimap_painter: no magic values (canvas sub-rule)', () => {
@@ -116,6 +120,8 @@ describe('minimap_painter: no magic values (canvas sub-rule)', () => {
       expect(code, `painter never reads ${tok}`).toContain(tok);
       expect(tokens, `missing ${tok}`).toContain(`${tok}:`);
     }
+    expect(tokens).toContain('--color-minimap-world-quest-available: #4aa3ff;');
+    expect(tokens).toContain('--color-minimap-world-boss: #a970ff;');
     // The hand list above cannot see a table entry it was never told about,
     // and resolveColors freezes the WHOLE color set on first resolve, so one
     // token absent from tokens.css draws default ink for the session. Pin
@@ -153,6 +159,21 @@ describe('minimap_painter: cached background + ~10Hz cadence preserved', () => {
 
   it("routes the '#zone-label' text through the elided setText (the one DOM write)", () => {
     expect(code).toContain('this.writers.setText(zoneLabelEl');
+  });
+
+  it('wires the small emblem through the touch-safe 40px hit target and opens its zone', () => {
+    const tap = readFileSync(
+      fileURLToPath(new URL('../src/ui/hud/map/minimap_objective_tap.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(hud).toContain('bindMinimapObjectiveTap(mm, this);');
+    expect(tap).toContain('bindTouchTap(mm,');
+    expect(tap).toContain('h.minimapPainter.worldObjectiveAt(');
+    expect(tap.replace(/\s+/g, ' ')).toContain(
+      'MINIMAP_OBJECTIVE_TAP_RADIUS_PX * Math.max(canvas.width / rect.width, canvas.height / rect.height)',
+    );
+    expect(tap).toContain('h.mapZoneOverride = marker.zoneId;');
+    expect(tap).toContain("marker.kind === 'world-quest' ? marker.questId : null");
   });
 
   it('keeps the cached Thornhollow Fields sheet bounded for the 240x452yd field', () => {
@@ -298,6 +319,14 @@ interface GlyphTrace {
     strokeStyle: string;
     lineWidth: number;
   }>;
+  /** Command grammar and resolved fill of each FILLED immediate-mode path.
+   *  filledArcs covers only arcs, so a painted polygon (the farm sprout) needs
+   *  its own record to pin which token actually coloured it. */
+  filledPaths: Array<{
+    commands: string[];
+    fillStyle: string;
+    points: Array<{ x: number; y: number }>;
+  }>;
   /** Immediate-mode rectangle paints. A hollow lootable-corpse marker uses
    *  these instead of depending on color alone. */
   rects: Array<{
@@ -313,16 +342,9 @@ interface GlyphTrace {
 
 const NPC_QUEST_TOKEN = '--color-minimap-npc-quest';
 const MINIMAP_OUTLINE_TOKEN = '--color-minimap-outline';
-// A real quest whose giver is also its turn-in npc, so one npc template carries both
-// the 'available' ('!') and 'ready' ('?') branches against real content.
-function requireReadyQuest() {
-  const quest = Object.values(QUESTS).find(
-    (q) => q.giverNpcId && isQuestTurnInNpc(q, q.giverNpcId),
-  );
-  if (!quest) throw new Error('expected a quest whose giver is also a turn-in npc');
-  return quest;
-}
-const READY_QUEST = requireReadyQuest();
+// Explicit combat content exercises available and ready glyphs independently
+// of ambient profession-offer visibility and content-table insertion order.
+const READY_QUEST = QUESTS.q_wolves;
 
 function makeFakeSprite(trace: GlyphTrace): FakeSprite {
   const ink: SpriteInk[] = [];
@@ -401,6 +423,7 @@ function newTrace(): GlyphTrace {
     filledArcs: [],
     strokedArcs: [],
     strokedPaths: [],
+    filledPaths: [],
     rects: [],
   };
 }
@@ -442,6 +465,7 @@ function fakeMinimapContext(trace: GlyphTrace): CanvasRenderingContext2D {
   let alpha = 1;
   let pendingArcs: GlyphTrace['filledArcs'] = [];
   let pendingCommands: string[] = [];
+  let pendingPoints: Array<{ x: number; y: number }> = [];
   const ctx = {
     fillStyle: '',
     strokeStyle: '',
@@ -485,6 +509,7 @@ function fakeMinimapContext(trace: GlyphTrace): CanvasRenderingContext2D {
       pending.length = 0;
       pendingArcs = [];
       pendingCommands = [];
+      pendingPoints = [];
     },
     closePath(): void {
       pendingCommands.push('closePath');
@@ -496,10 +521,12 @@ function fakeMinimapContext(trace: GlyphTrace): CanvasRenderingContext2D {
     },
     moveTo(x: number, y: number): void {
       pendingCommands.push('moveTo');
+      pendingPoints.push({ x, y });
       pathStart = { x, y };
     },
     lineTo(x: number, y: number): void {
       pendingCommands.push('lineTo');
+      pendingPoints.push({ x, y });
       if (pathStart !== null) {
         pending.push({ fromX: pathStart.x, fromY: pathStart.y, toX: x, toY: y, stroked: false });
       }
@@ -507,6 +534,11 @@ function fakeMinimapContext(trace: GlyphTrace): CanvasRenderingContext2D {
     },
     fill(): void {
       trace.filledArcs.push(...pendingArcs);
+      trace.filledPaths.push({
+        commands: [...pendingCommands],
+        fillStyle: String(ctx.fillStyle),
+        points: pendingPoints.map((point) => ({ ...point })),
+      });
     },
     stroke(): void {
       trace.strokedPaths.push({
@@ -584,16 +616,19 @@ function drawSymbols(
 // The player sits at an overworld position with no gather node or station in the rim.
 const PLAYER_POS = { x: 0, z: 100 };
 
-// A real cadenced work order drives the repeat/cooldown marker variants.
-function requireWorkOrderQuest() {
-  const quest = Object.values(QUESTS).find((q) => q.repeatable && q.repeatCadenceTicks);
-  if (!quest) throw new Error('expected a cadenced work order');
-  return quest;
-}
-const WORK_ORDER_QUEST = requireWorkOrderQuest();
+// A synthetic non-profession repeatable exercises generic cadence art while
+// profession offers are intentionally hidden. Registered only for its describe.
+const WORK_ORDER_QUEST = {
+  ...QUESTS.q_wolves,
+  id: 'q_test_minimap_repeat',
+  giverNpcId: 'test_minimap_repeat_giver',
+  turnInNpcId: 'test_minimap_repeat_giver',
+  repeatable: true,
+  repeatCadenceTicks: 1200,
+};
 
 /** `npcs` are world positions; `state` drives which glyph and marker variant
- *  each quest-giver resolves to (repeat/cooldown ride the real work order
+ *  each quest-giver resolves to (repeat/cooldown ride the synthetic combat repeatable
  *  with the questsDone/cadence inputs the classifier reads). */
 function glyphWorld(
   npcs: Array<{ x: number; z: number; quest: boolean }>,
@@ -627,6 +662,7 @@ function glyphWorld(
     playerId: 1,
     inventory: [],
     stationPlacements: [],
+    farmPatches: [],
     nodeHarvestableByMe: () => false,
     questState: (q: string) =>
       q === quest.id
@@ -674,6 +710,22 @@ afterEach(() => {
 });
 
 describe('minimap_painter: tiny procedural symbols carry identity without hue', () => {
+  it('draws the world boss as an outlined badge with a skull silhouette', () => {
+    const trace = drawSymbols([
+      { kind: 'world-boss', mx: 20, my: 30, bossId: 'boss', zoneId: 'zone' },
+    ]);
+
+    expect(trace.strokedArcs).toContainEqual({
+      x: 20,
+      y: 30,
+      radius: 6.5,
+      strokeStyle: 'paint:outline',
+      lineWidth: 1.5,
+    });
+    expect(trace.filledArcs.map((arc) => arc.radius)).toEqual([6.5, 4, 1.1, 1.1]);
+    expect(trace.rects.filter((rect) => rect.op === 'fill')).toHaveLength(2);
+  });
+
   it('draws a friend as an outlined circle and a guildmate as an outlined diamond', () => {
     const friend = drawSymbols([{ kind: 'ally', mx: 20, my: 30, ally: 'friend' }]);
     const guild = drawSymbols([{ kind: 'ally', mx: 20, my: 30, ally: 'guild' }]);
@@ -697,6 +749,50 @@ describe('minimap_painter: tiny procedural symbols carry identity without hue', 
       { fromX: 23.5, fromY: 30, toX: 20, toY: 33.5, stroked: true },
       { fromX: 20, fromY: 33.5, toX: 16.5, toY: 30, stroked: true },
     ]);
+  });
+
+  it('draws a harvest-only corpse as an outlined pelt triangle, not the loot square', () => {
+    const harvest = drawSymbols([{ kind: 'mob-harvest', mx: 20, my: 30 }]);
+    const loot = drawSymbols([{ kind: 'mob-loot', mx: 20, my: 30 }]);
+
+    // Three stroked edges (the fake records the explicit ones; closePath supplies
+    // the last in the real canvas) in the corpse-loot paint, apex up.
+    expect(harvest.segments).toEqual([
+      { fromX: 20, fromY: 26.5, toX: 23.5, toY: 32.45, stroked: true },
+      { fromX: 23.5, fromY: 32.45, toX: 16.5, toY: 32.45, stroked: true },
+    ]);
+    expect(harvest.filledPaths).toEqual([
+      {
+        commands: ['moveTo', 'lineTo', 'lineTo', 'closePath'],
+        fillStyle: 'paint:mobLoot',
+        points: [
+          { x: 20, y: 26.5 },
+          { x: 23.5, y: 32.45 },
+          { x: 16.5, y: 32.45 },
+        ],
+      },
+    ]);
+    expect(harvest.strokedPaths).toEqual([
+      {
+        commands: ['moveTo', 'lineTo', 'lineTo', 'closePath'],
+        strokeStyle: 'paint:outline',
+        lineWidth: 1.25,
+      },
+    ]);
+    // No square at all: silhouette, not hue, is what tells the two apart.
+    expect(harvest.rects.filter((rect) => rect.op === 'stroke')).toEqual([]);
+    expect(loot.rects.filter((rect) => rect.op === 'stroke')).toHaveLength(1);
+    expect(loot.segments).toEqual([]);
+  });
+
+  it('scales the pelt triangle with the compact profile', () => {
+    const harvest = drawSymbols([{ kind: 'mob-harvest', mx: 20, my: 30 }], 'compact');
+    expect(harvest.filledPaths[0]?.points).toEqual([
+      { x: 20, y: 24.75 },
+      { x: 25.25, y: 33.675 },
+      { x: 14.75, y: 33.675 },
+    ]);
+    expect(harvest.strokedPaths[0]?.lineWidth).toBe(1.75);
   });
 
   it('gives loose loot, calm mobs, aggro mobs, and lootable corpses four silhouettes', () => {
@@ -1081,6 +1177,7 @@ describe('minimap_painter: gathering state cues (decisive trace)', () => {
           ],
       gatheringProficiency: {},
       stationPlacements: [],
+      farmPatches: [],
       nodeHarvestableByMe: () => over.ready,
       questState: () => 'unavailable',
     } as unknown as IWorld;
@@ -1181,6 +1278,7 @@ function gatherArtWorld(
         ],
     gatheringProficiency: { mining: 1, logging: 1, herbalism: 1 },
     stationPlacements: [],
+    farmPatches: [],
     nodeHarvestableByMe: (id: string) => id === node.id && ready,
     questState: () => 'unavailable',
   } as unknown as IWorld;
@@ -1191,6 +1289,7 @@ function stableMarkerWorld(opts: {
   services?: Array<'mailbox' | typeof EASTBROOK_NOTICEBOARD_TEMPLATE_ID>;
   station?: boolean;
   stationTypes?: readonly (typeof TEST_STATION_TYPES)[number][];
+  farmPatch?: boolean;
 }): IWorld {
   const player = { id: 1, kind: 'player', name: 'Me', pos: { ...PLAYER_POS }, facing: 0 };
   const entities = new Map<number, unknown>([[1, player]]);
@@ -1233,6 +1332,18 @@ function stableMarkerWorld(opts: {
       pos: { x: PLAYER_POS.x - 3 + index * 2, z: PLAYER_POS.z + 2 },
       masterNpcId: `test_${type}_master`,
     })),
+    farmPatches: opts.farmPatch
+      ? [
+          {
+            id: 'patch_test',
+            zoneId: 'eastbrook_vale',
+            tier: 1,
+            x: PLAYER_POS.x + 3,
+            z: PLAYER_POS.z - 2,
+            beds: [],
+          },
+        ]
+      : [],
     nodeHarvestableByMe: () => false,
     questState: () => 'unavailable',
   } as unknown as IWorld;
@@ -1393,6 +1504,160 @@ describe('minimap_painter: painted stable marker sprites', () => {
     );
   });
 
+  it('routes farm-patch art through the minimap station size', () => {
+    const markerArt = fakeMarkerArt(['farm-patch']);
+    const trace = newTrace();
+    installGlyphGlobals(trace);
+    const world = stableMarkerWorld({ farmPatch: true });
+
+    paint(newPainter(markerArt.art), fakeMinimapContext(trace), world);
+
+    const patch = createMinimapMarkers()
+      .build(world, 162, 1.7)
+      .markers.find((marker) => marker.kind === 'farm-patch');
+    if (patch?.kind !== 'farm-patch') throw new Error('expected the farm-patch marker');
+    expect(markerArt.calls.filter((call) => call.id === 'farm-patch')).toEqual([
+      { id: 'farm-patch', size: 'minimapStation' },
+    ]);
+    expect(trace.markerBlits.find((blit) => blit.sprite.markerId === 'farm-patch')).toMatchObject({
+      sprite: { markerId: 'farm-patch', sizeId: 'minimapStation' },
+      dx: Math.round(patch.mx - MAP_MARKER_SIZES.minimapStation / 2),
+      dy: Math.round(patch.my - MAP_MARKER_SIZES.minimapStation / 2),
+    });
+  });
+
+  it('routes farm-patch art through the compact minimap station size', () => {
+    const markerArt = fakeMarkerArt(['farm-patch']);
+    const trace = newTrace();
+    installGlyphGlobals(trace);
+    const world = stableMarkerWorld({ farmPatch: true });
+
+    paint(
+      newPainter(markerArt.art, () => 'compact'),
+      fakeMinimapContext(trace),
+      world,
+    );
+
+    const patch = createMinimapMarkers()
+      .build(world, 162, 1.7)
+      .markers.find((marker) => marker.kind === 'farm-patch');
+    if (patch?.kind !== 'farm-patch') throw new Error('expected the farm-patch marker');
+    expect(markerArt.calls.filter((call) => call.id === 'farm-patch')).toEqual([
+      { id: 'farm-patch', size: 'minimapStationCompact' },
+    ]);
+    expect(trace.markerBlits.find((blit) => blit.sprite.markerId === 'farm-patch')).toMatchObject({
+      sprite: { markerId: 'farm-patch', sizeId: 'minimapStationCompact' },
+      dx: Math.round(patch.mx - MAP_MARKER_SIZES.minimapStationCompact / 2),
+      dy: Math.round(patch.my - MAP_MARKER_SIZES.minimapStationCompact / 2),
+    });
+  });
+
+  it('falls back to the procedural farm-patch sprout in the station token', () => {
+    const markerArt = fakeMarkerArt([]);
+    const trace = newTrace();
+    installGlyphGlobals(trace);
+    const world = stableMarkerWorld({ farmPatch: true });
+
+    paint(newPainter(markerArt.art), fakeMinimapContext(trace), world);
+
+    expect(markerArt.calls.filter((call) => call.id === 'farm-patch')).toEqual([
+      { id: 'farm-patch', size: 'minimapStation' },
+    ]);
+    expect(trace.markerBlits).toEqual([]);
+
+    const patch = createMinimapMarkers()
+      .build(world, 162, 1.7)
+      .markers.find((marker) => marker.kind === 'farm-patch');
+    if (patch?.kind !== 'farm-patch') throw new Error('expected the farm-patch marker');
+    expect(patch.patchId).toBe('patch_test');
+
+    const radius = 3.5;
+    const crownY = patch.my - radius * 0.2;
+    const heelX = radius * 0.15;
+    const heelY = patch.my + radius * 0.25;
+    // Two leaves in ONE filled path, in the STATION family's token: a patch is
+    // a static service site like a crafting station, and gatherReady green is
+    // refused on this surface because it means "harvestable right now" while
+    // this pin carries no plot state. The silhouette (two closed triangles vs
+    // the diamond's four lineTo calls) is what separates the two pins.
+    const leaves = trace.filledPaths.find(
+      (path) =>
+        path.commands.join() === 'moveTo,lineTo,lineTo,closePath,moveTo,lineTo,lineTo,closePath',
+    );
+    expect(leaves?.fillStyle).toBe('paint:--color-minimap-station');
+    expect(leaves?.points).toEqual([
+      { x: patch.mx, y: crownY },
+      { x: patch.mx - radius, y: patch.my - radius },
+      { x: patch.mx - heelX, y: heelY },
+      { x: patch.mx, y: crownY },
+      { x: patch.mx + radius, y: patch.my - radius },
+      { x: patch.mx + heelX, y: heelY },
+    ]);
+    // The stem is its own outlined two-point stroke from the crown downward.
+    expect(trace.segments).toEqual(
+      expect.arrayContaining([
+        { fromX: patch.mx, fromY: crownY, toX: patch.mx, toY: patch.my + radius, stroked: true },
+      ]),
+    );
+    const stem = trace.strokedPaths.find((path) => path.commands.join() === 'moveTo,lineTo');
+    expect(stem).toMatchObject({ strokeStyle: trace.outlineColor });
+    // No station diamond is drawn: a farm patch is not a station.
+    expect(
+      trace.strokedPaths.some(
+        (path) => path.commands.join() === 'moveTo,lineTo,lineTo,lineTo,closePath',
+      ),
+    ).toBe(false);
+  });
+
+  it('scales the procedural farm-patch fallback with the compact minimap profile', () => {
+    const markerArt = fakeMarkerArt([]);
+    const trace = newTrace();
+    installGlyphGlobals(trace);
+    const world = stableMarkerWorld({ farmPatch: true });
+
+    paint(
+      newPainter(markerArt.art, () => 'compact'),
+      fakeMinimapContext(trace),
+      world,
+    );
+
+    expect(markerArt.calls.filter((call) => call.id === 'farm-patch')).toEqual([
+      { id: 'farm-patch', size: 'minimapStationCompact' },
+    ]);
+    expect(trace.markerBlits).toEqual([]);
+    const patch = createMinimapMarkers()
+      .build(world, 162, 1.7)
+      .markers.find((marker) => marker.kind === 'farm-patch');
+    if (patch?.kind !== 'farm-patch') throw new Error('expected the farm-patch marker');
+
+    const radius = 3.5 * 1.5;
+    const crownY = patch.my - radius * 0.2;
+    const heelX = radius * 0.15;
+    const heelY = patch.my + radius * 0.25;
+    const leaves = trace.filledPaths.find(
+      (path) =>
+        path.commands.join() === 'moveTo,lineTo,lineTo,closePath,moveTo,lineTo,lineTo,closePath',
+    );
+    expect(leaves).toMatchObject({
+      fillStyle: 'paint:--color-minimap-station',
+      points: [
+        { x: patch.mx, y: crownY },
+        { x: patch.mx - radius, y: patch.my - radius },
+        { x: patch.mx - heelX, y: heelY },
+        { x: patch.mx, y: crownY },
+        { x: patch.mx + radius, y: patch.my - radius },
+        { x: patch.mx + heelX, y: heelY },
+      ],
+    });
+    const stem = trace.strokedPaths.find((path) => path.commands.join() === 'moveTo,lineTo');
+    expect(stem).toMatchObject({ strokeStyle: trace.outlineColor, lineWidth: 2 });
+    expect(trace.segments).toEqual(
+      expect.arrayContaining([
+        { fromX: patch.mx, fromY: crownY, toX: patch.mx, toY: patch.my + radius, stroked: true },
+      ]),
+    );
+  });
+
   it('routes distinct dungeon entrance and exit paintings through the shared minimap size', () => {
     const markerArt = fakeMarkerArt(['dungeon-entrance', 'dungeon-exit']);
     const trace = newTrace();
@@ -1522,6 +1787,20 @@ describe('minimap_painter: painted stable marker sprites', () => {
 });
 
 describe('minimap_painter: generated quest art', () => {
+  beforeEach(() => {
+    QUESTS[WORK_ORDER_QUEST.id] = { ...WORK_ORDER_QUEST };
+    NPCS[WORK_ORDER_QUEST.giverNpcId] = {
+      ...NPCS.marshal_redbrook,
+      id: WORK_ORDER_QUEST.giverNpcId,
+      questIds: [WORK_ORDER_QUEST.id],
+    };
+  });
+
+  afterEach(() => {
+    delete QUESTS[WORK_ORDER_QUEST.id];
+    delete NPCS[WORK_ORDER_QUEST.giverNpcId];
+  });
+
   it.each([
     { state: 'available', id: 'quest-available', size: 'minimapQuest' },
     { state: 'ready', id: 'quest-ready', size: 'minimapQuest' },
@@ -1850,6 +2129,7 @@ function bgAllyWorld(opts: { match: BgMatchInfo | null; partyPids?: number[] }):
     playerId: 1,
     inventory: [],
     stationPlacements: [],
+    farmPatches: [],
     nodeHarvestableByMe: () => false,
     questState: () => 'unavailable',
   } as unknown as IWorld;

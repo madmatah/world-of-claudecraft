@@ -767,13 +767,84 @@ function makeObbPlacement(
   };
 }
 
+// The square's centrepiece: the Realm Builder monument, which replaced the
+// well beacon and its floating crystal.
+//
+// nativeDimensions are the SHIPPED sculpt's own bounding box scaled to the
+// height below, and they have to stay proportional: eastbrook_town.ts
+// placementMatrix scales each axis independently, so a hand-rounded entry
+// shears the statue.
+//
+// Round 8 (owner): DOUBLED, 3.8 yards to 7.6. The plinth now stands about 2.2
+// yards, over head height, with its honour plates between knee and chest as
+// you walk up; the builder is another 5.4 yards above that. It is the tallest
+// thing in the square by a long way, which is the point. It does overlap the
+// nominal civic ring band, and that is fine: `civic.ring` is a stated
+// intent that nothing reads for collision or drawing (only a layout-suite pin
+// reads it at all). What the size DOES cost is bench room, see BENCH_RING_RADIUS.
+const MONUMENT_HEIGHT = 7.6;
+const MONUMENT_SOURCE = { width: 0.755235, height: 0.991974, depth: 0.702649 } as const;
+const MONUMENT_SCALE = MONUMENT_HEIGHT / MONUMENT_SOURCE.height;
+// Tight cylinder, not the old loose 1.5: the widest point in the sculpt is the
+// lantern outrigger ring at 0.415158 source units, and nothing above it reaches
+// past 0.36, so one cylinder at that radius hugs the whole silhouette. Rounded
+// UP by a 1cm skin so the collider never cuts inside its own art.
+const MONUMENT_SOURCE_RADIUS = 0.415158;
+const MONUMENT_RADIUS = Math.ceil(MONUMENT_SOURCE_RADIUS * MONUMENT_SCALE * 100) / 100;
+// Front plate, and the builder's own face, aim down the east quadrant: the
+// open spawn-to-square arrival lane, so the first side of the monument a
+// player meets is the one carrying the current honouree. The sculpt faces +Z
+// at rotation 0, and east in this town is NEGATIVE x (the arrival is at
+// x -94 and the bench named "west" sits at +x of the civic centre), so the
+// quarter turn goes the other way: a Y Euler rotation maps local +Z to world
+// (sin, cos), and only -PI/2 lands that on -x. (Spelled without naming the
+// renderer library, which this module is asserted never to mention.)
+const MONUMENT_ROTATION = -Math.PI / 2;
+
+const MONUMENT = {
+  id: 'eastbrook_realm_builder_monument',
+  assetId: '/models/props/eastbrook_realm_builder_monument.glb',
+  // Reserved static-service id. The noticeboard band (content/noticeboards.ts)
+  // runs 2_000_000_001 upward and is APPEND ONLY, so the monument takes a slot
+  // clear of it rather than the next free number.
+  entityId: 2_000_000_100,
+  // The literal, not the types.ts constant: this module is asserted to carry
+  // ZERO imports (tests/eastbrook_layout_suite.test.ts), so the two are pinned
+  // equal by tests/realm_builder_monument.test.ts instead.
+  templateId: 'realm_builder_monument',
+  name: 'Realm Builder Monument',
+  position: CIVIC_FEATURE_CENTER,
+  rotation: MONUMENT_ROTATION,
+  radius: MONUMENT_RADIUS,
+  height: MONUMENT_HEIGHT,
+  nativeDimensions: {
+    width: MONUMENT_SOURCE.width * MONUMENT_SCALE,
+    height: MONUMENT_HEIGHT,
+    depth: MONUMENT_SOURCE.depth * MONUMENT_SCALE,
+  },
+} as const;
+
 // Three cardinal benches occupy the quiet sides of the civic ring. The east
 // quadrant deliberately remains open as the spawn-to-square arrival lane.
+//
+// Round 7 re-seated them for the monument, and moved what they ring. They used
+// to sit 2.9 yards off CIVIC_CENTER, the square's own point; a statue is what
+// people sit facing, so they now ring CIVIC_FEATURE_CENTER, the statue's own.
+//
+// Round 8 pushed them as far out as the square allows, because the doubled
+// monument eats most of the room they used to have. The ceiling is the
+// SOUTHWEST ROAD: its last centreline sample sits at (-9, -100.4), and the
+// west bench's own box has to stay 1.5 yards off it, which caps the ring at
+// 4.12 (solve hypot(|5.75 - R| - 0.3, 0.7) >= 1.5). At 4.1 that leaves about
+// 0.6 yards between a bench back and the plinth: snug rather than roomy, and
+// the most the square can give once the statue is this size. Anything wider
+// reds tests/eastbrook_layout_suite.test.ts on the lane clearance.
+const BENCH_RING_RADIUS = 4.1;
 const BENCHES = [
   makeObbPlacement(
     'eastbrook_civic_bench_north',
     '/models/dungeon/bench.glb',
-    { x: -14, z: -99.1 },
+    { x: CIVIC_FEATURE_CENTER.x, z: CIVIC_FEATURE_CENTER.z + BENCH_RING_RADIUS },
     1.8,
     0.6,
     Math.PI,
@@ -781,7 +852,7 @@ const BENCHES = [
   makeObbPlacement(
     'eastbrook_civic_bench_south',
     '/models/dungeon/bench.glb',
-    { x: -14, z: -104.9 },
+    { x: CIVIC_FEATURE_CENTER.x, z: CIVIC_FEATURE_CENTER.z - BENCH_RING_RADIUS },
     1.8,
     0.6,
     0,
@@ -789,7 +860,7 @@ const BENCHES = [
   makeObbPlacement(
     'eastbrook_civic_bench_west',
     '/models/dungeon/bench.glb',
-    { x: -11.1, z: -102 },
+    { x: CIVIC_FEATURE_CENTER.x + BENCH_RING_RADIUS, z: CIVIC_FEATURE_CENTER.z },
     1.8,
     0.6,
     Math.PI / 2,
@@ -1076,15 +1147,12 @@ const MERCHANT_POSITION = localToWorld(
   0,
   MARKET_STALLS[0].depth / 2 + 0.8,
 );
-const TRADER_POSITION = localToWorld(
-  MARKET_STALLS[1].position,
-  MARKET_STALLS[1].rotation,
-  0,
-  MARKET_STALLS[1].depth / 2 + 0.8,
-);
-// Lin is a quest herbalist, not a merchant. Keep her already-clear civic-green
-// position without inventing a replacement stall or blocking the smithy sightline.
-const APOTHECARY_POSITION = { x: -72, z: -96 } as const;
+// Starter combat givers occupy the civic square with room between each stand.
+// Wilkes keeps his vendor service on the market edge; trades stay at their stations.
+const TRADER_POSITION = { x: -25, z: -94 } as const;
+const APOTHECARY_POSITION = { x: -11, z: -89 } as const;
+const BRANDT_POSITION = { x: -25, z: -104 } as const;
+const ODELL_POSITION = { x: -16, z: -111 } as const;
 // Station cluster props sit at station + world-axis offsets (town_props.ts,
 // no rotation), so the smith's and cook's work points derive the same way.
 // Round 4: the smith stands on the yard's open corner, half a stride clear
@@ -1121,20 +1189,12 @@ const SAUL_POSITION = { x: 10.2, z: -87.5 } as const;
 // the town's edge rather than in the churchyard approach.
 const FURY_POSITION = { x: 16, z: -78 } as const;
 
-// Round 4: the marshal keeps watch beside his notice board, a clear stride
-// from the bursar's queue and outside the board's posting envelope (the
-// board's body and posting point both stay a full interact range away, the
-// board comment's rule). The drafted spot at (9, -92.5) sat INSIDE the
-// bank's rotated lot (the 45-degree townhall footprint owns that corner),
-// so the watch stands on the green south of the board instead: outside the
-// envelope, off the posting lane, facing the civic square he polices.
-// Round 6b (owner): the town's NPCs are laid out by ROLE along the dockside
-// road. Quest givers sit nearest the quay, because a new character spawns
-// there and the zone's welcome line sends them to Redbrook: he used to be an
-// eighty yard walk inland. Profession masters stay mid-town with their
-// crafting stations (a forge master cannot leave the forge), and service NPCs
-// sit out on the edges. Each group is spread, not clustered.
-const MARSHAL_POSITION = { x: -58, z: -102 } as const;
+// Marshal stands beside the noticeboard, a full INTERACT_RANGE clear of
+// both the board's body and its posting point so a player posting a notice
+// is never handed his dialogue (tests/noticeboard_interaction.test.ts and
+// the layout suite pin that clearance), facing the square that holds the
+// other combat givers.
+const MARSHAL_POSITION = { x: -1, z: -93 } as const;
 
 const NPCS = [
   makeNpc('the_merchant', MERCHANT_POSITION, MARKET_STALLS[0].rotation, MARKET_STALLS[0].id),
@@ -1142,14 +1202,19 @@ const NPCS = [
     'marshal_redbrook',
     MARSHAL_POSITION,
     facingToward(MARSHAL_POSITION, CIVIC_CENTER),
-    'eastbrook_harbour_market',
+    'eastbrook_noticeboard',
   ),
-  makeNpc('trader_wilkes', TRADER_POSITION, MARKET_STALLS[1].rotation, MARKET_STALLS[1].id),
+  makeNpc(
+    'trader_wilkes',
+    TRADER_POSITION,
+    facingToward(TRADER_POSITION, CIVIC_CENTER),
+    'eastbrook_civic_square',
+  ),
   makeNpc(
     'apothecary_lin',
     APOTHECARY_POSITION,
     facingToward(APOTHECARY_POSITION, CIVIC_CENTER),
-    'eastbrook_quayside_home',
+    'eastbrook_civic_square',
   ),
   makeNpc('brother_aldric', CHAPEL.frontStandingPoint, CHAPEL.rotation, CHAPEL.id),
   makeNpc(
@@ -1160,8 +1225,18 @@ const NPCS = [
     facingToward(BLACKSMITH_SHOP_CENTER, SMITH_POSITION),
     'eastbrook_blacksmith',
   ),
-  makeNpc('fisherman_brandt', { x: -95, z: -50 }, -1.5707963267948966, 'eastbrook_quay'),
-  makeNpc('foreman_odell', { x: -84, z: -63 }, 0.6747409422235526, 'eastbrook_quay'),
+  makeNpc(
+    'fisherman_brandt',
+    BRANDT_POSITION,
+    facingToward(BRANDT_POSITION, CIVIC_CENTER),
+    'eastbrook_civic_square',
+  ),
+  makeNpc(
+    'foreman_odell',
+    ODELL_POSITION,
+    facingToward(ODELL_POSITION, CIVIC_CENTER),
+    'eastbrook_civic_square',
+  ),
   makeNpc('bursar_fernando', BANK.frontStandingPoint, BANK.rotation, BANK.id),
   makeNpc('card_master', { x: 20, z: -98 }, -2.677945044588987, 'eastbrook_bank'),
   makeNpc('chronicler_saul', SAUL_POSITION, TOOLWORKS.rotation, 'mailbox_eastbrook'),
@@ -1341,17 +1416,21 @@ export const EASTBROOK_LAYOUT = deepFreeze({
   id: 'eastbrook_civic_layout_v2',
   preservedBuildings: [] as readonly PreservedBuildingPlacement[],
   buildings: BUILDINGS,
+  weeklyVault: {
+    id: 'eastbrook_weekly_vault',
+    kind: 'house',
+    x: 21,
+    z: -119,
+    w: 14,
+    d: 12,
+    rot: -Math.PI / 2,
+    height: 13,
+    keeper: { x: 12, z: -119 },
+  },
   civic: {
     center: CIVIC_CENTER,
     ring: { radius: 4.75, pathHalfWidth: 1.5 },
-    wellBeacon: {
-      id: 'eastbrook_civic_well_beacon',
-      assetId: '/models/props/eastbrook_civic_well_beacon.glb',
-      position: CIVIC_FEATURE_CENTER,
-      radius: 1.5,
-      height: 3.1,
-      nativeDimensions: { width: 3.2, height: 3.1, depth: 3.2 },
-    },
+    monument: MONUMENT,
     benches: BENCHES,
   },
   market: {

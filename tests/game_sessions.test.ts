@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEROIC_MARK_ITEM_ID } from '../src/sim/content/dungeon_difficulty';
+import { RETIRED_MOUNT_SKIN_IDS } from '../src/sim/content/mount_skins';
 import { MECH_CHROMAS } from '../src/sim/content/skins';
 import { MOBS } from '../src/sim/data';
 import { createMob } from '../src/sim/entity';
@@ -25,6 +26,7 @@ const grantAccountWeaponSkins = vi.fn(async (_accountId: number, skinIds: string
   mechChromaIds: [],
   weaponSkinIds: [...skinIds],
   weaponSkinLoadout: {},
+  mountSkinIds: [],
 }));
 const setAccountWeaponSkinLoadout = vi.fn(
   async (_accountId: number, loadout: Record<string, string>) => ({
@@ -32,8 +34,16 @@ const setAccountWeaponSkinLoadout = vi.fn(
     mechChromaIds: [],
     weaponSkinIds: Object.values(loadout),
     weaponSkinLoadout: loadout,
+    mountSkinIds: [],
   }),
 );
+const grantAccountMountSkins = vi.fn(async (_accountId: number, skinIds: string[]) => ({
+  completedQuestIds: [],
+  mechChromaIds: [],
+  weaponSkinIds: [],
+  weaponSkinLoadout: {},
+  mountSkinIds: skinIds,
+}));
 
 vi.mock('../server/db', () => ({
   pool: { query: vi.fn(async () => ({ rows: [] })) },
@@ -53,6 +63,8 @@ vi.mock('../server/db', () => ({
     grantAccountWeaponSkins(...(args as [number, string[]])),
   setAccountWeaponSkinLoadout: (...args: unknown[]) =>
     setAccountWeaponSkinLoadout(...(args as [number, Record<string, string>])),
+  grantAccountMountSkins: (...args: unknown[]) =>
+    grantAccountMountSkins(...(args as [number, string[]])),
   // Character load leases: leave() releases and the autosave loop heartbeats, so
   // these must exist on the mock or those paths throw on the undefined export.
   acquireCharacterLease: vi.fn(async () => true),
@@ -237,6 +249,7 @@ describe('GameServer sessions', () => {
           mechChromaIds: [],
           weaponSkinIds: [],
           weaponSkinLoadout: {},
+          mountSkinIds: [],
         },
       }),
     );
@@ -370,6 +383,7 @@ describe('GameServer sessions', () => {
           mechChromaIds: ['amber_crimson'],
           weaponSkinIds: [],
           weaponSkinLoadout: {},
+          mountSkinIds: [],
         },
       }),
     );
@@ -402,6 +416,7 @@ describe('GameServer sessions', () => {
       mechChromaIds: ['amber_crimson'],
       weaponSkinIds: [],
       weaponSkinLoadout: {},
+      mountSkinIds: [],
     };
     const first = expectJoined(
       server.join(fakeWs(), 11, 101, 'Lupercal', 'shaman', null, false, {
@@ -475,6 +490,7 @@ describe('GameServer sessions', () => {
           mechChromaIds: [],
           weaponSkinIds: [],
           weaponSkinLoadout: {},
+          mountSkinIds: [],
         },
       }),
     );
@@ -1236,6 +1252,170 @@ describe('GameServer sessions', () => {
 // weapon-type gate re-validated by the Sim, FIFO account-wide persistence).
 // Warriors join holding worn_sword, a sword; ice_fang_sword is a sword
 // skin and glaciersplit_axe an axe skin.
+// Mount skins (src/sim/content/mount_skins.ts): account-wide ownership, a
+// per-character worn skin. The server gates the wear command on the session's
+// account cosmetics, the Sim only validates the id, and the identity wire
+// carries the result as `msk` (render-only: the ridden mount keeps its stats).
+describe('GameServer mount skin commands', () => {
+  const ownedMountSkins = (mountSkinIds: string[]) => ({
+    accountCosmetics: {
+      completedQuestIds: [],
+      mechChromaIds: [],
+      weaponSkinIds: [],
+      weaponSkinLoadout: {},
+      mountSkinIds,
+    },
+  });
+
+  function changeMountSkin(server: GameServer, session: ClientSession, skin: unknown) {
+    server.handleMessage(session, JSON.stringify({ t: 'cmd', cmd: 'change_mount_skin', skin }));
+  }
+
+  it('wears an owned skin on the acting character only, and takes it off with null', () => {
+    const server = new GameServer();
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Skinrider', 'warrior', null, false, {
+        ...ownedMountSkins(['mech_bird', 'chimeglass_tortoise']),
+      }),
+    );
+    changeMountSkin(server, session, 'mech_bird');
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBe('mech_bird');
+    expect(server.sim.meta(session.pid)?.mountSkinId).toBe('mech_bird');
+    // The worn skin is character state: the account's ownership list is untouched.
+    expect(session.accountCosmetics.mountSkinIds).toEqual(['mech_bird', 'chimeglass_tortoise']);
+    // Swapping to the other owned skin is a plain overwrite.
+    changeMountSkin(server, session, 'chimeglass_tortoise');
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBe('chimeglass_tortoise');
+    changeMountSkin(server, session, null);
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+    expect(server.sim.meta(session.pid)?.mountSkinId).toBeNull();
+  });
+
+  it('ignores a skin the account does not own, an unknown id, and a malformed payload', () => {
+    const server = new GameServer();
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Forger', 'warrior', null, false, {
+        ...ownedMountSkins(['chimeglass_tortoise']),
+      }),
+    );
+    changeMountSkin(server, session, 'mech_bird'); // owned by nobody here
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+    changeMountSkin(server, session, 'valorsteed'); // a mount key, not a skin
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+    changeMountSkin(server, session, 7);
+    changeMountSkin(server, session, undefined);
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+    // Wearing the owned one still works after the refusals.
+    changeMountSkin(server, session, 'chimeglass_tortoise');
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBe('chimeglass_tortoise');
+  });
+
+  it('persists the worn skin in the character save and keeps it at join while owned', () => {
+    const seedServer = new GameServer();
+    const seedPid = seedServer.sim.addPlayer('mage', 'Keeper');
+    expect(seedServer.sim.setMountSkin(seedPid, 'mech_bird')).toBe(true);
+    const state = seedServer.sim.serializeCharacter(seedPid);
+    if (!state) throw new Error('missing saved state');
+    expect(state.mountSkinId).toBe('mech_bird');
+
+    const server = new GameServer();
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Keeper', 'mage', state, false, {
+        ...ownedMountSkins(['mech_bird']),
+      }),
+    );
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBe('mech_bird');
+    // Wearing nothing is omitted from the save (zero-default omission).
+    changeMountSkin(server, session, null);
+    expect(server.sim.serializeCharacter(session.pid)?.mountSkinId).toBeUndefined();
+  });
+
+  it('takes an unowned saved skin off at join instead of healing it into ownership', () => {
+    const seedServer = new GameServer();
+    const seedPid = seedServer.sim.addPlayer('mage', 'Revoked');
+    seedServer.sim.setMountSkin(seedPid, 'mech_bird');
+    const state = seedServer.sim.serializeCharacter(seedPid);
+    if (!state) throw new Error('missing saved state');
+
+    const server = new GameServer();
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Revoked', 'mage', state, false, {
+        ...ownedMountSkins(['chimeglass_tortoise']),
+      }),
+    );
+    expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+    expect(server.sim.meta(session.pid)?.mountSkinId).toBeNull();
+    expect(session.accountCosmetics.mountSkinIds).toEqual(['chimeglass_tortoise']);
+  });
+
+  it('takes a retired saved skin off at join even though the account row still grants it', () => {
+    // A v0.42.0 save wearing the Rallycart RXT, joined on a binary where the
+    // skin is retired (RETIRED_MOUNT_SKIN_IDS) while the prod mirror row still
+    // lists the grant as dormant data. The character comes up bare, the row
+    // is untouched, and the next save no longer names the skin.
+    const seedServer = new GameServer();
+    const seedPid = seedServer.sim.addPlayer('mage', 'Driver');
+    const state = seedServer.sim.serializeCharacter(seedPid);
+    if (!state) throw new Error('missing saved state');
+    for (const retired of RETIRED_MOUNT_SKIN_IDS) {
+      expect(seedServer.sim.setMountSkin(seedPid, retired)).toBe(false);
+      const legacySave = { ...state, mountSkinId: retired };
+      const server = new GameServer();
+      const session = expectJoined(
+        server.join(fakeWs(), 11, 101, 'Driver', 'mage', legacySave, false, {
+          ...ownedMountSkins([retired, 'mech_bird']),
+        }),
+      );
+      expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+      expect(server.sim.meta(session.pid)?.mountSkinId).toBeNull();
+      expect(session.accountCosmetics.mountSkinIds).toEqual([retired, 'mech_bird']);
+      expect(server.sim.serializeCharacter(session.pid)?.mountSkinId).toBeUndefined();
+      // The owned live skin still wears; the retired one is refused outright.
+      changeMountSkin(server, session, retired);
+      expect(server.sim.entities.get(session.pid)?.mountSkinId).toBeNull();
+      changeMountSkin(server, session, 'mech_bird');
+      expect(server.sim.entities.get(session.pid)?.mountSkinId).toBe('mech_bird');
+    }
+  });
+
+  it('mirrors a store grant to every live session on the account and persists it', async () => {
+    grantAccountMountSkins.mockClear();
+    const server = new GameServer();
+    const a = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Buyer', 'warrior', null, false, {
+        ...ownedMountSkins([]),
+      }),
+    );
+    const b = expectJoined(
+      server.join(fakeWs(), 11, 102, 'Buyeralt', 'mage', null, true, {
+        ...ownedMountSkins([]),
+      }),
+    );
+    const other = expectJoined(
+      server.join(fakeWs(), 12, 103, 'Stranger', 'mage', null, true, {
+        ...ownedMountSkins([]),
+      }),
+    );
+    // Before the grant the wear command is refused on both of the account's sessions.
+    changeMountSkin(server, a, 'mech_bird');
+    expect(server.sim.entities.get(a.pid)?.mountSkinId).toBeNull();
+
+    server.grantMountSkinsToAccount(11, ['mech_bird', 'valorsteed', 'nope']);
+    await vi.waitFor(() => expect(a.accountCosmetics.mountSkinIds).toEqual(['mech_bird']));
+    expect(b.accountCosmetics.mountSkinIds).toEqual(['mech_bird']);
+    expect(other.accountCosmetics.mountSkinIds).toEqual([]);
+    changeMountSkin(server, b, 'mech_bird');
+    expect(server.sim.entities.get(b.pid)?.mountSkinId).toBe('mech_bird');
+    await vi.waitFor(() => {
+      expect(grantAccountMountSkins).toHaveBeenCalledWith(11, ['mech_bird']);
+    });
+    // Idempotent: an already-owned id neither re-pushes nor re-persists.
+    grantAccountMountSkins.mockClear();
+    server.grantMountSkinsToAccount(11, ['mech_bird']);
+    expect(grantAccountMountSkins).not.toHaveBeenCalled();
+  });
+});
+
 describe('GameServer weapon skin commands', () => {
   const ownedSkins = (weaponSkinIds: string[], weaponSkinLoadout: Record<string, string> = {}) => ({
     accountCosmetics: {
@@ -1243,6 +1423,7 @@ describe('GameServer weapon skin commands', () => {
       mechChromaIds: [],
       weaponSkinIds,
       weaponSkinLoadout,
+      mountSkinIds: [],
     },
   });
 
@@ -1322,6 +1503,33 @@ describe('GameServer weapon skin commands', () => {
     expect(setAccountWeaponSkinLoadout).not.toHaveBeenCalled();
   });
 
+  it('applies an owned skin whose type is held in the OFFHAND only (rogue mace)', async () => {
+    setAccountWeaponSkinLoadout.mockClear();
+    const server = new GameServer();
+    // Reported from live play: a rogue's mace lands in the offhand, and the
+    // owned legendary mace skin could never apply because the type gate read
+    // the mainhand alone.
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Offhander', 'rogue', null, false, {
+        ...ownedSkins(['starfall_mace']),
+      }),
+    );
+    server.sim.setPlayerLevel(30, session.pid);
+    server.sim.addItem('forgefathers_warhammer', 1, session.pid);
+    server.sim.equipItemToSlot('forgefathers_warhammer', 'offhand', session.pid);
+    const e = server.sim.entities.get(session.pid);
+    expect(e?.mainhandItemId).toBe('rusty_dagger');
+    expect(e?.offhandItemId).toBe('forgefathers_warhammer');
+
+    changeSkin(server, session, 'starfall_mace', 'mace');
+
+    expect(e?.weaponSkinId).toBe('starfall_mace');
+    expect(session.accountCosmetics.weaponSkinLoadout).toEqual({ mace: 'starfall_mace' });
+    await vi.waitFor(() => {
+      expect(setAccountWeaponSkinLoadout).toHaveBeenCalledWith(11, { mace: 'starfall_mace' });
+    });
+  });
+
   it('rejects an owned skin whose type does not match the equipped weapon', () => {
     setAccountWeaponSkinLoadout.mockClear();
     const server = new GameServer();
@@ -1388,6 +1596,7 @@ describe('GameServer weapon skin commands', () => {
       mechChromaIds: [],
       weaponSkinIds: ['ice_fang_sword'],
       weaponSkinLoadout: {},
+      mountSkinIds: [],
     };
     const first = expectJoined(
       server.join(fakeWs(), 11, 101, 'Skinone', 'warrior', null, false, {
@@ -1428,6 +1637,7 @@ describe('GameServer weapon skin commands', () => {
               mechChromaIds: [],
               weaponSkinIds: ['ice_fang_sword'],
               weaponSkinLoadout: { sword: 'ice_fang_sword' },
+              mountSkinIds: [],
             });
         }),
     );

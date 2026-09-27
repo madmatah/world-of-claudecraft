@@ -2,7 +2,8 @@
 // proven at the seam it rides. Chronoweave (Aetherweave Vestments) 2pc bakes
 // the 50 percent single-target rate into the mark at placeTemporalEcho (the
 // one write combat and the aura tooltip both read back) and 4pc is a RESOLVED
-// cooldownFlat rewrite on Temporal Cascade (17 to 12); Pyroclast 2pc moves the
+// cooldownFlat + costPct rewrite on Temporal Cascade (17 to 12 sec and 170 to
+// 119 mana); Pyroclast 2pc moves the
 // Scald execute threshold at fireGuaranteedCrit's sole functional reader (the
 // crit roll is still drawn, only the outcome overrides, so no stream shifts)
 // and 4pc widens the builder-crit Phoenix Trance shave at the one
@@ -16,6 +17,8 @@ import {
   ECHO_CONVERT_AOE,
   ECHO_CONVERT_SINGLE,
   ECHO_GROUP_CONVERT_SINGLE,
+  ECHO_ROTATION_CONVERSION_MULT,
+  echoHealPowerMultiplier,
   placeGroupEcho,
   placeTemporalEcho,
 } from '../src/sim/combat/chronomancy';
@@ -38,13 +41,15 @@ import { abilitiesKnownAt } from '../src/sim/content/classes';
 import {
   CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE,
   CHRONOWEAVE_4PC_CASCADE_COOLDOWN_CUT_SEC,
+  CHRONOWEAVE_4PC_CASCADE_COST_PCT,
   FROSTQUENCH_2PC_CRIT_BONUS_ICICLES,
   FROSTQUENCH_4PC_WINTERS_CHILL_CHARGES,
   PYROCLAST_2PC_SCALD_EXECUTE_HP,
   PYROCLAST_4PC_COMBUSTION_CDR_PER_CRIT,
   setBonusFlag,
 } from '../src/sim/content/ignivar_set_bonuses';
-import { ABILITIES, MOBS } from '../src/sim/data';
+import type { TalentAllocation } from '../src/sim/content/talents';
+import { ABILITIES, ITEM_SETS, MOBS } from '../src/sim/data';
 import { createMob } from '../src/sim/entity';
 import { computeCharacterModifiers } from '../src/sim/set_bonus_mods';
 import { Sim } from '../src/sim/sim';
@@ -156,10 +161,29 @@ describe('Chronoweave 2pc: Temporal Echo converts 50 percent of single-target Ar
       ally.hp = Math.max(1, ally.maxHp - 800);
       const before = ally.hp;
       chronomancyConvertArcaneDamage(sim.ctx, sim.player, 1000, 'arcane', false);
+      const baseRate = wearer ? CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE : ECHO_CONVERT_SINGLE;
       expect(ally.hp - before).toBe(
-        Math.round(1000 * (wearer ? CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE : ECHO_CONVERT_SINGLE)),
+        Math.round(1000 * baseRate * echoHealPowerMultiplier(sim.player)),
       );
     }
+  });
+
+  it('keeps the 2pc at a 25 percent relative gain for the offensive-healing rotation', () => {
+    const healing: number[] = [];
+    for (const wearer of [false, true]) {
+      const { sim, ally } = placedRates(wearer);
+      ally.hp = 1;
+      const before = ally.hp;
+      chronomancyConvertArcaneDamage(sim.ctx, sim.player, 100, 'arcane', false, 'arcane_missiles');
+      healing.push(ally.hp - before);
+    }
+    expect(ECHO_ROTATION_CONVERSION_MULT).toBe(4);
+    expect(healing[0]).toBe(160);
+    // 200 base from 50% rate x 4 rotation mult, scaled by 2pc gear healing power (+24 healPower = 1.02x)
+    expect(healing[1]).toBe(204);
+    expect(healing[1] / healing[0]).toBeCloseTo(1.275, 2);
+    expect(ITEM_SETS.chronoweave.bonuses[0]?.text).toContain('200 percent');
+    expect(ITEM_SETS.chronoweave.bonuses[0]?.text).toContain('Aether Surge and Aether Darts');
   });
 
   it('the AREA rate and the Cascada group rate stay base for wearers', () => {
@@ -167,7 +191,9 @@ describe('Chronoweave 2pc: Temporal Echo converts 50 percent of single-target Ar
     ally.hp = Math.max(1, ally.maxHp - 800);
     const before = ally.hp;
     chronomancyConvertArcaneDamage(sim.ctx, sim.player, 1000, 'arcane', true);
-    expect(ally.hp - before).toBe(Math.round(1000 * ECHO_CONVERT_AOE));
+    expect(ally.hp - before).toBe(
+      Math.round(1000 * ECHO_CONVERT_AOE * echoHealPowerMultiplier(sim.player)),
+    );
     // A group echo placed BY a wearer keeps the 13 percent group coefficient:
     // the copy promises the single-target mark only.
     const second = addAlly(sim, 'Grouped', 6);
@@ -183,7 +209,9 @@ describe('Chronoweave 2pc: Temporal Echo converts 50 percent of single-target Ar
     ally.hp = Math.max(1, ally.maxHp - 800);
     const before = ally.hp;
     chronomancyConvertArcaneDamage(sim.ctx, sim.player, 1000, 'arcane', false);
-    expect(ally.hp - before).toBe(Math.round(1000 * CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE));
+    expect(ally.hp - before).toBe(
+      Math.round(1000 * CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE * echoHealPowerMultiplier(sim.player)),
+    );
     // Re-placing without the tier snaps back to base.
     placeTemporalEcho(sim.ctx, sim.player, ally, 15);
     expect(expectDefined(echoAuraOn(ally, sim.player.id)).echoConvertRate).toBe(
@@ -193,19 +221,33 @@ describe('Chronoweave 2pc: Temporal Echo converts 50 percent of single-target Ar
 });
 
 describe("Chronoweave 4pc: Temporal Cascade's cooldown drops 17 to 12", () => {
-  it('the resolved cooldown: 12 for wearers, 17 base, and no other row overlaps', () => {
-    const entryOf = (equipment: Partial<Record<string, string>>) =>
+  it('keeps the faster Cascade cost-neutral per second for wearers only', () => {
+    const entryOf = (
+      equipment: Partial<Record<string, string>>,
+      rows: TalentAllocation['rows'] = {},
+    ) =>
       expectDefined(
-        abilitiesKnownAt('mage', 25, mageMods('arcane', equipment)).find(
-          (known) => known.def.id === 'temporal_cascade',
-        ),
+        abilitiesKnownAt(
+          'mage',
+          25,
+          computeCharacterModifiers('mage', { spec: 'arcane', rows }, 25, equipment),
+        ).find((known) => known.def.id === 'temporal_cascade'),
       );
     expect(entryOf({}).cooldown).toBe(17);
     expect(entryOf(worn('chronoweave', 4)).cooldown).toBe(
       17 - CHRONOWEAVE_4PC_CASCADE_COOLDOWN_CUT_SEC,
     );
-    // The 2pc alone must NOT move the cooldown (the cut is the 4pc's row).
-    expect(entryOf(worn('chronoweave', 2)).cooldown).toBe(17);
+    expect(entryOf(worn('chronoweave', 4)).cost).toBe(119);
+    // The 2pc alone must NOT move either field (both bends share the 4pc row).
+    expect(entryOf(worn('chronoweave', 2))).toMatchObject({ cooldown: 17, cost: 170 });
+    expect(entryOf({})).toMatchObject({ cooldown: 17, cost: 170 });
+    expect(entryOf(worn('chronoweave', 4), { 20: 'mag_r20_evocation' })).toMatchObject({
+      cooldown: 12,
+      cost: 119,
+    });
+    expect(ITEM_SETS.chronoweave.bonuses[1]?.text).toBe(
+      "Temporal Cascade's cooldown is reduced by 5 sec and its mana cost is reduced by 30 percent.",
+    );
   });
 });
 
@@ -382,6 +424,7 @@ describe('the wearer literals against the authored copy', () => {
   it('pins every audited mage constant', () => {
     expect(CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE).toBeCloseTo(0.5, 10);
     expect(CHRONOWEAVE_4PC_CASCADE_COOLDOWN_CUT_SEC).toBe(5);
+    expect(CHRONOWEAVE_4PC_CASCADE_COST_PCT).toBeCloseTo(-0.3, 10);
     expect(PYROCLAST_2PC_SCALD_EXECUTE_HP).toBeCloseTo(0.35, 10);
     expect(PYROCLAST_4PC_COMBUSTION_CDR_PER_CRIT).toBe(1.5);
     expect(FROSTQUENCH_2PC_CRIT_BONUS_ICICLES).toBe(1);

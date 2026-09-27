@@ -1,7 +1,5 @@
 import { bgFieldHeightLocal } from './battleground_field';
 import { BORDER_EDGES } from './border_edges';
-import { bulwarkPadTarget, bulwarkPadWeight } from './bulwark_layout';
-import { castlePadTarget, castlePadWeight, castleSkirtWeight, LAST_SPRING } from './castle_layout';
 import { EMBER_BAYS, EMBER_LAND_LOBES, forgefatherScatterExcluded } from './content/ember_coast';
 import { STABLE_FLAT, STABLE_PADDOCK } from './content/mounts';
 import { PALMREACH_PROPS } from './content/palmreach';
@@ -31,10 +29,11 @@ import {
   zoneAt,
 } from './data';
 import { dawnholdPadTarget, dawnholdPadWeight } from './dawnhold_layout';
-import { dockSurfaceHeight } from './deck_surfaces';
+import { dockSurfaceHeight, onHarborPlanks } from './deck_surfaces';
+import { isExcludedDecoration } from './decoration_exclusions';
 import { dungeonFloorLift } from './dungeon_floor';
 import { dawnholdKeepLiftAt, lastKeepLiftAt } from './dungeon_layout';
-import { eastbrookDeckSurface } from './eastbrook_harbor';
+import { applyEastbrookVaultPad } from './eastbrook_vault_terrain';
 import {
   EMBER_FLAT_POOLS,
   EMBER_LAVA_LINKS,
@@ -42,10 +41,14 @@ import {
   emberLinkDistanceNorm,
   emberNearestOnLink,
 } from './ember_lava_layout';
-import { GALE_DECK_FREEBOARD, galeDeckSurface } from './gale_harbor';
+import { applyFarshoreShipwreckShore } from './farshore_shipwreck_shore';
+import { GALE_DECK_FREEBOARD } from './gale_harbor';
+import { applyGliderApproachPath } from './glider_approach_path';
+import { applyKeepSitePad, keepSitePadWeight } from './keep_site';
 import { reachDeckClear, reachDeckSurface } from './reach_decks';
 import { isAtRealmRacersXZ } from './realm_racers_layout';
 import { fbm2, hash2, noise2 } from './rng';
+import { carveSeaChannels } from './sea_channels';
 import {
   CALM_SKIRT_MAX_WIDTH,
   type CalmProbe,
@@ -62,6 +65,7 @@ import {
   terrainRegionHas,
 } from './terrain_region_index';
 import { cragLayer, highlandMask, reliefBase, ridged2, warpedCoords } from './terrain_relief';
+import { applyGardenwalkWestPass, applyThornpeakPocketGrade } from './thornpeak_walk_grades';
 import type { BiomeId, HeightStamp, ZoneDef } from './types';
 import { overworldWalkSurface } from './walk_lifts';
 import { wildheartFieldHeight } from './wildheart_field';
@@ -748,7 +752,7 @@ const NIGHT_ZMAX = 1820; // ...and zMax
 const NIGHT_LAND_LOBES = [
   { x: -390, z: 1300, r: 60 }, // the Nightgate's shelf
   { x: -330, z: 1298, r: 46 }, // ...and the crossing's dark-side shoulder
-  { x: -340, z: 1380, r: 90 }, // the realm's heart: Moonrest and the Moonwell
+  { x: -340, z: 1380, r: 90 }, // the realm's heart: Moonrest and the Moonspring
   { x: -440, z: 1480, r: 80 }, // Gloamfield's flower downs
   { x: -280, z: 1550, r: 70 }, // the Standing Vigil's rise
   { x: -360, z: 1660, r: 85 }, // the barrow downs
@@ -815,7 +819,7 @@ const WOOD_LAND_LOBES = [
   { x: 390, z: 1300, r: 55 }, // the Crowgate's shelf
   { x: 398, z: 1742, r: 46 }, // the Wyrmroad's wood-side shoulder...
   { x: 404, z: 1790, r: 46 }, // ...carried to the waste's border
-  { x: 360, z: 1420, r: 90 }, // the realm's heart: Gallowmere under the eaves
+  { x: 360, z: 1420, r: 90 }, // the realm's heart: Gibbetmere under the eaves
   { x: 280, z: 1490, r: 80 }, // Widow's Thicket
   { x: 440, z: 1530, r: 75 }, // the Hanging Glade
   { x: 410, z: 1488, r: 40 }, // the glade road's shoulder
@@ -1340,32 +1344,6 @@ function applyGardenCoast(x: number, z: number, h: number): number {
   return h + (out - h) * seam * zSeam;
 }
 
-// The Gardenwalk pass floor, mirrored onto the Thornpeak (west/strip) side
-// of the border: applyGardenCoast's passW above only reaches the east
-// column (its blend rides "seam", the coastal cross-fade into the strip,
-// which is near zero west of the border). Without a matching flatten here
-// the peaks biome's full hill/crag/detail noise (baseHeight) runs right up
-// to the crossing: player report, a small unclimbable step around x=173,
-// z=797. A pure function of (x, z), like every applier in this file: it
-// touches no content table, so it cannot move roadDistance calming or any
-// other rng-consuming system.
-function applyGardenwalkWestPass(x: number, z: number, h: number): number {
-  // Symmetric around the border line itself (not a one-sided cutoff at
-  // STRIP_MAX_X): a hard x < STRIP_MAX_X gate left a seam exactly at the
-  // border, where this window's near-full weight met applyGardenCoast's
-  // own passW at whatever partial "seam" it had reached there, and the two
-  // land on different baseline math (this blends raw h; that blends a
-  // coastal "out" value), so the join was not even C0. Peaking gently AT the
-  // border and fading both directions instead overlaps applyGardenCoast's
-  // effect on the east side, but both blends pull the same direction (down
-  // toward the ~6 pass floor), so composing them stays smooth.
-  const w =
-    (1 - smoothstep(26, 52, Math.abs(z - 800))) *
-    (1 - smoothstep(0, 58, Math.abs(x - STRIP_MAX_X)));
-  if (w <= 0) return h;
-  return h + (6 + (h - 6) * 0.08 - h) * w;
-}
-
 // The Great Maze. '#' cells are modeled hedge walls; '.' cells are lawn
 // corridors. Row 0 is the NORTH row (the map's top): the entrance is the
 // gap in the south row, the exit the gap in the north row, and the open
@@ -1423,10 +1401,10 @@ export function inGardenMaze(x: number, z: number): boolean {
   );
 }
 
-// Is a grid position a wall? Out-of-bounds counts as open (the lawn beyond
-// the maze), so the outer ring's pieces run along the perimeter only.
+// Is a grid position a wall? Out-of-bounds counts as open (the lawn beyond the
+// maze), and so does a NaN index: one positive conjunction, every comparison false.
 function mazeWallAt(c: number, r: number): boolean {
-  if (r < 0 || r >= MAZE_ROWS || c < 0 || c >= MAZE_COLS) return false;
+  if (!(r >= 0 && r < MAZE_ROWS && c >= 0 && c < MAZE_COLS)) return false;
   return GARDEN_MAZE[r].charCodeAt(c) === 35; // '#'
 }
 
@@ -2539,70 +2517,10 @@ function applyEmberLavaBasins(x: number, z: number, h: number): number {
   return out;
 }
 
-// The Last Keep's terraced grounds: the castle pads grade to their local
-// target (the outer bailey floor, or the raised inner ward with its stair
-// cuts; the plan lives in castle_layout.ts), with a gentle skirt back onto
-// the midlands.
-function applyCastlePad(x: number, z: number, h: number): number {
-  const w = castlePadWeight(x, z);
-  if (w <= 0) return h;
-  return h + (castlePadTarget(x, z) - h) * w;
-}
-
-// The Ashen Bulwark's graded grounds on the Drakelands west headland (the
-// castle pad idiom at barracks scale; the plan lives in bulwark_layout.ts).
-function applyBulwarkPad(x: number, z: number, h: number): number {
-  const w = bulwarkPadWeight(x, z);
-  if (w <= 0) return h;
-  return h + (bulwarkPadTarget() - h) * w;
-}
-
-// The pad's northeast apron meets the Last Spring pool, and the pad yields to
-// the pool over castlePadWeight's own ring: the bailey's level floor ends on an
-// arc about 16yd out from the pool center and the ground then falls to the pool
-// bed in about 5yd of run. That left a 1.85 rise/run face standing straight out
-// of the water (tests/world_edge_coast.test.ts swept it on the drake east
-// margin: 4.5 and 4.3yd per 2yd step at z 1990 and 1998).
-//
-// Grade the apron into the shore: fill the hollow between the arc and the water
-// with a straight bank, so the pad's skirt reaches the pool as a shore slope
-// instead of a lip (the near-shore band measures 1.58 rise/run after, 2.82
-// before). Three properties keep the castle out of it:
-//   - it RAISES ONLY, so no pad, courtyard, or grounds height can move down;
-//   - its rim stops inside the castle's closest masonry (the northeast
-//     bastion's outer face at x 440.2, 15.8yd from the pool center), so no
-//     wall, bastion, ramp, or flank-trap seal is ever in its reach;
-//   - its authority is the pad's OWN skirt (castleSkirtWeight), so the fill is
-//     the skirt meeting the water and dies out around the pool's far shores,
-//     which have no pad behind them and keep their natural bank.
-// The bank line dives under the pool bed inside the shallows and rises above
-// the natural apron outside it, so the fill releases to zero at both ends on
-// its own: no window edge to seam (tests/terrain_window_seams.test.ts).
-const LAST_SPRING_BANK = {
-  /** the bank's outer rim, measured from the pool center (castle_layout) */
-  rim: 15.5,
-  /** the bank's height at the rim, just under the apron it meets there */
-  rimH: 3.5,
-  /** rise/run of the bank plane, under PLAYER_MAX_CLIMB_SLOPE (the apron
-   *  ABOVE it is the pad's own yield ramp and stays as steep as it was) */
-  slope: 1.4,
-  /** the fill eases back to the natural apron over the last of the rim */
-  ease: 1.5,
-} as const;
-
-function applyLastSpringBank(x: number, z: number, h: number): number {
-  const b = LAST_SPRING_BANK;
-  const dx = x - LAST_SPRING.x;
-  const dz = z - LAST_SPRING.z;
-  if (dx < -b.rim || dx > b.rim || dz < -b.rim || dz > b.rim) return h;
-  const d = Math.hypot(dx, dz);
-  if (d >= b.rim) return h;
-  const target = b.rimH - b.slope * (b.rim - d);
-  if (target <= h) return h; // raises only: the apron above the bank never moves
-  const w = castleSkirtWeight(x, z) * (1 - smoothstep(b.rim - b.ease, b.rim, d));
-  if (w <= 0) return h;
-  return h + (target - h) * w;
-}
+// (The Last Spring's authored shore bank retired with the castle pad: the
+// steep face it graded was the hollow the pad's own pool yield opened, and
+// the natural apron the pool keeps without a pad behind it never had one.
+// tests/world_edge_coast.test.ts and the lake escape sweep hold the shore.)
 
 // Dawnhold Castle's graded grounds in the Evergarden (the same idiom at a
 // smaller scale; the plan lives in dawnhold_layout.ts).
@@ -3549,7 +3467,8 @@ function baseHeight(
       }
     }
   }
-  return h;
+  // ...and the sea-channel bowls under the ferry lanes (sea_channels.ts)
+  return carveSeaChannels(x, z, h, WATER_LEVEL);
 }
 
 // ---------------------------------------------------------------------------
@@ -3971,19 +3890,19 @@ export function terrainHeightSansEdits(x: number, z: number, seed: number): numb
   return applyTerrainPads(x, z, seed, terrainHeightUnpadded(x, z, seed, true));
 }
 
-// The authored pad chain over the unpadded height (castle pad, spring bank,
-// pool walkway bed, garden/gale pads): one shared body so terrainHeight and
+// The authored pad chain over the unpadded height (keep-site pad, pool
+// walkway bed, garden/gale pads): one shared body so terrainHeight and
 // terrainHeightSansEdits can never drift.
 function applyTerrainPads(x: number, z: number, seed: number, h0: number): number {
-  let h = h0;
-  // The Last Keep's courtyard pad, over the FINISHED height (the world-edge
-  // sea shave runs late in the unpadded chain and was clipping the castle's
-  // seaward corner; the castle plateau must win everywhere inside its walls).
-  h = applyCastlePad(x, z, h);
-  // ...and the shore bank that carries that pad's northeast apron down into the
-  // Last Spring, applied straight after it: the hollow it fills is the one the
-  // pad's own pool yield opens, so it has to read the padded height.
-  h = applyLastSpringBank(x, z, h);
+  let h = calmForce === null ? applyFarshoreShipwreckShore(x, z, h0) : h0;
+  // Ease only the walking trail on the existing western mountain.
+  h = applyGliderApproachPath(x, z, h);
+  // The Last Keep's site pad on the Trollmoot rise, over the FINISHED
+  // height (the world-edge sea shave runs late in the unpadded chain and
+  // the rise sits near the west shore shelf; the build floor must win
+  // everywhere inside its rect).
+  h = applyKeepSitePad(x, z, h);
+  h = applyEastbrookVaultPad(x, z, seed, h, terrainHeightUnpadded, calmForce === null);
   // The Palmreach jungle-pool walkway's bed, over the FINISHED height: the
   // deck surfaces the movement kernel walks are anchored to this function, so
   // the rim the planks cover and the sand they land on have to be shaped here,
@@ -3993,7 +3912,6 @@ function applyTerrainPads(x: number, z: number, seed: number, h0: number): numbe
   // Dawnhold Castle's garden pad, same late application.
   h = applyDawnholdPad(x, z, h);
   // the Drakelands' headland barracks, graded the same way
-  h = applyBulwarkPad(x, z, h);
   // Level pads under the Evergarden's modeled flower beds, applied over the
   // FINISHED height (the garden seam reshapes the lawn per position, so an
   // early flatten would drift apart again): each bed ensemble sits flush on
@@ -4353,6 +4271,9 @@ function terrainHeightUnpadded(x: number, z: number, seed: number, skipEdits = f
   if (terrainRegionHas(region, TERRAIN_APPLIER.gardenwalkWestPass)) {
     h = applyGardenwalkWestPass(x, z, h);
   }
+  if (terrainRegionHas(region, TERRAIN_APPLIER.thornpeakPocketGrade)) {
+    h = applyThornpeakPocketGrade(x, z, h, seed);
+  }
   if (terrainRegionHas(region, TERRAIN_APPLIER.galeCoast)) {
     h = applyGaleCoast(x, z, h);
   }
@@ -4574,7 +4495,7 @@ function terrainHeightUnpadded(x: number, z: number, seed: number, skipEdits = f
     }
   }
   // The Huntsman's Bluff: the Pale Huntsman's clearing sits on a flat-top
-  // rise; his road from Gallowmere climbs the blended rim as the ramp.
+  // rise; his road from Gibbetmere climbs the blended rim as the ramp.
   if (z > 1620 && z < 1750) {
     const dBluff = Math.hypot(x - 380, z - 1680);
     if (dBluff < 32) {
@@ -4963,14 +4884,7 @@ export interface Decoration {
   biome: BiomeId;
 }
 
-const DECORATION_EXCLUSION_RADIUS = 1.2;
-const DECORATION_EXCLUSIONS = [{ x: 2.456450840458274, z: 211.33819991815835 }];
-
-function isExcludedDecoration(x: number, z: number): boolean {
-  return DECORATION_EXCLUSIONS.some(
-    (p) => Math.hypot(x - p.x, z - p.z) < DECORATION_EXCLUSION_RADIUS,
-  );
-}
+// Shared by render scatter and its collision grid; independent of terrain shaping.
 
 export function zoneBiomeAt(x: number, z: number): BiomeId {
   // Delegates to zoneAt rather than repeating its rect walk over the static
@@ -5070,13 +4984,10 @@ function decorationAt(seed: number, gx: number, gz: number): Decoration | null {
     // beds, and the shaped basins stay clear (a rock there is also a stray
     // collider standing in the melt)
     if (gz > 2160 && gz < 2360 && emberLinkDistanceNorm(gx, gz) < 1.1) return null;
-    // the Last Keep's graded grounds carry no wild scatter, and neither
+    // the Last Keep's build pad carries no wild scatter, and neither
     // do the Forgefather fortress's courts and stair flights
-    if (castlePadWeight(gx, gz) > 0) return null;
+    if (keepSitePadWeight(gx, gz) > 0) return null;
     if (forgefatherScatterExcluded(gx, gz)) return null;
-    // ...nor the Ashen Bulwark's headland pad (a boulder in the drill yard
-    // is also a stray collider standing in the muster lane)
-    if (bulwarkPadWeight(gx, gz) > 0) return null;
     for (const pool of EMBER_FLAT_POOLS) {
       if (Math.hypot(gx - pool.x, gz - pool.z) < pool.r * 1.6 + 4) return null;
     }
@@ -5152,15 +5063,8 @@ function decorationAt(seed: number, gx: number, gz: number): Decoration | null {
     return null;
   }
   // No rock or stunted tree grows up through Wickharbor's boardwalk planks,
-  // nor New Eastbrook's quay and piers.
-  if (galeDeckSurface(x, z, (sx, sz) => terrainHeight(sx, sz, seed), WATER_LEVEL) !== -Infinity) {
-    return null;
-  }
-  if (
-    eastbrookDeckSurface(x, z, (sx, sz) => terrainHeight(sx, sz, seed), WATER_LEVEL) !== -Infinity
-  ) {
-    return null;
-  }
+  // New Eastbrook's quay and piers, or a far ferry pier (deck_surfaces.ts).
+  if (onHarborPlanks(x, z, (sx, sz) => terrainHeight(sx, sz, seed), WATER_LEVEL)) return null;
   if (!reachDeckClear(x, z, 1)) return null;
   // The Old Beacon's lawn stays clear (nothing crowds the lighthouse stair),
   // and the raider encampments keep trees and rocks off their level pads.

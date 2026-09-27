@@ -28,7 +28,6 @@ import {
   buildLambertMaterial,
   buildSplatMaterial,
   hasTerrainSplatAssets,
-  NORMAL_ANISOTROPY,
   type SurfaceOrigin,
   TERRAIN_DETAIL_REPEAT,
 } from './terrain';
@@ -40,9 +39,6 @@ export {
   terrainSplatTexture,
 } from './terrain';
 export type { BrushUniforms, SurfaceOrigin };
-
-/** Shared with terrain.ts's macro-relief atlas: one normal-map anisotropy. */
-export const GROUND_NORMAL_ANISOTROPY = NORMAL_ANISOTROPY;
 
 /** Whether the real PBR splat photo set resolved. Named for the material rather
  *  than for terrain, because a band gates on it without owning a chunk. */

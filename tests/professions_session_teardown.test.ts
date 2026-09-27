@@ -127,6 +127,26 @@ describe('the shared displacement helper', () => {
     }
   });
 
+  it('drops a GCD-held queued press while leaving a live spell cast untouched', () => {
+    const sim = makeSim();
+    const pid = sim.playerId;
+    const p = sim.entities.get(pid);
+    if (!p) throw new Error('missing entity');
+    // A stored press must not survive a displacement: it would fire ticks
+    // later at the destination (with a clamped stale aim for a ground-target
+    // press). A live spell cast keeps its own teleport rules.
+    p.castingAbility = 'fireball';
+    p.castRemaining = 2;
+    p.queuedCastAbility = 'flamestrike';
+    p.queuedCastAim = { x: 10, z: 20 };
+    cancelProfessionSessionOnDisplacement(sim.ctx, p);
+    expect(p.queuedCastAbility).toBeNull();
+    expect(p.queuedCastAim).toBeNull();
+    expect(p.castingAbility).toBe('fireball');
+    p.castingAbility = null;
+    p.castRemaining = 0;
+  });
+
   it('the gather timer survives the cancel (nothing was spent)', () => {
     const sim = makeSim();
     const pid = sim.playerId;
@@ -272,17 +292,23 @@ describe('teleports cancel a live session', () => {
     const cancelAt = riftSrc.indexOf('cancelProfessionSessionOnDisplacement(ctx, e)', descendAt);
     expect(cancelAt).toBeGreaterThan(descendAt);
     expect(cancelAt).toBeLessThan(riftSrc.indexOf('e.pos = ctx.groundPos', descendAt));
+    // The dev teleports (/dev tp, /dev town, the mountquest hop) share one
+    // displacement helper, so the hop is pinned to CALL that helper and the
+    // helper is pinned to run the teardown before its position write.
     const devSrc = strip(
       readFileSync(new URL('../src/sim/dev_commands.ts', import.meta.url), 'utf8'),
     );
-    const hopAt = devSrc.indexOf('groundPos(marla.pos.x + 2');
+    const hopAt = devSrc.indexOf('displacePlayerForDev(ctx, entity, marla.pos.x + 2');
     expect(hopAt).toBeGreaterThan(-1);
-    const devCancelAt = devSrc.lastIndexOf(
-      'cancelProfessionSessionOnDisplacement(ctx, entity)',
-      hopAt,
+    const displaceSrc = strip(
+      readFileSync(new URL('../src/sim/dev/dev_displace.ts', import.meta.url), 'utf8'),
     );
-    expect(devCancelAt).toBeGreaterThan(-1);
-    expect(hopAt - devCancelAt).toBeLessThan(400);
+    const helperCancelAt = displaceSrc.indexOf(
+      'cancelProfessionSessionOnDisplacement(ctx, entity)',
+    );
+    expect(helperCancelAt).toBeGreaterThan(-1);
+    const helperWriteAt = displaceSrc.indexOf('entity.pos = pos');
+    expect(helperWriteAt).toBeGreaterThan(helperCancelAt);
   });
 
   it('/dev tp cancels a session', () => {
@@ -291,6 +317,15 @@ describe('teleports cancel a live session', () => {
     const p = startGatherSession(sim, pid);
     sim.drainEvents();
     handleDevChat(sim.ctx, '/dev tp 50 50', pid);
+    expectSessionEnded(sim, p);
+  });
+
+  it('/dev town cancels a session', () => {
+    const sim = makeSim();
+    const pid = sim.playerId;
+    const p = startGatherSession(sim, pid);
+    sim.drainEvents();
+    handleDevChat(sim.ctx, '/dev town highwatch', pid);
     expectSessionEnded(sim, p);
   });
 });

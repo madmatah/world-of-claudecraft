@@ -11,10 +11,41 @@
 import type { ChatSenderFlair } from '../src/sim/account_flair';
 import { GUILD_CREATION_FEE_COPPER } from '../src/sim/guild_bank';
 import { pledgeCooldownActive } from '../src/sim/guild_pledge_ladder';
+import {
+  effectiveGuildRankId,
+  GUILD_RANK_LEADER_ID,
+  GUILD_RANK_MEMBER_ID,
+  GUILD_RANK_OFFICER_ID,
+  type GuildRankDef,
+  type GuildRankId,
+  guildBankStampRank,
+  guildRankCan,
+  guildRankCanRemove,
+  guildRankDemoteTo,
+  guildRankIndex,
+  guildRankOutranks,
+  guildRankPromoteTo,
+  guildStepDownRankId,
+  resolveGuildRankLadder,
+  sanitizeGuildRankLadder,
+} from '../src/sim/guild_ranks';
+import {
+  GUILD_ROSTER_MAX_MEMBERS,
+  guildRosterCap,
+  guildRosterNextPagePrice,
+} from '../src/sim/guild_roster';
 import { guildTierForLifetimeXp } from '../src/sim/guild_tier';
 import type { PlayerClass } from '../src/sim/types';
+import type { GuildPledgeSettings } from '../src/world_api/social_graph';
+import type { GuildPledgeSettingsInput } from './guild_pledge_settings_cmd';
 
+// The built-in rank TIERS: the vocabulary of the live sim's guild membership
+// stamp (src/sim/guild_bank.ts GUILD_RANKS, pinned lockstep by
+// tests/guild_bank.test.ts). A member's STORED rank is a GuildRankId on the
+// guild's ladder (src/sim/guild_ranks.ts), which the service collapses to one
+// of these tiers only when it stamps the sim (guildBankStampRank).
 export type GuildRank = 'leader' | 'officer' | 'member';
+export type { GuildRankDef, GuildRankId };
 
 const GUILD_CREATION_FEE_GOLD = GUILD_CREATION_FEE_COPPER / 10_000;
 
@@ -54,7 +85,9 @@ export interface FriendEntry extends CharInfo {
 }
 
 export interface GuildMemberEntry extends CharInfo {
-  rank: GuildRank;
+  // The member's rank id on the guild's ladder (GuildView.ranks), already
+  // resolved: an id the ladder does not know is sent as the joining rank.
+  rank: GuildRankId;
   // ISO-8601 timestamp of the member's most recent world-entry, or null if never
   // recorded. Serialized server-side (server/social_db.ts) and shown in the roster.
   lastLogin: string | null;
@@ -85,7 +118,12 @@ export interface GuildEventRow {
 export interface GuildView {
   id: number;
   name: string;
-  rank: GuildRank;
+  // The viewer's rank id on `ranks` (resolved like GuildMemberEntry.rank).
+  rank: GuildRankId;
+  // The guild's rank ladder (docs/prd/guild-custom-ranks.md), most senior
+  // first: every member's title and what each rank may do. The client derives
+  // its button and tab visibility from it (UX only; every op re-checks here).
+  ranks: GuildRankDef[];
   // The guild billboard: a short officer-set message pinned atop the Guild tab
   // ('' when unset), with the setter's display name for attribution.
   motd: string;
@@ -94,10 +132,18 @@ export interface GuildView {
   events: GuildEventRow[];
   // Guild pledge board: the recruiting settings every member sees, and the
   // open pledges (officer-plus only; empty for plain members).
-  pledgeSettings: { enabled: boolean; minLevel: number; note: string };
+  pledgeSettings: GuildPledgeSettings;
   pledges: (CharInfo & { sinceMs: number })[];
   // The guild colour tier (sim/guild_tier.ts) for the nameplate line.
   tier: number;
+  // Roster expansion (docs/prd/guild-roster-expansion.md): the seats this
+  // guild may fill (base seats plus bought pages) and the copper price of the
+  // NEXT page, null once the ladder is complete. Server-derived from the
+  // guild row (src/sim/guild_roster.ts), never client-computed: the Guild tab
+  // renders the count against memberCap and the leader's buy button from the
+  // price, and the service re-prices from the row at purchase time anyway.
+  memberCap: number;
+  nextRosterPrice: number | null;
 }
 
 export interface SocialSnapshot {
@@ -141,10 +187,35 @@ export interface SocialDb {
   // duplicate create packet can never orphan a leaderless guild
   createGuildWithLeader(name: string, leaderId: number): Promise<GuildCreateResult>;
   deleteGuild(id: number): Promise<void>;
-  guildMembership(
-    charId: number,
-  ): Promise<{ guildId: number; guildName: string; rank: GuildRank } | null>;
-  // seat a member atomically, enforcing the cap under concurrent accepts.
+  // rosterPages is the guild's bought roster pages (guilds.roster_pages,
+  // already floored into the ladder): the cap and the next page's price both
+  // derive from it (src/sim/guild_roster.ts), and it rides the membership
+  // read so neither the snapshot nor the invite gate pays a second query.
+  // `ranks` is the guild's resolved rank ladder (guilds.ranks through
+  // resolveGuildRankLadder), riding the same read so every rank-permission
+  // gate below costs no extra query.
+  guildMembership(charId: number): Promise<{
+    guildId: number;
+    guildName: string;
+    rank: GuildRankId;
+    rosterPages: number;
+    ranks: GuildRankDef[];
+  } | null>;
+  // The resolved ladder of a guild the caller is not necessarily in (the
+  // pledge notification fan-out reads who may recruit).
+  guildRanks(guildId: number): Promise<GuildRankDef[]>;
+  // Replace the guild's ladder, compare-and-set on `leaderCharId` STILL being
+  // its Guild Master (false = refused, nothing written). Members holding a
+  // rank the new ladder drops fall back to the joining rank in the same
+  // transaction.
+  setGuildRankLadder(
+    guildId: number,
+    leaderCharId: number,
+    ladder: readonly GuildRankDef[],
+  ): Promise<boolean>;
+  // seat a member atomically, enforcing the cap under concurrent accepts. The
+  // cap is the guild's OWN (base seats plus bought pages), read from the guild
+  // row under the same lock as the seat, never a caller-supplied number.
   // requirePledge additionally consumes the character's pledge to THIS guild
   // inside the same transaction and refuses with 'no_pledge' when it is gone:
   // the pledge is the seat's consent, so a withdraw or decline racing the
@@ -152,8 +223,7 @@ export interface SocialDb {
   addGuildMemberAtomic(
     guildId: number,
     charId: number,
-    rank: GuildRank,
-    limit: number,
+    rank: GuildRankId,
     requirePledge?: boolean,
   ): Promise<'ok' | 'full' | 'already_member' | 'no_guild' | 'no_pledge'>;
   removeGuildMember(charId: number): Promise<void>;
@@ -163,19 +233,21 @@ export interface SocialDb {
   // membership read and this write: the caller must treat it as a refusal
   // and stamp nothing (the live membership stamp gates the guild bank, so a
   // stamp the DB refused is privilege escalation, see guildSetRank).
-  setGuildRank(charId: number, guildId: number, rank: GuildRank): Promise<boolean>;
+  setGuildRank(charId: number, guildId: number, rank: GuildRankId): Promise<boolean>;
   // hand off the Guild Master title atomically: locks the guild row, re-checks
   // that fromCharId is still the leader and toCharId is still a member of the
   // SAME guild, then promotes/demotes both rows in one transaction, so two
-  // racing transfers can never both succeed and leave two Guild Masters.
+  // racing transfers can never both succeed and leave two Guild Masters. The
+  // former leader steps down to `stepDownRank` (guildStepDownRankId).
   transferGuildLeader(
     guildId: number,
     fromCharId: number,
     toCharId: number,
+    stepDownRank: GuildRankId,
   ): Promise<'ok' | 'not_leader' | 'not_member' | 'no_guild'>;
   guildMembers(guildId: number): Promise<
     (CharInfo & {
-      rank: GuildRank;
+      rank: GuildRankId;
       lastLogin: string | null;
       activeTitle: string | null;
       joinedAt: number | null;
@@ -186,13 +258,10 @@ export interface SocialDb {
   guildMotd(guildId: number): Promise<{ motd: string; motdSetBy: string }>;
   // guild pledge board (docs/prd/guild-pledge-board.md)
   guildByName(name: string): Promise<{ id: number; name: string } | null>;
-  guildPledgeSettings(
-    guildId: number,
-  ): Promise<{ enabled: boolean; minLevel: number; note: string }>;
-  setGuildPledgeSettings(
-    guildId: number,
-    settings: { enabled: boolean; minLevel: number; note: string },
-  ): Promise<void>;
+  guildPledgeSettings(guildId: number): Promise<GuildPledgeSettings>;
+  /** An absent `newPlayerFriendly` keeps the stored flag: the store merges it
+   *  inside the write (one statement), never read-then-write. */
+  setGuildPledgeSettings(guildId: number, settings: GuildPledgeSettingsInput): Promise<void>;
   guildPledges(guildId: number): Promise<(CharInfo & { sinceMs: number })[]>;
   pledgeOf(charId: number): Promise<{ guildId: number; guildName: string; sinceMs: number } | null>;
   upsertPledge(charId: number, guildId: number): Promise<void>;
@@ -275,6 +344,20 @@ export interface SocialTransport {
   // (guildsFounded is the one server-produced DeedStatKey; see its doc in
   // src/sim/types.ts)
   onGuildFounded(characterId: number): void;
+  // Roster expansion (docs/prd/guild-roster-expansion.md): buy the NEXT page
+  // for the Guild Master, priced by the service from the guild row (never a
+  // client-supplied amount) and paid from their OWN purse. The transport owns
+  // the whole purchase (server/guild_roster_transport.ts): the live purse
+  // charge, the exact post-charge snapshot, and ONE atomic write that commits
+  // the page, a receipt, and the charged purse together, refunding the live
+  // purse on every known refusal and abandoning the live session on an
+  // unknown COMMIT rather than refunding a page that may have landed.
+  buyRosterPage(
+    characterId: number,
+    guildId: number,
+    expectedPages: number,
+    price: number,
+  ): Promise<GuildRosterPurchase>;
   // A guild membership or rank mutation just COMMITTED in the DB for this
   // character. The transport owner re-stamps the live sim SYNCHRONOUSLY (the
   // session-only PlayerMeta.guildMembership stamp plus the nameplate guild
@@ -283,7 +366,9 @@ export interface SocialTransport {
   // path alone would leave a stale-rank window between the DB commit and the
   // snapshot's arrival. Called with null on leave, kick, and disband. Offline
   // characters have no live sim state to stamp (the owner no-ops); the join
-  // path re-stamps them from the snapshot chokepoint.
+  // path re-stamps them from the snapshot chokepoint. `rank` is the built-in
+  // TIER (GuildRank), never a ladder rank id: the service collapses the
+  // member's rank through the guild's ladder first (guildBankStampRank).
   onGuildMembershipChanged(
     characterId: number,
     membership: { guildId: number; guildName: string; rank: GuildRank } | null,
@@ -370,6 +455,14 @@ export type SocialEvent =
   | { type: 'calendarResult'; code: CalendarResultCode }
   // Structured guild-billboard outcome, same convention as calendarResult.
   | { type: 'motdResult'; code: MotdResultCode }
+  // Structured roster-expansion refusal, same convention as calendarResult:
+  // the client renders the line from the code. `price` (copper) rides only
+  // the cannotAfford arm so the line can name the page's price.
+  | { type: 'guildRosterResult'; code: GuildRosterResultCode; price?: number }
+  // A guild's roster just grew (the page COMMITTED): delivered to every
+  // online member, the buyer included, as the success line. Carries the
+  // buyer's display name and the new cap only, never English.
+  | { type: 'guildRosterExpanded'; byName: string; cap: number }
   // A guildmate's or followed friend's marquee deed unlock. Carries the deed
   // ID only, never English (the client composes the line from deed_i18n plus
   // its own chrome key, the calendarResult convention).
@@ -392,14 +485,29 @@ export type CalendarResultCode =
 // Guild billboard command outcomes ('set' is the success; the rest refusals).
 export type MotdResultCode = 'set' | 'notInGuild' | 'notOfficer';
 
+// Roster-expansion refusals (all refusals: the success is the guild-wide
+// guildRosterExpanded event). Mirrored in src/sim/types.ts for the client
+// event switch; tests/social_system.test.ts pins the two declarations equal.
+export type GuildRosterResultCode = 'notInGuild' | 'notLeader' | 'maxed' | 'cannotAfford' | 'retry';
+
+// The outcome of one page purchase as the transport reports it
+// (server/guild_roster_transport.ts): 'ok' carries the pages now bought;
+// 'retry' may carry the cause the dispatcher should log; 'session_lost'
+// means the buyer's live session is gone or was abandoned to durable truth,
+// so there is nobody to answer; 'busy' is a repeated command while the
+// character's own purchase is still in flight (its answer is coming).
+export type GuildRosterPurchase =
+  | { outcome: 'ok'; pages: number }
+  | { outcome: 'cannotAfford' | 'stale' | 'no_guild' | 'session_lost' | 'busy' }
+  | { outcome: 'retry'; error?: unknown };
+
 const FRIEND_LIMIT = 50;
 const BLOCK_LIMIT = 50;
 const IGNORE_LIMIT = 50;
-// Exported because the admin guild backoffice enforces the same roster cap: the
-// detail read pages the roster at it and the rename guard refuses above it. Two
-// copies would drift the day the cap moves, leaving guilds between the values
-// un-renameable and silently truncated in the dashboard.
-export const GUILD_MEMBER_LIMIT = 100;
+// The roster cap is PER GUILD now (base seats plus bought pages,
+// src/sim/guild_roster.ts guildRosterCap): every seat path reads it from the
+// guild row. GUILD_ROSTER_MAX_MEMBERS is the absolute bound the admin
+// backoffice pages at and the rename fan-out is capped by.
 const GUILD_INVITE_TTL_MS = 60_000;
 const GUILD_MESSAGE_MAX = 200;
 // Guild billboard: the officer-set message pinned atop the Guild tab.
@@ -441,11 +549,40 @@ export function validateGuildName(name: string): string | null {
   return trimmed;
 }
 
-const RANK_LABEL: Record<GuildRank, string> = {
-  leader: 'Guild Master',
-  officer: 'Officer',
-  member: 'Member',
+// The English label of a built-in rank left at its default title. Server
+// English: the client matcher (src/ui/server_i18n.ts localizeRank) maps these
+// back onto its rank keys, and a guild's own title passes through verbatim.
+const DEFAULT_RANK_LABEL: Record<string, string> = {
+  [GUILD_RANK_LEADER_ID]: 'Guild Master',
+  [GUILD_RANK_OFFICER_ID]: 'Officer',
+  [GUILD_RANK_MEMBER_ID]: 'Member',
 };
+
+// The label a rank-change line names: a built-in rank left at its default
+// title is its bare English label (the pre-ladder lines, byte-identical);
+// anything else rides in [brackets], the guild's own title verbatim or 'Rank N'
+// (its ladder position) for an untitled custom rank. The brackets are what
+// let the client matcher (src/ui/server_i18n.ts) pick a player-authored title
+// out of "X is now [title]." without a catch-all rule that would also swallow
+// the sim's ordinary "... is now full." lines.
+function rankLabel(ladder: readonly GuildRankDef[], id: GuildRankId): string {
+  const index = guildRankIndex(ladder, id);
+  const rank = ladder[index];
+  if (rank && rank.name !== '') return `[${rank.name}]`;
+  const builtIn = DEFAULT_RANK_LABEL[rank?.id ?? GUILD_RANK_MEMBER_ID];
+  return builtIn ?? `[Rank ${index}]`;
+}
+
+/** The built-in tier a snapshot's viewer stamps onto the live sim (the guild
+ *  bank gate, see GuildRank): their rank collapsed through the snapshot's own
+ *  ladder, which a frame from an older builder may omit (the default ladder
+ *  then, whose tiers are the pre-ladder ranks). */
+export function guildStampRankOf(guild: {
+  rank: GuildRankId;
+  ranks?: readonly GuildRankDef[];
+}): GuildRank {
+  return guildBankStampRank(guild.ranks ?? resolveGuildRankLadder(null), guild.rank);
+}
 
 export class SocialService {
   private pendingGuildInvites = new Map<
@@ -506,7 +643,10 @@ export class SocialService {
     let guild: GuildView | null = null;
     if (membership) {
       const fromDay = shiftDay(this.todayIso(), -GUILD_EVENT_KEEP_PAST_DAYS);
-      const officerPlus = membership.rank !== 'member';
+      const ladder = membership.ranks;
+      // The open pledges are recruitment work: only a rank that may invite
+      // sees them (the pre-ladder officer-plus rule on the default ladder).
+      const officerPlus = guildRankCan(ladder, membership.rank, 'invite');
       const [members, events, motd, pledgeSettings, pledges, xpTotal] = await Promise.all([
         this.db.guildMembers(membership.guildId),
         this.db.guildEvents(membership.guildId, fromDay),
@@ -520,16 +660,27 @@ export class SocialService {
       guild = {
         id: membership.guildId,
         name: membership.guildName,
-        rank: membership.rank,
+        rank: effectiveGuildRankId(ladder, membership.rank),
+        ranks: ladder,
         motd: motd.motd,
         motdSetBy: motd.motdSetBy,
         members: members
-          .map((m) => ({ ...m, ...this.presence(charId, m.id, blockedByViewer) }))
-          .sort((a, b) => rankOrder(a.rank) - rankOrder(b.rank) || a.name.localeCompare(b.name)),
+          .map((m) => ({
+            ...m,
+            rank: effectiveGuildRankId(ladder, m.rank),
+            ...this.presence(charId, m.id, blockedByViewer),
+          }))
+          .sort(
+            (a, b) =>
+              guildRankIndex(ladder, a.rank) - guildRankIndex(ladder, b.rank) ||
+              a.name.localeCompare(b.name),
+          ),
         events,
         pledgeSettings,
         pledges,
         tier: guildTierForLifetimeXp(xpTotal),
+        memberCap: guildRosterCap(membership.rosterPages),
+        nextRosterPrice: guildRosterNextPagePrice(membership.rosterPages),
       };
     }
     const myPledgeRow = membership ? null : await this.db.pledgeOf(charId);
@@ -639,7 +790,7 @@ export class SocialService {
     for (const id of memberCharacterIds) {
       if (!Number.isInteger(id) || id <= 0) continue;
       members.add(id);
-      if (members.size >= GUILD_MEMBER_LIMIT) break;
+      if (members.size >= GUILD_ROSTER_MAX_MEMBERS) break;
     }
     const invitees = [...(this.pendingGuildInviteesByGuild.get(guildId) ?? [])];
     for (const inviteeId of invitees) {
@@ -1011,7 +1162,7 @@ export class SocialService {
       this.err(actor.characterId, 'You are not in a guild.');
       return 'refused';
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'invite')) {
       this.err(actor.characterId, 'Only officers and the Guild Master may invite.');
       return 'refused';
     }
@@ -1035,7 +1186,7 @@ export class SocialService {
       return 'refused';
     }
     const members = await this.db.guildMembers(membership.guildId);
-    if (members.length >= GUILD_MEMBER_LIMIT) {
+    if (members.length >= guildRosterCap(membership.rosterPages)) {
       this.err(actor.characterId, 'Your guild is full.');
       return 'refused';
     }
@@ -1071,12 +1222,7 @@ export class SocialService {
       this.err(actor.characterId, 'The guild invitation has expired.');
       return;
     }
-    const result = await this.db.addGuildMemberAtomic(
-      invite.guildId,
-      actor.characterId,
-      'member',
-      GUILD_MEMBER_LIMIT,
-    );
+    const result = await this.db.addGuildMemberAtomic(invite.guildId, actor.characterId, 'member');
     if (result === 'no_guild') {
       this.err(actor.characterId, 'That guild no longer exists.');
       return;
@@ -1093,7 +1239,10 @@ export class SocialService {
     // one way or the other).
     const priorPledge = await this.db.pledgeOf(actor.characterId);
     await this.db.deletePledge(actor.characterId);
-    // Seated in the DB: stamp the live sim before any push resolves.
+    // Seated in the DB: stamp the live sim before any push resolves. The
+    // 'member' tier is the fail-closed stamp (read-only vault): the invite
+    // carries no ladder, so a guild whose joining rank holds the vault gets
+    // its exact tier from the pushGuild snapshot below, never a wider one.
     this.tx.onGuildMembershipChanged(actor.characterId, {
       guildId: invite.guildId,
       guildName: invite.guildName,
@@ -1116,11 +1265,15 @@ export class SocialService {
 
   // ---- guild pledges (docs/prd/guild-pledge-board.md) ----
 
-  /** Deliver a log line to every ONLINE officer-plus member of a guild. */
+  /** Deliver a log line to every ONLINE member of a guild whose rank may
+   *  recruit (the 'invite' permission: the pre-ladder officer-plus set). */
   private async notifyGuildOfficers(guildId: number, text: string): Promise<void> {
-    const members = await this.db.guildMembers(guildId);
+    const [members, ladder] = await Promise.all([
+      this.db.guildMembers(guildId),
+      this.db.guildRanks(guildId),
+    ]);
     for (const m of members) {
-      if (m.rank !== 'leader' && m.rank !== 'officer') continue;
+      if (!guildRankCan(ladder, m.rank, 'invite')) continue;
       if (!this.tx.isOnline(m.id)) continue;
       this.tx.deliver(m.id, [{ type: 'log', text, color: '#ffd070' }]);
     }
@@ -1209,7 +1362,7 @@ export class SocialService {
       this.err(actor.characterId, 'You are not in a guild.');
       return;
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'invite')) {
       this.err(actor.characterId, 'Only officers and the Guild Master may manage pledges.');
       return;
     }
@@ -1289,13 +1442,12 @@ export class SocialService {
   private async seatOfflinePledger(
     actor: SocialActor,
     target: { id: number; name: string },
-    membership: { guildId: number; guildName: string },
+    membership: { guildId: number; guildName: string; ranks: GuildRankDef[] },
   ): Promise<void> {
     const result = await this.db.addGuildMemberAtomic(
       membership.guildId,
       target.id,
       'member',
-      GUILD_MEMBER_LIMIT,
       true,
     );
     if (result === 'no_guild') {
@@ -1333,7 +1485,7 @@ export class SocialService {
     this.tx.onGuildMembershipChanged(target.id, {
       guildId: membership.guildId,
       guildName: membership.guildName,
-      rank: 'member',
+      rank: guildBankStampRank(membership.ranks, GUILD_RANK_MEMBER_ID),
     });
     await this.refreshPledgeBadge(target.id);
     await this.broadcastGuild(membership.guildId, [
@@ -1344,14 +1496,14 @@ export class SocialService {
 
   async setGuildPledgeSettings(
     actor: SocialActor,
-    settings: { enabled: boolean; minLevel: number; note: string },
+    settings: GuildPledgeSettingsInput,
   ): Promise<void> {
     const membership = await this.db.guildMembership(actor.characterId);
     if (!membership) {
       this.err(actor.characterId, 'You are not in a guild.');
       return;
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'invite')) {
       this.err(actor.characterId, 'Only officers and the Guild Master may manage pledges.');
       return;
     }
@@ -1368,10 +1520,16 @@ export class SocialService {
       this.err(actor.characterId, 'That board note is not allowed.');
       return;
     }
+    // The category opt-in is optional on the wire (guild_pledge_settings_cmd.ts):
+    // a client that predates it leaves the stored flag alone, merged by the
+    // store inside its one write (no extra read, no read-modify-write race).
     await this.db.setGuildPledgeSettings(membership.guildId, {
       enabled: !!settings.enabled,
       minLevel,
       note,
+      ...(settings.newPlayerFriendly === undefined
+        ? {}
+        : { newPlayerFriendly: settings.newPlayerFriendly }),
     });
     await this.pushGuild(membership.guildId);
   }
@@ -1506,10 +1664,12 @@ export class SocialService {
       this.err(actor.characterId, `${target.name} is not in your guild.`);
       return;
     }
+    const stepDownRank = guildStepDownRankId(membership.ranks);
     const result = await this.db.transferGuildLeader(
       membership.guildId,
       actor.characterId,
       target.id,
+      stepDownRank,
     );
     if (result === 'no_guild') {
       this.err(actor.characterId, 'That guild no longer exists.');
@@ -1525,7 +1685,8 @@ export class SocialService {
       return;
     }
     // Both rows moved in one DB transaction (target -> leader, former leader
-    // -> officer): stamp both live sims before any push resolves.
+    // -> the ladder's most senior rank below it): stamp both live sims before
+    // any push resolves.
     this.tx.onGuildMembershipChanged(target.id, {
       guildId: membership.guildId,
       guildName: membership.guildName,
@@ -1534,7 +1695,7 @@ export class SocialService {
     this.tx.onGuildMembershipChanged(actor.characterId, {
       guildId: membership.guildId,
       guildName: membership.guildName,
-      rank: 'officer',
+      rank: guildBankStampRank(membership.ranks, stepDownRank),
     });
     await this.broadcastGuild(membership.guildId, [
       {
@@ -1603,7 +1764,8 @@ export class SocialService {
       this.err(actor.characterId, 'You are not in a guild.');
       return;
     }
-    if (membership.rank === 'member') {
+    const ladder = membership.ranks;
+    if (!guildRankCan(ladder, membership.rank, 'remove')) {
       this.err(actor.characterId, 'Only officers and the Guild Master may remove members.');
       return;
     }
@@ -1621,12 +1783,19 @@ export class SocialService {
       this.err(actor.characterId, `${target.name} is not in your guild.`);
       return;
     }
-    if (targetMembership.rank === 'leader') {
+    const targetRank = effectiveGuildRankId(ladder, targetMembership.rank);
+    if (targetRank === GUILD_RANK_LEADER_ID) {
       this.err(actor.characterId, 'You cannot remove the Guild Master.');
       return;
     }
-    if (targetMembership.rank === 'officer' && membership.rank !== 'leader') {
-      this.err(actor.characterId, 'Only the Guild Master may remove an officer.');
+    // A rank's powers over another member reach strictly LOWER ranks only.
+    if (!guildRankCanRemove(ladder, membership.rank, targetRank)) {
+      this.err(
+        actor.characterId,
+        targetRank === GUILD_RANK_OFFICER_ID
+          ? 'Only the Guild Master may remove an officer.'
+          : 'You can only do that to members below your own rank.',
+      );
       return;
     }
     await this.db.removeGuildMember(target.id);
@@ -1646,18 +1815,32 @@ export class SocialService {
     await this.pushGuild(membership.guildId);
   }
 
-  async guildSetRank(actor: SocialActor, name: string, rank: GuildRank): Promise<void> {
+  // /gpromote and /gdemote: move a member ONE rank up or down the guild's
+  // ladder. Gated on the 'promote' permission (the Guild Master's alone on
+  // the default ladder), and only ever between ranks strictly below the
+  // actor's own: nobody lifts a member to their own rank or above, and the
+  // Guild Master title itself only moves by transfer.
+  async guildPromote(actor: SocialActor, name: string): Promise<void> {
+    await this.guildStepRank(actor, name, 'promote');
+  }
+
+  async guildDemote(actor: SocialActor, name: string): Promise<void> {
+    await this.guildStepRank(actor, name, 'demote');
+  }
+
+  private async guildStepRank(
+    actor: SocialActor,
+    name: string,
+    direction: 'promote' | 'demote',
+  ): Promise<void> {
     const membership = await this.db.guildMembership(actor.characterId);
     if (!membership) {
       this.err(actor.characterId, 'You are not in a guild.');
       return;
     }
-    if (membership.rank !== 'leader') {
+    const ladder = membership.ranks;
+    if (!guildRankCan(ladder, membership.rank, 'promote')) {
       this.err(actor.characterId, 'Only the Guild Master may change ranks.');
-      return;
-    }
-    if (rank === 'leader') {
-      this.err(actor.characterId, 'Use a guild transfer to hand over leadership.');
       return;
     }
     const target = await this.db.findCharacterByName(String(name ?? '').trim());
@@ -1670,8 +1853,27 @@ export class SocialService {
       this.err(actor.characterId, `${target.name} is not in your guild.`);
       return;
     }
-    if (targetMembership.rank === rank) {
-      this.err(actor.characterId, `${target.name} is already ${RANK_LABEL[rank]}.`);
+    const targetRank = effectiveGuildRankId(ladder, targetMembership.rank);
+    if (!guildRankOutranks(ladder, membership.rank, targetRank)) {
+      this.err(actor.characterId, 'You can only do that to members below your own rank.');
+      return;
+    }
+    const rank =
+      direction === 'promote'
+        ? guildRankPromoteTo(ladder, membership.rank, targetRank)
+        : guildRankDemoteTo(ladder, membership.rank, targetRank);
+    if (rank === null) {
+      // The Guild Master promoting the most senior rank below them (only a
+      // transfer goes higher), or anyone demoting the joining rank: the
+      // pre-ladder "already Officer / already Member" answers. A non-leader
+      // promoting someone right below their own rank is out of reach instead.
+      const atEdge = direction === 'demote' || membership.rank === GUILD_RANK_LEADER_ID;
+      this.err(
+        actor.characterId,
+        atEdge
+          ? `${target.name} is already ${rankLabel(ladder, targetRank)}.`
+          : 'You can only do that to members below your own rank.',
+      );
       return;
     }
     const moved = await this.db.setGuildRank(target.id, membership.guildId, rank);
@@ -1692,10 +1894,59 @@ export class SocialService {
     this.tx.onGuildMembershipChanged(target.id, {
       guildId: membership.guildId,
       guildName: membership.guildName,
-      rank,
+      rank: guildBankStampRank(ladder, rank),
     });
     await this.broadcastGuild(membership.guildId, [
-      { type: 'log', text: `${target.name} is now ${RANK_LABEL[rank]}.`, color: '#40ff7f' },
+      { type: 'log', text: `${target.name} is now ${rankLabel(ladder, rank)}.`, color: '#40ff7f' },
+    ]);
+    await this.pushGuild(membership.guildId);
+  }
+
+  // Replace the guild's rank ladder (docs/prd/guild-custom-ranks.md): the
+  // titles, their order, and what each may do. Guild Master only. The ladder
+  // arrives untrusted and is validated whole by the shared sanitizer; a
+  // malformed one is dropped without a reply (the client runs the same
+  // sanitizer before it sends, so only a tampered or stale frame lands
+  // there, the parseGuildPledgeSettingsCommand precedent). Titles are player
+  // text shown to the whole guild, so they take the same hard-word screen as
+  // the pledge board note.
+  async guildSetRanks(actor: SocialActor, rawLadder: unknown): Promise<void> {
+    const membership = await this.db.guildMembership(actor.characterId);
+    if (!membership) {
+      this.err(actor.characterId, 'You are not in a guild.');
+      return;
+    }
+    if (membership.rank !== GUILD_RANK_LEADER_ID) {
+      this.err(actor.characterId, 'Only the Guild Master may change ranks.');
+      return;
+    }
+    const ladder = sanitizeGuildRankLadder(rawLadder);
+    if (!ladder) return;
+    if (ladder.some((r) => r.name !== '' && this.findHardHit(r.name) !== null)) {
+      this.err(actor.characterId, 'That rank title is not allowed.');
+      return;
+    }
+    const saved = await this.db.setGuildRankLadder(membership.guildId, actor.characterId, ladder);
+    if (!saved) {
+      // Lost leadership between the gate above and the compare-and-set.
+      this.err(actor.characterId, 'Only the Guild Master may change ranks.');
+      return;
+    }
+    // Committed: every member's permissions may have moved (a regranted or
+    // revoked vault, a deleted rank's holders now at the joining rank), so
+    // re-stamp every member's live vault tier before any push resolves. The
+    // transport no-ops for offline members; they stamp from durable truth at
+    // their next join.
+    const members = await this.db.guildMembers(membership.guildId);
+    for (const m of members) {
+      this.tx.onGuildMembershipChanged(m.id, {
+        guildId: membership.guildId,
+        guildName: membership.guildName,
+        rank: guildBankStampRank(ladder, m.rank),
+      });
+    }
+    await this.broadcastGuild(membership.guildId, [
+      { type: 'log', text: 'The guild ranks have been updated.', color: '#40ff7f' },
     ]);
     await this.pushGuild(membership.guildId);
   }
@@ -1792,7 +2043,8 @@ export class SocialService {
     }
   }
 
-  // Officer chat (/o): officers + Guild Master only, delivered to the same.
+  // Officer chat (/o): ranks holding the 'officerChat' permission (officers
+  // + the Guild Master on the default ladder), delivered to the same.
   async officerChat(actor: SocialActor, rawText: string): Promise<boolean> {
     const text = String(rawText ?? '')
       .trim()
@@ -1803,7 +2055,8 @@ export class SocialService {
       this.err(actor.characterId, 'You are not in a guild.');
       return false;
     }
-    if (membership.rank === 'member') {
+    const ladder = membership.ranks;
+    if (!guildRankCan(ladder, membership.rank, 'officerChat')) {
       this.err(actor.characterId, 'Only officers and the Guild Master can use officer chat.');
       return false;
     }
@@ -1818,7 +2071,7 @@ export class SocialService {
     };
     const members = await this.db.guildMembers(membership.guildId);
     for (const m of members) {
-      if ((m.rank === 'officer' || m.rank === 'leader') && this.tx.isOnline(m.id)) {
+      if (guildRankCan(ladder, m.rank, 'officerChat') && this.tx.isOnline(m.id)) {
         // honour the recipient's block and ignore lists, just like guild/say/whisper
         if (m.id !== actor.characterId && this.tx.isBlocking(m.id, actor.characterId)) continue;
         if (m.id !== actor.characterId && this.tx.isIgnoringChat(m.id, actor.characterId)) continue;
@@ -1849,7 +2102,7 @@ export class SocialService {
       this.calendarResult(actor.characterId, 'notInGuild');
       return;
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'events')) {
       this.calendarResult(actor.characterId, 'notOfficer');
       return;
     }
@@ -1892,8 +2145,79 @@ export class SocialService {
     this.tx.deliver(charId, [{ type: 'motdResult', code }]);
   }
 
-  // Set (or clear, with '') the guild billboard. Officers + the Guild Master
-  // only; the text is server-clamped and the wire layer has already run the
+  private rosterResult(charId: number, code: GuildRosterResultCode, price?: number): void {
+    this.tx.deliver(charId, [
+      price === undefined
+        ? { type: 'guildRosterResult', code }
+        : { type: 'guildRosterResult', code, price },
+    ]);
+  }
+
+  // Buy the next roster page (docs/prd/guild-roster-expansion.md): Guild
+  // Master only, priced from the guild row, paid from the buyer's OWN purse.
+  // The transport owns the purchase itself (server/guild_roster_transport.ts):
+  // the live purse charge, the exact post-charge snapshot, and ONE atomic
+  // write that commits the page, a receipt, and the charged purse together
+  // (server/guild_roster_page_db.ts), so no crash, takeover, or lost answer
+  // can leave a page bought and unpaid, or a landed page refunded. This
+  // method prices, gates, and turns the outcome into player messages. The
+  // compare-and-set inside the write lets a double-click (or two clients) pay
+  // for one page at most and re-checks the buyer's rank at commit: the loser
+  // is refunded and asked to retry from the fresh price.
+  async guildBuyRosterPage(actor: SocialActor): Promise<void> {
+    const membership = await this.db.guildMembership(actor.characterId);
+    if (!membership) {
+      this.rosterResult(actor.characterId, 'notInGuild');
+      return;
+    }
+    if (membership.rank !== 'leader') {
+      this.rosterResult(actor.characterId, 'notLeader');
+      return;
+    }
+    const price = guildRosterNextPagePrice(membership.rosterPages);
+    if (price === null) {
+      this.rosterResult(actor.characterId, 'maxed');
+      return;
+    }
+    const purchase = await this.tx.buyRosterPage(
+      actor.characterId,
+      membership.guildId,
+      membership.rosterPages,
+      price,
+    );
+    if (purchase.outcome !== 'ok') {
+      switch (purchase.outcome) {
+        case 'cannotAfford':
+          this.rosterResult(actor.characterId, 'cannotAfford', price);
+          return;
+        case 'stale':
+          this.rosterResult(actor.characterId, 'retry');
+          return;
+        case 'no_guild':
+          this.rosterResult(actor.characterId, 'notInGuild');
+          return;
+        case 'retry':
+          // The write failed for a reason that is not the buyer's: the retry
+          // line lands first (the one line that fits an unexplained miss),
+          // then the cause goes to the dispatcher's log.
+          this.rosterResult(actor.characterId, 'retry');
+          if (purchase.error !== undefined) throw purchase.error;
+          return;
+        default:
+          // session_lost: the buyer's live session is gone or was abandoned
+          // to durable truth, so there is nobody to answer. busy: their own
+          // purchase is still in flight and will answer for itself.
+          return;
+      }
+    }
+    await this.broadcastGuild(membership.guildId, [
+      { type: 'guildRosterExpanded', byName: actor.name, cap: guildRosterCap(purchase.pages) },
+    ]);
+    await this.pushGuild(membership.guildId);
+  }
+
+  // Set (or clear, with '') the guild billboard. Ranks holding the 'motd'
+  // permission only (officers + the Guild Master on the default ladder); the text is server-clamped and the wire layer has already run the
   // mute/rate/content gates (game.ts, the guild_event_create stack).
   async guildSetMotd(actor: SocialActor, rawText: string): Promise<void> {
     const membership = await this.db.guildMembership(actor.characterId);
@@ -1901,7 +2225,7 @@ export class SocialService {
       this.motdResult(actor.characterId, 'notInGuild');
       return;
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'motd')) {
       this.motdResult(actor.characterId, 'notOfficer');
       return;
     }
@@ -1924,7 +2248,7 @@ export class SocialService {
       this.calendarResult(actor.characterId, 'notInGuild');
       return;
     }
-    if (membership.rank === 'member') {
+    if (!guildRankCan(membership.ranks, membership.rank, 'events')) {
       this.calendarResult(actor.characterId, 'notOfficer');
       return;
     }
@@ -1954,8 +2278,4 @@ export class SocialService {
   forget(charId: number): void {
     this.takeGuildInvite(charId);
   }
-}
-
-function rankOrder(rank: GuildRank): number {
-  return rank === 'leader' ? 0 : rank === 'officer' ? 1 : 2;
 }

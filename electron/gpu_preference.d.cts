@@ -8,6 +8,8 @@ export const HIGH_PERF_GPU_SWITCHES: readonly string[];
 export const LINUX_PRIME_ENV: Readonly<Record<string, string>>;
 export const LINUX_OZONE_X11_ARG: string;
 export const PRIME_RELAUNCH_MARKER: string;
+/** Beside the marker: the env names and the argv addition the PRIME relaunch planted. */
+export const PRIME_RELAUNCH_ADDED_ENV: string;
 
 export function buildLinuxPrimeEnv(
   existingEnv?: Record<string, string | undefined>,
@@ -24,10 +26,36 @@ export function shouldRelaunchForLinuxPrime(
   fileExists?: (path: string) => boolean,
 ): boolean;
 
+export interface SelfSpawnedChild {
+  unref?(): void;
+  /** Node's ChildProcess events: 'spawn' once the child exists, 'error' when it never will. */
+  once?(event: 'spawn' | 'error', listener: (...args: unknown[]) => void): unknown;
+}
+export type SelfSpawn = (command: string, args: string[], options?: unknown) => SelfSpawnedChild;
+
+export function resolveSelfSpawnTarget(
+  env: Record<string, string | undefined> | undefined,
+  execPath: string,
+): string;
+
+export interface SpawnDetachedSelfDeps {
+  env: Record<string, string | undefined>;
+  argv: string[];
+  execPath?: string;
+  spawn?: SelfSpawn;
+  /** The child's 'spawn' event: it exists. */
+  onSpawned?: (spawnTarget: string) => void;
+  /** The child's 'error' event: it never started; this process is still running. */
+  onSpawnFailed?: (err: unknown, spawnTarget: string) => void;
+  /** The handle has no event surface: neither callback above can ever fire. */
+  onUnobservable?: (spawnTarget: string) => void;
+}
+export function spawnDetachedSelf(deps: SpawnDetachedSelfDeps): string;
+
 export interface RelaunchForLinuxPrimeDeps {
   platform?: string;
   env?: Record<string, string | undefined>;
-  spawn?: (command: string, args: string[], options?: unknown) => { unref?(): void };
+  spawn?: SelfSpawn;
   execPath?: string;
   argv?: string[];
   isHybridGpu?: () => boolean;
@@ -45,6 +73,56 @@ export function parseRegQueryData(regQueryStdout: unknown): string;
 export function mergeHighPerformancePreference(existingData: unknown): string;
 export function alreadyHighPerformance(regQueryStdout: unknown): boolean;
 export function hasUnparseableValueType(regQueryStdout: unknown): boolean;
+
+/** The frozen options bag every queryRegValue execFile call is given. */
+export const REG_QUERY_OPTIONS: Readonly<{
+  timeout: number;
+  windowsHide: boolean;
+  encoding: string;
+  maxBuffer: number;
+}>;
+
+/** The exact (key, valueName) pairs queryRegValue may read. Nothing else runs. */
+export const REG_QUERY_ALLOWLIST: readonly Readonly<{ key: string; valueName: string }>[];
+
+export function isAllowedRegRead(key: unknown, valueName: unknown): boolean;
+
+export const POWER_SCHEMES_KEY: string;
+export const GRAPHICS_DRIVERS_KEY: string;
+export const GAME_BAR_KEY: string;
+export const ACTIVE_POWER_SCHEME_VALUE: string;
+export const ACTIVE_OVERLAY_AC_VALUE: string;
+export const ACTIVE_OVERLAY_DC_VALUE: string;
+export const HW_SCH_MODE_VALUE: string;
+export const AUTO_GAME_MODE_VALUE: string;
+
+export type RegValueReading =
+  | { type: 'sz'; value: string }
+  | { type: 'dword'; value: number }
+  | { absent: true }
+  | null;
+
+export function parseRegQueryValue(
+  regQueryStdout: unknown,
+): { type: 'sz'; value: string } | { type: 'dword'; value: number } | null;
+
+export type RegExecFile = (
+  command: string,
+  args: string[],
+  options: unknown,
+  callback: (err: unknown, stdout: string, stderr?: string) => void,
+) => unknown;
+
+export interface QueryRegValueDeps {
+  execFile?: RegExecFile;
+  regExe?: string;
+  env?: Record<string, string | undefined>;
+}
+
+export function queryRegValue(
+  request: { key: string; valueName: string },
+  deps?: QueryRegValueDeps,
+): Promise<RegValueReading>;
 
 export interface GpuDeviceSummary {
   vendorId: string;

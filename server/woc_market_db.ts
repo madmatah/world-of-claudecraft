@@ -40,6 +40,7 @@ import type {
   WocListingRow,
   WocMarketDb,
   WocSaleRow,
+  WocSalesQuery,
   WocSellerProfile,
   WocSettlementRow,
   WocStrikeRow,
@@ -522,6 +523,18 @@ CREATE TABLE IF NOT EXISTS woc_market_sales (
   excluded BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- The Sales History tab's axes, stamped at the close-tail insert from the
+-- settled listing (which carries quality/category/subcategory) plus a derived
+-- sale_type ('auction' | 'buy_now' | 'directed'). Nullable and additive: rows
+-- written before this shipped carry NULLs and sit OUTSIDE the filtered results
+-- (no backfill, mirroring the pre-enable listing-category convention above;
+-- sale_type is not even derivable post-hoc once the listing prunes). The
+-- realm-wide read filters on these columns exactly as browseListings filters
+-- the listing columns. category/subcategory are filter-only, never on the wire.
+ALTER TABLE woc_market_sales ADD COLUMN IF NOT EXISTS sale_type TEXT;
+ALTER TABLE woc_market_sales ADD COLUMN IF NOT EXISTS quality TEXT;
+ALTER TABLE woc_market_sales ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE woc_market_sales ADD COLUMN IF NOT EXISTS subcategory TEXT;
 CREATE INDEX IF NOT EXISTS woc_market_sales_item
   ON woc_market_sales(realm, item_id, created_at DESC);
 -- The seller click-through's read (salesForSeller) rides its own index,
@@ -883,66 +896,35 @@ export const GUARD_IDLE_TX_TIMEOUT_MS = ESCROW_LOCK_TIMEOUT_MS;
  *  event-loop stall has bigger problems than this transaction). */
 export const SAVE_IDLE_TX_TIMEOUT_MS = 10_000;
 
-/** Query-count inputs to the escrow timeout ladder. The directed arm is the
- *  widest base (account lock, cap count, character update, listing insert,
- *  offer stamp). One generic ledger prefix is one batched CTE regardless of
- *  its 2,048-row/2 MiB maximum. The live storage flow admits at most one
- *  staged effect, whose new-receipt arm is six statements including its
- *  batched advisory-lock acquisition. */
-export const ESCROW_DIRECTED_BASE_WORKLOAD_STATEMENTS = 5;
-export const ESCROW_LEDGER_WORKLOAD_STATEMENTS = 6;
-export const ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS = 12;
+/** Conservative workload counts for directed escrow: account lock, cap count,
+ * character save, conditional source journal, listing insert and offer stamp.
+ * A ledger prefix adds one batched statement regardless of its row count.
+ * One staged storage effect adds six statements, including advisory locks. */
+export const ESCROW_DIRECTED_BASE_WORKLOAD_STATEMENTS = 6;
+export const ESCROW_LEDGER_WORKLOAD_STATEMENTS = 7;
+export const ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS = 13;
 
-/** Per-statement allowance for the escrow listing transaction, WORKLOAD
- *  scoped (exported for the tunables-ladder pin). It sits between the lock
- *  wait ceiling and the session default: the transaction now runs inside the
- *  per-character save FIFO, so its worst case bounds the seller's own
- *  autosave chain, a saveAll worker slot, and leave/takeover, and it must
- *  keep the five-statement ledger-free base under the 30s autosave period.
- *  A normal ledger-bearing save is six statements (31s conservative sum
- *  including lock wait and pool checkout); the one-storage-effect maximum
- *  is twelve (55s by the same sum). Both stay bounded by the started-request
- *  ceiling below rather than pretending every optional effect fits one
- *  autosave interval. Measured against Postgres 16 with a 27KB character blob:
- *  p50 3.5ms, max 8.3ms over 25 passes, whole-transaction timings (the
- *  delivery pg suite's escrow-cost test re-measures and asserts the
- *  observed MAX stays under a twenty-fifth of this allowance, 160ms; an
- *  env-gated local gate per tests/CLAUDE.md, not a CI floor). Its sibling
- *  max-prefix case drives all 2,048 rows, nearly 2 MiB, and one storage
- *  effect through PostgreSQL 16; success proves each of the twelve queries
- *  stayed under the installed allowance while the measured wall time is
- *  logged rather than made a CI promise. For the measured base, 4s is orders
- *  of magnitude of headroom, while a genuinely wedged statement can no
- *  longer hold the FIFO for the 60s heavy allowance. 4000, down from the
- *  original 5000, BECAUSE the statement count grew: the directed rail added
- *  the offer-stamp CAS and stopped skipping the cap count, and five 5s
- *  allowances would put the pinned worst-case sum past one autosave period.
- *  Honest ceiling accounting: this allowance bounds up to TWELVE workload
- *  statements (the tunables relation pins the five-statement base, the
- *  six-statement ledger path, and the twelve-statement ledger-plus-storage
- *  maximum; the two later SET LOCALs also run under it but are
- *  protocol statements with no locks, IO, or planning, excluded from the
- *  worst-case sum on that ground); BEGIN and the SET LOCAL that installs
- *  the allowance necessarily run under the 15s session default, and
- *  COMMIT's only hard bound is the 65s driver query_timeout backstop
- *  (measured: statement_timeout does not bound COMMIT), so a genuinely
- *  wedged transaction can exceed one 30s autosave interval, and reaching
- *  the driver backstop also costs the DISCARDED connection (withTx's
- *  codeless-failure rule below). The tail's DOMINANT term is none of these:
- *  the pre-job guild flush is an ordinary saveCharacter on the same FIFO
- *  whose statements ride the 60s heavy allowance, exceeding this whole
- *  workload sum on its own (the tunables ladder pins that relation, plus
- *  the 255s started-request ceiling derived from these constants,
- *  inter-statement idle windows included). What
- *  bounds the player-facing impact in that tail is the queue wait deadline
- *  plus the depth cap plus the realm-global escrow gate (later requests
- *  refuse typed instead of stacking). Tightening the flush term itself
- *  stays REJECTED as invasive (the 06 ruling, re-affirmed by the escrow
- *  write-path rider: it would thread a workload-scoped allowance through
- *  saveCharacter). The heavy allowance remains correct for the
- *  LOGOUT-shaped saves (losing one is data loss; losing a listing attempt
- *  is a refusal the player retries), and the flush IS one of those saves. */
-export const ESCROW_STATEMENT_TIMEOUT_MS = 4_000;
+/** Workload-scoped escrow allowance. A failed listing can be retried; logout
+ * saves retain their separate heavy allowance. Including the conditional source
+ * journal, the base workload plus pool checkout and one lock wait fits the 30s
+ * autosave period (28s). Ledger and storage variants price their optional work
+ * honestly at 31.5s and 52.5s. These sums exclude protocol, idle and commit time.
+ *
+ * PostgreSQL 16 calibration in the delivery integration suite exercises full
+ * source-bearing containers, first and established anchors, plus the maximum
+ * ledger/storage arm. The observed largest 3.62MB source-state transaction was
+ * 729ms before opening-transfer optimization. This is local calibration, never
+ * a fleet capacity promise; the suite remeasures after timeout changes.
+ *
+ * BEGIN and the installing SET LOCAL use the session default; later SET LOCALs
+ * have no locks or data work and are excluded from the workload sum. COMMIT is
+ * bounded by the 65s driver backstop, not statement_timeout. The established
+ * started-request ladder, including inter-statement idle windows, is 262.5s,
+ * pinned by tunables.test.ts below the 300s HTTP bound. The pre-job guild flush
+ * remains an ordinary heavy-allowance save outside this sum. Queue deadlines,
+ * depth and realm admission bound waiting jobs; none of these figures promise
+ * every wedged sequence completes within an autosave interval. */
+export const ESCROW_STATEMENT_TIMEOUT_MS = 3_500;
 
 const LISTING_COLS =
   'id, realm, seller_account, seller_character, seller_name, seller_wallet, item, item_id, ' +
@@ -1140,6 +1122,10 @@ function toSale(row: Row): WocSaleRow {
     buyerAccount: row.buyer_account,
     sellerName: row.seller_name,
     buyerName: row.buyer_name,
+    saleType: (row.sale_type as WocSaleRow['saleType']) ?? null,
+    quality: row.quality ?? null,
+    category: row.category ?? null,
+    subcategory: row.subcategory ?? null,
     excluded: row.excluded === true,
     atMs: ms(row.created_at),
   };
@@ -1447,7 +1433,7 @@ export class PgWocMarketDb implements WocMarketDb {
         // statements (those two surface as the typed 'contended' refusal;
         // the statement bound's 57014 deliberately does NOT: it proves
         // rollback, so the copy restores, and then it 500s, because a
-        // statement blowing a 4s allowance measured at single-digit
+        // statement blowing the scoped allowance measured at single-digit
         // milliseconds is an incident to surface, not contention to retry).
         await client.query(`SET LOCAL statement_timeout = ${ESCROW_STATEMENT_TIMEOUT_MS}`);
         await client.query(`SET LOCAL lock_timeout = ${ESCROW_LOCK_TIMEOUT_MS}`);
@@ -2720,10 +2706,12 @@ export class PgWocMarketDb implements WocMarketDb {
       // A delivery save should wait out a slow database rather than lose the
       // grant (the saveCharacterState rationale); still bounded by the heavy
       // allowance so a sweep pass cannot hang past the container stop grace.
-      // The LOCK wait is bounded separately and tightly: this is the one
-      // market transaction that takes a characters row lock (the game loop's
-      // autosave contends it), and holding a pooled client for the heavy
-      // allowance while queued on that row would starve the loop's own saves.
+      // The LOCK wait is bounded separately and tightly: since D145
+      // (qr-19-live-nonce-fence-write-loss) every live character save takes a
+      // characters row lock (FOR NO KEY UPDATE) before its fenced UPDATE, so this
+      // delivery save genuinely contends the game loop's autosaves on that row,
+      // and holding a pooled client for the heavy allowance while queued on it
+      // would starve the loop's own saves.
       // A 55P03 here surfaces as the transient-throw arm and retries.
       await client.query(`SET LOCAL statement_timeout = ${DB_HEAVY_STATEMENT_TIMEOUT_MS}`);
       await client.query(`SET LOCAL lock_timeout = ${ESCROW_LOCK_TIMEOUT_MS}`);
@@ -4465,8 +4453,9 @@ export class PgWocMarketDb implements WocMarketDb {
         await client.query(
           `INSERT INTO woc_market_sales (
              realm, listing_id, item_id, item, price_cents, amount_base,
-             seller_account, buyer_account, seller_name, buyer_name
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             seller_account, buyer_account, seller_name, buyer_name,
+             sale_type, quality, category, subcategory
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            ON CONFLICT (listing_id) WHERE excluded = false DO NOTHING`,
           [
             args.sale.realm,
@@ -4479,6 +4468,10 @@ export class PgWocMarketDb implements WocMarketDb {
             args.sale.buyerAccount,
             args.sale.sellerName,
             args.sale.buyerName,
+            args.sale.saleType ?? null,
+            args.sale.quality ?? null,
+            args.sale.category ?? null,
+            args.sale.subcategory ?? null,
           ],
         );
         // Close and dispose in ONE statement: two UPDATEs on the same row
@@ -4589,8 +4582,9 @@ export class PgWocMarketDb implements WocMarketDb {
     const res = await this.boundedWrite(
       `INSERT INTO woc_market_sales (
          realm, listing_id, item_id, item, price_cents, amount_base,
-         seller_account, buyer_account, seller_name, buyer_name
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         seller_account, buyer_account, seller_name, buyer_name,
+         sale_type, quality, category, subcategory
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         args.realm,
@@ -4603,6 +4597,10 @@ export class PgWocMarketDb implements WocMarketDb {
         args.buyerAccount,
         args.sellerName,
         args.buyerName,
+        args.saleType ?? null,
+        args.quality ?? null,
+        args.category ?? null,
+        args.subcategory ?? null,
       ],
     );
     return Number(res.rows[0].id);
@@ -4626,6 +4624,53 @@ export class PgWocMarketDb implements WocMarketDb {
       [realm, sellerName, limit],
     );
     return res.rows.map(toSale);
+  }
+
+  /** The Sales History tab's realm-wide read: most-recent-first over every
+   *  non-excluded sale, filtered by the Browse axes (over the stamped sale
+   *  columns; a NULL-stamped legacy row sits outside every filter, exactly as
+   *  browseListings' category filter treats an unstamped listing). The filter
+   *  arms mirror browseListings verbatim, `format` matching the stamped
+   *  sale_type. A has-more probe (LIMIT pageSize+1), never a COUNT. */
+  async salesForRealm(
+    realm: string,
+    q: WocSalesQuery,
+  ): Promise<{ rows: WocSaleRow[]; hasMore: boolean }> {
+    const where: string[] = ['realm = $1', 'excluded = false'];
+    const params: unknown[] = [realm];
+    if (q.quality) {
+      params.push(q.quality);
+      where.push(`quality = $${params.length}`);
+    }
+    if (q.format) {
+      params.push(q.format);
+      where.push(`sale_type = $${params.length}`);
+    }
+    if (q.category) {
+      params.push(q.category);
+      where.push(`category = $${params.length}`);
+    }
+    if (q.subcategory) {
+      params.push(q.subcategory);
+      where.push(`subcategory = $${params.length}`);
+    }
+    if (q.itemIds && q.itemIds.length > 0) {
+      params.push(q.itemIds.slice(0, 50));
+      where.push(`item_id = ANY($${params.length})`);
+    }
+    const pageSize = Math.min(Math.max(1, q.pageSize), 50);
+    const offset = Math.max(0, q.page) * pageSize;
+    params.push(pageSize + 1, offset);
+    const res = await this.pool.query(
+      `SELECT * FROM woc_market_sales
+        WHERE ${where.join(' AND ')}
+        ORDER BY created_at DESC, id DESC
+        LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+    const hasMore = res.rows.length > pageSize;
+    const rows = (hasMore ? res.rows.slice(0, pageSize) : res.rows).map(toSale);
+    return { rows, hasMore };
   }
 
   async listingItemIdsMissingCategory(): Promise<string[]> {

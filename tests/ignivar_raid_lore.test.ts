@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { objectDisplayName } from '../src/render/entity_labels';
 import {
+  CRUCIBLE_HAMMER_QUEST_IDS,
   IGNIVAR_LORE_OBJECTS,
   IGNIVAR_LORE_QUEST_IDS,
   IGNIVAR_MAELIN_NPC_ID,
@@ -63,6 +64,8 @@ describe('Ignivar raid lore content', () => {
       IGNIVAR_LORE_QUEST_IDS.echoesInIron,
       IGNIVAR_LORE_QUEST_IDS.heraldsHeart,
       IGNIVAR_LORE_QUEST_IDS.forgefather,
+      CRUCIBLE_HAMMER_QUEST_IDS.requiem,
+      CRUCIBLE_HAMMER_QUEST_IDS.forging,
     ]);
     expect(QUESTS[IGNIVAR_LORE_QUEST_IDS.echoesInIron]).toMatchObject({
       giverNpcId: IGNIVAR_MAELIN_NPC_ID,
@@ -84,8 +87,8 @@ describe('Ignivar raid lore content', () => {
         shareable: false,
         minLevel: 20,
         suggestedPlayers: 10,
-        xpReward: 0,
-        copperReward: 0,
+        xpReward: 5300,
+        copperReward: 25000,
         itemRewards: {},
       });
     }
@@ -106,7 +109,7 @@ describe('Ignivar raid lore content', () => {
     expect(QUESTS[IGNIVAR_LORE_QUEST_IDS.forgefather].objectives).toEqual([
       expect.objectContaining({ type: 'kill', targetMobId: VARKHUL_BOSS_ID, count: 1 }),
     ]);
-    for (const questId of IGNIVAR_RAID_LORE_QUEST_ORDER) {
+    for (const questId of Object.values(IGNIVAR_LORE_QUEST_IDS)) {
       expect(QUESTS[questId].objectives.every((objective) => objective.type === 'kill')).toBe(true);
     }
     expect(Object.keys(IGNIVAR_LORE_OBJECTS)).toEqual(Object.values(IGNIVAR_RECORD_IDS));
@@ -116,8 +119,6 @@ describe('Ignivar raid lore content', () => {
     expect(DUNGEONS[IGNIVAR_FORGE_APPROACH_ID].npcs).toEqual([
       { npcId: IGNIVAR_MAELIN_NPC_ID, x: 0, z: -47 },
       { npcId: IGNIVAR_MAELIN_PROJECTION_NPC_ID, x: 0, z: 48 },
-      // The sigil-redemption vendor beside the entrance (content/ignivar_loot.ts).
-      { npcId: 'crucible_quartermaster', x: 6, z: -47 },
     ]);
     expect(DUNGEONS[IGNIVAR_RAID_ARENA_ID].npcs).toEqual([
       { npcId: IGNIVAR_MAELIN_PROJECTION_NPC_ID, x: 10, z: 24, facing: Math.PI },

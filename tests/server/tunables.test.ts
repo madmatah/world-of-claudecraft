@@ -503,11 +503,11 @@ describe('db pool timeouts hold their literal values and the query_timeout layer
       await import('../../server/woc_market_custody');
     // The statement allowance applies per query. Pin all three supported
     // shapes so adding a save effect cannot leave the occupancy math stale.
-    expect(ESCROW_STATEMENT_TIMEOUT_MS).toBe(4_000);
+    expect(ESCROW_STATEMENT_TIMEOUT_MS).toBe(3_500);
     expect(ESCROW_LOCK_TIMEOUT_MS).toBe(2_000);
-    expect(ESCROW_DIRECTED_BASE_WORKLOAD_STATEMENTS).toBe(5);
-    expect(ESCROW_LEDGER_WORKLOAD_STATEMENTS).toBe(6);
-    expect(ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS).toBe(12);
+    expect(ESCROW_DIRECTED_BASE_WORKLOAD_STATEMENTS).toBe(6);
+    expect(ESCROW_LEDGER_WORKLOAD_STATEMENTS).toBe(7);
+    expect(ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS).toBe(13);
     // Equal BY RULING (the idle bound and the lock wait tell one story).
     expect(GUARD_IDLE_TX_TIMEOUT_MS).toBe(2_000);
     expect(GUARD_IDLE_TX_TIMEOUT_MS).toBe(ESCROW_LOCK_TIMEOUT_MS);
@@ -542,11 +542,11 @@ describe('db pool timeouts hold their literal values and the query_timeout layer
     expect(ESCROW_STATEMENT_TIMEOUT_MS).toBeGreaterThan(ESCROW_LOCK_TIMEOUT_MS);
     // The escrow FIFO-occupancy relation, and it bounds exactly this much: the
     // workload statements plus the lock wait plus the pool checkout. Only the
-    // five-statement base stays under one autosave period; a personal-ledger
-    // prefix is six statements and the live ledger-plus-one-storage maximum is
-    // twelve. It is NOT the whole worst case: BEGIN and the SET
+    // six-statement base stays under one autosave period; a personal-ledger
+    // prefix is seven statements and the live ledger-plus-one-storage maximum is
+    // thirteen. It is NOT the whole worst case: BEGIN and the SET
     // LOCAL that installs the allowance run under the 15s session default, the
-    // two LATER SET LOCALs run under the 4s allowance but are protocol
+    // two LATER SET LOCALs run under the 3.5s allowance but are protocol
     // statements with no locks, IO, or planning (excluded from the sum on
     // that ground), COMMIT's only hard bound is the 65s driver
     // query_timeout backstop, and the PRE-JOB GUILD FLUSH (an ordinary
@@ -575,16 +575,16 @@ describe('db pool timeouts hold their literal values and the query_timeout layer
     const baseWorkloadCeilingMs = workloadCeiling(ESCROW_DIRECTED_BASE_WORKLOAD_STATEMENTS);
     const ledgerWorkloadCeilingMs = workloadCeiling(ESCROW_LEDGER_WORKLOAD_STATEMENTS);
     const maxWorkloadCeilingMs = workloadCeiling(ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS);
-    expect(baseWorkloadCeilingMs).toBe(27_000);
+    expect(baseWorkloadCeilingMs).toBe(28_000);
     expect(baseWorkloadCeilingMs).toBeLessThan(autosaveMs);
-    expect(ledgerWorkloadCeilingMs).toBe(31_000);
+    expect(ledgerWorkloadCeilingMs).toBe(31_500);
     expect(ledgerWorkloadCeilingMs).toBeGreaterThan(autosaveMs);
-    expect(maxWorkloadCeilingMs).toBe(55_000);
+    expect(maxWorkloadCeilingMs).toBe(52_500);
     // The honest occupancy tail (the escrow write-path rider). The pre-job
     // guild flush is an ordinary saveCharacter on the SAME per-character
     // FIFO, and its statements ride the 60s heavy allowance, so that ONE
     // term exceeds the entire pinned workload sum above on its own: any
-    // occupancy story quoting the 27s sum without the flush term is
+    // occupancy story quoting the 28s sum without the flush term is
     // dishonest, and this relation is what keeps the two numbers from
     // quietly converging (a heavy-allowance cut below the workload sum
     // would make the exclusion comment above overstate the tail). Threading
@@ -597,8 +597,8 @@ describe('db pool timeouts hold their literal values and the query_timeout layer
     // The started-request ceiling, DERIVED so the docblocks can state a
     // number that cannot drift from the constants: once the escrow job has
     // STARTED, the request rides pool checkout + BEGIN and the installing
-    // SET LOCAL under the session default + the twelve workload statements +
-    // the lock wait + twelve inter-statement idle windows under the SAVE
+    // SET LOCAL under the session default + the thirteen workload statements +
+    // the lock wait + thirteen inter-statement idle windows under the SAVE
     // bound (the review round's term: the character serialize and every
     // round-trip gap run between statements, each bounded only by the
     // idle-in-transaction kill) + COMMIT under the driver backstop. The
@@ -612,7 +612,7 @@ describe('db pool timeouts hold their literal values and the query_timeout layer
       SAVE_IDLE_TX_TIMEOUT_MS * ESCROW_LEDGER_STORAGE_WORKLOAD_STATEMENTS +
       ESCROW_LOCK_TIMEOUT_MS +
       DB_QUERY_TIMEOUT_MS;
-    expect(startedCeilingMs).toBe(255_000);
+    expect(startedCeilingMs).toBe(262_500);
     expect(startedCeilingMs).toBeLessThan(300_000);
     // The docblocks that QUOTE the ceiling scrape-pin against the derived
     // figure, so re-tuning a constant cannot leave prose lying (the audit
@@ -778,6 +778,7 @@ describe('no consolidated tunable literal is duplicated at a call site', () => {
   const unstuckDbSrc = read('server/unstuck_db.ts');
   const unstuckRecordsSrc = read('server/unstuck_records.ts');
   const retentionSrc = read('server/play_session_retention_db.ts');
+  const clientPerfDbSrc = read('server/client_perf_reports_db.ts');
   const bankLedgerSrc = read('server/bank_ledger.ts');
 
   // Slice a function BODY: from its declaration to the next top-level export,
@@ -1018,13 +1019,25 @@ describe('no consolidated tunable literal is duplicated at a call site', () => {
     for (const decl of [
       'export async function topArenaRatings',
       'export async function topLifetimeXp',
-      'export async function topGuilds',
       'export async function deedsBoardRanked',
     ]) {
       expect(bodyOf(dbSrc, decl)).toContain(
         'runWithStatementTimeout(DB_HEAVY_STATEMENT_TIMEOUT_MS',
       );
     }
+    // The guild board's ranked aggregate moved out to server/guild_board_db.ts
+    // (the monolith ratchet) and rides the same raised allowance; its sibling
+    // officer-roster read deliberately takes a tighter bound of its own and a
+    // row cap, so a slow roster degrades to a presence-free page rather than
+    // holding a board request for the heavy allowance twice over.
+    const guildBoardSrc = read('server/guild_board_db.ts');
+    expect(bodyOf(guildBoardSrc, 'export async function topGuilds')).toContain(
+      'runWithStatementTimeout(DB_HEAVY_STATEMENT_TIMEOUT_MS',
+    );
+    const rosterBody = bodyOf(guildBoardSrc, 'export async function topGuildOfficers');
+    expect(rosterBody).toContain('runWithStatementTimeout(GUILD_BOARD_OFFICER_ROSTER_TIMEOUT_MS');
+    expect(rosterBody).toContain('LIMIT $2');
+    expect(guildBoardSrc).toContain('GUILD_BOARD_OFFICER_ROSTER_TIMEOUT_MS = 10_000');
     // Character saves share one owner that bounds BEGIN through COMMIT, rather
     // than the read-only wrapper used by aggregates. Since the pg_cancel
     // wiring, every save path rides db.ts's beginSaveTx wrapper (the ONE
@@ -1102,9 +1115,9 @@ describe('no consolidated tunable literal is duplicated at a call site', () => {
     expect(bodyOf(dbSrc, 'export async function pruneChatLogsBatch')).not.toContain(
       'runWithStatementTimeout',
     );
-    expect(bodyOf(dbSrc, 'export async function pruneClientPerfReportsBatch')).not.toContain(
-      'runWithStatementTimeout',
-    );
+    expect(
+      bodyOf(clientPerfDbSrc, 'export async function pruneClientPerfReportsBatch'),
+    ).not.toContain('runWithStatementTimeout');
   });
 
   it('the play-session retention prunes stay batched on the default allowance', () => {
@@ -1619,5 +1632,17 @@ describe('STORAGE_PRICES env parsing (server/storage_prices.ts)', () => {
     // BUILDER-set field on the constructed server sim's cfg.
     // Whitespace-tolerant: biome wraps the call across lines.
     expect(codeOnly(read('server/game.ts'))).toMatch(/new Sim\(\s*buildRealmSimConfig\(/);
+  });
+});
+
+describe('WORLD_PVP_DISABLED (the World PvP realm kill switch)', () => {
+  it('is read from the environment at sim boot and documented for operators', () => {
+    // The realm switch refuses every raise and loads every saved flag down
+    // (src/sim/pvp/world_pvp.ts); the env read is the only way to set it.
+    expect(codeOnly(read('server/sim_boot_config.ts'))).toContain(
+      "process.env.WORLD_PVP_DISABLED === '1'",
+    );
+    // Documented for operators, commented out so the built-in default (open) applies.
+    expect(read('.env.example')).toContain('#WORLD_PVP_DISABLED=0');
   });
 });

@@ -5,9 +5,21 @@ import {
   getCharacter,
   insertClientPerfReport,
 } from './db';
+import { glBackendFromRenderer } from './gl_backend';
+import { glLaptop, glModel } from './gpu_model_bucket';
 import { clientPerfMetricsSink } from './http/client_perf_metrics';
 import type { RateLimitOutcome } from './http/types';
 import { json, readBody } from './http_util';
+import {
+  sanitizeBootPhases,
+  sanitizeCadence,
+  sanitizePostRevealLinks,
+  sanitizeShaderWarm,
+  shaderWarmToken,
+} from './perf_report_entry_blocks';
+import { hostEssentialsRow } from './perf_report_host';
+import { shedRawSummaryToFit, stripReservedRawSummaryKeys } from './perf_report_shed';
+import { stripControlChars, stripJsonControlChars } from './perf_report_text';
 import { rateLimitNow, requestIp, windowedRateLimitOutcome } from './ratelimit';
 import { REALM } from './realm';
 
@@ -123,6 +135,13 @@ function intIn(value: unknown, min: number, max: number, fallback: number): numb
   return Math.floor(numberIn(value, min, max, fallback));
 }
 
+/** The frame rate ceiling is a closed choice: anything else reads as none. The
+ *  range is wide on purpose, a tight one would clamp 9000 onto 60. */
+function frameCapIntentIn(value: unknown): number {
+  const n = intIn(value, 0, 1000, 0);
+  return n === 30 || n === 60 ? n : 0;
+}
+
 function nullableNumberIn(value: unknown, min: number, max: number): number | null {
   if (value === null || value === undefined || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
@@ -131,7 +150,7 @@ function nullableNumberIn(value: unknown, min: number, max: number): number | nu
 }
 
 function textIn(value: unknown, max: number, fallback = ''): string {
-  const text = typeof value === 'string' ? value.trim() : '';
+  const text = typeof value === 'string' ? stripControlChars(value).trim() : '';
   return (text || fallback).slice(0, max);
 }
 
@@ -164,6 +183,14 @@ function browserFamily(userAgent: string): string {
   if (ua.includes('chrome/') || ua.includes('crios/')) return 'chrome';
   if (ua.includes('safari/')) return 'safari';
   return 'other';
+}
+
+// The desktop shell's user agent carries the Electron token (src/runtime.ts
+// isElectronRuntime; server/ cannot import it, so this is a deliberate copy,
+// the same pattern as browserFamily above). The fallback for a client older
+// than the desktopShell payload field.
+function isElectronUserAgent(userAgent: string): boolean {
+  return /\bElectron\//.test(userAgent);
 }
 
 function osFamily(userAgent: string): string {
@@ -242,8 +269,8 @@ const LONG_TASK_RAW_AGE_MS_MAX = 30 * 60_000;
 // They ride inside raw_summary (JSONB, no DDL) rather than as new typed
 // columns, but still get the same kind of numeric bound the typed frame
 // columns get so a hostile payload cannot inject an absurd number into the
-// admin raw-report reader. Applied unconditionally in rawSummary() (not only
-// on the compact path), unlike compactPrewarmSummary below.
+// admin raw-report reader. Applied unconditionally in rawSummary(), before
+// the byte cap's shed ladder ever runs.
 function sanitizeBrowserSummary(value: unknown): Record<string, unknown> | undefined {
   if (!isRecord(value)) return undefined;
   const longTasks = value.longTasks;
@@ -255,6 +282,28 @@ function sanitizeBrowserSummary(value: unknown): Record<string, unknown> | undef
       max: nullableNumberIn(longTasks.max, 0, LONG_TASK_RAW_MS_MAX) ?? 0,
       lastAge: nullableNumberIn(longTasks.lastAge, -1, LONG_TASK_RAW_AGE_MS_MAX) ?? -1,
     },
+  };
+}
+
+// rendererDrawingBuffer: the allocated 3D backing store and the CSS viewport it
+// covers, the only field that says what resolution a session rasterizes at
+// (viewport x dpr is not the allocation). Same JSONB-not-DDL treatment as the
+// longtask block above, and the same reason for a bound: the shed ladder keeps
+// it as a core key copied verbatim, so "four scalars" has to be enforced here
+// rather than trusted. The ceiling is generous against any real
+// panel and MAX_VIEWPORT_DIMS, and only defends the ingest. The flag says
+// whether the governor rasterizes a sub-rect of that allocation, without which
+// a backed-off session reads as if it drew at full size.
+const DRAWING_BUFFER_RAW_PIXELS_MAX = 65_536;
+
+function sanitizeDrawingBuffer(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    width: intIn(value.width, 0, DRAWING_BUFFER_RAW_PIXELS_MAX, 0),
+    height: intIn(value.height, 0, DRAWING_BUFFER_RAW_PIXELS_MAX, 0),
+    cssWidth: intIn(value.cssWidth, 0, DRAWING_BUFFER_RAW_PIXELS_MAX, 0),
+    cssHeight: intIn(value.cssHeight, 0, DRAWING_BUFFER_RAW_PIXELS_MAX, 0),
+    dynamicResolution: Boolean(value.dynamicResolution),
   };
 }
 
@@ -455,6 +504,9 @@ function compactPrewarmSummary(value: unknown): Record<string, unknown> | null {
     'manifestSkipped',
     'manifestTimedOut',
     'manifestFailed',
+    // Absent-because-unchanged, not absent-because-empty: the client's
+    // emit-on-change gate stamps it when the heavy lists were withheld.
+    'prewarmListsUnchanged',
   ];
   for (const key of scalarKeys) {
     if (value[key] !== undefined) out[key] = value[key];
@@ -467,13 +519,10 @@ function compactPrewarmSummary(value: unknown): Record<string, unknown> | null {
   // (clamping one would misreport the true count), while these id lists are
   // bounded SAMPLES. A stored count larger than its list length is therefore
   // the documented shape of this signal, not self-contradiction.
-  for (const key of ['partialEntryIds', 'timedOutEntryIds', 'failedEntryIds']) {
+  for (const key of PREWARM_ENTRY_ID_LIST_KEYS) {
     const ids = value[key];
     if (!Array.isArray(ids)) continue;
-    out[key] = ids
-      .slice(0, 24)
-      .filter((id): id is string => typeof id === 'string')
-      .map((id) => textIn(id, 80));
+    out[key] = boundPrewarmEntryIds(ids);
   }
   const entries = Array.isArray(value.entries)
     ? value.entries
@@ -577,11 +626,11 @@ const PREWARM_RESUME_LANES = ['debt', 'cosmetic'] as const;
 // diagnostics, and it is their UNBOUNDED length that is the defect. Individual
 // member fields stay unshaped here on purpose, so a retained member can still
 // carry a long string or a nested object; what bounds THAT is the 16 KB
-// RAW_SUMMARY_MAX_BYTES check below, which runs after these clamps and routes
-// anything over it into compactPrewarmSummary, where every field IS rebuilt
-// through textIn / nullableNumberIn. Storage is therefore bounded in bytes on
-// both paths, and in shape on the compact one.
-// The compact path's own, tighter sample: it exists to fit a report that
+// RAW_SUMMARY_MAX_BYTES shed ladder below (perf_report_shed.ts), whose prewarm
+// rung rebuilds the block through compactPrewarmSummary, where every field IS
+// re-shaped through textIn / nullableNumberIn. Storage is therefore bounded in
+// bytes on every path, and in shape once the ladder reaches that rung.
+// The compact rung's own, tighter sample: it exists to fit a report that
 // already overflowed, so it carries fewer members and fewer fields per member.
 const PREWARM_COMPACT_COMPILE_UNITS_MAX = 6;
 const PREWARM_COMPACT_TRANSITIONS_MAX = 6;
@@ -629,9 +678,29 @@ function rankedCompileUnits(units: unknown[], limit: number): Record<string, unk
 const PREWARM_COMPILE_UNITS_MAX = 12;
 const PREWARM_BUDGET_VARIANTS_MAX = 8;
 const PREWARM_PACING_TRANSITIONS_MAX = 12;
+// The three entry-id lists (bounded SAMPLES beside authoritative counts; see
+// the note in compactPrewarmSummary). Bounded on the verbatim path too, since
+// the shed ladder no longer guarantees an oversized report reaches the compact
+// rung (a stray unknown key is shed first).
+const PREWARM_ENTRY_ID_LIST_KEYS = ['partialEntryIds', 'timedOutEntryIds', 'failedEntryIds'];
+const PREWARM_ENTRY_ID_LIST_MAX = 24;
+const PREWARM_ENTRY_ID_MAX_CHARS = 80;
+
+function boundPrewarmEntryIds(ids: unknown[]): string[] {
+  return ids
+    .slice(0, PREWARM_ENTRY_ID_LIST_MAX)
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => textIn(id, PREWARM_ENTRY_ID_MAX_CHARS));
+}
 
 /** Bound the client-supplied prewarm diagnostic lists in place. */
 function boundPrewarmDiagnosticLists(prewarm: Record<string, unknown>): void {
+  for (const key of PREWARM_ENTRY_ID_LIST_KEYS) {
+    if (prewarm[key] === undefined) continue;
+    const ids = prewarm[key];
+    if (Array.isArray(ids)) prewarm[key] = boundPrewarmEntryIds(ids);
+    else delete prewarm[key];
+  }
   if (Array.isArray(prewarm.compileUnits)) {
     // Ranked, not sliced: taking the first N here would throw away the slow and
     // failed units before the compact path (or a reader) ever sees them, which
@@ -689,39 +758,17 @@ function sanitizePrewarmResume(value: unknown): Record<string, unknown> | null {
   };
 }
 
-function compactRawSummary(value: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { truncated: true };
-  for (const key of [
-    'graphicsConfigVersion',
-    'seconds',
-    'frames',
-    'windows',
-    'mainMs',
-    'rendererPhaseMs',
-    'rendererFoliage',
-    'rendererBudget',
-    'rendererQualityBuckets',
-    'input',
-    'hud',
-    'netPipeline',
-    'heapSawtooth',
-    'browser',
-    // A wedged GPU queue is exactly what a truncated report must still carry:
-    // the block is small and bounded, and it is the whole signal.
-    'rendererGpuQueue',
-  ]) {
-    if (value[key] !== undefined) out[key] = value[key];
-  }
-  const prewarm = compactPrewarmSummary(value.rendererPrewarmSummary ?? value.rendererPrewarm);
-  if (prewarm) out.rendererPrewarmSummary = prewarm;
-  return out;
-}
-
 function rawSummary(value: unknown, devTraceAllowed = false): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   try {
     const text = JSON.stringify(value);
-    const parsed = JSON.parse(text) as Record<string, unknown>;
+    // Before any other sanitizer, and over the WHOLE parsed value rather than
+    // the fields below: raw_summary is jsonb, which rejects a NUL escape the
+    // same way a text parameter rejects the character, and this object
+    // round-trips client-shaped keys and values that no field clamp here sees.
+    const parsed = stripJsonControlChars(JSON.parse(text) as Record<string, unknown>);
+    // Server-authored markers: a client cannot post a row that reads as shed.
+    stripReservedRawSummaryKeys(parsed);
     if (!devTraceAllowed) delete parsed.devTrace;
     const browser = sanitizeBrowserSummary(parsed.browser);
     if (browser) parsed.browser = browser;
@@ -729,15 +776,32 @@ function rawSummary(value: unknown, devTraceAllowed = false): Record<string, unk
     const gpuQueue = sanitizeGpuQueueSummary(parsed.rendererGpuQueue);
     if (gpuQueue) parsed.rendererGpuQueue = gpuQueue;
     else delete parsed.rendererGpuQueue;
-    // The prewarm summary rides through verbatim on this path, bounded only by
-    // the body cap, so its client-supplied LISTS are bounded here explicitly.
+    // Field-shaped here, BEFORE the byte check, so the shed ladder's verbatim
+    // copy of the key is bounded by construction.
+    const drawingBuffer = sanitizeDrawingBuffer(parsed.rendererDrawingBuffer);
+    if (drawingBuffer) parsed.rendererDrawingBuffer = drawingBuffer;
+    else delete parsed.rendererDrawingBuffer;
+    const postRevealLinks = sanitizePostRevealLinks(parsed.postRevealLinks);
+    if (postRevealLinks) parsed.postRevealLinks = postRevealLinks;
+    else delete parsed.postRevealLinks;
+    const bootPhases = sanitizeBootPhases(parsed.bootPhases);
+    if (bootPhases) parsed.bootPhases = bootPhases;
+    else delete parsed.bootPhases;
+    const shaderWarm = sanitizeShaderWarm(parsed.shaderWarm);
+    if (shaderWarm) parsed.shaderWarm = shaderWarm;
+    else delete parsed.shaderWarm;
+    const cadence = sanitizeCadence(parsed.cadence);
+    if (cadence) parsed.cadence = cadence;
+    else delete parsed.cadence;
+    // The prewarm summary rides through verbatim under the cap, bounded only
+    // by the body cap, so its client-supplied LISTS are bounded here explicitly.
     // Without this the resume block's entries and failed-unit ids reach storage
-    // unclamped on every report under the size limit, and the compact path's
-    // sanitizer only ever sees the oversized minority.
+    // unclamped on every report under the size limit, and the shed ladder's
+    // compact rung only ever sees the oversized minority.
     // BOTH prewarm keys, never only the summary: the current client stopped
     // sending the full `rendererPrewarm` twin, but a client older than that
     // change still does (its resume block rides a getter on the live stats
-    // object), the compact path still accepts the key as its fallback, and any
+    // object), the shed ladder still accepts the key as its fallback, and any
     // token holder can post one whatever their client does.
     for (const key of ['rendererPrewarmSummary', 'rendererPrewarm']) {
       const prewarm = parsed[key];
@@ -747,13 +811,11 @@ function rawSummary(value: unknown, devTraceAllowed = false): Record<string, unk
       else delete prewarm.resume;
       boundPrewarmDiagnosticLists(prewarm);
     }
-    const boundedText = JSON.stringify(parsed);
+    // The byte cap as a priority shed ladder (perf_report_shed.ts): the small
+    // diagnostic keys always survive, the big blocks go one rung at a time,
+    // and `dropped` records what went. Never a whole-blob drop.
     const maxBytes = devTraceAllowed ? RAW_SUMMARY_DEV_TRACE_MAX_BYTES : RAW_SUMMARY_MAX_BYTES;
-    if (Buffer.byteLength(boundedText) > maxBytes) {
-      const compact = compactRawSummary(parsed);
-      return Buffer.byteLength(JSON.stringify(compact)) > maxBytes ? { truncated: true } : compact;
-    }
-    return JSON.parse(boundedText) as Record<string, unknown>;
+    return shedRawSummaryToFit(parsed, maxBytes, { compactPrewarm: compactPrewarmSummary });
   } catch {
     return {};
   }
@@ -795,9 +857,20 @@ export async function handlePerfReport(
   const accountId = await authenticatedAccountId(req);
   const userAgent = String(req.headers['user-agent'] ?? '');
   const glRenderer = textIn(body.glRenderer, 160);
+  // The client's WebGPU high-performance adapter description
+  // (src/game/gpu_adapter_probe.ts), '' from a client that has none: an absent
+  // navigator.gpu, a refused adapter, or a client older than the probe. On
+  // Chrome this is the vendor/architecture pair ("nvidia ampere"), not a model
+  // name, so the key parsed off it below is usually vendor-level.
+  const gpuHpAdapter = textIn(body.gpuHpAdapter, 160);
   const releaseVersion = textIn(body.releaseVersion, 40);
   const buildId = textIn(body.buildId, 40);
   const source = choiceIn(body.source, ['gameplay', 'benchmark'], 'gameplay');
+  // Chromium shell, same bundle, same build id: browser_family stays 'chrome'
+  // for it, and this is what tells the shell from a tab. Resolved before the
+  // row because the host-essentials block is gated on it (a web client has no
+  // business claiming a Windows power plan).
+  const desktopShell = Boolean(body.desktopShell) || isElectronUserAgent(userAgent);
 
   const row: ClientPerfReportInsert = {
     schemaVersion: intIn(
@@ -819,7 +892,15 @@ export async function handlePerfReport(
     ),
     gfxTier: choiceIn(body.gfxTier, ['low', 'medium', 'high', 'ultra', 'insane'], 'low'),
     autoGovernor: Boolean(body.autoGovernor),
+    shaderWarmWorkerActive: Boolean(body.shaderWarmWorkerActive),
+    shaderWarmRefusal: shaderWarmToken(body.shaderWarmRefusal),
     targetFps: intIn(body.targetFps, 0, 240, 0),
+    frameCapIntent: frameCapIntentIn(body.frameCapIntent),
+    cadenceDivisor: intIn(body.cadenceDivisor, 1, 16, 1),
+    // Whole Hz: the fleet reads a display CLASS (60, 120, 144), and a finer
+    // estimate would be a stable per-display value on an endpoint that accepts
+    // anonymous reports.
+    refreshHz: Math.round(numberIn(body.refreshHz, 0, 1000, 0)),
     renderScale: numberIn(body.renderScale, 0.3, 1.5, 1),
     effectiveRenderScale: numberIn(body.effectiveRenderScale, 0.3, 1.5, 1),
     fpsAvg: numberIn(body.fpsAvg, 0, 300, 0),
@@ -840,6 +921,7 @@ export async function handlePerfReport(
     deviceMemory: nullableNumberIn(body.deviceMemory, 0, 1024),
     hardwareConcurrency: intIn(body.hardwareConcurrency, 0, 1024, 0),
     mobileTouch: Boolean(body.mobileTouch),
+    desktopShell,
     browserFamily: choiceIn(
       body.browserFamily,
       ['chrome', 'safari', 'firefox', 'edge', 'other'],
@@ -852,6 +934,22 @@ export async function handlePerfReport(
     ),
     glVendor: textIn(body.glVendor, 80),
     glRendererBucket: bucketGpu(glRenderer || textIn(body.glRendererBucket, 80)),
+    // Derived from the SAME adapter name, never from the bucket: bucketGpu has
+    // already thrown the API token away by then for every recognised vendor.
+    glBackend: glBackendFromRenderer(glRenderer),
+    // GPU model dimensions, one block on purpose. The renderer string was
+    // sanitized to 160 chars at the top and then DROPPED before storage; it is
+    // stored as received now, and gpu_model_bucket.ts parses the family key and
+    // form-factor verdict off it server-side (the client is never trusted to
+    // bucket). An absent renderer stores '' rather than the 'other' key, so a
+    // grouped read tells "no evidence" apart from "unrecognised GPU". The
+    // adapter runs through the SAME parser so both columns speak one key
+    // vocabulary; the summary compares them on their vendor segment, which is
+    // as far as the adapter text a browser hands a normal page can reach.
+    glRendererRaw: glRenderer,
+    glModel: glRenderer ? glModel(glRenderer) : '',
+    glLaptop: glLaptop(glRenderer),
+    gpuHpAdapter: gpuHpAdapter ? glModel(gpuHpAdapter) : '',
     zoneOrScenario: textIn(
       body.zoneOrScenario,
       80,
@@ -865,6 +963,12 @@ export async function handlePerfReport(
     worst10sFrameP95Ms: numberIn(body.worst10sFrameP95Ms, 0, 1000, 0),
     suggestionIds: suggestionIdsIn(body.suggestionIds),
     rawSummary: rawSummary(body.rawSummary, devTraceAllowed),
+    // The desktop shell's host facts, as TOP-LEVEL payload fields rather than
+    // raw_summary keys (that block is over its byte budget and its lower rungs
+    // are shed). Ignored entirely unless this same report is a shell report;
+    // the closed vocabularies and the strict nullable booleans live in
+    // server/perf_report_host.ts.
+    ...hostEssentialsRow(body, desktopShell),
   };
 
   await insertClientPerfReport(row);
@@ -876,11 +980,14 @@ export async function handlePerfReport(
 
 export const perfReportInternalsForTest = {
   bucketGpu,
+  stripControlChars,
   browserFamily,
   osFamily,
   viewportBucket,
   allowDevTrace,
   rawSummary,
+  compactPrewarmSummary,
+  RAW_SUMMARY_MAX_BYTES,
   shouldStorePerfReport,
   suggestionIdsIn,
   CROWD_BUCKET_LABELS,
@@ -888,6 +995,7 @@ export const perfReportInternalsForTest = {
   PERF_REPORT_SCHEMA_VERSION,
   LONG_TASK_RAW_MS_MAX,
   LONG_TASK_RAW_AGE_MS_MAX,
+  DRAWING_BUFFER_RAW_PIXELS_MAX,
   GPU_QUEUE_RAW_MS_MAX,
   GPU_QUEUE_RAW_AGE_MS_MAX,
   GPU_QUEUE_RAW_STALLS_MAX,

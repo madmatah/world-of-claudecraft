@@ -44,6 +44,10 @@ vi.mock('../server/epic/mirror', () => ({
   reconcileOnLogin: vi.fn(),
 }));
 
+import {
+  accountLedgerKeysFor,
+  setAccountLedgerKeysReaderForTests,
+} from '../server/account_ledger_keys_cache';
 import { insertCharacterDeeds } from '../server/deeds_db';
 import { deedRecordsIdle, reconcileCharacterDeeds } from '../server/deeds_records';
 import {
@@ -56,6 +60,7 @@ import {
   onDeedRecorded as onSteamDeedRecorded,
   reconcileOnLogin as reconcileSteamOnLogin,
 } from '../server/steam/mirror';
+import { defaultGuildRankLadder } from '../src/sim/guild_ranks';
 
 const insertDeedsMock = vi.mocked(insertCharacterDeeds);
 const onDeedRecordedMock = vi.mocked(onSteamDeedRecorded);
@@ -90,6 +95,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await settle();
+  setAccountLedgerKeysReaderForTests(null);
   vi.restoreAllMocks();
 });
 
@@ -108,6 +114,20 @@ describe('reconcileCharacterDeeds', () => {
     const [who, ids] = insertDeedsMock.mock.calls[0];
     expect(who).toEqual({ realm: REALM, characterId: 42, accountId: 7 });
     expect([...ids].sort()).toEqual(['prog_first_steps', 'prog_veteran']);
+  });
+
+  it("busts the account's cached public-sheet ledger keys once the batch lands", async () => {
+    let reads = 0;
+    setAccountLedgerKeysReaderForTests(async () => {
+      reads++;
+      return { deeds: new Set<string>(), relics: new Set<string>() };
+    });
+    await accountLedgerKeysFor(7);
+    expect(reads).toBe(1);
+    reconcileCharacterDeeds({ characterId: 42, accountId: 7 }, ['prog_veteran']);
+    await settle();
+    await accountLedgerKeysFor(7);
+    expect(reads).toBe(2); // the healed row shows on the /c/ page's next read
   });
 
   it('never notifies the Steam mirror (the reconcile is a DB write only)', async () => {
@@ -266,13 +286,16 @@ describe('reconcile through GameServer.join', () => {
       id: 1,
       name: 'The Vanguard',
       rank: 'member' as const,
+      ranks: defaultGuildRankLadder(),
       motd: '',
       motdSetBy: '',
       members: [],
       events: [],
-      pledgeSettings: { enabled: true, minLevel: 1, note: '' },
+      pledgeSettings: { enabled: true, minLevel: 1, note: '', newPlayerFriendly: false },
       pledges: [],
       tier: 0,
+      memberCap: 100,
+      nextRosterPrice: 400_000,
     };
     vi.spyOn(server.social, 'snapshot').mockResolvedValue({
       friends: [],

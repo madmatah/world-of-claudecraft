@@ -9,6 +9,7 @@
 // Plus the world-drop decision shared with the desktop arm (world_drop_target.ts).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DraggedCopyRef } from '../src/ui/equip_drop_core';
 import { ItemDragState } from '../src/ui/item_drag_state';
 import {
   bindTouchItemDrag,
@@ -44,7 +45,8 @@ function harness(opts: { touch?: boolean; payload?: boolean } = {}): Harness {
   bindTouchItemDrag(el, {
     state,
     isTouchHud: () => opts.touch !== false,
-    payload: () => (opts.payload === false ? null : { itemId: 'linen_cloth', count: 4, index: 2 }),
+    payload: () =>
+      opts.payload === false ? null : { itemId: 'linen_cloth', count: 4, index: 2, copyPin: '' },
     ghostHtml: () => '<img class="item-icon">',
     onStart: () => {
       h.started++;
@@ -73,7 +75,7 @@ describe('bindTouchItemDrag', () => {
     expect(h.state.get()).toBeNull(); // nothing in flight yet: this could still be a tap
     vi.advanceTimersByTime(TOUCH_DRAG_HOLD_MS);
     expect(h.started).toBe(1);
-    expect(h.state.get()).toEqual({ itemId: 'linen_cloth', count: 4, index: 2 });
+    expect(h.state.get()).toEqual({ itemId: 'linen_cloth', count: 4, index: 2, copyPin: '' });
     expect(document.body.classList.contains('touch-item-dragging')).toBe(true);
     expect(document.querySelector('.touch-drag-ghost')).not.toBeNull();
   });
@@ -123,6 +125,25 @@ describe('bindTouchItemDrag', () => {
     // so it kills the tooltip timer WITHOUT tearing down the live drag.
     expect(cancels[0].pointerId).toBe(-1);
     expect(h.state.get()).not.toBeNull();
+  });
+
+  it('an armed drag cancels the touch scroll, so the browser never steals it with pointercancel', () => {
+    // #ui is touch-action pan-x pan-y on the touch HUD, so without this the
+    // first move of an armed drag became a pan and the drop never ran.
+    const h = harness();
+    const touchmove = (): TouchEvent => {
+      const e = new Event('touchmove', { bubbles: true, cancelable: true }) as TouchEvent;
+      h.el.dispatchEvent(e);
+      return e;
+    };
+    h.el.dispatchEvent(pointer('pointerdown', 100, 100));
+    // Before the hold the move stays a scroll (the grid must keep scrolling).
+    expect(touchmove().defaultPrevented).toBe(false);
+    vi.advanceTimersByTime(TOUCH_DRAG_HOLD_MS);
+    expect(touchmove().defaultPrevented).toBe(true);
+    h.el.dispatchEvent(pointer('pointerup', 300, 220));
+    // Once released, touches on the row scroll again.
+    expect(touchmove().defaultPrevented).toBe(false);
   });
 
   it('a real pointercancel (the system stole the touch) ends the drag with no drop', () => {
@@ -175,12 +196,13 @@ describe('bindTouchItemDrag', () => {
 
 describe('dropOnWorld', () => {
   function deps(action: 'discard' | 'discardBlocked' | 'none') {
-    const calls = { prompts: [] as Array<[string, number]>, blocked: 0 };
+    const calls = { prompts: [] as Array<[string, number, DraggedCopyRef | null]>, blocked: 0 };
     return {
       calls,
       deps: {
         destroyAction: () => action,
-        promptDestroy: (id: string, n: number) => calls.prompts.push([id, n]),
+        promptDestroy: (id: string, n: number, at: DraggedCopyRef | null) =>
+          calls.prompts.push([id, n, at]),
         showBlocked: () => {
           calls.blocked++;
         },
@@ -188,23 +210,32 @@ describe('dropOnWorld', () => {
     };
   }
 
-  it('opens the destroy PROMPT, never destroying the stack outright', () => {
+  it('opens the destroy PROMPT, never destroying the stack outright, naming the dragged COPY', () => {
+    // The dragged copy's IDENTITY rides to the prompt (its pick-up index plus
+    // its pin) so the prompt names, targets and destroys the copy the player
+    // actually dragged, not whatever now sits at the index it started at
+    // (Phase 18, itemdragstate-invslot). Null when nothing was in flight.
     const { calls, deps: d } = deps('discard');
-    dropOnWorld(d, 'linen_cloth', 4);
-    expect(calls.prompts).toEqual([['linen_cloth', 4]]);
+    const ref = { index: 2, copyPin: 'pin-a' };
+    dropOnWorld(d, 'linen_cloth', 4, ref);
+    dropOnWorld(d, 'linen_cloth', 4, null);
+    expect(calls.prompts).toEqual([
+      ['linen_cloth', 4, ref],
+      ['linen_cloth', 4, null],
+    ]);
     expect(calls.blocked).toBe(0);
   });
 
   it('refuses a protected (noDiscard) item with feedback and no prompt', () => {
     const { calls, deps: d } = deps('discardBlocked');
-    dropOnWorld(d, 'quest_key', 1);
+    dropOnWorld(d, 'quest_key', 1, { index: 0, copyPin: 'pin-a' });
     expect(calls.prompts).toEqual([]);
     expect(calls.blocked).toBe(1);
   });
 
   it('is inert while a transactional window owns the item (vendor / trade / bank)', () => {
     const { calls, deps: d } = deps('none');
-    dropOnWorld(d, 'linen_cloth', 4);
+    dropOnWorld(d, 'linen_cloth', 4, { index: 0, copyPin: 'pin-a' });
     expect(calls.prompts).toEqual([]);
     expect(calls.blocked).toBe(0);
   });

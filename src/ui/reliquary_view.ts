@@ -16,7 +16,9 @@
 // the deeds_view searchText idiom), never on the raw catalog English the models
 // carry, so a player searches the names their own client shows them.
 
+import { type AccountEarner, accountRelicKey } from '../sim/account_ledger';
 import { DEEDS } from '../sim/content/deeds';
+import { type DelveShopGate, delveShopGateForItem } from '../sim/content/delves';
 import {
   type ReliquaryClearSource,
   type ReliquaryPageDef,
@@ -70,7 +72,7 @@ export const CURATOR_RANK_NAME_KEYS: readonly TranslationKey[] = [
  *  assertion and throw inside t() at the caller. */
 export function curatorRankNameKey(rank: number): TranslationKey {
   if (Number.isInteger(rank) && rank >= 1 && rank <= CURATOR_RANK_NAME_KEYS.length) {
-    return CURATOR_RANK_NAME_KEYS[rank - 1]!;
+    return CURATOR_RANK_NAME_KEYS[rank - 1] ?? 'hudChrome.reliquary.curatorRank';
   }
   return 'hudChrome.reliquary.curatorRank';
 }
@@ -159,7 +161,10 @@ export type ReliquarySourceLinePlan =
   | { kind: 'zone'; zoneId: string }
   | { kind: 'profession'; professionId: string }
   | { kind: 'deed'; deedId: string }
-  | { kind: 'vendor'; npcId: string }
+  // `gate` is omitted for an ungated ('available') or unstocked vendor row, so
+  // a plain "Sold by {vendor}" line is unaffected: only a real DelveShopGate
+  // ('heroicClear' or 'clears:N') ever reaches the localized text.
+  | { kind: 'vendor'; npcId: string; gate?: DelveShopGate }
   | { kind: 'delve'; delveId: string }
   | { kind: 'rift'; rank: string }
   | { kind: 'quest'; questId: string }
@@ -177,6 +182,7 @@ const NO_SOURCE_LINES: readonly ReliquarySourceLinePlan[] = Object.freeze([]);
 function sourceLineForHint(
   hint: ReliquarySourceHint,
   clearSource: ReliquaryClearSource | undefined,
+  vendorGate: DelveShopGate | undefined,
 ): ReliquarySourceLinePlan {
   switch (hint.sourceKind) {
     case 'boss':
@@ -190,7 +196,9 @@ function sourceLineForHint(
     case 'deed':
       return { kind: 'deed', deedId: hint.sourceId };
     case 'vendor':
-      return { kind: 'vendor', npcId: hint.sourceId };
+      return vendorGate !== undefined && vendorGate !== 'available'
+        ? { kind: 'vendor', npcId: hint.sourceId, gate: vendorGate }
+        : { kind: 'vendor', npcId: hint.sourceId };
     case 'delve':
       return { kind: 'delve', delveId: hint.sourceId };
     case 'rift':
@@ -229,10 +237,16 @@ function sourceLineForHint(
  * line. One line per door is the pattern everywhere else in this function, and
  * a reader who has learned to count doors by counting lines should not have to
  * unlearn it for the one shape where the doors happen to share a roof.
+ *
+ * `vendorGate` is the relic's static DELVE_SHOPS gate (undefined for a relic
+ * with no vendor hint, or one no shop table stocks): it rides every 'vendor'
+ * line this call produces, so the caller resolves it once per relic rather
+ * than per hint.
  */
 export function reliquarySourceLinePlan(
   hints: readonly ReliquarySourceHint[],
   clearSource: ReliquaryClearSource | undefined,
+  vendorGate?: DelveShopGate,
 ): readonly ReliquarySourceLinePlan[] {
   if (hints.length === 0) return NO_SOURCE_LINES;
   let soleBoss: ReliquarySourceHint | null = null;
@@ -271,7 +285,7 @@ export function reliquarySourceLinePlan(
         continue;
       }
     }
-    lines.push(sourceLineForHint(hint, clearSource));
+    lines.push(sourceLineForHint(hint, clearSource, vendorGate));
   }
   return lines;
 }
@@ -330,6 +344,13 @@ export interface ReliquaryViewInput {
   weaponSkins?: { has(id: string): boolean };
   /** Title ownership via deeds earned (deeds with title rewards only). */
   deedsEarned?: { has(id: string): boolean };
+  /**
+   * The account ledger's relic half (IWorldReliquary.reliquaryAccountFinds):
+   * accountRelicKey -> the characters on the account that found it. Names the
+   * finders on an owned item / mark / mount cell; it never decides ownership
+   * here (the painter unions ownership into the lookups above).
+   */
+  accountFinds?: ReadonlyMap<string, readonly AccountEarner[]>;
   /**
    * Lowercased search needle; '' (or absent) means no search. Matching runs
    * against the LOCALIZED display text the painter injects below, never the
@@ -455,6 +476,13 @@ export interface ReliquaryGridCellModel {
    * and a length test agree.
    */
   sourcePlans?: readonly ReliquarySourceLinePlan[];
+  /**
+   * Every character on the account that found this owned item / mark / mount
+   * relic, first finder first (the account ledger). Undefined for a missing
+   * cell, a skin or title cell, or when the ledger names nobody; never an
+   * empty list, so a truthiness test and a length test agree.
+   */
+  finders?: readonly AccountEarner[];
 }
 
 /** Full page view: header progress plus ordered grid cells. */
@@ -516,6 +544,20 @@ export interface ReliquaryViewModel {
    */
   recentEmptiedBySearch: boolean;
   nearlyEmptiedBySearch: boolean;
+}
+
+/** Repaint digest over the account ledger: the total finder plus earner count
+ *  across every entry, so an alt's new find or earn (a new key OR a new name
+ *  on a known key) repaints an open window. Entries only grow, so climbs never
+ *  cancel. O(entries) per slow-band poll. */
+export function accountLedgerDigest(
+  finds: ReadonlyMap<string, readonly AccountEarner[]>,
+  deeds: ReadonlyMap<string, readonly AccountEarner[]>,
+): number {
+  let digest = 0;
+  for (const list of finds.values()) digest += list.length;
+  for (const list of deeds.values()) digest += list.length;
+  return digest;
 }
 
 function ownershipOpts(input: ReliquaryViewInput) {
@@ -594,6 +636,39 @@ function relicSlotId(relic: ReliquaryRelicDef): string {
   }
 }
 
+/**
+ * The DELVE_SHOPS gate (if any) to name on one relic's vendor source line, so
+ * production (buildReliquaryPageCells below) and its test oracle
+ * (tests/reliquary_window_behavior.test.ts sourceLinesFor) resolve it through
+ * the SAME implementation rather than two hand-derivations that can drift.
+ * Keyed by BOTH the item id and the page's own delve (never item id alone: a
+ * relic could in principle be stocked, at a different gate, by a delve this
+ * page is not about), so it only ever names the gate on the vendor the page
+ * itself already claims; a page with no single delve clearSource, or a
+ * non-item relic, answers undefined.
+ */
+export function relicVendorGate(
+  page: ReliquaryPageDef,
+  relic: ReliquaryRelicDef,
+): DelveShopGate | undefined {
+  if (relic.kind !== 'item') return undefined;
+  const pageDelveId = page.clearSource?.kind === 'delve' ? page.clearSource.delveId : undefined;
+  return pageDelveId !== undefined ? delveShopGateForItem(pageDelveId, relic.itemId) : undefined;
+}
+
+/**
+ * Whether one shelf row survives the ownership chip. Illuminated pages are the
+ * "owned" side of the list (nothing left to find), every other page the
+ * "missing" side.
+ */
+export function shelfPagePassesOwnedFilter(
+  page: Pick<ReliquaryShelfPageModel, 'complete'>,
+  filter: ReliquaryOwnedFilter,
+): boolean {
+  if (filter === 'all') return true;
+  return filter === 'owned' ? page.complete : !page.complete;
+}
+
 /** Build ordered grid cells for one page (owned vs missing). */
 export function buildReliquaryPageCells(
   page: ReliquaryPageDef,
@@ -605,6 +680,7 @@ export function buildReliquaryPageCells(
     deedsEarned?: { has(id: string): boolean };
     firstFind?: ReliquaryFirstFindLookup;
     obtainCounts?: ReliquaryObtainCountLookup;
+    accountFinds?: ReadonlyMap<string, readonly AccountEarner[]>;
   },
 ): ReliquaryGridCellModel[] {
   const cells: ReliquaryGridCellModel[] = [];
@@ -618,11 +694,21 @@ export function buildReliquaryPageCells(
       owned,
       index: i,
     };
+    // Finders ride only the three ledger-recorded kinds; skins are account
+    // cosmetics with no finder and a title's earners live on its deed card.
+    if (owned && (relic.kind === 'item' || relic.kind === 'mark' || relic.kind === 'mount')) {
+      const finders = opts.accountFinds?.get(accountRelicKey(relic.kind, id));
+      if (finders !== undefined && finders.length > 0) cell.finders = finders;
+    }
     // Slot hints first, then the page default, through the ONE implementation of
     // that precedence (reliquaryRelicSource). It takes the INJECTED page def,
     // never a catalog lookup by id, so a synthetic test page resolves its own
     // sourceDefault instead of a live RELIQUARY_PAGES row that shares its id.
-    const plans = reliquarySourceLinePlan(reliquaryRelicSource(page, relic), page.clearSource);
+    const plans = reliquarySourceLinePlan(
+      reliquaryRelicSource(page, relic),
+      page.clearSource,
+      relicVendorGate(page, relic),
+    );
     if (plans.length > 0) cell.sourcePlans = plans;
     if (owned && relic.kind === 'item') {
       const clears = opts.firstFind?.[id]?.clears;
@@ -781,10 +867,16 @@ export function buildReliquaryView(input: ReliquaryViewInput): ReliquaryViewMode
   // Typing a relic name from the shelf shows you which page holds it instead
   // of an empty list (see pageMatches above). Cold path (one keystroke, not
   // per frame).
-  const shelfPages =
-    search === '' || !canMatchPages
-      ? allShelfPages
-      : allShelfPages.filter((p) => pageMatches(p.pageId));
+  // The ownership chip narrows the shelf list on the same axis it narrows a
+  // grid: a page is either illuminated (every relic catalogued) or still has
+  // relics to find, so Catalogued keeps the illuminated pages and Missing
+  // keeps the rest. That is what lets a completionist hide what is done and
+  // read only what remains, per shelf, without opening every page.
+  const shelfPages = allShelfPages.filter(
+    (p) =>
+      shelfPagePassesOwnedFilter(p, ownedFilter) &&
+      (search === '' || !canMatchPages || pageMatches(p.pageId)),
+  );
 
   let activePage: ReliquaryShelfPageModel | null = null;
   let pageDetail: ReliquaryPageDetailModel | null = null;
@@ -805,6 +897,7 @@ export function buildReliquaryView(input: ReliquaryViewInput): ReliquaryViewMode
           ...opts,
           firstFind: input.firstFind,
           obtainCounts: input.obtainCounts,
+          accountFinds: input.accountFinds,
         });
         const visible = cells.filter(
           (cell) =>
@@ -833,12 +926,14 @@ export function buildReliquaryView(input: ReliquaryViewInput): ReliquaryViewMode
   const nearlyNarrowed =
     nearly.length !== unfilteredNearly.length ||
     nearly.some((n, i) => n.pageId !== unfilteredNearly[i]?.pageId);
+  // The shelf answers on its painted list alone (needle OR chip), so a chip
+  // that hides every illuminated page announces exactly like a needle would.
   const filtered =
-    search === '' || !canMatchPages
-      ? false
-      : input.nav === 'overview'
-        ? recent.length !== recentTotal || nearlyNarrowed
-        : shelfPages.length !== allShelfPages.length;
+    input.nav !== 'overview'
+      ? shelfPages.length !== allShelfPages.length
+      : search === '' || !canMatchPages
+        ? false
+        : recent.length !== recentTotal || nearlyNarrowed;
 
   return {
     nav: input.nav,

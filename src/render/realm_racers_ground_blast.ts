@@ -397,6 +397,51 @@ export class RealmRacersGroundBlastVisuals {
     }
   }
 
+  /** Terminal release on renderer teardown: every geometry and material this
+   *  pool minted, the per-slot clones included. The marker texture belongs to
+   *  the shared texture cache and stays. */
+  dispose(): void {
+    for (const slot of this.slots) {
+      if (!slot) continue;
+      slot.trail.dispose();
+      for (const mesh of [slot.marker, slot.core, slot.column]) {
+        (mesh.material as THREE.Material).dispose();
+      }
+    }
+    for (const burst of this.bursts) {
+      if (!burst) continue;
+      (burst.flash.material as THREE.Material).dispose();
+      (burst.wave.material as THREE.Material).dispose();
+    }
+    for (const geometry of [
+      this.projectileGeometry,
+      this.glowGeometry,
+      this.moteGeometry,
+      this.markerGeometry,
+      this.coreGeometry,
+      this.columnGeometry,
+      this.waveGeometry,
+      this.flashGeometry,
+    ]) {
+      geometry.dispose();
+    }
+    for (const material of [
+      this.projectileMaterial,
+      this.glowMaterial,
+      this.trailMaterial,
+      this.markerMaterial,
+      this.coreMaterial,
+      this.columnMaterial,
+      this.waveMaterial,
+      this.flashMaterial,
+    ]) {
+      material.dispose();
+    }
+    this.slots.length = 0;
+    this.bursts.length = 0;
+    this.group.clear();
+  }
+
   /** Live shells, for tests and for anything that needs to know whether the sky
    *  is busy. */
   get inFlight(): number {

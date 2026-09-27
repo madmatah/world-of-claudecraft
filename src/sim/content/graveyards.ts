@@ -14,6 +14,11 @@ import type { GraveyardDef, NpcDef } from '../types';
 
 export type { GraveyardDef } from '../types';
 
+export const LAST_KEEP_GRAVEYARD_ID = 'gy_last_keep';
+// Reserved outside the ordinary nextId stream. Adding the Last Keep yard must not
+// shift later player, dungeon, raid or boss ids in parity traces.
+export const LAST_KEEP_SPIRIT_HEALER_ENTITY_ID = 1_000_000_004;
+
 // One graveyard per existing headstone cluster (the ZonePropsDef.graveyards anchors
 // across all three zones), so every visible graveyard on the map gets an angel and
 // no overworld death is ever far from one.
@@ -52,7 +57,7 @@ export const OVERWORLD_GRAVEYARDS: GraveyardDef[] = [
   // field (content/*.ts). Spirit healers spawn here and a released spirit picks
   // the nearest, so death in any new realm returns you locally, not to a far-off
   // strip graveyard across a sealed border.
-  { id: 'gy_veiled_hollow', name: 'Eldergleam Rest', x: -60, z: 1004 },
+  { id: 'gy_veiled_hollow', name: 'Eldershine Rest', x: -60, z: 1004 },
   { id: 'gy_farshore', name: 'Gullhaven Rest', x: 290, z: 86 },
   // At the zone's own graveyard field (willowfen.ts): the old (-346, 338) spot
   // sits inside Bridgemere's moat ring, below WATER_LEVEL, and the Pale Keeper
@@ -72,6 +77,11 @@ export const OVERWORLD_GRAVEYARDS: GraveyardDef[] = [
   // in this array's order, so a mid-array insert would renumber every later
   // healer's entity id for no reason (the camps append-last discipline).
   { id: 'gy_proving_shore', name: 'Dawnrest Graves', x: -324, z: 58 },
+  // The Last Keep churchyard (Drakelands). The rebuilt keep's headstone
+  // cluster south of its chapel (DRAKELANDS_PROPS.graveyards) had stones but no
+  // record, so every death at the keep released at the Wyrmwatch cairns,
+  // nearly 300 yd north across the zone. Appended last (see above).
+  { id: LAST_KEEP_GRAVEYARD_ID, name: 'Last Keep Churchyard', x: 451, z: 2134 },
 ];
 
 // The Spirit Healer NPC id (one shared template; every spawned angel carries this

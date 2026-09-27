@@ -1,3 +1,5 @@
+import { INVESTIGATION_MOB, INVESTIGATION_NPCS } from './content/world_quest_investigation';
+import { SHADOW_GUARDS, SHADOW_NPC_DEF } from './content/world_quest_shadow';
 // Content merge layer. Actual game content lives in sim/content/* — one
 // module per zone plus classes (abilities), shared items, and dungeons —
 // so content can grow without everything colliding in one file. This module
@@ -26,8 +28,16 @@ import type {
 } from './types';
 
 export type { FishingEntry } from './content/items';
+export {
+  EASTBROOK_FREIGHT_CARAVAN_ESCORT_ID,
+  EASTBROOK_FREIGHT_CARAVAN_MOB_ID,
+  WORLD_QUEST_DEFAULT_MIN_LEVEL,
+  WORLD_QUEST_MIN_LEVEL,
+  WORLD_QUESTS,
+  WORLD_QUESTS_BY_ID,
+} from './content/world_quests';
+export type { WorldQuestDef } from './types';
 
-import { CASTLE_BLOCKERS } from './castle_layout';
 import {
   AMBERFALL_CAMPS,
   AMBERFALL_ITEMS,
@@ -81,6 +91,7 @@ import {
   EVERGARDEN_ROADS,
   EVERGARDEN_ZONE,
 } from './content/evergarden';
+import { FACTION_VENDOR_ITEMS, FACTION_VENDOR_NPCS } from './content/faction_vendors';
 import {
   FARSHORE_CAMPS,
   FARSHORE_ESCORTS,
@@ -127,11 +138,14 @@ import {
 import { GATHER_NODES as GATHER_NODES_CONTENT } from './content/gather_nodes';
 import {
   type GraveyardDef,
+  LAST_KEEP_GRAVEYARD_ID,
+  LAST_KEEP_SPIRIT_HEALER_ENTITY_ID,
   OVERWORLD_GRAVEYARDS,
   SPIRIT_HEALER,
   SPIRIT_HEALER_NPC_ID,
 } from './content/graveyards';
 import { GROUND_PICKUP_LINES } from './content/ground_pickup_lines';
+import { HEALING_TRAINING_MOBS } from './content/healing_training';
 import {
   IGNIVAR_RAID_LORE_NPCS,
   IGNIVAR_RAID_LORE_QUEST_ORDER,
@@ -169,7 +183,13 @@ import {
   PALMREACH_ROADS,
   PALMREACH_ZONE,
 } from './content/palmreach';
-import { PRACTICE_DUMMY_CAMPS, PRACTICE_DUMMY_MOBS } from './content/practice_dummies';
+import {
+  HUB_PRACTICE_NPCS,
+  HUB_PRACTICE_QUEST_ORDER,
+  HUB_PRACTICE_QUESTS,
+  PRACTICE_DUMMY_CAMPS,
+  PRACTICE_DUMMY_MOBS,
+} from './content/practice_dummies';
 import { STATIONS } from './content/professions';
 import {
   PROVING_SHORE_CAMPS,
@@ -217,6 +237,7 @@ import {
   TEMPLE_QUESTS,
 } from './content/temple';
 import { WARLOCK_PET_MOBS } from './content/warlock_pets';
+import { WEEKLY_EMISSARY_NPC_DEF } from './content/weekly_quests';
 import { WILDHEART_DUNGEON_DEFS, WILDHEART_ITEMS, WILDHEART_MOBS } from './content/wildheart';
 import {
   WILLOWFEN_CAMPS,
@@ -232,6 +253,16 @@ import {
   WILLOWFEN_ROADS,
   WILLOWFEN_ZONE,
 } from './content/willowfen';
+import { WORLD_QUEST_CALLIGRAPHY_NPCS } from './content/world_quest_calligraphy';
+import { FORGE_NPC_DEF } from './content/world_quest_forging';
+import { GLIDER_APPRENTICE_NPC_DEF, GLIDER_NPC_DEF } from './content/world_quest_glider';
+import { WISP_MAZE_NPC_DEF } from './content/world_quest_wisp_maze';
+import {
+  WORLD_QUEST_ESCORTS,
+  WORLD_QUEST_ITEMS,
+  WORLD_QUEST_MOBS,
+  WORLD_QUEST_OBJECTS,
+} from './content/world_quests';
 import {
   WRAITHWOOD_CAMPS,
   WRAITHWOOD_ESCORTS,
@@ -309,8 +340,10 @@ export {
   resolveDelveShopOffers,
 } from './content/delves';
 
+import { APEX_PATTERN_ITEMS } from './content/apex_patterns';
 import { CRUCIBLE_PROFESSION_ITEMS } from './content/crucible_professions';
 import { DELVE_ITEMS } from './content/delves/items';
+import { FARM_PATTERN_ITEMS } from './content/farm_patterns';
 import { HEROIC_ITEMS, RETIRED_HEROIC_ITEMS } from './content/heroic_loot';
 import { buildHeroicVariants } from './content/heroic_variants';
 import { HEROIC_VENDOR_ITEMS } from './content/heroic_vendor';
@@ -318,6 +351,9 @@ import { IGNIVAR_DROP_ITEMS } from './content/ignivar_drops';
 import { IGNIVAR_LOOT_ITEMS, IGNIVAR_VENDOR_NPCS } from './content/ignivar_loot';
 import { PROFESSION_ITEMS } from './content/profession_items';
 import { FURY_NPC, WARFARE_ITEMS } from './content/pvp_honor';
+import { SEASON2_ITEMS } from './content/pvp_honor_season2';
+import { TRINKET_ITEMS } from './content/trinkets';
+import { WYRMWATCH_HARBOR_NPCS } from './content/wyrmwatch_harbor_house';
 import { DELVE_MODULE_LAYOUTS, type DelveModuleId, delveModuleSpan } from './delve_layout';
 
 function mergeItems(...parts: Record<string, ItemDef>[]): Record<string, ItemDef> {
@@ -356,15 +392,19 @@ export { STATIONS };
 export const ITEMS: Record<string, ItemDef> = mergeItems(
   BASE_ITEMS,
   PROFESSION_ITEMS,
+  APEX_PATTERN_ITEMS,
+  FARM_PATTERN_ITEMS,
   ZONE2_ITEMS,
   ZONE3_ITEMS,
   TEMPLE_ITEMS,
   DELVE_ITEMS,
   HEROIC_VENDOR_ITEMS,
+  TRINKET_ITEMS,
   HEROIC_ITEMS,
   RETIRED_HEROIC_ITEMS,
   IGNIVAR_LOOT_ITEMS,
   WARFARE_ITEMS,
+  SEASON2_ITEMS,
   RIFT_ITEMS,
   REALM_ITEMS,
   DRAKELANDS_ITEMS,
@@ -382,6 +422,8 @@ export const ITEMS: Record<string, ItemDef> = mergeItems(
   DUNGEON_KEEPSAKE_ITEMS,
   IGNIVAR_DROP_ITEMS,
   CRUCIBLE_PROFESSION_ITEMS,
+  WORLD_QUEST_ITEMS,
+  FACTION_VENDOR_ITEMS,
 );
 
 export type { AggregatedSetEffect } from './content/item_sets';
@@ -390,8 +432,10 @@ export { aggregateSetBonuses, ITEM_SETS } from './content/item_sets';
 export const MOBS: Record<string, MobTemplate> = {
   ...ZONE1_MOBS,
   ...ZONE2_MOBS,
+  [INVESTIGATION_MOB.id]: INVESTIGATION_MOB,
   ...ZONE3_MOBS,
   ...PRACTICE_DUMMY_MOBS,
+  ...HEALING_TRAINING_MOBS,
   ...DUNGEON_MOBS,
   ...WARLOCK_PET_MOBS,
   ...NECROMANCY_MOBS,
@@ -414,6 +458,7 @@ export const MOBS: Record<string, MobTemplate> = {
   ...GALECREST_MOBS,
   ...FARSHORE_MOBS,
   ...PROVING_SHORE_MOBS,
+  ...WORLD_QUEST_MOBS,
 };
 
 // Heroic upgraded drop variants: generated from the base item + mob loot tables and
@@ -453,11 +498,36 @@ export const NPCS: Record<string, NpcDef> = {
   // loop skips it). Kept in NPCS so the online client and world_entity_i18n can
   // resolve its name; spirit.ts spawns a copy at every graveyard.
   [SPIRIT_HEALER_NPC_ID]: SPIRIT_HEALER,
+  // The Eastbrook quay's sparring master (content/practice_dummies.ts):
+  // dynamic, spawned after the player by sim/hub_practice.ts, so his
+  // presence in this record moves no id.
+  ...HUB_PRACTICE_NPCS,
+  ...WORLD_QUEST_CALLIGRAPHY_NPCS,
+  [FORGE_NPC_DEF.id]: FORGE_NPC_DEF,
+  [WISP_MAZE_NPC_DEF.id]: WISP_MAZE_NPC_DEF,
+  [WEEKLY_EMISSARY_NPC_DEF.id]: WEEKLY_EMISSARY_NPC_DEF,
+  [SHADOW_NPC_DEF.id]: SHADOW_NPC_DEF,
+  ...Object.fromEntries(SHADOW_GUARDS.map(({ npc }) => [npc.id, npc])),
+  [GLIDER_NPC_DEF.id]: GLIDER_NPC_DEF,
+  [GLIDER_APPRENTICE_NPC_DEF.id]: GLIDER_APPRENTICE_NPC_DEF,
+  ...Object.fromEntries(INVESTIGATION_NPCS.map((npc) => [npc.id, npc])),
+  ...FACTION_VENDOR_NPCS,
+  // The Harbormaster's House keeper at the Wyrmwatch cliff harbor
+  // (content/wyrmwatch_harbor_house.ts), appended last so every NPC placed
+  // before her keeps its entity id.
+  ...WYRMWATCH_HARBOR_NPCS,
 };
 
 // Graveyards + the Spirit Healer: re-exported so the Sim and spirit.ts import the
 // whole death-loop data surface from this one merge module.
-export { type GraveyardDef, OVERWORLD_GRAVEYARDS, SPIRIT_HEALER, SPIRIT_HEALER_NPC_ID };
+export {
+  type GraveyardDef,
+  LAST_KEEP_GRAVEYARD_ID,
+  LAST_KEEP_SPIRIT_HEALER_ENTITY_ID,
+  OVERWORLD_GRAVEYARDS,
+  SPIRIT_HEALER,
+  SPIRIT_HEALER_NPC_ID,
+};
 
 export const QUESTS: Record<string, QuestDef> = {
   ...ZONE1_QUESTS,
@@ -477,6 +547,7 @@ export const QUESTS: Record<string, QuestDef> = {
   ...FARSHORE_QUESTS,
   ...PROVING_SHORE_QUESTS,
   ...IGNIVAR_RAID_LORE_QUESTS,
+  ...HUB_PRACTICE_QUESTS,
 };
 
 export const QUEST_ORDER: string[] = [
@@ -497,6 +568,7 @@ export const QUEST_ORDER: string[] = [
   ...FARSHORE_QUEST_ORDER,
   ...PROVING_SHORE_QUEST_ORDER,
   ...IGNIVAR_RAID_LORE_QUEST_ORDER,
+  ...HUB_PRACTICE_QUEST_ORDER,
 ];
 
 // The Book of Deeds catalog (content/deeds.ts) is deliberately NOT re-exported
@@ -559,6 +631,8 @@ export const CAMPS: CampDef[] = [
   // private streams (mob/idle_rng.ts) move: a content append like this one
   // legitimately re-mints the parity goldens without touching a draw digest.
   ...PROVING_SHORE_CAMPS,
+  // The Eastbrook hub dummy is NOT a camp: it spawns with its sparring master
+  // after the player (sim/hub_practice.ts), so it consumes only trailing ids.
 ];
 
 // Escort quest runs (src/sim/escort.ts): defs authored per realm, merged here
@@ -568,6 +642,7 @@ export const ESCORTS: Record<string, EscortDef> = {
   ...WRAITHWOOD_ESCORTS,
   ...PALMREACH_ESCORTS,
   ...FARSHORE_ESCORTS,
+  ...WORLD_QUEST_ESCORTS,
 };
 
 export const GROUND_OBJECTS: GroundObjectDef[] = [
@@ -587,6 +662,7 @@ export const GROUND_OBJECTS: GroundObjectDef[] = [
   ...GALECREST_OBJECTS,
   ...FARSHORE_OBJECTS,
   ...PROVING_SHORE_OBJECTS,
+  ...WORLD_QUEST_OBJECTS,
 ];
 
 export const GATHER_NODES: GatherNodeDef[] = [...GATHER_NODES_CONTENT];
@@ -778,8 +854,7 @@ export const BUILTIN_WORLD: WorldContent = {
     graveyards: OVERWORLD_GRAVEYARDS,
   },
   // invisible collision walls: the moderation cage plus the Last Keep's
-  // sealed building slot (castle_layout.ts CASTLE_BLOCKERS)
-  blockers: [...JAIL_BLOCKERS, ...CASTLE_BLOCKERS],
+  blockers: [...JAIL_BLOCKERS],
   terrainEdits: [
     ...JAIL_TERRAIN_EDITS,
     ...COPPER_DIG_TERRAIN_EDITS,

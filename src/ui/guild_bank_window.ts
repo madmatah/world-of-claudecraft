@@ -32,7 +32,7 @@
 import { audio } from '../game/audio';
 import { ITEMS } from '../sim/data';
 import { isItemLocked } from '../sim/item_lock';
-import type { IWorld } from '../world_api';
+import type { GuildBankLogKind, IWorld } from '../world_api';
 import { bagCornerMark, bagRimClasses } from './bag_corner_mark_view';
 import { bagFineMark } from './bag_fine_mark_view';
 import { bagInstanceGlyphKind } from './bag_instance_glyph_view';
@@ -61,12 +61,20 @@ import { formatMoney, t } from './i18n';
 import { QUALITY_COLOR } from './icons';
 import { cornerMarkHtml, INSTANCE_GLYPH_ARIA_KEYS, lockMarkHtml } from './item_instance_glyph_mark';
 import { knownItemDef } from './known_item';
+import { guildMaterialWithdrawSelection } from './material_source_storage_actions';
+import {
+  appendMaterialSourcesActionAfter,
+  attachMaterialSourcesContextMenu,
+  type MaterialSourcesSelectionFactory,
+} from './material_sources_dialog';
+import { materialSourcesForDisplay } from './material_sources_view';
 import type { PainterHostPresentation } from './painter_host';
 import { tSim } from './sim_i18n';
 import { StorageRungEchoLatch } from './storage_rung_echo_core';
 import { focusActiveTab, wireTabStrip } from './tab_strip_painter';
 import { tabStripHtml, tabStripModel } from './tab_strip_view';
 import { svgIcon } from './ui_icons';
+import { wornItemCellParts } from './worn_item_cell_view';
 
 // The unranked quality fallback as a CSS custom property (mirrors bank_window's
 // QUALITY_DEFAULT_COLOR; kept local so the pane stays independently importable).
@@ -103,7 +111,9 @@ export interface GuildBankTabDeps extends PainterHostPresentation {
   requestRender(): void;
 }
 
-/** The two views inside the Guild pane: the bank itself, and its activity log. */
+/** The two views inside the Guild pane: the bank itself, and its transaction
+ *  history (the `log` id is the wire-era name and stays: it is a DOM/test hook,
+ *  not player text). */
 export type GuildBankPaneView = 'contents' | 'log';
 
 /** The Guild pane's role=tabpanel element id. Exported so BankWindow can point
@@ -123,8 +133,33 @@ export class GuildBankTab {
   // all this pane's business; BankWindow reads it through the getters below for
   // its repaint gate and its scroll scoping.
   private view: GuildBankPaneView = 'contents';
+  // The history's selected filter slice. Owned here beside the sub-view for
+  // the same reason: the pane's read passes it to the world, and the world
+  // drops its loaded pages the moment the kind it is read under changes.
+  private logKind: GuildBankLogKind = 'all';
+  // The history's search text, raw as typed (the core normalizes it). Owned
+  // here so it survives the pane rebuild every keystroke causes and resets
+  // with the sub-view on close.
+  private logQuery = '';
   private readonly logPane = new GuildBankLogPane({
     itemDef: (id) => knownItemDef(ITEMS, id),
+    selectFilter: (kind) => {
+      if (this.logKind === kind) return;
+      audio.click();
+      this.logKind = kind;
+      this.deps.requestRender();
+    },
+    loadOlder: () => {
+      // The world decides whether there is a page to ask for; the repaint
+      // flips the footer to its loading line when it sent one.
+      this.deps.world().guildBankLogOlder();
+      this.deps.requestRender();
+    },
+    setSearch: (query) => {
+      if (this.logQuery === query) return;
+      this.logQuery = query;
+      this.deps.requestRender();
+    },
   });
   private readonly purchaseEcho: StorageRungEchoLatch;
   // A stale confirmation result belongs to the purchase surface, not the
@@ -161,6 +196,8 @@ export class GuildBankTab {
    *  read-only edge detector resets with it so a reopening never announces. */
   resetView(): void {
     this.view = 'contents';
+    this.logKind = 'all';
+    this.logQuery = '';
     this.prevReadOnly = null;
     this.priceChangedStatus = null;
   }
@@ -180,7 +217,9 @@ export class GuildBankTab {
    */
   readAndRequestLog(): string | null {
     if (this.view !== 'log') return null;
-    return guildBankLogSignature(this.deps.world().guildBankLog());
+    // The search text joins the key: it changes what the pane draws, and the
+    // window's repaint gate compares this string rather than rendering it.
+    return `${guildBankLogSignature(this.deps.world().guildBankLog(this.logKind))}|${this.logQuery}`;
   }
 
   /** Build the guild pane model from the live world. Exposed so BankWindow can
@@ -233,7 +272,13 @@ export class GuildBankTab {
       // Reading the log is what REQUESTS it (cold data, no snapshot key), so
       // this call is the whole fetch trigger and it only happens here, on a
       // paint of the open log view.
-      this.logPane.renderInto(el, buildGuildBankLogView(this.deps.world().guildBankLog()));
+      this.logPane.renderInto(
+        el,
+        buildGuildBankLogView(this.deps.world().guildBankLog(this.logKind), this.logKind, {
+          query: this.logQuery,
+          textOf: (row) => this.logPane.searchText(row),
+        }),
+      );
       return;
     }
     this.appendPriceChangedStatus(el);
@@ -341,12 +386,12 @@ export class GuildBankTab {
       tabStripHtml(
         tabStripModel({
           ariaLabel: t('hudChrome.bank.guildViewsAria'),
-          stripClass: 'bank-tabs gbank-view-tabs',
-          tabClass: 'gbank-view-tab',
-          selectedClass: 'on',
+          stripClass: 'bank-tabs ui-tabs gbank-view-tabs',
+          tabClass: 'gbank-view-tab ui-tab',
+          selectedClass: 'on is-on',
           tabs: [
             { id: 'contents', label: t('hudChrome.bank.guildContentsTab') },
-            { id: 'log', label: t('hudChrome.bank.guildLogTab') },
+            { id: 'log', label: t('hudChrome.bank.guildHistoryTab') },
           ],
           selected: this.view,
         }),
@@ -383,13 +428,13 @@ export class GuildBankTab {
     actions.className = 'gbank-treasury-actions';
     const deposit = document.createElement('button');
     deposit.type = 'button';
-    deposit.className = 'gbank-gold-btn';
+    deposit.className = 'gbank-gold-btn ui-btn';
     deposit.textContent = t('hudChrome.bank.guildDepositGold');
     deposit.disabled = !treasury.canDepositGold;
     deposit.addEventListener('click', () => this.showGoldPrompt('deposit', treasury.copper));
     const withdraw = document.createElement('button');
     withdraw.type = 'button';
-    withdraw.className = 'gbank-gold-btn';
+    withdraw.className = 'gbank-gold-btn ui-btn';
     withdraw.textContent = t('hudChrome.bank.guildWithdrawGold');
     withdraw.disabled = !treasury.canWithdrawGold;
     withdraw.addEventListener('click', () => this.showGoldPrompt('withdraw', treasury.copper));
@@ -412,7 +457,7 @@ export class GuildBankTab {
     row.className = 'bank-buy-row gbank-buy-row gbank-open-row';
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `bank-buy-btn${open.affordable ? '' : ' gbank-buy-short'}`;
+    btn.className = `bank-buy-btn ui-btn ui-btn--gold${open.affordable ? '' : ' gbank-buy-short'}`;
     const short = open.affordable
       ? ''
       : `<span class="gbank-buy-short-label">${esc(t('hudChrome.bank.guildPurseShort'))}</span>`;
@@ -505,16 +550,43 @@ export class GuildBankTab {
     }
     // NO filter/sort layer and NO unknown-id drop: every slot renders at its
     // wire index, dormant ones visibly distinct (the carried-forward line).
-    for (const slot of model.slots) grid.appendChild(this.buildCell(slot, model.readOnly));
+    for (const slot of model.slots) {
+      // The exact-source withdraw session (absent on a read-only pane and on a
+      // dormant slot, where no withdraw exists) rides both doors into the
+      // dialog: desktop right-click and the touch-only Sources button.
+      const withdrawSelection =
+        model.readOnly || slot.dormant
+          ? undefined
+          : guildMaterialWithdrawSelection(this.deps.world(), slot.itemId, slot.slotIndex, () => {
+              this.deps.hideTooltip();
+              this.deps.onInventoryChanged();
+              this.deps.requestRender();
+            });
+      const cell = this.buildCell(slot, model.readOnly, withdrawSelection);
+      const item = knownItemDef(ITEMS, slot.itemId);
+      const itemName = item ? itemDisplayName(item) : slot.itemId;
+      grid.appendChild(cell);
+      appendMaterialSourcesActionAfter(
+        cell,
+        itemName,
+        materialSourcesForDisplay(slot),
+        this.deps.openMaterialSources,
+        withdrawSelection,
+      );
+    }
     for (let i = 0; i < model.emptyCells; i++) {
       const cell = document.createElement('div');
-      cell.className = 'bank-item empty';
+      cell.className = 'bank-item ui-socket ui-socket--bag empty';
       cell.setAttribute('aria-hidden', 'true');
       grid.appendChild(cell);
     }
   }
 
-  private buildCell(slot: GuildBankSlotModel, readOnly: boolean): HTMLElement {
+  private buildCell(
+    slot: GuildBankSlotModel,
+    readOnly: boolean,
+    withdrawSelection: MaterialSourcesSelectionFactory,
+  ): HTMLElement {
     const item = knownItemDef(ITEMS, slot.itemId);
     const cell = document.createElement('button');
     cell.type = 'button';
@@ -523,7 +595,12 @@ export class GuildBankTab {
     // namespace inside the one module that imports focus_restore (the guard in
     // tests/focus_restore.test.ts pins that single-reader rule).
     const dormantClass = slot.dormant ? ' gbank-dormant' : '';
-    const itemName = item ? itemDisplayName(item) : t('hudChrome.bank.guildUnknownItem');
+    // The cell authority (worn_item_cell_view.ts): no promoted copy reaches
+    // this grid today (bound copies are refused at the anonymous pipe), but
+    // the cell describes its copy the same way every other grid does.
+    const parts = item ? wornItemCellParts(item, slot.instance) : null;
+    const itemName = parts ? parts.name : t('hudChrome.bank.guildUnknownItem');
+    const displayedSources = materialSourcesForDisplay(slot);
     const count = this.fmt(slot.count);
     // Corner marks share the bags/personal-bank helpers and priority core
     // (bag_corner_mark_view.ts) so a guild-banked masterwork or fine stack
@@ -544,11 +621,11 @@ export class GuildBankTab {
     const locked = isItemLocked(slot.instance);
     const lockSeal = lockMarkHtml(locked);
     if (slot.known && item) {
-      cell.className = `bank-item q-${slot.qualityKey}${bagRimClasses(null, fineMark)}${dormantClass}`;
+      cell.className = `bank-item ui-socket ui-socket--bag q-${slot.qualityKey}${bagRimClasses(null, fineMark)}${dormantClass}`;
       const qColor = QUALITY_COLOR[slot.qualityKey] ?? QUALITY_DEFAULT_COLOR;
       cell.style.setProperty('--bank-slot-quality', qColor);
       const mark = slot.dormant ? `<span class="gbank-dormant-mark">${svgIcon('lock')}</span>` : '';
-      cell.innerHTML = `${this.deps.itemIcon(item)}${instanceMark}${lockSeal}<span class="bank-count">${
+      cell.innerHTML = `${this.deps.itemIcon(item, parts?.quality)}${parts?.qualityBadge ?? ''}${instanceMark}${lockSeal}<span class="bank-count">${
         slot.showCount ? esc(t('itemUi.bags.stackCount', { count })) : ''
       }</span>${mark}`;
       this.deps.attachTooltip(cell, () => {
@@ -564,7 +641,7 @@ export class GuildBankTab {
                   ? `<div class="tt-sub">${esc(t('hudChrome.bank.withdrawPartialHint'))}</div>`
                   : ''
               }`;
-        return `${this.deps.itemTooltip(item, slot.instance)}${hint}`;
+        return `${this.deps.itemTooltip(item, slot.instance, displayedSources)}${hint}`;
       });
     } else {
       // Unknown id (a removed def): a recoverable dormant-shaped cell. The sim
@@ -575,7 +652,7 @@ export class GuildBankTab {
       // table, so this is a no-op today, but if the grade table ever carried
       // an id this branch sees, the seal minted above and the rim would still
       // arrive together.
-      cell.className = `bank-item gbank-unknown${bagRimClasses(null, fineMark)}${dormantClass}`;
+      cell.className = `bank-item ui-socket ui-socket--bag gbank-unknown${bagRimClasses(null, fineMark)}${dormantClass}`;
       cell.innerHTML = `<span class="gbank-unknown-label">${esc(
         t('hudChrome.bank.guildUnknownItem'),
       )}</span>${instanceMark}${lockSeal}<span class="bank-count">${
@@ -592,6 +669,13 @@ export class GuildBankTab {
         }`;
       });
     }
+    attachMaterialSourcesContextMenu(
+      cell,
+      itemName,
+      displayedSources,
+      this.deps.openMaterialSources,
+      withdrawSelection,
+    );
     // Dormant wording outranks every other announcement (the guild-permission
     // lock is the action fact); the player item lock (issue 3042) outranks
     // the per-copy glyph next, since "this copy is protected" is the most
@@ -612,7 +696,7 @@ export class GuildBankTab {
                 ? INSTANCE_GLYPH_ARIA_KEYS[glyphKind]
                 : 'itemUi.bags.itemAria',
             {
-              item: itemName,
+              item: parts?.ariaName ?? itemName,
               count,
             },
           ),
@@ -719,7 +803,7 @@ export class GuildBankTab {
         ? guildBankGoldDepositMax(purse, treasuryCopper)
         : guildBankGoldWithdrawMax(purse, treasuryCopper);
     const prompt = document.createElement('div');
-    prompt.className = 'prompt panel bank-quantity-prompt gbank-gold-prompt';
+    prompt.className = 'prompt panel ui-window bank-quantity-prompt gbank-gold-prompt';
     const title =
       direction === 'deposit'
         ? t('hudChrome.bank.guildDepositGoldTitle')
@@ -735,7 +819,7 @@ export class GuildBankTab {
     coinRow.className = 'gbank-coin-row';
     const mkCoin = (cls: 'g' | 's' | 'c', ariaText: string, capped: boolean): HTMLInputElement => {
       const input = document.createElement('input');
-      input.className = 'coininput';
+      input.className = 'coininput ui-input';
       input.type = 'number';
       input.min = '0';
       if (capped) input.max = '99';
@@ -773,13 +857,13 @@ export class GuildBankTab {
       errorLine.appendChild(line);
     };
     const confirm = document.createElement('button');
-    confirm.className = 'btn';
+    confirm.className = 'btn ui-btn ui-btn--red';
     confirm.textContent =
       direction === 'deposit'
         ? t('hudChrome.bank.depositQuantityConfirm')
         : t('hudChrome.bank.withdrawQuantityConfirm');
     const cancel = document.createElement('button');
-    cancel.className = 'btn';
+    cancel.className = 'btn ui-btn';
     cancel.textContent = t('itemUi.vendor.sellQuantityCancel');
     prompt.append(confirm, cancel);
     const { dismiss, dismissAndReturn } = this.deps.installPromptDialog(prompt, opener, () =>
@@ -854,7 +938,7 @@ export class GuildBankTab {
     }
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `bank-buy-btn${buy.affordable ? '' : ' gbank-buy-short'}`;
+    btn.className = `bank-buy-btn ui-btn ui-btn--gold${buy.affordable ? '' : ' gbank-buy-short'}`;
     const short = buy.affordable
       ? ''
       : `<span class="gbank-buy-short-label">${esc(t('hudChrome.bank.guildTreasuryShort'))}</span>`;

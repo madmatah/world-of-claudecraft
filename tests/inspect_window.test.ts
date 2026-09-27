@@ -3,11 +3,26 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PlayerClass } from '../src/sim/types';
+
+// This suite exercises the inspect DOM and injected preview boundary, not
+// WebGL portraits. Importing the real portrait module starts GLB fetches that
+// can outlive happy-dom teardown and throw ProgressEvent errors in Node.
+// Keep that renderer boundary inert, as the turntable mount already is below.
+vi.mock('../src/ui/portrait_chip', () => ({
+  hydratePortraits: () => undefined,
+  portraitChipHtml: () => '',
+}));
+
+import type { ModularLook } from '../src/render/characters/modular';
+import { ITEMS } from '../src/sim/data';
+import type { EquipSlot, ItemInstancePayload, PlayerClass } from '../src/sim/types';
 import { borderAccent, borderMotifPrimitives } from '../src/ui/deed_border_view';
 import { deedName, deedTitleText } from '../src/ui/deed_i18n';
+import { QUALITY_COLOR } from '../src/ui/icons';
 import { classColorCss } from '../src/ui/inspect_view';
 import { type InspectEntity, InspectWindow } from '../src/ui/inspect_window';
+import { qualityGlowShadow } from '../src/ui/quality_glow';
+import { knownItemIconHtml } from '../src/ui/unknown_item_icon';
 
 // The inspect ("Profile") window painter is a DOM module. Most guards below are
 // source scans, the char_window suite's shape: they pin the WCAG focus-trap the
@@ -20,6 +35,7 @@ import { type InspectEntity, InspectWindow } from '../src/ui/inspect_window';
 // Under happy-dom import.meta.url is an http URL, so source is resolved from
 // Vitest's injected filesystem dirname (same reason char_window.test.ts does).
 const painter = readFileSync(join(__dirname, '../src/ui/inspect_window.ts'), 'utf8');
+const shellCss = readFileSync(join(__dirname, '../src/styles/shell.css'), 'utf8');
 // Comment-stripped copy for the Curator scans below (the architecture-test rule):
 // prose that NAMES a pinned literal must neither satisfy a positive pin nor trip
 // a negative one. The doc comment beside the sigil <img> literally quotes alt=""
@@ -51,6 +67,12 @@ describe('inspect_window: WCAG 2.2 AA focus trap (new to the extraction)', () =>
 });
 
 describe('inspect_window: thin painter, deps-only Hud access', () => {
+  it('keeps a desktop scroll path after adopting the window primitive', () => {
+    const rootRule = shellCss.match(/#inspect-window\s*\{([^}]*)\}/)?.[1] ?? '';
+    // W12: ui-window hides overflow by default, while Inspect owns no inner desktop scroller.
+    expect(rootRule).toContain('overflow-y: auto');
+  });
+
   it('imports no Sim / Hud / render layer and no Three', () => {
     expect(painter).not.toMatch(/from\s+['"]\.\.\/render\//);
     expect(painter).not.toMatch(/from\s+['"]three['"]/);
@@ -111,7 +133,8 @@ describe('inspect_window: the Curator standing surfaces', () => {
   it('reuses the shared .inspect-holder badge family for the sigil (no bespoke row)', () => {
     const curator = code.slice(code.indexOf('private curatorHtml('));
     const body = curator.slice(0, curator.indexOf('private holderHtml('));
-    expect(body).toContain('<div class="inspect-holder">');
+    // W12: the shared badge-row hook now sits beside the shared card primitive.
+    expect(body).toContain('<div class="inspect-holder ui-card">');
     expect(body).toContain('inspect-holder-text');
     expect(body).toContain('inspect-holder-name');
     // The art + class + glow all come from the sigil module, never inline here.
@@ -139,8 +162,9 @@ describe('inspect_window: the Curator standing surfaces', () => {
     const body = curator.slice(0, curator.indexOf('private holderHtml('));
     expect(body).toContain('alt=""');
     expect(body).not.toContain('alt="${esc(t(\'hudChrome.reliquary.sigilCaption\'))}"');
+    // W12: the visible caption adopts the shared muted metadata primitives.
     expect(body).toContain(
-      '<div class="inspect-holder-sub">${esc(t(\'hudChrome.reliquary.sigilCaption\'))}</div>',
+      '<div class="inspect-holder-sub ui-meta ui-muted">${esc(t(\'hudChrome.reliquary.sigilCaption\'))}</div>',
     );
     // Rename-residue negative, decisive only as a PAIR: the caption-div
     // positive above is the control proving this slice sees the live row.
@@ -204,8 +228,12 @@ describe('inspect_window: the Curator standing surfaces', () => {
       .replace(/(^|[^:])\/\/.*$/gm, '$1');
     const at = hud.indexOf('openInspect(pid: number): void {');
     expect(at, 'Hud.openInspect is missing').toBeGreaterThan(-1);
-    const body = hud.slice(at, at + 520);
-    expect(body).toContain('pid === this.sim.playerId ? selfCuratorStanding(this.sim) : null');
+    const body = hud.slice(at, at + 640);
+    expect(body).toContain('const self = pid === this.sim.playerId;');
+    expect(body).toContain('self ? selfCuratorStanding(this.sim) : null');
+    // The 2026-08-27 host-parity ruling rides the same gate: only SELF hands
+    // the full worn mirror; a peer's card stays on the eqi-shaped entity.
+    expect(body).toContain('self ? this.sim.equipmentInstances : undefined');
     // And the standing itself still comes from the character sheet's own model,
     // so the card and the sheet cannot print different numbers for the same
     // player. The three-line adapter moved out of Hud at Phase 20 QA (it needed
@@ -236,26 +264,20 @@ describe('inspect_window: the Curator standing surfaces', () => {
     ]) {
       expect(body, `the remote card must not paint ${token}`).not.toContain(token);
     }
-    expect(body).toContain('class="inspect-card inspect-card-remote"');
+    // W12: the remote profile preserves its hooks beside the shared card primitive.
+    expect(body).toContain('class="inspect-card inspect-card-remote ui-card"');
   });
 
-  it('the Reliquary line joins the .inspect-meta pill family, and CSS reaches it', () => {
-    // Class presence proves only that the painter wrote the hook. The line
-    // wears the family class itself (.inspect-meta), so the pill chrome
-    // reaches it by construction, and that base rule is the reach pin. The
-    // modifier is a semantic hook by DESIGN, not an override: an earlier
-    // revision shipped a .inspect-meta.inspect-reliquary rule that repeated
-    // the base color byte for byte (a dead declaration certified by this very
-    // test), so the negative bound below keeps a repainted override from
-    // coming back without the comment above it being rewritten on purpose.
+  it('the Reliquary line joins the shared inspect pill family', () => {
+    // The ui-chip class owns the shared look while .inspect-meta keeps geometry
+    // and .inspect-reliquary remains a rule-free semantic hook.
     const line = code.slice(code.indexOf('private curatorLineHtml('));
     const body = line.slice(0, line.indexOf('private curatorHtml('));
-    expect(body).toContain('class="inspect-meta inspect-reliquary"');
+    // W12: the semantic hooks retain geometry while shared primitives own the pill look.
+    expect(body).toContain('class="inspect-meta inspect-reliquary ui-chip ui-num"');
     const shell = readFileSync(join(__dirname, '../src/styles/shell.css'), 'utf8');
-    // Positive controls: the base family rule exists and carries the pill
-    // chrome the standing line inherits.
+    // Positive control: the legacy family still owns only its compact geometry.
     expect(shell).toMatch(/\n {2}\.inspect-meta \{[^}]*display: inline-block;/);
-    expect(shell).toMatch(/\n {2}\.inspect-meta \{[^}]*color: var\(--color-text-muted\);/);
     // The semantic hook stays rule-free (occurrence bound, not a bare
     // negative: the two positive matches above prove this scan sees the file).
     expect(shell.match(/\.inspect-meta\.inspect-reliquary\s*\{/g) ?? []).toHaveLength(0);
@@ -336,11 +358,21 @@ describe('inspect_window: the real painter over a Sim-shaped and a ranked entity
 
   afterEach(() => vi.restoreAllMocks());
 
+  // Captured per openWith call: the tooltip payload each socket row hands the
+  // Hud dep, so the SELF-override pin below can see exactly what a hover reads.
+  const tooltipCalls: Array<{ itemId: string; instance: ItemInstancePayload | undefined }> = [];
+  const attachedTooltips: Array<{ el: HTMLElement; build: () => string }> = [];
+  const mountPreview = vi.fn();
   const openWith = (
     e: InspectEntity,
     selfStanding?: { curatorRank: number; owned: number; total: number } | null,
     showDevBadges = false,
+    selfEquippedInstances?: Partial<Record<EquipSlot, ItemInstancePayload>>,
+    look?: ModularLook | null,
   ): HTMLElement => {
+    tooltipCalls.length = 0;
+    attachedTooltips.length = 0;
+    mountPreview.mockClear();
     const realCreate = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       const el = realCreate(tag);
@@ -360,21 +392,68 @@ describe('inspect_window: the real painter over a Sim-shaped and a ranked entity
       restoreFocus: vi.fn(),
       slotName: (slot) => slot,
       showDevBadges: () => showDevBadges,
-      mountPreview: vi.fn(),
-      // A real data URL, not '': an empty-string src resolves against the
-      // document URL in happy-dom and fetches. NOTE the honest scope: this
-      // stub is the FILLED-slot resolver and these fixtures equip nothing, so
-      // it guards future filled-slot fixtures; the suite's residual
-      // localhost fetch noise comes from other asset-path srcs and is a
-      // recorded hygiene follow-up, not this line.
-      itemIcon: () => STUB_DATA_URL,
+      mountPreview,
+      // The real icon resolver (what Hud.itemIcon binds), so the filled-slot
+      // rows carry the `.item-icon q-<quality>` markup the row pins read; its
+      // src is a data URL off the stubbed canvas (an empty-string src would
+      // resolve against the document URL in happy-dom and fetch). The
+      // suite's residual localhost fetch noise comes from other asset-path
+      // srcs and is a recorded hygiene follow-up, not this line.
+      itemIcon: (item, quality) => knownItemIconHtml(item, quality),
       moneyHtml: () => '',
-      itemTooltip: () => '',
-      attachTooltip: vi.fn(),
+      itemTooltip: (item, instance) => {
+        tooltipCalls.push({ itemId: item.id, instance });
+        return '';
+      },
+      attachTooltip: (el, build) => {
+        attachedTooltips.push({ el, build });
+      },
     });
-    win.openInspect(e, 1_700_000_000_000, selfStanding);
+    win.openInspect(e, 1_700_000_000_000, selfStanding, selfEquippedInstances, look);
     return root;
   };
+
+  it('hands the inspected player look to the turntable mount, null when none', () => {
+    // The Inspect arm of the composed-face fix: without this the card mounts
+    // the stock class rig for a player whose world body is their own face.
+    const look = { app: { gender: 'female' }, worn: {} } as unknown as ModularLook;
+    // Read the recorded params rather than matching the call: a DOM node in
+    // a failed toHaveBeenCalledWith diff recurses happy-dom's tree on print.
+    const paramsOf = (): { look?: unknown; cls?: unknown } => {
+      expect(mountPreview.mock.calls.length).toBe(1);
+      const [stage, params] = mountPreview.mock.calls[0] as [HTMLElement, { look?: unknown }];
+      expect(stage.id).toBe('inspect-model-preview');
+      return params;
+    };
+    openWith(baseEntity, null, false, undefined, look);
+    expect(paramsOf().look).toBe(look);
+    expect(paramsOf().cls).toBe(baseEntity.templateId);
+  });
+
+  it('mounts the turntable with a null look for a pre-creator character', () => {
+    // Its own case: openWith re-spies document.createElement per call, and a
+    // second call in one test wraps the spy in itself.
+    openWith(baseEntity);
+    expect(mountPreview.mock.calls.length).toBe(1);
+    const [, params] = mountPreview.mock.calls[0] as [HTMLElement, { look?: unknown }];
+    expect(params.look).toBeNull();
+  });
+
+  it('lets the Combat Mech win over the look on the Hud side of the mount', () => {
+    // The precedence the world applies (createCharacterVisual never composes
+    // over a mech) restated at the turntable, pinned as the full statement.
+    const hud = readFileSync(join(__dirname, '../src/ui/hud.ts'), 'utf8');
+    const at = hud.indexOf('private mountInspectPreview(');
+    expect(at).toBeGreaterThan(-1);
+    const body = hud.slice(at, at + 1600);
+    expect(body).toContain("const mech = preview.visualKey === 'player_mech';");
+    expect(body).toContain('look: mech ? null : params.look,');
+    // And the Hud resolves the look from the LIVE entity as a parameter, the
+    // selfStanding doctrine: no cast of the wire mirror back to an Entity.
+    const open = hud.slice(hud.indexOf('openInspect(pid: number): void {'));
+    expect(open.slice(0, 900)).toContain('modularLookFor(e),');
+    expect(hud).not.toContain('composedLook');
+  });
 
   it('renders NO Reliquary line and NO sigil for an entity with no curator fields', () => {
     // The offline / pre-Curator shape: the fields are absent entirely, not zero.
@@ -477,7 +556,8 @@ describe('inspect_window: the real painter over a Sim-shaped and a ranked entity
     const standing = root.querySelector('.inspect-standing-row');
     const standingItems = [...(standing?.children ?? [])];
     expect(standingItems).toHaveLength(2);
-    expect(standingItems[0]?.className).toBe('inspect-meta');
+    // W12: the standing pill adopts the shared chip and numeric primitives.
+    expect(standingItems[0]?.className).toBe('inspect-meta ui-chip ui-num');
     expect(standingItems[0]?.textContent).toContain('60');
     expect(standingItems[1]?.classList.contains('inspect-reliquary')).toBe(true);
     expect(standingItems[1]?.textContent).toContain('300');
@@ -569,5 +649,98 @@ describe('inspect_window: the real painter over a Sim-shaped and a ranked entity
       root.querySelector('.inspect-curator-halo'),
       'a live rank 2 must not wear the rank-5 sigil the stale wire claimed',
     ).toBeNull();
+  });
+
+  // The 2026-08-27 QA round: the inspect equipment row was the one item-cell
+  // surface still def-only. These two drive the REAL row over the same worn
+  // payload shape the eqi mirror delivers, instance-driven and def-only.
+  const mainhandRow = (root: HTMLElement): HTMLElement => {
+    const row = [...root.querySelectorAll<HTMLElement>('.equip-slot')].find(
+      (r) => r.querySelector('.slot-name')?.textContent === 'mainhand',
+    );
+    expect(row, 'the mainhand socket row must render').toBeDefined();
+    return row as HTMLElement;
+  };
+
+  it('drives the equipment row off the worn copy: chosen name, legendary color, rim, glow', () => {
+    const root = openWith({
+      ...baseEntity,
+      equippedItems: { mainhand: 'worn_sword' },
+      equippedInstances: {
+        mainhand: { name: "Vel'tara's Oath", rolled: { quality: 'legendary' } },
+      },
+    });
+    const row = mainhandRow(root);
+    const label = row.querySelector<HTMLElement>('.slot-item');
+    expect(label?.textContent).toBe("Vel'tara's Oath");
+    expect(label?.getAttribute('style')).toContain(QUALITY_COLOR.legendary);
+    const icon = row.querySelector<HTMLElement>('.item-icon');
+    expect(icon?.className).toContain('q-legendary');
+    // The glow follows the effective quality too: compare through a probe so
+    // happy-dom's own style serialization judges both sides.
+    const probe = document.createElement('div');
+    probe.style.boxShadow = qualityGlowShadow(QUALITY_COLOR.legendary);
+    expect(probe.style.boxShadow).not.toBe('');
+    expect(icon?.style.boxShadow).toBe(probe.style.boxShadow);
+  });
+
+  it('a def-only row keeps the def name and def quality (the negative)', () => {
+    const root = openWith({ ...baseEntity, equippedItems: { mainhand: 'worn_sword' } });
+    const row = mainhandRow(root);
+    const label = row.querySelector<HTMLElement>('.slot-item');
+    expect(label?.textContent).toBe(ITEMS.worn_sword.name);
+    expect(label?.getAttribute('style')).toContain(QUALITY_COLOR.common);
+    expect(row.querySelector<HTMLElement>('.item-icon')?.className).toContain('q-common');
+  });
+
+  // Self-inspect takes the viewer's full mirror through openInspect's fourth
+  // parameter, overriding stale broadcast values. Peers receive the public
+  // active Perfected marker too; intermediate ranks and binding remain private.
+  it('the SELF override hands the tooltip the full worn payload: perfected rides', () => {
+    openWith(
+      {
+        ...baseEntity,
+        equippedItems: { mainhand: 'worn_sword' },
+        equippedInstances: { mainhand: { name: 'Oathkeeper', rolled: { quality: 'legendary' } } },
+      },
+      null,
+      false,
+      {
+        mainhand: { name: 'Oathkeeper', rolled: { quality: 'legendary' }, perfected: true },
+      },
+    );
+    for (const attached of attachedTooltips) attached.build();
+    const call = tooltipCalls.find((c) => c.itemId === 'worn_sword');
+    expect(call, 'the mainhand row must attach a tooltip').toBeDefined();
+    expect(call?.instance?.perfected, 'the self override must reach the hover').toBe(true);
+    expect(call?.instance?.name).toBe('Oathkeeper');
+  });
+
+  it('an unperfected peer row does not invent a Perfected marker', () => {
+    openWith({
+      ...baseEntity,
+      equippedItems: { mainhand: 'worn_sword' },
+      equippedInstances: { mainhand: { name: 'Oathkeeper', rolled: { quality: 'legendary' } } },
+    });
+    for (const attached of attachedTooltips) attached.build();
+    const call = tooltipCalls.find((c) => c.itemId === 'worn_sword');
+    expect(call).toBeDefined();
+    expect(call?.instance?.perfected, 'an absent marker stays absent').toBeUndefined();
+    expect(call?.instance?.name).toBe('Oathkeeper');
+  });
+
+  it('a perfected peer row passes its public active marker to the tooltip', () => {
+    openWith({
+      ...baseEntity,
+      equippedItems: { mainhand: 'worn_sword' },
+      equippedInstances: {
+        mainhand: { name: 'Oathkeeper', rolled: { quality: 'legendary' }, perfected: true },
+      },
+    });
+    for (const attached of attachedTooltips) attached.build();
+    const call = tooltipCalls.find((c) => c.itemId === 'worn_sword');
+    expect(call).toBeDefined();
+    expect(call?.instance?.perfected).toBe(true);
+    expect(call?.instance?.name).toBe('Oathkeeper');
   });
 });

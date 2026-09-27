@@ -7,6 +7,12 @@ import { resolveMobAuraIconIdentity } from './mob_aura_icon_art';
 export interface AuraIconIdentity {
   id: string;
   kind: string;
+  /** True for a FLASK-sourced buff (sim: Aura.flask; wire: the `fl` marker).
+   *  A flask, an elixir and a scroll of one stat all mint the SAME aura id, so
+   *  the id alone cannot tell them apart and every one of them painted the
+   *  shared aura_<kind> glyph. Optional, so a caller that has no marker (a mob
+   *  aura, a test fixture) behaves exactly as before. */
+  flask?: boolean;
 }
 
 export type AuraIdentityProbe = (id: string) => boolean;
@@ -63,9 +69,6 @@ export const RUNTIME_AURA_ICON_SOURCE_IDS: ReadonlyMap<string, string> = new Map
   ['avenging_wrath_buff_haste', 'avenging_wrath'],
   ['avenging_wrath_buff_healing_done', 'avenging_wrath'],
   ['bastion_rite_buff_block', 'bastion_rite'],
-  // Benison Dawnweave 4pc mend (src/sim/combat/priest/benison.ts): same icon
-  // family as the Seraphic Vigil it pays off.
-  ['benison_dawnweave_mend', 'seraphic_vigil'],
   ['bladed_echo', 'whirlwind'],
   ['bloodhook_bleed', 'bloodhook'],
   ['bloodhook_pending', 'bloodhook'],
@@ -109,9 +112,11 @@ export const RUNTIME_AURA_ICON_SOURCE_IDS: ReadonlyMap<string, string> = new Map
   ['ignite', 'ignition'],
   ['lich_form_army', 'metamorphosis'],
   ['lich_form_army_haste', 'metamorphosis'],
+  ['bruin_rush_window', 'bear_charge'],
   ['loping_stride', 'cat_form'],
   ['marked_prey', 'kidney_shot'],
   ['marrowbreak_guard', 'marrowbreak'],
+  ['pin', 'bear_charge'],
   ['natures_fury', 'hurricane'],
   ['oath_chain_pull', 'oath_chain'],
   // Oathpyre 4pc consume shield (src/sim/combat/paladin_solar_reprisal.ts):
@@ -134,6 +139,8 @@ export const RUNTIME_AURA_ICON_SOURCE_IDS: ReadonlyMap<string, string> = new Map
   ['powerup_pow_speed_demon_buff_speed', 'pow_speed_demon'],
   ['pri_inner_fire', 'martyrs_aegis'],
   ['pri_measured_faith', 'lesser_heal'],
+  ['priest_benison_prayers', 'prayer_of_healing'],
+  ['priest_benison_whisper', 'lesser_heal'],
   ['priest_doctrine', 'power_word_shield'],
   ['priest_effigy', 'mind_blast'],
   ['priest_gloomtithe', 'summon_tithefiend'],
@@ -169,6 +176,7 @@ export const RUNTIME_AURA_ICON_SOURCE_IDS: ReadonlyMap<string, string> = new Map
   ['shaman_gathering_winds_icd', 'galeheart_weapon'],
   ['shaman_living_weapon_absorb', 'rockbiter_weapon'],
   ['shaman_living_weapon_bolt', 'rockbiter_weapon'],
+  ['shaman_magma_surge', 'lava_burst'],
   ['shaman_primal_exaltation', 'elemental_mastery'],
   ['shaman_pyrebrand_mastery', 'rockbiter_weapon'],
   ['shaman_stonebound_armor', 'rockbiter_weapon'],
@@ -302,6 +310,16 @@ export function resolveAuraIconId(
   hasAuraRecipe: AuraIdentityProbe,
   hasAuraImageIdentity: AuraIdentityProbe,
 ): string {
+  // The FLASK arm runs FIRST, ahead of every identity probe, and that ordering
+  // is the point rather than an oversight. A flask's aura id IS its elixir's
+  // (`elixir_<kind>`, shared by the flask, elixir and scroll sources on
+  // purpose), and that id carries its own dedicated recipe, so any later
+  // placement is unreachable: the id arm would answer before the marker was
+  // ever consulted. The marker is strictly MORE specific than a deliberately
+  // shared id, so it outranks it.
+  const flaskId = flaskAuraIconId(aura, hasAuraRecipe);
+  if (flaskId) return flaskId;
+
   const kindSources = RUNTIME_AURA_ICON_SOURCE_IDS_BY_KIND.get(aura.id);
   if (kindSources) {
     const source = kindSources.get(aura.kind);
@@ -351,6 +369,23 @@ export function resolveAuraIconId(
 }
 
 /**
+ * The dedicated glyph for a FLASK-sourced buff, or null when the aura is not
+ * flask-marked (or its stat has no flask recipe yet).
+ *
+ * A flask, an elixir and a scroll of one stat mint the same aura id, so the id
+ * carries no source and all three painted the same art: the buff bar could not
+ * say which of them a player was wearing, and a flask is exactly the one worth
+ * telling apart, since it survives death and cannot be right-clicked off. A
+ * stat with no `flask_<kind>` recipe answers null and falls through to the
+ * ordinary resolution, so adding the marker can never blank an icon.
+ */
+function flaskAuraIconId(aura: AuraIconIdentity, hasAuraRecipe: AuraIdentityProbe): string | null {
+  if (aura.flask !== true) return null;
+  const id = `flask_${aura.kind}`;
+  return hasAuraRecipe(id) ? id : null;
+}
+
+/**
  * Build the frame-path resolver used by the HUD. Aura identities are stable for
  * the life of an aura, so cache the result by the wire id and kind. The capped
  * FIFO keeps hostile or future server-authored identities from growing the HUD
@@ -361,10 +396,14 @@ export function createAuraIconResolver(
   hasAuraRecipe: AuraIdentityProbe,
   hasAuraImageIdentity: AuraIdentityProbe,
 ): (aura: AuraIconIdentity) => string {
-  const cache = new Map<string, { kind: string; iconId: string }>();
+  // The flask marker joins the cache identity, not just the kind: a flask and
+  // an elixir of one stat share an aura id, so a key of id+kind alone would
+  // hand the second one whichever glyph the first resolved.
+  const cache = new Map<string, { kind: string; flask: boolean; iconId: string }>();
   return (aura) => {
+    const flask = aura.flask === true;
     const cached = cache.get(aura.id);
-    if (cached?.kind === aura.kind) return cached.iconId;
+    if (cached?.kind === aura.kind && cached.flask === flask) return cached.iconId;
 
     const iconId = resolveAuraIconId(
       aura,
@@ -376,7 +415,7 @@ export function createAuraIconResolver(
       const oldest = cache.keys().next().value;
       if (oldest !== undefined) cache.delete(oldest);
     }
-    cache.set(aura.id, { kind: aura.kind, iconId });
+    cache.set(aura.id, { kind: aura.kind, flask, iconId });
     return iconId;
   };
 }

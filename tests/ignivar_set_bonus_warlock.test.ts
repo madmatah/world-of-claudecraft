@@ -12,9 +12,10 @@
 // Ruincaller 2pc is a generic bonusCharges row on Conflagrate's native
 // 2-charge pool (the {charges} splice reads the same resolved count) with the
 // unequip clamp proven mid-fight; 4pc is a dmgPct row on Ruinbolt sized
-// DELIVERED (0.22 against the 0.1 spec-baseline spellDmgPct floor, 20 percent
-// exactly). Non-wearer rng stays byte-identical everywhere; no warlock bend
-// draws rng.
+// DELIVERED (0.242 against the 1.21 post-v0.42.0 destruction baseline: the
+// 0.1 spec-baseline spellDmgPct floor plus the v0.42.0 Ruination offense-only
+// spell bonus of 0.11, 20 percent exactly). Non-wearer rng stays
+// byte-identical everywhere; no warlock bend draws rng.
 import { describe, expect, it } from 'vitest';
 import {
   doomValue,
@@ -459,10 +460,90 @@ describe('Ruincaller 2pc: Conflagrate holds 3 charges', () => {
     expect(sim.player.abilityCharges?.conflagrate?.maxCharges).toBe(3);
     expect(sim.player.abilityCharges?.conflagrate?.charges).toBe(2);
   });
+
+  it('an unequip on an empty pool keeps one recharge timer per missing charge', () => {
+    const sim = liveWarlock(521, 'destruction');
+    equipSet(sim, 'ruincaller', 2);
+    const target = addHostileTarget(sim);
+    sim.targetEntity(target.id);
+    for (let use = 0; use < 3; use++) {
+      ensurePact(sim, target);
+      sim.player.gcdRemaining = 0;
+      sim.player.resource = sim.player.maxResource;
+      sim.castAbility('conflagrate');
+      for (let tick = 0; tick < 10; tick++) sim.tick();
+    }
+    const spent = sim.player.abilityCharges?.conflagrate;
+    expect(spent?.charges).toBe(0);
+    expect(spent?.recharges).toHaveLength(3);
+    const soonest = [...(spent?.recharges ?? [])].slice(0, 2);
+    sim.unequipItem('helmet'); // the cap drops 3 -> 2 with every use spent
+    const pool = sim.player.abilityCharges?.conflagrate;
+    expect(pool?.maxCharges).toBe(2);
+    expect(pool?.charges).toBe(0);
+    // A third timer would pay out a charge the clamped pool no longer owes
+    // (early, on top of the next spend's own timer). The two oldest spends
+    // keep their schedule.
+    expect(pool?.recharges).toEqual(soonest);
+    expect(pool?.recharge).toBe(soonest[0]);
+  });
+
+  it('an unequip keeps no timer on a full pool and one per missing charge otherwise', () => {
+    const conflagratePool = (charges: number, recharges: number[]) => {
+      const sim = liveWarlock(522, 'destruction');
+      equipSet(sim, 'ruincaller', 2);
+      // Extra timers beside the missing charges: the shape a pre-fix reset
+      // could leave (a live pool, or one restored from such a save).
+      sim.player.abilityCharges = {
+        conflagrate: {
+          charges,
+          maxCharges: 3,
+          recharge: recharges[0],
+          rechargeLength: 18,
+          recharges,
+        },
+      };
+      sim.unequipItem('helmet'); // the cap drops 3 -> 2
+      return sim.player.abilityCharges?.conflagrate;
+    };
+    const full = conflagratePool(3, [5, 9]);
+    expect(full?.charges).toBe(2);
+    expect(full?.recharges ?? []).toEqual([]);
+    const partial = conflagratePool(2, [4, 8, 12]);
+    expect(partial?.charges).toBe(1);
+    expect(partial?.recharges).toEqual([4]);
+  });
+
+  it('an unequip that empties the pool blocks a cast before the next tick', () => {
+    const sim = liveWarlock(523, 'destruction');
+    equipSet(sim, 'ruincaller', 2);
+    const target = addHostileTarget(sim);
+    sim.targetEntity(target.id);
+    for (let use = 0; use < 2; use++) {
+      ensurePact(sim, target);
+      sim.player.gcdRemaining = 0;
+      sim.player.resource = sim.player.maxResource;
+      sim.castAbility('conflagrate');
+      for (let tick = 0; tick < 10; tick++) sim.tick();
+    }
+    expect(sim.player.abilityCharges?.conflagrate?.charges).toBe(1);
+    sim.unequipItem('helmet'); // cap 3 -> 2 with 2 spent: the pool is now empty
+    const pool = sim.player.abilityCharges?.conflagrate;
+    expect(pool?.charges).toBe(0);
+    expect(sim.player.cooldowns.get('conflagrate')).toBe(pool?.recharge);
+    // Same command batch, no tick between: the empty pool refuses the cast and
+    // no third timer lands on the 2-charge pool.
+    ensurePact(sim, target);
+    sim.player.gcdRemaining = 0;
+    sim.player.resource = sim.player.maxResource;
+    sim.castAbility('conflagrate');
+    expect(sim.player.resource).toBe(sim.player.maxResource);
+    expect(pool?.recharges).toHaveLength(2);
+  });
 });
 
 describe('Ruincaller 4pc: Ruinbolt strikes 20 percent harder, delivered', () => {
-  it('the accumulator: 1.32 for wearers against the 1.1 spec-baseline floor', () => {
+  it('the accumulator: 1.452 for wearers against the 1.21 spec-baseline floor', () => {
     const wearerMult = resolveTalentHitMult(
       ABILITIES.chaos_bolt,
       warlockMods('destruction', worn('ruincaller', 4)),
@@ -471,11 +552,18 @@ describe('Ruincaller 4pc: Ruinbolt strikes 20 percent harder, delivered', () => 
       ABILITIES.chaos_bolt,
       warlockMods('destruction', {}),
     ).dmgMult;
-    expect(baseMult).toBeCloseTo(1.1, 10);
-    expect(wearerMult).toBeCloseTo(1.1 + RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT, 10);
+    // v0.42.0 Ruination retune: the 0.1 spec-baseline spellDmgPct floor
+    // (spec_baselines.ts) plus the new 0.11 offense-only spell bonus
+    // (spec_output_tuning.ts) puts the real baseline at 1.21, not the
+    // pre-v0.42.0 1.1; RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT was re-derived
+    // (0.242) to keep the delivered bonus at exactly 20 percent.
+    expect(baseMult).toBeCloseTo(1.21, 10);
+    expect(wearerMult).toBeCloseTo(1.21 + RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT, 10);
     // Delivered: exactly the 20 percent the copy promises.
     expect(wearerMult / baseMult).toBeCloseTo(1.2, 10);
-    // The floor this sizing leans on (spec_baselines.ts).
+    // The floor this sizing leans on (spec_baselines.ts); the v0.42.0
+    // offense-only spell bonus is a separate additive component
+    // (spec_output_tuning.ts) and does not move this legacy floor.
     expect(specBaselineFor('warlock', 'destruction')?.global?.spellDmgPct).toBeCloseTo(0.1, 10);
   });
 
@@ -511,7 +599,9 @@ describe('the wearer literals against the authored copy', () => {
     expect(GRAVEBRAND_2PC_REAPING_COOLDOWN_CUT_SEC).toBe(2);
     expect(GRAVEBRAND_4PC_UNISON_DAMAGE_MULT).toBeCloseTo(1.25, 10);
     expect(RUINCALLER_2PC_CONFLAGRATE_BONUS_CHARGES).toBe(1);
-    expect(RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT).toBeCloseTo(0.22, 10);
+    // v0.42.0 Ruination re-derivation: 0.2 x the new 1.21 destruction
+    // baseline (was 0.22 against the pre-v0.42.0 1.1 baseline).
+    expect(RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT).toBeCloseTo(0.242, 10);
     // The base literals the copy's claims lean on.
     const needle = ABILITIES.needle_of_fate.effects.find((eff) => eff.type === 'afflictionNeedle');
     expect(needle && 'doom' in needle ? needle.doom : undefined).toBe(7);

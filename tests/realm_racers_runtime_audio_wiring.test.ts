@@ -292,8 +292,9 @@ describe('Realm Racers coordinator audio wiring', () => {
     const view = {
       vehicleAudioActive: true,
       // removeView also runs the release's raid-encounter teardown over the
-      // group, which probes it by name; a bare object is enough for a racer.
-      group: { getObjectByName: () => undefined },
+      // group, which probes it by name and clears its telegraph mark; a bare
+      // object is enough for a racer.
+      group: { getObjectByName: () => undefined, userData: {} },
       viewLights: [],
       clickTarget: {},
       visual: { dispose: vi.fn() },

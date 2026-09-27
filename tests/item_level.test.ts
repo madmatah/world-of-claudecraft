@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HEROIC_BOSS_LOOT } from '../src/sim/content/heroic_loot';
+import { TROPHY_RECIPES } from '../src/sim/content/recipes';
 import {
   RIFT_EPIC_ITEM_IDS,
   RIFT_LEGENDARY_ITEM_IDS,
@@ -8,11 +9,13 @@ import {
 import { ITEMS, MOBS } from '../src/sim/data';
 import { occupiesHand } from '../src/sim/equipment_rules';
 import {
+  expectedLineBudget,
   expectedStatBudget,
   itemFromRaid,
   itemLevel,
   itemScore,
   itemSourceLevel,
+  itemStaminaModel,
   normalizePrimaryStats,
   PRIMARY_STATS,
   primaryStatBudget,
@@ -21,6 +24,7 @@ import {
   RIFT_CLEAR_LOOT_SOURCE_LEVEL,
   RIFT_LEGENDARY_LOOT_SOURCE_LEVEL,
   resetItemLevelCache,
+  statIdentity,
 } from '../src/sim/item_level';
 
 // The showcase tiers wired up in src/sim/content/items.ts: two trios, each one
@@ -113,25 +117,47 @@ describe('item level: showcase tiers are normalized to budget', () => {
     }
   });
 
-  it('items from the same place share one item level and one budget (same tier)', () => {
+  it('items from the same place share one item level and one line budget (same tier)', () => {
     const chestLevels = new Set(CHEST_TRIO.map((id) => itemLevel(ITEMS[id])));
-    const chestBudgets = new Set(CHEST_TRIO.map((id) => primaryStatSum(ITEMS[id])));
+    const chestLines = new Set(CHEST_TRIO.map((id) => expectedLineBudget(ITEMS[id])));
     expect(chestLevels).toEqual(new Set([10]));
-    expect(chestBudgets).toEqual(new Set([6]));
+    expect(chestLines).toEqual(new Set([6]));
+    // Totals diverge by identity: the caster piece (gravewoven_raiment) carries
+    // its stamina baseline on top of the shared line, while the two physical
+    // pieces already hold theirs inside it and so still share one total.
+    const chestTotalsByIdentity = new Map<string, Set<number>>();
+    for (const id of CHEST_TRIO) {
+      const identity = statIdentity(ITEMS[id].stats);
+      const totals = chestTotalsByIdentity.get(identity) ?? new Set<number>();
+      totals.add(primaryStatSum(ITEMS[id]));
+      chestTotalsByIdentity.set(identity, totals);
+    }
+    expect(chestTotalsByIdentity.get('physical')).toEqual(new Set([6]));
+    expect(chestTotalsByIdentity.get('caster')).toEqual(new Set([8]));
 
     const weaponLevels = new Set(WEAPON_TRIO.map((id) => itemLevel(ITEMS[id])));
-    const weaponBudgets = new Set(WEAPON_TRIO.map((id) => primaryStatSum(ITEMS[id])));
+    const weaponLines = new Set(WEAPON_TRIO.map((id) => expectedLineBudget(ITEMS[id])));
     expect(weaponLevels).toEqual(new Set([13]));
-    expect(weaponBudgets).toEqual(new Set([7]));
+    expect(weaponLines).toEqual(new Set([7]));
+    const weaponTotalsByIdentity = new Map<string, Set<number>>();
+    for (const id of WEAPON_TRIO) {
+      const identity = statIdentity(ITEMS[id].stats);
+      const totals = weaponTotalsByIdentity.get(identity) ?? new Set<number>();
+      totals.add(primaryStatSum(ITEMS[id]));
+      weaponTotalsByIdentity.set(identity, totals);
+    }
+    expect(weaponTotalsByIdentity.get('physical')).toEqual(new Set([7]));
+    expect(weaponTotalsByIdentity.get('caster')).toEqual(new Set([9]));
   });
 
   it('normalization preserved each piece stat identity (no attribute swapped in/out)', () => {
     const ident = (id: string) =>
       PRIMARY_STATS.filter((k) => (ITEMS[id].stats?.[k] ?? 0) > 0).sort();
     expect(ident('hollowbone_hauberk')).toEqual(['sta', 'str']);
-    expect(ident('gravewoven_raiment')).toEqual(['int', 'spi']);
+    // Caster pieces now also carry the free stamina baseline as a real stat.
+    expect(ident('gravewoven_raiment')).toEqual(['int', 'spi', 'sta']);
     expect(ident('cryptstalker_jerkin')).toEqual(['agi', 'sta']);
-    expect(ident('gravecaller_staff')).toEqual(['int', 'spi']);
+    expect(ident('gravecaller_staff')).toEqual(['int', 'spi', 'sta']);
   });
 });
 
@@ -236,17 +262,30 @@ describe('item level: heroic boss drops are budget-exact (five-mans 31, raid 33/
     // its explicit table lists the three heroic-only weapons (item level 33) plus
     // the two blue mount reins secondary paths (excluded from budget sweep below).
     // Mount reins (kind 'mount') have no item level; only armor/weapon entries are
-    // budget-enforced.
+    // budget-enforced. The same is true of the farming PATTERNS masterwrought
+    // Phase 11f appended to every five-man table (kind 'recipe'): a pattern
+    // carries no slot, so itemLevel() is undefined for it and the budget sweep
+    // would be asking a meaningless question. Excluded by KIND, like the
+    // reins, rather than by naming its group, because the reason is the same
+    // one: it is not gear.
     const isGearEntry = (itemId: string): boolean => {
       const item = ITEMS[itemId];
-      return !!item && item.kind !== 'mount';
+      return !!item && item.kind !== 'mount' && item.kind !== 'recipe';
     };
     const raidIds = new Set(
       (HEROIC_BOSS_LOOT.nythraxis_scourge_of_thornpeak ?? []).flatMap((e) =>
         e.itemId && isGearEntry(e.itemId) ? [e.itemId] : [],
       ),
     );
-    expect(raidIds.size).toBe(3); // the three heroic-only raid weapons
+    // The three heroic-only raid weapons plus the four raid trinkets
+    // (content/trinkets.ts), all in the one heroic-exclusive group.
+    expect(raidIds.size).toBe(7);
+    expect([...raidIds].filter((id) => ITEMS[id].slot === 'trinket').sort()).toEqual([
+      'echoing_lens',
+      'hunters_tally',
+      'mooring_stone',
+      'wellspring_seed',
+    ]);
     // The Ignivar raid bosses' heroic-only appends live in this table too but
     // read the Crucible tier (source 26, ilvl 35, sigil tokens with no item
     // level at all); their pins live in tests/ignivar_loot.test.ts, so this
@@ -258,7 +297,9 @@ describe('item level: heroic boss drops are budget-exact (five-mans 31, raid 33/
     const ids = Object.entries(HEROIC_BOSS_LOOT)
       .filter(([bossId]) => !IGNIVAR_RAID_BOSSES.has(bossId))
       .flatMap(([, entries]) => entries)
-      .flatMap((e) => (e.itemId && isGearEntry(e.itemId) ? [e.itemId] : []));
+      .flatMap((e) =>
+        e.itemId && !e.preserveSourceTier && isGearEntry(e.itemId) ? [e.itemId] : [],
+      );
     expect(ids.length).toBeGreaterThanOrEqual(12); // the full five-man heroic set + raid weapons
     for (const id of ids) {
       const item = ITEMS[id];
@@ -293,11 +334,16 @@ describe('item level: heroic boss drops are budget-exact (five-mans 31, raid 33/
       if (variant.quality === 'legendary') {
         legendaries++;
         expect(itemLevel(variant), `${variant.id} ilvl`).toBe(53);
-        // The mint keeps its base's line (normalize-to-max): Heartwood's
-        // banded 65, Thronebane's owned 44 plus the heroic seed (49). The 53
-        // label prices the dominant axes, not a fresh stat roll.
+        // The mint keeps its base's line (normalize-to-max), then the stamina
+        // baseline model (item_budget.ts) lands on top of it: Heartwood is
+        // caster identity, so its 65-point line plus a 22-point baseline bands
+        // to 87; Thronebane is on the drift allowlist, so only its stamina
+        // floor was topped up, growing its own 44-point line to a 53-point
+        // total that already clears the heroic mint's target, so the mint
+        // keeps it unchanged. The 53 ilvl label prices the dominant axes, not
+        // a fresh stat roll.
         expect(primaryStatSum(variant), `${variant.id} banded stats`).toBe(
-          variant.id === 'heroic_deathless_heartwood' ? 65 : 49,
+          variant.id === 'heroic_deathless_heartwood' ? 87 : 53,
         );
         continue;
       } else {
@@ -330,7 +376,7 @@ describe('item level: every level-20 item is balanced to budget', () => {
     expect(offBudget, offBudget.join('\n')).toEqual([]);
   });
 
-  it('level-20 items of the same item level + slot + hand share one budget', () => {
+  it('level-20 items of the same item level + slot + hand + identity share one budget', () => {
     const groups = new Map<string, Set<number>>();
     for (const id of Object.keys(ITEMS)) {
       const item = ITEMS[id];
@@ -344,7 +390,12 @@ describe('item level: every level-20 item is balanced to budget', () => {
         : item.kind === 'weapon' && item.hand === 'twohand'
           ? 'twohand'
           : 'onehand';
-      const key = `${itemLevel(item)}:${item.quality}:${item.slot}:${hand}`;
+      // The stamina baseline model (item_budget.ts) makes the TOTAL
+      // identity-dependent: a caster piece carries its baseline on top of the
+      // shared line, a physical piece already holds it inside. Group by
+      // identity too so the check still pins a real shared budget within each.
+      const identity = statIdentity(item.stats);
+      const key = `${itemLevel(item)}:${item.quality}:${item.slot}:${hand}:${identity}`;
       let sums = groups.get(key);
       if (!sums) {
         sums = new Set();
@@ -359,10 +410,14 @@ describe('item level: every level-20 item is balanced to budget', () => {
 
   it('the Nythraxis legendaries carry their landed band budgets', () => {
     // The 2026-08-30 legendary band: Heartwood is BUFFED budget-true to its
-    // ilvl-49 label (65 points); Thronebane keeps its owned 44-point line by
-    // maintainer direction, priced by its weapon axis instead.
-    expect(primaryStatSum(ITEMS.deathless_heartwood)).toBe(65);
-    expect(primaryStatSum(ITEMS.kingsbane_last_oath)).toBe(44);
+    // ilvl-49 label (a 65-point line); Thronebane keeps its owned 44-point
+    // line by maintainer direction, priced by its weapon axis instead. The
+    // stamina baseline model (item_budget.ts) then lands on top: Heartwood is
+    // caster identity and fully on its line, so it bands to 65 + 22 = 87;
+    // Thronebane is on the drift allowlist, so only its stamina floor was
+    // topped up, growing its line total from 44 to 53.
+    expect(primaryStatSum(ITEMS.deathless_heartwood)).toBe(87);
+    expect(primaryStatSum(ITEMS.kingsbane_last_oath)).toBe(53);
   });
 });
 
@@ -401,11 +456,13 @@ describe('item level: rift gear is budget-exact (rares ilvl 26, epics ilvl 31, l
       expect(item.quality, `${id} quality`).toBe('epic');
       expect(itemLevel(item), `${id} ilvl`).toBe(31);
       expect(primaryStatSum(item), `${id} stat sum == budget`).toBe(expectedStatBudget(item));
-      // Every rift epic must carry exactly one combat rating.
+      // Every rift epic must carry exactly one combat rating, except the rift
+      // trinkets: a trinket's use effect is its differentiator and it carries
+      // no rating at all.
       const ratingCount = [item.hitRating, item.critRating, item.hasteRating].filter(
         (r) => r !== undefined && r > 0,
       ).length;
-      expect(ratingCount, `${id} carries one combat rating`).toBe(1);
+      expect(ratingCount, `${id} carries one combat rating`).toBe(item.slot === 'trinket' ? 0 : 1);
     }
   });
 
@@ -462,10 +519,14 @@ describe('heroic set: class coverage', () => {
 });
 
 describe('item level: crafted gear derives its level from the recipe (content/recipes.ts)', () => {
-  // The three level-20, hub-gated caster pieces (issue #1965 review): budgeted at
-  // ITEM level (recipe level 20 + the rare QUALITY_ILVL_BONUS of 3 = 23), matching
-  // the level-20 rares in the same slots (boundstone_helm, gravewyrm_gauntlets,
-  // gravewyrm_mantle).
+  // The three hub caster pieces (issue #1965 review): STATS budgeted at their
+  // authoring-time ITEM level (recipe level 20 + the rare QUALITY_ILVL_BONUS
+  // of 3 = 23), matching the level-20 rares in the same slots
+  // (boundstone_helm, gravewyrm_gauntlets, gravewyrm_mantle). Since
+  // masterwrought Phase 11o (qr-11o-WEAR) the recipes carry level 17
+  // (cowl, mantle) and 15 (wraps), so the LIVE item levels read 20/20/18 and
+  // the pieces deliberately sit above the derived budget of the new levels:
+  // the re-level moved WHEN they can be worn, never their stats.
   const CASTER_HUB_IDS = ['wardweave_cowl', 'duskhide_wraps', 'sootscale_mantle'];
   const CASTER_COMMON_IDS = [
     'eastbrook_ritual_vestments',
@@ -480,19 +541,170 @@ describe('item level: crafted gear derives its level from the recipe (content/re
     }
   });
 
-  it('the hub caster pieces land at item level 23 and carry their exact stat budget', () => {
+  it('the hub caster pieces land at their re-leveled item levels and keep their authored budgets', () => {
+    // Per id: [live item level, authored stat sum (the ilvl-23 budget), live
+    // derived budget at the new level]. The authored sum sitting ABOVE the
+    // live budget is the 11o design, asserted explicitly so a well-meaning
+    // re-budget to the new level reads as the nerf it would be.
+    const EXPECTED: Record<string, [number, number, number]> = {
+      wardweave_cowl: [20, 14, 13],
+      duskhide_wraps: [18, 11, 9],
+      sootscale_mantle: [20, 13, 11],
+    };
     for (const id of CASTER_HUB_IDS) {
       const item = ITEMS[id];
-      expect(itemLevel(item), `${id} item level`).toBe(23);
-      const budget = expectedStatBudget(item);
-      expect(budget, `${id} has a derivable budget`).not.toBeUndefined();
-      expect(primaryStatSum(item), `${id} stat sum == budget`).toBe(budget);
+      const [level, authoredSum, liveBudget] = EXPECTED[id];
+      expect(itemLevel(item), `${id} item level`).toBe(level);
+      expect(primaryStatSum(item), `${id} authored stat sum`).toBe(authoredSum);
+      expect(expectedStatBudget(item), `${id} live derived budget`).toBe(liveBudget);
+      // The over-budget claim reads the LIVE values, not the table's own
+      // literals, so it can fail independently of the rows above.
+      expect(primaryStatSum(item), `${id} stays deliberately over the live budget`).toBeGreaterThan(
+        expectedStatBudget(item) ?? Number.POSITIVE_INFINITY,
+      );
     }
   });
 
-  it('matches the existing level-20 rares sharing its slot (helmet 11, gloves 9, shoulder 10)', () => {
-    expect(primaryStatSum(ITEMS.wardweave_cowl)).toBe(primaryStatSum(ITEMS.boundstone_helm));
-    expect(primaryStatSum(ITEMS.duskhide_wraps)).toBe(primaryStatSum(ITEMS.gravewyrm_gauntlets));
-    expect(primaryStatSum(ITEMS.sootscale_mantle)).toBe(primaryStatSum(ITEMS.gravewyrm_mantle));
+  it('matches the existing level-20 rares sharing its slot on their line (helmet 11, gloves 9, shoulder 10)', () => {
+    // The hub pieces are caster identity, so their TOTAL now carries the
+    // stamina baseline on top of the line (item_budget.ts, the stamina
+    // baseline model); the shared-authoring-budget design intent only still
+    // holds on the LINE (Intellect + Spirit), which a physical sibling's
+    // total already equals since its own baseline sits inside its budget.
+    expect(itemStaminaModel(ITEMS.wardweave_cowl)?.line).toBe(
+      primaryStatSum(ITEMS.boundstone_helm),
+    );
+    expect(itemStaminaModel(ITEMS.duskhide_wraps)?.line).toBe(
+      primaryStatSum(ITEMS.gravewyrm_gauntlets),
+    );
+    expect(itemStaminaModel(ITEMS.sootscale_mantle)?.line).toBe(
+      primaryStatSum(ITEMS.gravewyrm_mantle),
+    );
+  });
+});
+
+describe('item level: the phase 11l trophy recipe outputs (TROPHY_RECIPES)', () => {
+  // The recipe route registers an acquisition source at recipe.level
+  // (buildSourceIndex), so a trophy row's level is part of its output's item
+  // level: a future level edit on a trophy row is a deliberate re-tier of a
+  // shipped item, never a drive-by. The itemLevel pin is decisive only UPWARD
+  // for the rows capped at their output's live drop source (the
+  // oiled boots, the gravewyrm bone quiver at Korzul, where the rung-50
+  // scaffolding and the level-20 cap coincide, the maul, the cragprowl belt
+  // at the Thornpeak Ogres, the leather row the second review round added,
+  // and the wildgrove cinch at the Ridge Stalkers, the pelt's output since
+  // the fourth fix round re-picked it off cragwalker_boots): the mob source
+  // wins on a LOWERED recipe level and the item level never moves, which is
+  // why the recipe.level literal is pinned beside it in TROPHY_RECIPE_LEVELS.
+  // (The lantern and the hobnail boots left this map when the 11l QA excluded
+  // their rows; the arm below pins what their item levels read without
+  // them.) The potion and the pouch carry no combat slot, so they are not
+  // item-level eligible and stay undefined whatever the row says.
+  const TROPHY_OUTPUT_LEVELS: Record<string, number | undefined> = {
+    oiled_boots: 11,
+    gravewyrm_bone_quiver: 23,
+    fenshadow_maul: 13,
+    lesser_healing_potion: undefined,
+    linen_pouch: undefined,
+    // 15 = the Ridge Stalkers' 14 plus the uncommon bonus 1 (the same 15
+    // tests/itemization_coverage.test.ts pins from the drop side).
+    wildgrove_cinch: 15,
+    cragprowl_belt: 17,
+  };
+
+  it('the pinned outputs are exactly the TROPHY_RECIPES result ids', () => {
+    expect(TROPHY_RECIPES.map((r) => r.resultItemId).sort()).toEqual(
+      Object.keys(TROPHY_OUTPUT_LEVELS).sort(),
+    );
+  });
+
+  it('pins every trophy output at its item level', () => {
+    expect(Object.keys(TROPHY_OUTPUT_LEVELS)).toHaveLength(7);
+    for (const [id, level] of Object.entries(TROPHY_OUTPUT_LEVELS)) {
+      expect(ITEMS[id], `${id} is a real item`).toBeTruthy();
+      expect(itemLevel(ITEMS[id]), `${id} item level`).toBe(level);
+    }
+  });
+
+  it('the re-pick and the exclusion took the derived item level back off both knives', () => {
+    // The fifth fix round moved the weaponcrafting rung-25 row off the
+    // vendor-only carving knife (R21: a 3.06 dps dagger the recipe's level
+    // 15 sorted above rare item-level-14 daggers), so it is sourceless again
+    // and its tooltip shows no item level line, the pre-phase behavior. The
+    // sixth fix round then output-excluded the chipped tusk outright (every
+    // uncrafted weapon in its band is dominated by the trainer's own
+    // recipe_whetted_iron_dirk), so the Mirejaw fang knife it had moved onto
+    // is sourceless again too: a Drowned Litany chest is not an item level
+    // source, and the recipe was the one thing that gave it a level.
+    expect(itemLevel(ITEMS.vale_carving_knife)).toBeUndefined();
+    expect(itemLevel(ITEMS.mirejaw_fang_knife)).toBeUndefined();
+  });
+
+  it('the 11l QA exclusions left the lantern at its Mogger level and took the boots back to sourceless', () => {
+    // The valefire_lantern row was capped at Mogger's level 6 so the item
+    // level never moved; with the row gone it still reads 7 from that drop.
+    // hobnail_boots gained its only source from the deleted row (an honest
+    // 10 chosen by hand), so it is vendor-only and sourceless again, with no
+    // tooltip item level line, the pre-phase behavior.
+    expect(itemLevel(ITEMS.valefire_lantern)).toBe(7);
+    expect(itemLevel(ITEMS.hobnail_boots)).toBeUndefined();
+  });
+
+  // The recipe.level literal per row: the source-capped rows sit AT their
+  // output's live source level (a lowered value would be invisible to the
+  // itemLevel pin above), the scaffolding rows at the rung convention, and
+  // the boots at the chosen content level.
+  const TROPHY_RECIPE_LEVELS: Record<string, number> = {
+    recipe_oiled_boots: 10,
+    recipe_gravewyrm_bone_quiver: 20,
+    recipe_fenshadow_maul: 12,
+    recipe_lesser_healing_potion: 15,
+    recipe_linen_pouch: 10,
+    recipe_wildgrove_cinch: 14,
+    recipe_cragprowl_belt: 16,
+  };
+
+  it('the pinned recipe levels are exactly the TROPHY_RECIPES rows', () => {
+    expect(TROPHY_RECIPES.map((r) => r.id).sort()).toEqual(
+      Object.keys(TROPHY_RECIPE_LEVELS).sort(),
+    );
+  });
+
+  it('pins every trophy row at its recipe level', () => {
+    expect(Object.keys(TROPHY_RECIPE_LEVELS)).toHaveLength(7);
+    for (const recipe of TROPHY_RECIPES) {
+      expect(recipe.level, `${recipe.id} recipe.level`).toBe(TROPHY_RECIPE_LEVELS[recipe.id]);
+    }
+  });
+
+  // The RUNG per row, EXACTLY: the trainer view buckets skillReq into 25-point
+  // tiers (train_view.ts tierForSkill), the training fee and the craft cast
+  // read the same bucket, and the mastery model pinned only the hobnail row,
+  // so a within-band drift (25 to 49) on six of the seven rows survived every
+  // suite (the 11l QA's test-coverage audit, mutation-proven). The literal
+  // holds each row's rung to the digit; the rung is NOT derivable from a
+  // drop-zone rule, and this map is the record of why each sits where it
+  // does: the four zone-3 and dungeon trophies (the wyrm scale, the ogre
+  // tusk, the pelt, the cinderscale) feed the rung-50 registers; the mudfin
+  // scale drops from level 3 to 20 and the tallow from 4 to 15, and their
+  // rows sit at 25 on the marshstalker leather rung and under the rung-25
+  // healing draught (the potion is placed by the ladder, not by the drop);
+  // the bandana's four sources split two zone-1 and two level-20, and the
+  // rung-0 tailoring row is the honest tie-break for a 6-copper drop.
+  const TROPHY_RECIPE_RUNGS: Record<string, number> = {
+    recipe_oiled_boots: 25,
+    recipe_gravewyrm_bone_quiver: 50,
+    recipe_fenshadow_maul: 50,
+    recipe_lesser_healing_potion: 25,
+    recipe_linen_pouch: 0,
+    recipe_wildgrove_cinch: 50,
+    recipe_cragprowl_belt: 50,
+  };
+
+  it('pins every trophy row at its exact rung, not its 25-point tier', () => {
+    expect(Object.keys(TROPHY_RECIPE_RUNGS).sort()).toEqual(TROPHY_RECIPES.map((r) => r.id).sort());
+    for (const recipe of TROPHY_RECIPES) {
+      expect(recipe.skillReq, `${recipe.id} skillReq`).toBe(TROPHY_RECIPE_RUNGS[recipe.id]);
+    }
   });
 });

@@ -11,6 +11,7 @@ import {
   METRIC_REGISTRY,
   type MetricsSample,
   metricsPreset,
+  overlayCssOffset,
   overlayFractionFromPixel,
   overlayPixelPosition,
   PERF_COLOR_THEMES,
@@ -89,6 +90,26 @@ describe('perf overlay metric registry', () => {
     const apm = METRIC_REGISTRY.find((d) => d.key === 'apm');
     expect(apm?.group).toBe('input');
     expect(apm?.read(sample({ apm: 42 }))).toEqual({ kind: 'int', v: 42 });
+  });
+
+  it('colours the frame rows against a chosen Frame Rate Limit, and as before with none', () => {
+    const sev = (key: string, over: Partial<MetricsSample>) =>
+      METRIC_REGISTRY.find((m) => m.key === key)?.severity(sample(over));
+    const held30 = { fps: 30, frameTimeMs: 33.4, fps1Low: 28, fps01Low: 25 };
+    // No limit: a 30 fps session is a warning on fps and red on frame time.
+    expect(sev('fps', held30)).toBe('warn');
+    expect(sev('frameTime', held30)).toBe('bad');
+    // A limit of 30 on a 60 Hz display: the same numbers are the goal.
+    const limited = { ...held30, chosenFrameMs: 1000 / 30 };
+    expect(sev('fps', limited)).toBe('good');
+    expect(sev('frameTime', limited)).toBe('good');
+    expect(sev('fps1Low', limited)).toBe('good');
+    expect(sev('fps01Low', limited)).toBe('good');
+    // A limit the machine cannot hold still reads as a problem.
+    expect(sev('fps', { ...limited, fps: 14 })).toBe('bad');
+    expect(sev('frameTime', { ...limited, frameTimeMs: 70 })).toBe('bad');
+    // A limit faster than 60 (72 on a 144 Hz display) never tightens the rows.
+    expect(sev('frameTime', { fps: 60, frameTimeMs: 16.7, chosenFrameMs: 1000 / 72 })).toBe('good');
   });
 
   it('renders the server tick rate (network group) at one decimal, off by default', () => {
@@ -339,5 +360,30 @@ describe('free positioning math', () => {
     expect(resized.left).toBeLessThanOrEqual(1000 - 150 - 8);
     expect(resized.top).toBeGreaterThanOrEqual(8);
     expect(resized.top).toBeLessThanOrEqual(600 - 70 - 8);
+  });
+});
+
+describe('overlayCssOffset (author-space #ui zoom compensation)', () => {
+  it('is a no-op at UI Scale 1 (the default)', () => {
+    expect(overlayCssOffset({ left: 100, top: 200 }, 1)).toEqual({ left: 100, top: 200 });
+  });
+
+  it('divides the visual pixel offset by the live UI Scale into #ui author space, so the zoom re-multiplies it back to the intended on-screen spot', () => {
+    // Enlarged interface (uiScale > 1): the author length shrinks.
+    expect(overlayCssOffset({ left: 800, top: 400 }, 1.25)).toEqual({ left: 640, top: 320 });
+    // Reduced interface (uiScale < 1, the reported bug): the author length grows,
+    // which is what lets a corner-clamped visual position still reach the true
+    // corner once #ui's zoom shrinks it back down.
+    expect(overlayCssOffset({ left: 680, top: 680 }, 0.85)).toEqual({ left: 800, top: 800 });
+  });
+
+  it('falls back to scale 1 on a non-finite or non-positive scale, never blanking the offset', () => {
+    expect(overlayCssOffset({ left: 100, top: 50 }, 0)).toEqual({ left: 100, top: 50 });
+    expect(overlayCssOffset({ left: 100, top: 50 }, -2)).toEqual({ left: 100, top: 50 });
+    expect(overlayCssOffset({ left: 100, top: 50 }, Number.NaN)).toEqual({ left: 100, top: 50 });
+    expect(overlayCssOffset({ left: 100, top: 50 }, Number.POSITIVE_INFINITY)).toEqual({
+      left: 100,
+      top: 50,
+    });
   });
 });

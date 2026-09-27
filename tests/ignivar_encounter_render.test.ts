@@ -1392,7 +1392,7 @@ describe('Ignivar encounter renderer', () => {
     expect(renderer).toMatch(
       /this\.gateViewOnCompile\(\s*view,\s*group,\s*e\.templateId === IGNIVAR_BOSS_ID && view\.visual \? view\.visual\.root : group,\s*requiredForEntry,\s*\)/,
     );
-    expect(renderer).toContain('v.group.visible = raidEncounterViewVisibleDuringCompile(');
+    expect(renderer).toMatch(/v\.group\.visible =\s*raidEncounterViewVisibleDuringCompile\(/);
     // The rig-attached sync rides the extracted wrapper with the real cull and
     // presentation verdicts, in that order, and the wrapper owns the
     // still-visible-telegraph escape for culled bodies.
@@ -1418,7 +1418,9 @@ describe('Ignivar encounter renderer', () => {
       renderer.match(/this\.mageGroundFx\.syncWorldMeteorWarnings\(this\.sim\);/g),
     ).toHaveLength(2);
     expect(renderer).toContain('if (handleMageGroundSpellfxEvent(this.mageGroundFx, ev)) break;');
-    expect(hud).toContain('resolveCastLabel: (s) => abilityDisplayNameFromSource(s.label)');
+    // The target cast bar's resolver stays on the shared ability-display
+    // path; farming's plant cast no longer needs a front-running HUD arm.
+    expect(hud).toContain('resolveCastLabel: (s) => abilityDisplayNameFromSource(s.label),');
   });
 
   it('locks the boss render facing for every facing-anchored telegraph cast', () => {
@@ -1488,7 +1490,15 @@ describe('Ignivar encounter renderer', () => {
         persistentId: 'm1',
       }),
     ).toBe(true);
-    expect(stub.impactMeteor).toHaveBeenCalledWith('m1', 7, 8);
+    // The event's own cue identity rides along so an impact whose warning
+    // this client never saw can still detonate in it (mage_ground_fx.ts
+    // impactMeteor uses this only when no stored warning is found).
+    expect(stub.impactMeteor).toHaveBeenCalledWith('m1', 7, 8, {
+      radius: undefined,
+      ability: undefined,
+      school: 'fire',
+      sourceId: undefined,
+    });
     // Without a persistent id the impact stays unclaimed so the renderer's
     // generic ground-impact burst still fires for it.
     expect(

@@ -17,6 +17,7 @@
 // constants. The window redraws while open from hud.update()'s
 // mediumHud band, skipping the DOM rebuild when the content signature is unchanged.
 
+import { apiUrl } from '../client_origin';
 import { audio } from '../game/audio';
 import type { ArenaMapId } from '../sim/dungeon_layout';
 import { ARENA_MIN_LEVEL } from '../sim/social/arena';
@@ -35,6 +36,7 @@ import {
 import { markDialogRoot } from './dialog_root';
 import { classDisplayName } from './entity_i18n';
 import { esc } from './esc';
+import { captureFocusKey, findFocusKey, restoreFirstEnabled } from './focus_restore';
 import {
   type BgAllTimeEntry,
   type BgAllTimeRow,
@@ -43,6 +45,12 @@ import {
   type BgWindowView,
   buildBgWindowView,
 } from './hud/battleground';
+import {
+  buildWorldPvpWindowView,
+  WORLD_PVP_ACTION_FOCUS_KEY,
+  wireWorldPvpPanel,
+  worldPvpBodyHtml,
+} from './hud/world_pvp';
 import { formatNumber, t } from './i18n';
 import { formatPvpRecord } from './pvp_record_core';
 import { buildPvpTabs, type PvpTabId, type PvpTabsModel } from './pvp_tabs_view';
@@ -103,6 +111,9 @@ export class ArenaWindow {
   private lbFetchedAt: Partial<Record<ArenaFormat, number>> = {};
   private bgAllTime: BgAllTimeEntry[] | null = null;
   private bgLbFetchedAt = 0;
+  // The World PvP tab's raise-confirm step (hud/world_pvp/): window state so
+  // a tab switch or a close clears it; the view signature carries it.
+  private worldConfirming = false;
 
   constructor(private readonly deps: ArenaWindowDeps) {}
 
@@ -137,6 +148,7 @@ export class ArenaWindow {
   /** Open on (or switch to) a specific tab; a second call on that tab closes.
    *  The Thornhollow Fields deep entry (the shot harness, legacy callers) rides this. */
   openTab(tab: PvpTabId): void {
+    this.worldConfirming = false;
     if (!this.isOpen) {
       this.tab = tab;
       this.toggle();
@@ -155,6 +167,7 @@ export class ArenaWindow {
 
   close(): void {
     const el = this.deps.root();
+    this.worldConfirming = false;
     if (el.style.display !== 'block') {
       this.openerFocus = null;
       return;
@@ -180,14 +193,14 @@ export class ArenaWindow {
   // server) so the panel still shows the live online ladder either way.
   private fetchLeaderboardFor(tab: PvpTabId): void {
     if (tab === 'ravenrift') this.fetchBgLeaderboard();
-    else this.fetchArenaLeaderboard(tab);
+    else if (tab !== 'world') this.fetchArenaLeaderboard(tab);
   }
 
   private fetchArenaLeaderboard(format: ArenaFormat): void {
     const now = performance.now();
     if (now - (this.lbFetchedAt[format] ?? 0) < LEADERBOARD_REFETCH_MS) return;
     this.lbFetchedAt[format] = now;
-    fetch(`/api/arena/leaderboard?format=${encodeURIComponent(format)}`)
+    fetch(apiUrl(`/api/arena/leaderboard?format=${encodeURIComponent(format)}`))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d && Array.isArray(d.leaders)) {
@@ -204,7 +217,7 @@ export class ArenaWindow {
     const now = performance.now();
     if (now - this.bgLbFetchedAt < LEADERBOARD_REFETCH_MS) return;
     this.bgLbFetchedAt = now;
-    fetch('/api/battleground/leaderboard')
+    fetch(apiUrl('/api/battleground/leaderboard'))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d && Array.isArray(d.leaders)) {
@@ -236,6 +249,10 @@ export class ArenaWindow {
       return;
     }
     thornhollowPrewarm?.pausePreview();
+    if (this.tab === 'world') {
+      this.renderWorldPvp(el, world, strip);
+      return;
+    }
     this.renderArena(el, world, strip, this.tab);
   }
 
@@ -275,6 +292,42 @@ export class ArenaWindow {
     el.querySelector('[data-act="leave"]')?.addEventListener('click', () => {
       this.deps.world().bgQueueLeave();
       audio.click();
+    });
+  }
+
+  /** The World PvP flag tab (hud/world_pvp/): the pure view decides the status,
+   *  the action and the stakes copy inputs; the sibling painter renders and wires
+   *  them. Signature-gated like the other arms; no ladder fetch (there is no
+   *  world ladder yet). */
+  private renderWorldPvp(el: HTMLElement, world: IWorld, strip: PvpTabsModel): void {
+    const view = buildWorldPvpWindowView({
+      info: world.worldPvpInfo,
+      honor: world.honor,
+      confirming: this.worldConfirming,
+    });
+    const sig = `${view.sig}|${strip.tabs.map((s2) => (s2.locked ? 1 : 0)).join('')}`;
+    if (sig === this.lastSig) return;
+    this.lastSig = sig;
+    // The disarm countdown rebuilds this panel once a second: a keyboard user
+    // on the action button must land back on it (or its successor) after the
+    // innerHTML swap, never on the body (the bags window precedent).
+    const focusKey = captureFocusKey(el);
+    el.innerHTML = this.worldTitleHtml() + this.stripHtml(strip) + worldPvpBodyHtml(view);
+    this.wireChrome(el);
+    if (focusKey !== null) {
+      restoreFirstEnabled([
+        findFocusKey(el, focusKey),
+        findFocusKey(el, WORLD_PVP_ACTION_FOCUS_KEY),
+        el.querySelector<HTMLElement>('[data-close]'),
+      ]);
+    }
+    wireWorldPvpPanel(el, {
+      world: () => this.deps.world(),
+      setConfirming: (confirming) => {
+        this.worldConfirming = confirming;
+        this.lastSig = '';
+        this.render();
+      },
     });
   }
 
@@ -333,6 +386,7 @@ export class ArenaWindow {
       btn.addEventListener('click', () => {
         if (btn.getAttribute('aria-disabled') === 'true') return;
         this.tab = (btn as HTMLElement).dataset.bracket as PvpTabId;
+        this.worldConfirming = false;
         this.lastSig = '';
         this.fetchLeaderboardFor(this.tab);
         this.render();
@@ -348,33 +402,37 @@ export class ArenaWindow {
     const tag = bracket
       ? ` <span class="arena-bracket-tag">${esc(this.tabLabel(bracket))}</span>`
       : '';
-    return `<div class="panel-title"><span id="arena-title">${esc(t('hud.arena.title'))}${tag}</span><button type="button" class="x-btn" data-close aria-label="${esc(t('hud.arena.close'))}">${svgIcon('close')}</button></div>`;
+    return `<div class="panel-title ui-win-head"><span id="arena-title" class="ui-win-title">${esc(t('hud.arena.title'))}${tag}</span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hud.arena.close'))}">${svgIcon('close')}</button></div>`;
+  }
+
+  private worldTitleHtml(): string {
+    return `<div class="panel-title ui-win-head"><span id="arena-title" class="ui-win-title">${esc(t('hudChrome.worldPvp.title'))}</span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hud.arena.close'))}">${svgIcon('close')}</button></div>`;
   }
 
   private bgTitleHtml(): string {
-    return `<div class="panel-title"><span id="arena-title">${esc(t('hudChrome.bg.title'))} <span class="bg-mode-tag">${esc(t('hudChrome.bg.modeTag'))}</span></span><button type="button" class="x-btn" data-close aria-label="${esc(t('hud.arena.close'))}">${svgIcon('close')}</button></div>`;
+    return `<div class="panel-title ui-win-head"><span id="arena-title" class="ui-win-title">${esc(t('hudChrome.bg.title'))} <span class="bg-mode-tag ui-chip">${esc(t('hudChrome.bg.modeTag'))}</span></span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hud.arena.close'))}">${svgIcon('close')}</button></div>`;
   }
 
   private stripHtml(strip: PvpTabsModel): string {
     // Locked tabs carry aria-disabled (still perceivable and announced) rather
     // than disabled (which would drop them from the accessibility tree).
     const btn = (tab: { id: PvpTabId; active: boolean; locked: boolean }): string =>
-      `<button class="arena-bracket${tab.active ? ' active' : ''}${tab.locked ? ' locked' : ''}" data-bracket="${tab.id}" aria-pressed="${tab.active ? 'true' : 'false'}"${tab.locked ? ' aria-disabled="true"' : ''}>${esc(this.tabLabel(tab.id))}</button>`;
-    return `<div class="arena-brackets">${strip.tabs.map(btn).join('')}</div>`;
+      `<button class="arena-bracket ui-seg-tab${tab.active ? ' active is-on' : ''}${tab.locked ? ' locked' : ''}" data-bracket="${tab.id}" aria-pressed="${tab.active ? 'true' : 'false'}"${tab.locked ? ' aria-disabled="true"' : ''}>${esc(this.tabLabel(tab.id))}</button>`;
+    return `<div class="arena-brackets ui-seg">${strip.tabs.map(btn).join('')}</div>`;
   }
 
   private bgBodyHtml(view: Extract<BgWindowView, { kind: 'live' }>): string {
     const blurb = `<div class="bg-blurb">${esc(t('hudChrome.bg.blurb'))}</div>`;
     const rank =
-      `<div class="bg-rank"><span class="rating">${esc(num(view.rating))}</span>` +
+      `<div class="bg-rank ui-card"><span class="rating">${esc(num(view.rating))}</span>` +
       `<span class="wl">${esc(
         t('hudChrome.bg.ratingSummary', {
           wins: num(view.wins),
           losses: num(view.losses),
           draws: num(view.draws),
         }),
-      )}</span></div>` +
-      `<div class="bg-captures">${esc(t('hudChrome.bg.careerCaptures', { count: num(view.captures) }))}</div>`;
+      )}</span></div>`;
+    const captures = `<div class="bg-captures ui-card">${esc(t('hudChrome.bg.careerCaptures', { count: num(view.captures) }))}</div>`;
     // The LIVE online ladder sits above the all-time board, the same order the
     // arena tabs use (arenaBodyHtml below): who is here now, then the record.
     const onlineSection =
@@ -384,16 +442,17 @@ export class ArenaWindow {
       view.allTime && view.allTime.length > 0
         ? `<div class="bg-sub">${esc(t('hudChrome.bg.ladderAllTime'))}</div>${this.bgLadderHtml(view.allTime)}`
         : `<div class="bg-sub">${esc(t('hudChrome.bg.ladderAllTime'))}</div><div class="ladder-empty">${esc(t('hudChrome.bg.noRanked'))}</div>`;
+    const stats = `<div class="pvp-stat-grid">${rank}${captures}${this.bgFirstWinChipHtml(view.firstWinBonus)}</div>`;
     return (
+      `<div class="arena-layout"><section class="arena-overview">` +
       blurb +
-      rank +
-      // Event chip above the daily chip: the realm-wide, rarer fact reads
-      // first, and both sit against the queue affordance they advertise.
       this.bgDoubleHonorChipHtml(view.doubleHonor) +
-      this.bgFirstWinChipHtml(view.firstWinBonus) +
+      stats +
       this.bgActionHtml(view.action) +
+      `</section><section class="arena-ladders">` +
       onlineSection +
-      allTimeSection
+      allTimeSection +
+      `</section></div>`
     );
   }
 
@@ -409,7 +468,7 @@ export class ArenaWindow {
     if (!bonus) return '';
     const label = t('hudChrome.bg.firstWinBonusLine', { honor: num(bonus.honor) });
     return (
-      `<div class="bg-firstwin-chip"><span aria-hidden="true">${svgIcon('battleground')}</span>` +
+      `<div class="bg-firstwin-chip ui-card"><span aria-hidden="true">${svgIcon('battleground')}</span>` +
       `<span>${esc(label)}</span></div>`
     );
   }
@@ -421,7 +480,7 @@ export class ArenaWindow {
     if (!event) return '';
     const label = t('hudChrome.bg.doubleHonorLine', { mult: num(event.multiplier) });
     return (
-      `<div class="bg-firstwin-chip"><span aria-hidden="true">${svgIcon('battleground')}</span>` +
+      `<div class="bg-event-chip ui-chip"><span aria-hidden="true">${svgIcon('battleground')}</span>` +
       `<span>${esc(label)}</span></div>`
     );
   }
@@ -440,14 +499,20 @@ export class ArenaWindow {
         action.queuedParty > 1
           ? ` ${esc(t('hudChrome.bg.queuedParty', { count: num(action.queuedParty) }))}`
           : '';
+      const enterLabel =
+        action.queuedParty > 1
+          ? t('hudChrome.bg.enterQueueParty', { count: num(action.queuedParty) })
+          : t('hudChrome.bg.enterQueue');
       return (
-        `<button class="btn leave" data-act="leave">${esc(t('hudChrome.bg.leaveQueue'))}</button>` +
-        `<div class="bg-queue-status">${esc(
+        `<div class="pvp-queue ui-card"><div class="bg-queue-status">${esc(
           t('hudChrome.bg.searching', {
             count: num(action.queueSize),
             size: num(BG_TEAM_SIZE * 2),
           }),
-        )}${partyNote}</div>`
+        )}${partyNote}</div><div class="pvp-queue-actions">` +
+        `<button class="btn leave ui-btn" data-act="leave">${esc(t('hudChrome.bg.leaveQueue'))}</button>` +
+        `<button class="btn ui-btn ui-btn--red" disabled aria-disabled="true">${esc(enterLabel)}</button>` +
+        `</div></div>`
       );
     }
     const label =
@@ -458,22 +523,22 @@ export class ArenaWindow {
     // disabled button (the sim refuses server-side regardless).
     if (action.locked) {
       return (
-        `<button class="btn" data-act="queue" disabled aria-disabled="true">${esc(label)}</button>` +
+        `<div class="pvp-queue ui-card"><button class="btn ui-btn ui-btn--red" data-act="queue" disabled aria-disabled="true">${esc(label)}</button>` +
         `<div class="bg-note bg-level-req">${esc(
           t('hudChrome.bg.levelRequirement', { level: num(action.requiredLevel) }),
-        )}</div>`
+        )}</div></div>`
       );
     }
     // Leader-only group queue: a member sees the same button, inert (the sim
     // refuses it server-side regardless, with the leader-only error).
     return (
-      `<button class="btn${action.queueDisabled ? ' disabled' : ''}" data-act="queue"${
+      `<div class="pvp-queue ui-card"><button class="btn ui-btn ui-btn--red${action.queueDisabled ? ' disabled' : ''}" data-act="queue"${
         action.queueDisabled ? ' disabled aria-disabled="true"' : ''
       }>${esc(label)}</button>` +
       `<div class="bg-note">${esc(t('hudChrome.bg.queueNote'))}</div>` +
       `<div class="bg-note bg-level-req">${esc(
         t('hudChrome.bg.levelRequirement', { level: num(action.requiredLevel) }),
-      )}</div>`
+      )}</div></div>`
     );
   }
 
@@ -518,7 +583,7 @@ export class ArenaWindow {
 
   private arenaBodyHtml(view: Extract<ArenaView, { kind: 'live' }>): string {
     const rank =
-      `<div class="arena-rank"><span class="rating">${esc(num(view.standing.rating))}</span>` +
+      `<div class="arena-rank ui-card"><span class="rating">${esc(num(view.standing.rating))}</span>` +
       `<span class="wl">${esc(
         t('hud.arena.ratingSummary', {
           wins: num(view.standing.wins),
@@ -531,12 +596,15 @@ export class ArenaWindow {
         ? `<div class="arena-sub">${esc(t('hud.arena.ladderAllTime'))}</div>${this.allTimeHtml(view.allTime)}`
         : '';
     return (
+      `<div class="arena-layout"><section class="arena-overview">` +
       rank +
       this.partyHtml(view.party) +
       this.actionHtml(view.action, view.matchMap) +
+      `</section><section class="arena-ladders">` +
       `<div class="arena-sub">${esc(t('hud.arena.ladderOnline'))}</div>` +
       this.ladderHtml(view.ladder) +
-      allTimeSection
+      allTimeSection +
+      `</section></div>`
     );
   }
 
@@ -556,7 +624,7 @@ export class ArenaWindow {
           );
         })
         .join('');
-      return `<div class="arena-party">${rows}</div>`;
+      return `<div class="arena-party ui-card">${rows}</div>`;
     }
     if (section.kind === 'warn') {
       return `<div class="arena-note arena-warn">${esc(t('hud.arena.queueNote'))}</div>`;
@@ -576,19 +644,23 @@ export class ArenaWindow {
     }
     if (action.kind === 'queued') {
       return (
-        `<button class="btn leave" data-act="leave">${esc(t('hud.arena.leaveQueue'))}</button>` +
-        `<div class="arena-queue-status">${esc(t('hud.arena.searching', { count: num(action.queueSize) }))}</div>`
+        `<div class="pvp-queue ui-card"><div class="arena-queue-status">${esc(t('hud.arena.searching', { count: num(action.queueSize) }))}</div>` +
+        `<div class="pvp-queue-actions"><button class="btn leave ui-btn" data-act="leave">${esc(t('hud.arena.leaveQueue'))}</button>` +
+        `<button class="btn ui-btn ui-btn--red" disabled aria-disabled="true">${esc(t('hud.arena.enterQueue'))}</button>` +
+        `</div></div>`
       );
     }
-    const btnCls = action.queueDisabled ? 'btn disabled' : 'btn';
+    const btnCls = action.queueDisabled
+      ? 'btn ui-btn ui-btn--red disabled'
+      : 'btn ui-btn ui-btn--red';
     const note = action.belowMinLevel
       ? t('hudChrome.arenaGate.minLevelNote', {
           level: formatNumber(ARENA_MIN_LEVEL, { maximumFractionDigits: 0 }),
         })
       : t('hud.arena.queueNote');
     return (
-      `<button class="${btnCls}" data-act="queue"${action.queueDisabled ? ' disabled' : ''}>${esc(t('hud.arena.enterQueue'))}</button>` +
-      `<div class="arena-note">${esc(note)}</div>`
+      `<div class="pvp-queue ui-card"><button class="${btnCls}" data-act="queue"${action.queueDisabled ? ' disabled' : ''}>${esc(t('hud.arena.enterQueue'))}</button>` +
+      `<div class="arena-note">${esc(note)}</div></div>`
     );
   }
 
@@ -629,6 +701,7 @@ export class ArenaWindow {
 
   private tabLabel(tab: PvpTabId | ArenaFormat): string {
     if (tab === 'ravenrift') return t('hudChrome.bg.title');
+    if (tab === 'world') return t('hudChrome.worldPvp.tab');
     if (tab === '1v1') return t('hudChrome.pvp.bracket1v1');
     if (tab === '2v2') return t('hudChrome.pvp.bracket2v2');
     // Retired brackets stay renderable (a dev-started bout commits them into

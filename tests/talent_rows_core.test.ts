@@ -137,9 +137,9 @@ describe('canonical Talents V2 row registry', () => {
       prot: {
         name: 'Recompense',
         description:
-          'Increases all threat you generate by 80% and your armor by 10%. Vanguard: your Stamina is increased by 40% and you gain armor equal to 70% of your Strength.',
+          'Increases all threat you generate by 110% and your armor by 10%. Vanguard: your Stamina is increased by 40% and you gain armor equal to 70% of your Strength.',
         effect: {
-          global: { threatPct: 0.8 },
+          global: { threatPct: 1.1 },
           stats: { armorPct: 0.1, staPct: 0.4, armorFromStrPct: 0.7 },
         },
       },
@@ -216,7 +216,7 @@ describe('canonical Talents V2 allocation', () => {
 
   it('folds each selected row exactly once', () => {
     // The owner mage tree (89d1625a2) replaced Impulse; Double Blink is the
-    // row 5 option that grants one bonus charge (on Flickerstep/blink).
+    // row 5 option that grants one bonus charge (on Flitstep/blink).
     const mods = computeTalentModifiers(
       'mage',
       { spec: null, rows: { 5: 'mag_r5_double_blink' } },

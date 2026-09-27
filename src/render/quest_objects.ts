@@ -5,6 +5,12 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import {
+  buildFarshoreSalvageObject,
+  FARSHORE_SALVAGE_URLS,
+  groundQuestObjectYaw,
+  salvageVisualItemId,
+} from './farshore_salvage_assets';
+import {
   FENBRIDGE_SURFACE_NORMAL_SCALE,
   fenbridgeSemanticForColor,
   fenbridgeSurfaceAtlasTexture,
@@ -12,14 +18,28 @@ import {
   fenbridgeSurfaceNormalTexture,
   fenbridgeSurfaceRoughnessTexture,
 } from './fenbridge_surface_atlas';
+
+export {
+  farshoreSalvagePrewarmPlan,
+  prepareFarshoreSalvageObjects,
+  prewarmFarshoreSalvageObjects,
+} from './farshore_salvage_assets';
+
+import { buildForgeAnvilTarget, buildForgeWellTarget } from './forge_anvil_target';
 import { GFX, surfaceMat } from './gfx';
 import { markSharedGeometry, markSharedMaterial } from './shared_resource';
+import { buildWorldQuestFreightWagon } from './world_quest_freight_visual';
 import { applySurfaceDetail, wornFamilyFor } from './worn_stone';
 
 /** Target max height after normalization (~sparkle anchor at 1.35). */
 const TARGET_HEIGHT = 1.35;
 
 const QUEST_OBJECT_URLS: Record<string, string> = {
+  forge_fuel: '/models/resources/wood_log_stack.glb',
+  forge_metal: '/models/quest/supply_crate.glb',
+  north_watch_cannon: '/models/biome/hex_cannon.glb',
+  last_keep_cannon: '/models/biome/hex_cannon.glb',
+  eastbrook_freight_crate: '/models/quest/supply_crate.glb',
   crypt_ritual_circle: '/models/quest/crypt_ritual_circle.glb',
   supply_crate: '/models/quest/supply_crate.glb',
   lost_caravan_goods: '/models/quest/lost_caravan_goods.glb',
@@ -40,9 +60,17 @@ const QUEST_OBJECT_URLS: Record<string, string> = {
   // The Proving Shore ferry bells (a clicked travel object, not a pickup):
   // the standing bell-on-frame prop the marsh dressing already ships.
   ps_ferry_bell: '/models/props/marsh_bell_gallows.glb',
+  leyline_cache: '/models/dungeon/chest.glb',
+  confection_game_box: '/models/dungeon/chest.glb',
 };
 
 const QUEST_OBJECT_HEIGHTS: Record<string, number> = {
+  forge_fuel: 1.5,
+  forge_metal: 1.6,
+  forge_water: 2.8,
+  forge_tools: 1.7,
+  north_watch_cannon: 2.4,
+  last_keep_cannon: 2.4,
   // The Nythraxis soul wardstones are an active raid mechanic — make them a tall,
   // obvious glowing pillar rather than a small sigil so all three read at range.
   bastion_ward_stone: 3.4,
@@ -57,6 +85,8 @@ const QUEST_OBJECT_HEIGHTS: Record<string, number> = {
   // A standing bell frame players travel by: tall enough to read at range,
   // shy of the 3.4 the raid wardstones claim.
   ps_ferry_bell: 2.6,
+  leyline_cache: 0.85,
+  confection_game_box: 0.85,
 };
 
 const SCROLL_ITEM_IDS = new Set(['weathered_ledger_page', 'fen_muster_order', 'highwatch_summons']);
@@ -101,6 +131,8 @@ const ITEM_MAT_OVERRIDES: Record<
   soulshard_pillar: { color: 0x6f1b2c, emissive: 0x8f1232, emissiveIntensity: 0.42 },
   sanctum_key_shard: { emissive: 0x1a4060, emissiveIntensity: 0.5 },
   morthen_grimoire: { emissive: 0x3a1850, emissiveIntensity: 0.12 },
+  leyline_cache: { color: 0x4f8edc, emissive: 0x245fb0, emissiveIntensity: 0.18 },
+  confection_game_box: { color: 0xc45a88, emissive: 0x8e2f63, emissiveIntensity: 0.12 },
 };
 
 const gltfByUrl = new Map<string, GLTF>();
@@ -111,14 +143,21 @@ function castsDynamicShadow(itemId: string): boolean {
   return !AUTHORED_SCROLL_CUE_IDS.has(itemId);
 }
 
+function visualItemIdForEntity(itemId: string, entityId: number): string {
+  if (itemId === 'wq_infiltrator_orders') return 'fen_muster_order';
+  if (itemId === 'wq_infiltrator_ledger') return 'morthen_grimoire';
+  return salvageVisualItemId(itemId, entityId) ?? itemId;
+}
+
 /** Test-only window into the preload asset set (mirrors delve_props.ts). */
 export const questObjectPreloadInternalsForTest = {
-  questObjectUrl: QUEST_OBJECT_URLS,
+  questObjectUrl: { ...QUEST_OBJECT_URLS, ...FARSHORE_SALVAGE_URLS },
   usesLegacyScrollDecoration: (itemId: string) =>
     SCROLL_ITEM_IDS.has(itemId) && !AUTHORED_SCROLL_CUE_IDS.has(itemId),
   usesSharedSurfaceDetail: (itemId: string) => !AUTHORED_SCROLL_CUE_IDS.has(itemId),
   castsDynamicShadow,
   convertMaterial,
+  visualItemIdForEntity,
 };
 
 /** Test-only cache reset, so a determinism test can force two independent builds. */
@@ -247,12 +286,13 @@ function convertMaterial(src: THREE.Material, itemId: string): THREE.Material {
     vertexColors: fenbridgeAtlas ? false : s.vertexColors,
     normalMap: fenbridgePbr.normalMap ?? s.normalMap ?? undefined,
     roughnessMap: fenbridgePbr.roughnessMap ?? s.roughnessMap ?? undefined,
-    metalnessMap: musterIron ? fenbridgePbr.roughnessMap : undefined,
+    metalnessMap: musterIron ? fenbridgePbr.roughnessMap : (s.metalnessMap ?? undefined),
     roughness: s.roughness ?? 0.88,
-    metalness: musterIron ? 1 : Math.min(s.metalness ?? 0, 0.75),
+    metalness: musterIron ? 1 : (s.metalness ?? 0),
     emissive: ov?.emissive,
     emissiveIntensity: ov?.emissiveIntensity,
     flatShading: !GFX.standardMaterials,
+    side: s.side,
   });
   if (musterIron && mat instanceof THREE.MeshStandardMaterial) {
     mat.normalScale.setScalar(FENBRIDGE_SURFACE_NORMAL_SCALE);
@@ -636,23 +676,94 @@ function prepareItem(itemId: string): THREE.Group | null {
   return root;
 }
 
+/** The feast contract bounds (scripts/assets/farm_props/model.js), which size
+ *  the no-item pick proxy below. BOTH feast GLBs, the party trestle table and
+ *  the apex pedestal banquet, are authored to this one envelope precisely so
+ *  the single proxy fits either table. Exported ONLY for the drift pin in
+ *  tests/farm_props_asset.test.ts: an authored prop resize on EITHER must move
+ *  this pair or the click box silently desyncs from the visible table. */
+export const NO_ITEM_PICK_HEIGHT = 0.9;
+export const NO_ITEM_PICK_FOOTPRINT = 1.6;
+
+/**
+ * The ONE material every no-item pick proxy wears (the sparkleMat precedent):
+ * renderer-owned and dispose-exempt (markSharedMaterial), so removeView's
+ * per-view teardown skips it and the program it holds stays resident. A fresh
+ * MeshBasicMaterial per view was one compile-gate unit per feast that LINKED
+ * (the view's gate enumerates the proxy as its own material group, and each
+ * despawn disposed the only material holding that program, so the next feast's
+ * gate linked it cold again); shared, the unit remains (one piece per gated
+ * root) but is a program-cache hit after the first feast of a session. Never
+ * clone this: Material.copy carries the shared tag into the clone
+ * (shared_resource.ts markOwnedMaterial), so a tinted or per-view variant
+ * would be one more never-disposed material. The proxy is invisible, so the
+ * material's look is irrelevant; the program key is a plain MeshBasicMaterial.
+ */
+const NO_ITEM_PICK_MATERIAL = markSharedMaterial(new THREE.MeshBasicMaterial());
+
+/** Test-only: the shared proxy material, so a suite can pin identity. */
+export function noItemPickMaterialForTest(): THREE.Material {
+  return NO_ITEM_PICK_MATERIAL;
+}
+
 export function buildGroundQuestObject(
   itemId: string,
   entityId: number,
 ): { group: THREE.Group; height: number } {
+  const salvage = buildFarshoreSalvageObject(itemId, entityId);
+  if (salvage) return salvage;
+  if (itemId === 'forge_tools') return buildForgeAnvilTarget();
+  if (itemId === 'forge_water') return buildForgeWellTarget();
+  if (itemId === 'eastbrook_freight_wagon') {
+    const freightWagon = buildWorldQuestFreightWagon();
+    if (freightWagon) return freightWagon;
+  }
   const group = new THREE.Group();
+  // A ground object that grants NO item (renderer passes objectItemId ?? '';
+  // today only a placed feast, kind 'object', objectItemId null, carrying one
+  // of the templateIds `isFeastTemplateId` in src/sim/professions/feast.ts
+  // admits: the party feast's 'farm_feast' plus the three apex role feasts
+  // masterwrought Phase 11k added. Never key on the bare string here or
+  // anywhere; the family is derived from the catalog. Its world prop is drawn by
+  // farm_patches.ts, which since Phase 18 picks BETWEEN TWO TABLES off that
+  // same templateId (the party trestle table and the apex pedestal banquet;
+  // farmFeastModelUrl in farm_patches_core.ts), so this generic view must not
+  // stack a supply-crate body on top of either. What the view still owes the
+  // renderer is a raycastable click body and an honest anchor height, so the
+  // proxy is an INVISIBLE box at the feast contract's bounds, the ONE envelope
+  // both tables are authored to (the character clickProxy precedent:
+  // three's raycaster ignores `visible`). Fresh geometry per view on purpose
+  // (removeView's non-pooled path disposes it); the material is the shared
+  // dispose-exempt NO_ITEM_PICK_MATERIAL above, so the teardown that frees the
+  // box leaves the material, and its program, resident for the next feast.
+  if (!itemId) {
+    const proxy = new THREE.Mesh(
+      new THREE.BoxGeometry(NO_ITEM_PICK_FOOTPRINT, NO_ITEM_PICK_HEIGHT, NO_ITEM_PICK_FOOTPRINT),
+      NO_ITEM_PICK_MATERIAL,
+    );
+    proxy.position.y = NO_ITEM_PICK_HEIGHT / 2;
+    proxy.visible = false;
+    proxy.castShadow = false;
+    proxy.receiveShadow = false;
+    group.add(proxy);
+    return { group, height: NO_ITEM_PICK_HEIGHT };
+  }
+  const visualItemId = visualItemIdForEntity(itemId, entityId);
   const key =
-    PROCEDURAL_ITEM_IDS.has(itemId) || QUEST_OBJECT_URLS[itemId] ? itemId : 'supply_crate';
+    PROCEDURAL_ITEM_IDS.has(visualItemId) || QUEST_OBJECT_URLS[visualItemId]
+      ? visualItemId
+      : 'supply_crate';
+  group.userData.questObjectVisualItemId = key;
   const template = prepareItem(key);
   if (template) {
     const model = template.clone(true);
     group.add(model);
-    group.rotation.y = (entityId % 7) * 0.45;
+    group.rotation.y = groundQuestObjectYaw(itemId, entityId);
     return {
       group,
       height: measuredHeightByItem.get(key) ?? QUEST_OBJECT_HEIGHTS[key] ?? TARGET_HEIGHT,
     };
   }
-  group.rotation.y = (entityId % 7) * 0.45;
+  group.rotation.y = groundQuestObjectYaw(itemId, entityId);
   return { group, height: TARGET_HEIGHT };
 }

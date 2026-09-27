@@ -88,6 +88,14 @@ Everything else is a sibling module in one of these families:
   the camera + `dnGrade.fog` per frame; `?zonehaze=off` is the A/B switch.
 - **The nameplate suite** (below) owns all overhead text and badges.
 - **Pure logic cores** (below) hold Node-tested per-frame decisions.
+- **Chosen cadence:** `chosen_cadence.ts` is module state (like `arrival_cover.ts`)
+  between the frame loop's Frame Rate Limit wiring (`src/game/frame_cadence_wiring.ts`,
+  the writer of the chosen interval, its miss share and the quality hold) and the
+  renderer (the writer of the governor readings the automatic limit waits on: shedding,
+  at baseline, in combat). Under a chosen cadence the governor judges the MISS SHARE
+  (`chosen_cadence_pressure_core.ts`), never the wall interval, and every consumer that
+  reads a frame interval as load goes through `frameLoadMs`. A new renderer clears the
+  renderer-side readings (`resetChosenCadenceForRenderer`).
 - **Perf governors:** `render_budget.ts` (adaptive frame budget, see
   Performance) and `crowd_lod.ts` (pure character LOD policy: the band plan
   `characterLodBands` returns, which pulls shadow/anim cadence in as rig counts
@@ -96,6 +104,17 @@ Everything else is a sibling module in one of these families:
   crowd knee, the per-tier `GFX.farCharacterAnimScale` ceiling, and live budget
   pressure; cosmetic-only, and `showsStaticFarMesh` keeps anything a player
   reacts to out of the frozen mesh inside the uncrowded base range).
+- **Zone-feature cull:** `zone_feature_sweep.ts` is the per-frame sweep the renderer
+  drives over every attached feature cull group, a thin consumer of
+  `zone_feature_visibility_core.ts` (the fog or detail-horizon rule on the group's
+  XZ footprint, the apparent-size reach, the sun-shadow range with hysteresis). A
+  feature module registers sub-groups through `cullGroups` (the water flora's
+  per-region groups, the Willowfen's per-(family, cell) groups) and may set
+  `ZONE_FEATURE_EXTENT_KEY` on a DRESSING group to opt into the reach: the group is
+  shed once its largest instance is under `ZONE_FEATURE_MIN_APPARENT_PX` at the fixed
+  reference view, so a one-off giant keeps its whole group to the horizon with nothing
+  to write anywhere. Never on a collider-backed family (the distance rule alone), never
+  a per-family distance table.
 - **Zone streaming + residency:** `zone_streaming.ts` (pure policy: WHICH
   zones to materialize and in what order, feeding the renderer's background
   prepare queue), `chunk_residency_core.ts` (chunk-level "how far can the
@@ -108,9 +127,15 @@ Everything else is a sibling module in one of these families:
   rebuild so the same canvas + context is reused instead of a second context
   being minted), `context_release.ts` (forces context loss on `pagehide`:
   browsers cap live WebGL contexts per GPU process at ~16 and reclaim lost
-  ones lazily, and the client reloads on every logout), and
-  `software_renderer.ts` (the SINGLE source of truth for detecting a software
-  rasterizer from the adapter string; `gfx.ts`, `perf_doctor.ts`, and
+  ones lazily, and the client reloads on every logout),
+  `context_loss_recovery.ts` (`attachContextRecoveryHandlers`: the game
+  canvas's one persistent watchdog for an UNPLANNED loss that never restores,
+  e.g. a genuinely dead GPU/driver; distinct from three.js's own
+  `webglcontextlost` handler, which already requests restoration for the
+  entire life of a live renderer, and from `context_recycle.ts`'s short-lived
+  listener, which covers the deliberate rebuild's dispose-then-reconstruct
+  gap), and `software_renderer.ts` (the SINGLE source of truth for detecting a
+  software rasterizer from the adapter string; `gfx.ts`, `perf_doctor.ts`, and
   `perf_reporter.ts` all consume it so the detectors cannot drift).
 - `view_create_retry.ts`: bounded cooldown state for fail-soft character builds
   in per-frame paths, including required targets, form swaps, and visual-key
@@ -187,6 +212,21 @@ cadence logic of its own. Narrow helpers:
   `warlock_meteor_fx.ts`, `necromancy_*_fx.ts`, the frost/mage modules) is for
   effects that need scene objects the pooled primitive families cannot
   express; even then the pure math lands in a registered `_core`.
+- **Every floor-anchored VFX takes its `renderOrder` from the floor ladder**
+  (`floor_vfx_layer_core.ts` policy, `floor_vfx_layer.ts` the Three-side twin):
+  `floorVfxRenderOrder(layer, step)` with a band of `ground` (the world's own
+  marks), `player` (class ability ground VFX, plus the normal-blended click and
+  AoE feedback on its top rung), `encounter` (boss telegraphs, soaks, hazards,
+  death zones) or `reticle` (the additive aim guide), bottom to top, so a
+  mechanic a player must react to always paints over what a player emits. Never
+  a bare integer; never on a Group (three promotes a Group's renderOrder to
+  `groupOrder`, which outranks the whole ladder; use `applyFloorVfxLayer` for a
+  subtree). Register the module and its band in `tests/floor_vfx_layer.test.ts`,
+  or name it there as out of scope with a reason (its completeness sweep fails a
+  bare `renderOrder` that is neither); design in `docs/design/vfx-floor-layering.md`.
+  A pooled bespoke subtree calls `tagVfxSubtree` once it is fully built: the
+  warm-up walk selects on each object's OWN tag, so tagging only the root hides
+  its drawables from the prewarm and the cast gate.
 - **Models are real GLB assets** (CC0 kits, Tripo-generated models, and the
   image-to-GLB procedural exporters: props, foliage, dungeon, fish, gather nodes,
   mailbox, delve props, characters, the Eastbrook town kit), loaded via
@@ -258,7 +298,12 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
 - `prewarm_pass.ts` sequences the BACKGROUND zone prewarm (live frames keep
   rendering, so its groups MUST stay invisible; hidden objects still link
   their programs because compile traverses via `scene.traverse`, not
-  `traverseVisible`).
+  `traverseVisible`). One documented exception in `withHiddenPrewarmGroups`:
+  a reveal that lands INSIDE its window is kept, because the only other
+  writer of a feature group's visibility there is its own gated attach, whose
+  reveal follows the gate's colour, shadow, settle, upload and touch arms, so
+  it draws linked programs only; restoring the captured "hidden" over it left
+  a lazily built feature invisible for good (the Willowfen dressing).
 - Shared machinery: `compile_gate.ts` (fail-soft async shader-compile gating
   that also BOUNDS in-flight driver links during snapshot bursts, plus the
   `SerialGateLane` for gates that arrive in a burst), `linked_program_touch.ts`
@@ -273,9 +318,12 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   the old ADMISSION only (every unit admitted at once, the ledger still
   learning); the reveal-gate policy has no legacy arm and keeps revealing
   piecewise under its soft deadline whatever that flag says. The touch tail runs as one budgeted queue
-  unit PER PROGRAM (`linked_program_touch_lane.ts`) on the live gates AND on the
-  reveal host, which previously ended at the shadow arm and left streamed decor
-  paying the uniform-table round trip on its reveal draw. Its readiness comes
+  unit PER PROGRAM (`linked_program_touch_lane.ts`) on the live gates, on the
+  reveal host, and on the world-entry compile lane. Each of those three once
+  ended at the shadow arm and left its programs paying the uniform-table round
+  trip on their first live draw; the boot lane opts in through the `tail` of
+  `initial_scene_compile_units.ts`, whose `entryCompileTail` binds the same
+  settle and touch arms the gates use. Its readiness comes
   from the SETTLE and never from a driver query: a settled gate records its
   target's current programs in `linked_program_readiness.ts` and the walk reads
   that record, because three latches `programReady` false after one missed poll,
@@ -511,6 +559,21 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   the Yumi maze walls, the battleground placements) decides through
   `occluderKeepsInstances` before `acquire`. Pinned by
   `tests/occluder_fade_gate.test.ts` and `tests/occluder_fade_core.test.ts`.
+  On the DITHERED style (`occluder_dither_fade.ts` `ditherFadeEnabled`, the
+  `GFX.ditheredGhostFade` setting) none of the above runs: a hideable material
+  stays opaque and drops fragments on one Bayer pattern, so there is no second
+  program, no twin, no gate consult and no ghost prewarm, and the restore is
+  one step. Structures read a uniform; ONE instance of a batch reads a
+  per-instance HIDE attribute (`instanced_dither_fade.ts`, 0 = drawn, so a
+  geometry without the attribute draws fully) that `InstancedOccluderGhosts`
+  writes instead of swapping in a stand-in. The layer is attached where the
+  batch material is MADE (`withInstancedDitherFade` for a material the module
+  owns, `ghostFadeBatchMaterial` for a borrowed one), never at the first
+  occlusion, and each hideable batch draws a geometry SHELL
+  (`ghostHideGeometry`: the source's attribute objects plus its own hide
+  buffer) that leaves only through `disposeGhostHideGeometry`, because three's
+  geometry dispose deletes the buffer of every attribute still attached.
+  Pinned by `tests/instanced_dither_fade.test.ts`.
 - **The Proving Shore coach's guidance is prewarmed AND gated.** The golden
   ribbon, target ring, body aura, objective beam and camp ring
   (`coach_trail.ts`) used to mint their materials and canvas textures on the
@@ -579,7 +642,15 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   Warm nothing whose cost you have not measured: Brother Aldric was in this
   spec until an A/B from a start zone that had never compiled his model showed
   his spawn linking ZERO programs (the player bodies on screen already carry
-  them).
+  them). Varkhul's rig is the measured opposite (the harvest caught its body
+  programs linking live at the pull), so the Varkhul set stages it first,
+  through the live view's own factory, beside a held Forgestorm warning twin
+  (each storm disposes its warnings, and a program no material uses survives
+  only in the patched three's bounded released-program FIFO). The claim is per
+  staged SET, not per interior
+  (`unclaimedEncounterPrewarmSets`): the Ignivar raid's sets start in the
+  Forge-Lift, its first and quietest room, and every later raid room finds them
+  claimed, so each set is built once per session.
 
 ## GPU work: every new producer is a client of the scheduler
 The sections above are the machinery; this is the contract EVERY new producer of
@@ -593,7 +664,13 @@ GPU work signs. Each rule names its seam and its guard.
   `tests/ability_material_prewarm_sweep.test.ts`, the `buildInterior` gating pin in
   `tests/renderer_compile_gate.test.ts`, and the `live-program` events in
   `perfStats().gpuPrep`, whose count on an offline tour of the touched content is
-  the acceptance bar of a render PR.
+  the acceptance bar of a render PR. The fleet-side count of the same first seconds
+  is `post_reveal_links_core.ts`: `live_program_watch.ts` hosts one window per page,
+  armed at the first `markGpuHitchReveal` (the world entry; later arrivals only
+  count), sampled from the same present-host calls, closed 20 s later on the last
+  in-window count; `PerfMonitor` snapshots it as `postRevealLinks` and the beacon
+  ships it beside `entryReveal` (`tests/post_reveal_links_core.test.ts`, the host
+  block in `tests/live_program_watch.test.ts`).
 - **Every program-key change on a VISIBLE material rides a gated swap with a
   stand-in.** The key inputs: texture-slot presence, `transparent` / `blending` /
   `alphaToCoverage` / `alphaHash`, `defines`, `onBeforeCompile` /
@@ -605,13 +682,24 @@ GPU work signs. Each rule names its seam and its guard.
 - **Never add, remove, or hide a directional, hemisphere, spot, or rect-area light
   after boot:** those counts are program-cache-key inputs, so one change relinks
   every lit material in view. Re-GRADE the constructor's one sun/hemi pair through
-  `interior_light_rig.ts` instead. Point lights ride the pad budget
-  (`point_light_budget.ts`). Guards: `tests/render_light_census_pin.test.ts` (the
-  allowlist of every non-point light constructed under `src/render`) and
-  `tests/point_light_budget.test.ts`. The Wildheart caldera rig
-  (`wildheart_props.ts`) is the ONE named exception, pinned as such in
-  `tests/renderer_compile_gate.test.ts`; pre-linking a scene-wide light census is
-  a backlog item, not a precedent.
+  `interior_light_rig.ts` instead. The outdoor hemisphere fill constants live in
+  `outdoor_light_rig_core.ts`: the Lambert terrain derives its `uTerrainFillBoost`
+  from them (`terrainFillBoostTarget`), so retune them there, never inline.
+  Point lights ride the budget
+  (`point_light_budget.ts`) and reach three only through the carriers
+  (`point_light_carriers.ts`): a fixed set of lights, the only ones three gathers
+  in the world scene, packed each render with the live sources first because the
+  lit programs stop their point loop at the first black slot. A new point light in
+  the world scene is a carrier source (marked, and in a listed registry), never a
+  light three gathers itself. Guards: `tests/render_light_census_pin.test.ts` (the
+  allowlist of every non-point light constructed under `src/render`),
+  `tests/point_light_budget.test.ts` and `tests/point_light_carriers.test.ts` (the
+  allowlist of every point-light producer and its route to a carrier). There is
+  no exception: the Wildheart caldera rig used to add a fill pair to the world
+  scene at interior build, and
+  because interiors are never removed, every material drawn after a Palm Reach
+  visit relinked under the new census (132 programs at one graveyard in the
+  2026-09-12 hunt). Its grade is the `wildheartField` state of the rig now.
 - **Every new secondary GL context links (`compileAsync`) and uploads
   (`uploadTexturesInSlices`, `texture_prewarm.ts`) before its first draw, and sets
   `debug.checkShaderErrors = shaderDebugRequested()` on the renderer it just built,
@@ -663,6 +751,187 @@ GPU work signs. Each rule names its seam and its guard.
   `perfStats().lookPieces`) and `AssembleOptions.deferDecals`, guarded by
   `tests/look_pieces.test.ts`, `tests/deferred_face_decals.test.ts` and
   `tests/renderer_look_pieces_hold.test.ts`.
+- **No material buys a second scene pass: transmission is forbidden.** A material with
+  `transmission > 0` (a `MeshPhysicalMaterial`; GLTFLoader mints one for a glTF material
+  carrying `KHR_materials_transmission`) makes three draw the whole opaque scene a second
+  time per frame into a viewport-sized HalfFloat target with mipmaps
+  (`WebGLRenderer.renderTransmissionPass`), for as long as the object is on screen: a 4 s
+  first frame and a doubled draw cost on an integrated GPU, which no prewarm can remove
+  (measured 2026-08-28 on the water elemental's `living_water`). Translucency here is
+  alpha blending (`transparent`, `opacity`, `depthWrite: false`, the alphaMode BLEND
+  state). The loader neutralizes every transmissive material on a parsed GLB
+  (`assets/transmission_neutralize.ts`), and `tests/transmission_neutralize.test.ts` names
+  the shipped models that carry the extension so a new one is listed on purpose; a
+  procedural `new THREE.MeshPhysicalMaterial(` that sets `transmission`, `thickness` or
+  `attenuationColor` is a defect. Guard: `render-performance-reviewer` (its second-pass
+  check).
+- **The shader warm-up worker rides the gates, never beside them.** A Web Worker
+  owns a second WebGL2 context (`shader_warm_worker.ts`) that links the same GLSL the
+  game context is about to link, so the game's link is a driver program-cache hit
+  (the cache key is the translated source plus the context's enabled extension set,
+  which is why `renderer_extensions.ts` enables one pinned set on every context
+  before its first link). The client (`shader_warm_client.ts`, pure policy in
+  `shader_warm_client_core.ts`) resolves a MODE from the player's option and the
+  backend class (`gpu_backend_class_core.ts`, read off the renderer string): `auto`
+  is `all` only on a backend a FIELD measurement showed worth the worker, and none is
+  today (`WORKER_WORTH_BACKENDS` is empty, so `auto` is `off` everywhere. The options row is
+  withdrawn meanwhile (`SHADER_WARM_OPTION_OFFERED`): the stored value is kept for the
+  row's return but reads as `auto` for the worker, because a stored On nobody can turn
+  off would run a worker for good, while the character-select corpus still honours a
+  stored Off; only a `?shaderwarm=` pin starts the worker): D3D11 passed on a bench and the 0.43 fleet experiment
+  (half the D3D11 profiles with the worker, half without) found no gain it could detect;
+  Metal reads like Vulkan on its one datapoint and has no in-game measurement; it is
+  `off` on every OpenGL and GLES class,
+  where the worker only relocates the stall into the GPU process (measured 2026-08-28
+  on Linux NVIDIA, Linux Intel and Android Mali), and `off` on Vulkan, where a cold
+  link is already as cheap as a hit and the first draw is free while the worker's own
+  links cost three to six times more (measured 2026-08-30 on an RTX 3060, an RTX 3090
+  and an Intel iGPU); iOS is `off` whatever the setting (a second context is a
+  per-process ceiling risk there); `?shaderwarm=auto|off|reveal|all` overrides
+  (`0` and `1` are aliases of `off` and `all`, one grammar for both arms below), and
+  `?shaderwarmready=<ms>` lengthens the worker's ready deadline for a probe on a
+  backend whose GPU process is busy at boot (Windows OpenGL).
+  THE CHARACTER-SELECT CORPUS (`src/game/shader_cache_warmup.ts`, decisions in
+  `shader_warmup_core.ts`) is the other arm of the same cache. Its REPLAY half is
+  the ONE producer that is not a client of the scheduler, by construction rather
+  than by exemption: it replays the previous session's recorded program set on a
+  hidden context while the character-select screen is idle, before any `Renderer`
+  (and so any `background_gpu_queue`) exists, one program per animation frame, and
+  every world entry stops it as its first statement (`enterWorld` and
+  `startOffline`, pinned by the wiring block of `tests/shader_cache_warmup.test.ts`),
+  so no live frame ever shares the main thread with a submission; what the GPU
+  process still resolves after the click is the entry's own program set landing in
+  the shared cache. Its RECORD half runs in live frames 25 s after the reveal, so it
+  IS a client: `main.ts` hands it the renderer's queue
+  (`finishShaderWarmup(renderer.webgl, { queue: renderer.backgroundGpuWork })`) and
+  `src/game/shader_corpus_slices.ts` runs one BACKGROUND unit per BATCH of
+  program reads (`CORPUS_READ_BATCH`; a read is a synchronous driver round trip
+  that waits for the GPU frame in flight, paid once per batch), per chunk
+  encoded and per chunk fed to the gzip stream (the deflate runs on the main
+  thread inside the write, so the gzip unit holds its tail), under the `corpus-read`,
+  `corpus-encode` and `corpus-gzip` label kinds the budget prices separately. It
+  reads the same stored option and the same pin as the worker (`readWarmupQuery`):
+  Off silences it, `auto` and On keep it (the backend rule is the worker's: a
+  second context linking DURING play; this arm was measured on the OpenGL desktops
+  where `auto` turns the worker off), iOS never mints its context, and a stored
+  record is bounded before, during and after inflation
+  (`SHADER_CORPUS_MAX_BYTES`, `SHADER_CORPUS_PROGRAM_LIMIT`).
+  The worker is a client of the EXISTING gates: `shader_warm_gate.ts` assembles a
+  root's program sources through the three patch's dry-compile hook
+  (`program_sources.ts`; the hook calls each live material's `onBeforeCompile`
+  once more against a throwaway shader object, so a hook must stay idempotent and
+  must never keep the shader object it was handed), posts them to the worker, and
+  holds the gate's link piece until the worker answers or `SHADER_WARM_LANE_HOLD_CAP_MS`
+  passes (`shader_warm_lane.ts`; a hold that expires abandons its request so the worker
+  drops what nobody else waits for; three breaker rules end it:
+  `SHADER_WARM_TIMEOUT_BREAKER` holds in a row during which the worker settled NOTHING
+  (wedged: whether each hold expired on its cap, refusal `hold-timeouts:wedged`, or
+  ended on the worker's own link deadline, refusal `hold-failures:wedged`; the deadline
+  is shorter than the cap, so a single-program hold on a machine whose links never
+  settle always ends the second way, and a rule that counted expiries alone never
+  fired there), or `SHADER_WARM_EXPIRED_SHARE_BREAKER` of the last `SHADER_WARM_HOLD_WINDOW`
+  holds expired whatever it answered meanwhile (too slow for the demand); a slow worker
+  that keeps most holds served is kept). The third rule fires FIRST, on the worker's own
+  evidence and before any hold has paid: once it has settled `SHADER_WARM_EVIDENCE_LINKS`
+  links AND its first stats message has landed (the window is the divisor), the queue
+  ahead of the OLDEST outstanding hold, at the mean wall
+  this worker's links have actually cost, spread over the window that message reported,
+  is measured against what is left of the cap that hold's caller passed in
+  (`shaderWarmCannotServe`, refusal `cannot-serve:hold-cap`). Where NO link has settled
+  at all, the links the worker gave up on at `SHADER_WARM_LINK_DEADLINE_MS` stand in as
+  the evidence (the `link-deadline` failure carries the wall the link had run, a lower
+  bound the client keeps apart as `censoredLinks`), at the same floor, under its own
+  refusal `cannot-serve:hold-cap:censored` so the fleet can tell that arm from the
+  baseline; one settled link puts the rule back on the settled evidence, so a tab
+  throttled early on a healthy machine is never judged on its deadlines. Ahead is the worker's own
+  order, PRIORITY first and arrival only within one priority, so a live view held behind
+  a catalog's backlog is not charged for what the worker serves after it; the caller
+  also stamps when its cap clock started (`holdShaderPrograms`' `startedAtMs`), since a
+  lane asks inside a queue unit whose promise settles later. It is relative by
+  construction and carries no machine constant, the caller owning the cap and the worker
+  supplying the wall: on the laptop whose links cost about half a second it retires
+  seconds early with nothing expired, and where links are ten times shorter it never
+  fires at all. That verdict prices ONE burst, so it RELEASES the burst's held gates
+  (they link on the game context at once) and gives their requests back like an expiry
+  does (the worker drops what nobody else waits for: a second link of the same text in its
+  context would only compete for the busy driver); no gate holds again until the worker
+  owes nothing, in practice the links already in flight (bypass `standing-down`, and a hold
+  asked after the release is refused on the spot; a worker silent for two link deadlines
+  while the gates stand down is not ticking and retires as `standing-down:silent`), so the next
+  verdict can only come from a later burst, and the `SHADER_WARM_RELEASE_BREAKER`th
+  retires it. A released hold feeds neither expiry rule (a release with a link deadline
+  inside it would otherwise retire the worker the release kept). Read off a window that
+  had just halved, a final verdict retired a worker that warmed 174 programs on the next
+  launch (RTX 3060, 2026-09-12). The worker paces its links with the AIMD budget
+  under a RELATIVE judge (`shader_warm_settle_judge_core.ts`): a settle is read against
+  what this driver costs for a link of COMPARABLE size it has to itself, per thousand
+  GLSL characters, never against a millisecond bound (the absolute 150/400 ms bounds
+  pinned a cold Windows D3D11 at one link for a whole session, on the one backend that
+  overlaps links, 2026-08-30); solo evidence opens the window to two and no further,
+  a cache hit teaches nothing, and a halving is followed by a cooldown. A program the
+  worker's context REJECTS is not congestion and never halves the window (`markRejected`);
+  a link past its deadline still does. The boot lane
+  (`link_rate_budget.ts`) still runs the absolute bounds; the seam
+  (`AdaptiveLinkBudgetConfig.judgeSettlement`) is how it adopts the same rule later,
+  and a unit that linked nothing reaches the judge flagged `cheap` and teaches it
+  nothing (the boot sweep's already-linked views would otherwise set the etalon).
+  No new queue, no new lane: the hold is one more piece on
+  the caller's queue at the caller's priority, and the actionable floor and
+  imminent consults bypass it (`shaderWarmDecision`). The worker never draws, so it
+  is the one secondary context exempt from the `checkShaderErrors` rule, and it
+  goes with the renderer through `renderer_resource_lifecycle.ts` (`disposeShaderWarm`)
+  and on `pagehide`. The audit (`shader_warm_audit.ts`) names every program the game
+  context linked without a warm request (`unexpected`), so a new producer that
+  bypasses the gates shows up by key; `perfStats().shaderWarm` and
+  `perfStats().shaderWarmAudit` are the local readout, and of the worker's half only the
+  bounded projection `shaderWarmBeaconSummary` builds (`src/game/perf_shader_warm_core.ts`:
+  worker state, refusal, mode, setting, backend, counts, hold time summed and as wall
+  time, releases) rides the perf beacon, as `rawSummary.shaderWarm`
+  plus the typed `shaderWarmWorkerActive` and `shaderWarmRefusal` fields; the audit and
+  the adapter string ride none of it.
+  The readout also names the first programs the worker failed (`failedPrograms`).
+  A capture taken under `?diagnostics` also runs the scene census, whose
+  bucket-visibility diffs link programs no live frame asks for: those are charged to
+  `outOfBand` at the same host hooks that discard the burst's draws
+  (`renderer.captureSceneCensus`, which BRACKETS the burst: the census runs in its own
+  task, so without a begin the prologue of a gate that minted between the last present
+  and the census is charged to it), so read `unexpected` as the gates' own escapes.
+  The cast-VFX gate (`cast_vfx_readiness_core.ts`,
+  `cast_vfx_prewarm.ts`) is the same idea one level up, PER CAST and per
+  program FAMILY (`cast_vfx_family.ts`: the engine every class draws, the
+  Warrior kit): one ready bit per family, and a cast draws its whole
+  composition or nothing on the mask of the families it draws from
+  (`ability_vfx/cast_requirements.ts`: the engine, plus the kit for a Warrior
+  appearance and no other class), decided at its first entry point and kept
+  for the rest of that cast (`ability_vfx/cast_admission_core.ts`), while a
+  per-frame hold shows the frame its families are ready. A family opens on its
+  programs or on its own deadline, counted from the first consult that asks
+  for it (a diagnostics snapshot starts no clock), and a kit the device
+  declined never holds a cast. Every gated pool re-checks its own family at
+  spawn and skips (`AbilityVfxFx.setCastVfxSpawnGate`), counting a
+  `requirementMiss` a wrong mask would show instead of a live link
+  (`tests/ability_vfx_cast_requirements.test.ts` walks every spec'd id through
+  the real painter). The class pools, lazy stand-ins
+  and generic basics keep their compile units in the same warm-up but never
+  hold a cast, since none of them draws behind the gate (a bespoke visual
+  joins by a row in `CAST_VFX_FAMILIES`, a tag on its drawables and its ids in
+  the resolver); linked means the settle
+  record of `linked_program_readiness.ts`, which each cast unit writes once its
+  compile settled, and so does the stand-in slot's own resume link
+  (`castVfxStandInSlot`), the only unit that links the stand-ins after a dropped
+  entry; never the presence of `currentProgram`, assigned before the
+  link resolves, and never a driver query from a live frame. The reads a
+  player ACTS on never wait behind it: the
+  terrain-draped area ring and a mob's windup clip on the cast path, and on the
+  per-frame path the hard-CC band (stun, fear, root), re-held right after the
+  sleep that releases the held entity's cosmetic pools (`tests/ability_vfx_cast_gate.test.ts`).
+  Because those two draw through a closed gate, their programs (the band's
+  overlay cloud, the ring) link and are proved in their own deadline-exempt
+  boot entry, `vfx.cast-first-reads` (`castVfxFirstReadsEntry`), with the Vfx
+  particle cloud, ahead of `vfx.ability-primitives`; dropped past the hard
+  deadline or skipped on the minimal manifest, it resumes as program debt ahead
+  of the primitives, whose units run engine, then kit, first
+  (`tests/cast_vfx_first_reads.test.ts`).
 - **Verify, do not assert.** `?perf`, then `__game.renderer.perfStats().gpuPrep`: the
   budget snapshot, the event ring (`live-program`, `gate-timeout`, `reveal-watchdog`,
   `reveal-soft-deadline`, `submit-stop`, `attach-watchdog`, `touch-unproven` (programs a
@@ -711,6 +980,18 @@ dungeon-aware wrapper (flat floor past `DUNGEON_X_THRESHOLD`); plain
 collision/movement.
 
 ## Performance discipline: this runs at frame rate
+- **A per-frame roster walk runs on CHANGE, never on the frame.** The missing-view
+  candidate scan lives in `view_candidate_scan_core.ts`: `viewCandidateScanDue` walks
+  the roster at once when `IWorld.entityRosterVersion` (bumped by both worlds on every
+  entity add or drop) or the view count changed, when the player, their target or the
+  create range changed, when the center jumped past `VIEW_CANDIDATE_RESCAN_MOVE_YD`
+  (a teleport), and otherwise every `VIEW_CANDIDATE_RESCAN_FRAMES` frames for an entity
+  crossing the draw-range edge; in between the renderer consumes the last ranked list
+  (the drop pass stays per frame). A new input the list depends on (a quest-log flip, a
+  phase change) is a new trigger there, never a return to the per-frame walk. The same
+  version keys the meters' party set and the rift ambience; a raid readout walks the
+  instance slots (`src/sim/instance_entities.ts`); the tree occluder fade walks a grid
+  (`tree_hide_index_core.ts`); the fishing bobbers take their anglers from the view loop.
 - Three.js is **version-pinned in `package.json`**; the post chain lives in
   `post.ts` (its header comment documents the pass order and the N8AO
   subtleties) plus the `n8ao` package (SSAO). The `postprocessing` dep in
@@ -769,4 +1050,16 @@ collision/movement.
 - **`render_budget.ts` is the renderer's adaptive-budget core** (tier-driven frame
   budget + telemetry, keyed off `gfx.ts` quality bands). `renderer.ts` owns it,
   degrades against it, and pushes the resulting grass/foliage/vfx quality levels into
-  those subsystems. Consult it rather than reinventing a frame-level budget.
+  those subsystems. Consult it rather than reinventing a frame-level budget. Its `post`
+  level is the post chain's shed (`post_shed_core.ts` pure rungs, `post_shed.ts` painter
+  over the passes `post.ts` built): pass toggles and one-time target clears only, the
+  FXAA grade twin compiled under `post.initial-frame`, `?postshed=off|<0..1>` for a bench.
+  The shed's rungs are the reason the composer tiers now have a lever below the density
+  floors; when a chain sheds its full-frame passes, `post_plan_core.ts`'s region contract
+  is where dynamic resolution could re-open for it (not done).
+  Its external-frame-cap reading (`externalFrameCap`, a 30 Hz panel or a throttled tab)
+  is built from CPU-side numbers that cannot tell a display cap from a GPU-bound frame
+  under vsync, so it is never asserted on sight: the candidate opens a probe that sheds
+  every rung, dwells, restores and dwells again, and only an unmoved cadence latches the
+  cap; a moved one is refused and the session sheds under the normal rules, ending in
+  the `floored` reason once nothing is left (`tests/render_budget_frame_cap.test.ts`).

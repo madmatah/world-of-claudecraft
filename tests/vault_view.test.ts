@@ -19,7 +19,9 @@ import {
   hasVaultDepositable,
   predictVaultDepositAll,
   vaultDepositAllSummaryKey,
+  vaultMaterialHeadroom,
   vaultRowAction,
+  vaultSpecialContentKey,
   vaultWithdrawFit,
   vaultWithdrawNotice,
 } from '../src/ui/vault_view';
@@ -31,10 +33,16 @@ const LOOKUP_TABLE: Record<string, { quality?: string }> = {
   copper_ore: { quality: 'common' },
   ashwood_log: { quality: 'common' },
   frost_lotus: { quality: 'rare' },
+  ember_core: { quality: 'epic' },
 };
 const lookup = (id: string) => LOOKUP_TABLE[id];
 
-const MATERIALS: ReadonlySet<string> = new Set(['copper_ore', 'ashwood_log', 'frost_lotus']);
+const MATERIALS: ReadonlySet<string> = new Set([
+  'copper_ore',
+  'ashwood_log',
+  'frost_lotus',
+  'ember_core',
+]);
 
 function vinfo(
   stock: Record<string, number>,
@@ -108,7 +116,8 @@ describe('buildVaultView', () => {
         partialMax,
       })),
     ).toEqual([
-      { itemId: 'ashwood_log', canChooseQuantity: false, partialMax: null },
+      // A one-unit row offers the action too, so it reads alike on every row.
+      { itemId: 'ashwood_log', canChooseQuantity: true, partialMax: 1 },
       { itemId: 'copper_ore', canChooseQuantity: true, partialMax: 7 },
     ]);
   });
@@ -132,11 +141,14 @@ describe('buildVaultView', () => {
     const recipeRow = copper.find(
       (row) => row.kind === 'special' && row.craftedRecipeId === 'smelt_copper',
     );
+    // A signer is a mergeable payload (the bags already hold it as counted
+    // stacks), so the row splits like a plain one; only a charge-bearing or
+    // locked payload pins a row to whole moves (the sim's vaultRowMovesWhole).
     expect(signedRow).toMatchObject({
       kind: 'special',
       count: 2,
-      canChooseQuantity: false,
-      partialMax: null,
+      canChooseQuantity: true,
+      partialMax: 2,
       specialRef: { index: 1, instance: { signer: 'Ada' } },
     });
     expect(recipeRow).toMatchObject({
@@ -159,6 +171,22 @@ describe('buildVaultView', () => {
     );
   });
 
+  it('forwards a deep-cloned material composition and fingerprints composition changes', () => {
+    const sources = [
+      { source: { gatherer: { kind: 'character' as const, id: 4, name: 'Ada' } }, count: 2 },
+    ];
+    const special = slot('copper_ore', 2, { materialSources: sources });
+    const model = buildVaultView(vinfo({}, 1, 40, 50000, [special]), lookup);
+    if (model.kind !== 'vault') throw new Error('expected vault');
+    const row = model.rows.find((entry) => entry.kind === 'special');
+    expect(row?.kind === 'special' ? row.materialSources : undefined).toEqual(sources);
+    expect(row?.kind === 'special' ? row.materialSources : undefined).not.toBe(sources);
+    const changed = slot('copper_ore', 2, {
+      materialSources: [{ source: sources[0].source, count: 1 }],
+    });
+    expect(vaultSpecialContentKey([special])).not.toEqual(vaultSpecialContentKey([changed]));
+  });
+
   it('keeps duplicate special rows separately addressable by their snapshot indices', () => {
     const copy = (): InvSlot => slot('copper_ore', 1, { instance: { signer: 'Ada' } });
     const model = buildVaultView(vinfo({}, 1, 40, 50000, [copy(), copy()]), lookup);
@@ -166,6 +194,49 @@ describe('buildVaultView', () => {
     expect(model.rows.map((row) => (row.kind === 'special' ? row.specialRef.index : null))).toEqual(
       [0, 1],
     );
+  });
+
+  it('a row prints its own count ONLY when its material is split across stocked rows', () => {
+    // Every row already carries the material total (count/cap readout and
+    // aria copy). The own-count chip earns its place only when more than one
+    // stocked row shares the material, on EVERY such row, pooled included; a
+    // row that is the whole stock would print the same number twice. The
+    // rule reads the actual stocked row set: a tolerated degenerate
+    // zero-count sibling neither hides a real row's count nor earns an x0.
+    const alone = slot('copper_ore', 7, { instance: { signer: 'Ada' } });
+    const beside = slot('tin_ore', 2, { instance: { signer: 'Ada' } });
+    const twinA = slot('ashwood_log', 1, { instance: { signer: 'Ada' } });
+    const twinB = slot('ashwood_log', 3, { instance: { signer: 'Rin' } });
+    const ghost = slot('frost_lotus', 0, { instance: { signer: 'Ada' } });
+    const real = slot('frost_lotus', 5, { instance: { signer: 'Rin' } });
+    const model = buildVaultView(
+      vinfo({ tin_ore: 5, frost_lotus: 0 }, 1, 40, 50000, [
+        alone,
+        beside,
+        twinA,
+        twinB,
+        ghost,
+        real,
+      ]),
+      lookup,
+    );
+    if (model.kind !== 'vault') throw new Error('expected vault');
+    const shown = (itemId: string) =>
+      model.rows.filter((row) => row.itemId === itemId).map((row) => [row.kind, row.showCount]);
+    expect(shown('copper_ore')).toEqual([['special', false]]);
+    expect(shown('tin_ore')).toEqual([
+      ['pooled', true],
+      ['special', true],
+    ]);
+    expect(shown('ashwood_log')).toEqual([
+      ['special', true],
+      ['special', true],
+    ]);
+    expect(shown('frost_lotus')).toEqual([
+      ['pooled', false],
+      ['special', false],
+      ['special', false],
+    ]);
   });
 
   it('a fine grade sorts BESIDE its base (base first) and carries the fine flag (PIN MOVED)', () => {
@@ -255,10 +326,11 @@ describe('vaultRowAction', () => {
 describe('predictVaultDepositAll (the click-time replay of the sim sweep)', () => {
   it('a locked vault predicts nothing', () => {
     const inv = [slot('copper_ore', 5)];
-    expect(predictVaultDepositAll(inv, vinfo({}, 0, 0), MATERIALS)).toEqual({
+    expect(predictVaultDepositAll(inv, vinfo({}, 0, 0), MATERIALS, lookup)).toEqual({
       stacks: 0,
       items: 0,
       full: false,
+      notableItemId: null,
     });
   });
 
@@ -275,21 +347,35 @@ describe('predictVaultDepositAll (the click-time replay of the sim sweep)', () =
       slot('ashwood_log', 4, { craftedRecipeId: 'recipe_x' }),
       slot('ashwood_log', 2),
     ];
-    const p = predictVaultDepositAll(inv, vinfo({ copper_ore: 10 }, 1, 40), MATERIALS);
+    const p = predictVaultDepositAll(inv, vinfo({ copper_ore: 10 }, 1, 40), MATERIALS, lookup);
     // Whole stacks: copper idx 3 + signed idx 2 + both log rows = 4 stacks;
-    // items: 20 + 3 + 4 + 2 + 7 = 36; full: the partial final fill.
-    expect(p).toEqual({ stacks: 4, items: 36, full: true });
+    // items: 20 + 3 + 4 + 2 + 7 = 36; full: the partial final fill. Neither
+    // moved id is epic+, so no notable item.
+    expect(p).toEqual({ stacks: 4, items: 36, full: true, notableItemId: null });
   });
 
-  it('counts existing special stock against the shared cap and never splits an instance', () => {
+  it('counts existing special stock against the shared cap and never splits a whole-move payload', () => {
     const info = vinfo({ copper_ore: 30 }, 1, 40, 50000, [
       slot('copper_ore', 8, { craftedRecipeId: 'smelt_copper' }),
     ]);
-    const inv = [slot('copper_ore', 5, { instance: { signer: 'Ada' } })];
-    expect(predictVaultDepositAll(inv, info, MATERIALS)).toEqual({
+    // Headroom 2. A locked payload moves whole or not at all (the sim's
+    // vaultRowMovesWhole), so the replay leaves it carried and reports the
+    // ceiling, exactly as the sweep does.
+    const locked = [slot('copper_ore', 5, { instance: { locked: true } })];
+    expect(predictVaultDepositAll(locked, info, MATERIALS, lookup)).toEqual({
       stacks: 0,
       items: 0,
       full: true,
+      notableItemId: null,
+    });
+    // A signer or bind-on-trade payload partially fills like plain stock, the
+    // same two units the sweep and the targeted deposit both move.
+    const signed = [slot('copper_ore', 5, { instance: { signer: 'Ada' } })];
+    expect(predictVaultDepositAll(signed, info, MATERIALS, lookup)).toEqual({
+      stacks: 0,
+      items: 2,
+      full: true,
+      notableItemId: null,
     });
   });
 
@@ -298,10 +384,11 @@ describe('predictVaultDepositAll (the click-time replay of the sim sweep)', () =
     // exported predicate feeds both), or a tampered save would show a summary
     // for stock the sweep refuses to touch, or worse, predict a destruction.
     const inv = [slot('copper_ore', -3), slot('copper_ore', 0), slot('copper_ore', Number.NaN)];
-    expect(predictVaultDepositAll(inv, vinfo({ copper_ore: 10 }), MATERIALS)).toEqual({
+    expect(predictVaultDepositAll(inv, vinfo({ copper_ore: 10 }), MATERIALS, lookup)).toEqual({
       stacks: 0,
       items: 0,
       full: false,
+      notableItemId: null,
     });
     expect(hasVaultDepositable(inv, MATERIALS)).toBe(false);
   });
@@ -316,27 +403,26 @@ describe('predictVaultDepositAll (the click-time replay of the sim sweep)', () =
       slot('copper_ore', Number.POSITIVE_INFINITY),
       slot('copper_ore', 2.5), // fractional: the delayed-destruction arm
     ];
-    expect(predictVaultDepositAll(inv, vinfo({}, 1, 40), MATERIALS)).toEqual({
+    expect(predictVaultDepositAll(inv, vinfo({}, 1, 40), MATERIALS, lookup)).toEqual({
       stacks: 0,
       items: 0,
       full: false,
+      notableItemId: null,
     });
     expect(hasVaultDepositable(inv, MATERIALS)).toBe(false);
   });
 
   it('a material already at its ceiling flags full with zero movement', () => {
     const inv = [slot('copper_ore', 5)];
-    expect(predictVaultDepositAll(inv, vinfo({ copper_ore: 40 }, 1, 40), MATERIALS)).toEqual({
-      stacks: 0,
-      items: 0,
-      full: true,
-    });
+    expect(
+      predictVaultDepositAll(inv, vinfo({ copper_ore: 40 }, 1, 40), MATERIALS, lookup),
+    ).toEqual({ stacks: 0, items: 0, full: true, notableItemId: null });
   });
 
   it('does NOT mutate the snapshot it replays (inventory or stock)', () => {
     const inv = [slot('copper_ore', 5)];
     const info = vinfo({ copper_ore: 1 });
-    predictVaultDepositAll(inv, info, MATERIALS);
+    predictVaultDepositAll(inv, info, MATERIALS, lookup);
     expect(inv[0].count).toBe(5);
     expect(info.stock).toEqual({ copper_ore: 1 });
   });
@@ -346,14 +432,67 @@ describe('predictVaultDepositAll (the click-time replay of the sim sweep)', () =
     const materials = new Set(['__proto__']);
     // The dormant row is AT cap: nothing moves and nothing lands on
     // Object.prototype (the Map-not-spread rule in the core).
-    const p = predictVaultDepositAll([slot('__proto__', 3)], vinfo(stock, 1, 40), materials);
-    expect(p).toEqual({ stacks: 0, items: 0, full: true });
+    const p = predictVaultDepositAll(
+      [slot('__proto__', 3)],
+      vinfo(stock, 1, 40),
+      materials,
+      lookup,
+    );
+    expect(p).toEqual({ stacks: 0, items: 0, full: true, notableItemId: null });
     // The equality ABOVE is the decisive arm: a plain-record `held` built by
     // keyed ASSIGNMENT would send the row into the __proto__ setter, read
     // `have` back off the inherited accessor, and produce
     // { stacks: 1, items: NaN, full: false }. There is no residue to assert
     // separately (the setter swallows a non-object value without landing
     // anything on Object.prototype), so no second assertion exists here.
+  });
+
+  // #3xxx: "Core of the Last Flame" reports. A newly material-classified epic
+  // raid reagent swept silently into the vault by the pre-existing Deposit
+  // All read as items vanishing, because the aggregate count never named
+  // what moved. These pin the notable-item signal that closes the gap.
+  describe('notableItemId: flags an epic-or-better material the sweep moved', () => {
+    it('an ordinary common/rare sweep leaves it null', () => {
+      const inv = [slot('copper_ore', 5), slot('frost_lotus', 2)];
+      const p = predictVaultDepositAll(inv, vinfo({}, 1, 40), MATERIALS, lookup);
+      expect(p.notableItemId).toBeNull();
+    });
+
+    it('an epic material in the sweep is named, even among ordinary ones', () => {
+      const inv = [slot('copper_ore', 5), slot('ember_core', 1), slot('frost_lotus', 2)];
+      const p = predictVaultDepositAll(inv, vinfo({}, 1, 40), MATERIALS, lookup);
+      expect(p.notableItemId).toBe('ember_core');
+      expect(p.items).toBe(8);
+    });
+
+    it('a ceiling-blocked epic stack is never flagged (nothing of it actually moved)', () => {
+      const inv = [slot('ember_core', 5)];
+      const p = predictVaultDepositAll(inv, vinfo({ ember_core: 40 }, 1, 40), MATERIALS, lookup);
+      expect(p).toEqual({ stacks: 0, items: 0, full: true, notableItemId: null });
+    });
+
+    it('an unknown id never resolves as notable (a lookup miss is simply not notable)', () => {
+      const materials = new Set(['mystery_id']);
+      const p = predictVaultDepositAll(
+        [slot('mystery_id', 3)],
+        vinfo({}, 1, 40),
+        materials,
+        lookup,
+      );
+      expect(p.notableItemId).toBeNull();
+    });
+
+    it('a partially-clamped epic stack is still named: SOME of it moved', () => {
+      // Headroom 5 against an 8-count epic stack: 5 move, 3 stay carried (the
+      // moved < slot.count arm, same clamp as the ordinary partial-fill case
+      // above), so `full` is set for the leftover AND notableItemId still
+      // names the item, because it is not "nothing of it actually moved" (the
+      // ceiling-blocked case above): the vault pane's own headroom readout
+      // explains the rest, so naming what DID move stays consistent here too.
+      const inv = [slot('ember_core', 8)];
+      const p = predictVaultDepositAll(inv, vinfo({ ember_core: 35 }, 1, 40), MATERIALS, lookup);
+      expect(p).toEqual({ stacks: 0, items: 5, full: true, notableItemId: 'ember_core' });
+    });
   });
 });
 
@@ -376,18 +515,42 @@ describe('hasVaultDepositable (the button enable)', () => {
 });
 
 describe('vaultDepositAllSummaryKey', () => {
-  it('exactly one of three arms: none / full / done', () => {
-    expect(vaultDepositAllSummaryKey({ items: 0, full: true })).toBe(
+  it('exactly one of five arms: none / notable / notableFull / full / done', () => {
+    expect(vaultDepositAllSummaryKey({ items: 0, full: true, notableItemId: null })).toBe(
       'hudChrome.bank.vaultDepositAllNone',
     );
-    expect(vaultDepositAllSummaryKey({ items: 0, full: false })).toBe(
+    expect(vaultDepositAllSummaryKey({ items: 0, full: false, notableItemId: null })).toBe(
       'hudChrome.bank.vaultDepositAllNone',
     );
-    expect(vaultDepositAllSummaryKey({ items: 3, full: true })).toBe(
+    expect(vaultDepositAllSummaryKey({ items: 3, full: true, notableItemId: null })).toBe(
       'hudChrome.bank.vaultDepositAllFull',
     );
-    expect(vaultDepositAllSummaryKey({ items: 3, full: false })).toBe(
+    expect(vaultDepositAllSummaryKey({ items: 3, full: false, notableItemId: null })).toBe(
       'hudChrome.bank.vaultDepositAllDone',
+    );
+  });
+
+  it('a notable epic-or-better item takes priority over full, once anything moved', () => {
+    expect(vaultDepositAllSummaryKey({ items: 3, full: false, notableItemId: 'ember_core' })).toBe(
+      'hudChrome.bank.vaultDepositAllNotable',
+    );
+  });
+
+  // #3xxx follow-up: the Notable arm used to swallow the Full arm outright, so a
+  // sweep that both named the epic reagent AND left an ordinary material behind
+  // its ceiling read as if nothing else was capped. NotableFull keeps both facts.
+  it('a notable item alongside a ceiling that also held something back gets its OWN arm', () => {
+    expect(vaultDepositAllSummaryKey({ items: 3, full: true, notableItemId: 'ember_core' })).toBe(
+      'hudChrome.bank.vaultDepositAllNotableFull',
+    );
+  });
+
+  it('none still wins over notable when nothing actually moved', () => {
+    // Unreachable from the real predictVaultDepositAll (notableItemId is only
+    // ever set alongside a positive moved count), but the priority order is
+    // pinned directly here rather than only through the reachable shape.
+    expect(vaultDepositAllSummaryKey({ items: 0, full: true, notableItemId: 'ember_core' })).toBe(
+      'hudChrome.bank.vaultDepositAllNone',
     );
   });
 });
@@ -424,11 +587,14 @@ describe('vaultWithdrawFit + vaultWithdrawNotice (the shortfall explanation)', (
     expect(fit).toBe(25);
   });
 
-  it('passes identity/provenance into countFit and keeps instances all-or-nothing', () => {
+  it('passes identity/provenance into countFit and keeps whole-move payloads all-or-nothing', () => {
     const inv = Array.from({ length: 15 }, (_, i) => slot(`gear_${i}`, 1));
     const bags = [null, null, null, null];
+    // One free slot: a locked payload that cannot land whole fits nothing,
+    // while a signer (mergeable, the bags split it) and a plain row fit 20.
+    expect(vaultWithdrawFit(inv, bags, 'copper_ore', 30, { locked: true }, 'smelt_copper')).toBe(0);
     expect(vaultWithdrawFit(inv, bags, 'copper_ore', 30, { signer: 'Ada' }, 'smelt_copper')).toBe(
-      0,
+      20,
     );
     expect(vaultWithdrawFit(inv, bags, 'copper_ore', 30, undefined, 'smelt_copper')).toBe(20);
   });
@@ -479,5 +645,48 @@ describe('no client-side price constant (source scan)', () => {
     }
     // The loop above walks the live ladder: prove it saw the whole table.
     expect(VAULT_UPGRADE_PRICES.length).toBe(5);
+  });
+});
+
+describe('vaultMaterialHeadroom (the picker ceiling for a vault deposit)', () => {
+  it('is the ceiling less pooled and identity-row units, from the wire snapshot', () => {
+    const info = vinfo({ copper_ore: 30 }, 1, 40, 50000, [
+      slot('copper_ore', 6, { materialSources: [{ source: {}, count: 6 }] }),
+      slot('iron_ore', 3),
+    ]);
+    expect(vaultMaterialHeadroom(info, 'copper_ore')).toBe(4);
+    expect(vaultMaterialHeadroom(info, 'iron_ore')).toBe(37);
+    expect(vaultMaterialHeadroom(info, 'frost_lotus')).toBe(40);
+  });
+
+  it('floors an over-cap tolerated holding at zero and has no answer away or locked', () => {
+    expect(vaultMaterialHeadroom(vinfo({ copper_ore: 45 }), 'copper_ore')).toBe(0);
+    expect(vaultMaterialHeadroom(null, 'copper_ore')).toBeUndefined();
+    expect(vaultMaterialHeadroom(vinfo({}, 0, 0, 20000), 'copper_ore')).toBeUndefined();
+  });
+
+  it('never reads a prototype-named id off the stock record', () => {
+    expect(vaultMaterialHeadroom(vinfo({}), 'constructor')).toBe(40);
+  });
+});
+
+describe('the chosen-quantity action follows the whole-move rule at the seam', () => {
+  it('withholds it from a locked row only, one-unit rows included', () => {
+    const model = buildVaultView(
+      vinfo({}, 1, 40, 50000, [
+        slot('copper_ore', 3, { instance: { locked: true } }),
+        slot('copper_ore', 1, { instance: { signer: 'Ada' } }),
+        slot('iron_ore', 2, { instance: { bindOnTrade: true } }),
+      ]),
+      lookup,
+    );
+    if (model.kind !== 'vault') throw new Error('expected vault');
+    expect(
+      model.rows.map((row) => [row.itemId, row.count, row.canChooseQuantity, row.partialMax]),
+    ).toEqual([
+      ['copper_ore', 3, false, null],
+      ['copper_ore', 1, true, 1],
+      ['iron_ore', 2, true, 2],
+    ]);
   });
 });

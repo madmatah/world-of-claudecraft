@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ABILITIES } from '../src/sim/data';
+import { preparePartyFrameAuras } from '../src/sim/party_frame_info';
+import type { Aura } from '../src/sim/types';
 import {
   DEFAULT_PARTY_FRAME_DISPLAY,
   PARTY_FRAME_RANGE_YD,
   partyFrameAuraIsRelevant,
+  partyFrameHeaderState,
   partyFrameHealthText,
   partyFrameSignature,
   prioritizePartyFrameAuras,
+  readPartyFrameDisplayConfig,
   resolvePartyFrameStyle,
   selectPartyFrameMembers,
 } from '../src/ui/party_frames';
@@ -39,6 +43,14 @@ describe('party frame style resolution', () => {
   });
 });
 
+describe('party frame header state', () => {
+  it('shows the member count and derives the disclosure state without DOM state', () => {
+    expect(partyFrameHeaderState(4, false)).toEqual({ visible: true, count: 4, collapsed: false });
+    expect(partyFrameHeaderState(4, true)).toEqual({ visible: true, count: 4, collapsed: true });
+    expect(partyFrameHeaderState(0, true)).toEqual({ visible: false, count: 0, collapsed: true });
+  });
+});
+
 describe('party frame aura relevance', () => {
   it('hides passive maintenance buffs but keeps healer effects and harmful auras', () => {
     expect(partyFrameAuraIsRelevant({ id: 'imbue', kind: 'imbue' })).toBe(false);
@@ -56,7 +68,10 @@ describe('party frame aura relevance', () => {
       false,
     );
     expect(partyFrameAuraIsRelevant({ id: 'temporal_exhaustion', kind: 'sated' })).toBe(false);
-    expect(partyFrameAuraIsRelevant({ id: 'well_fed', kind: 'buff_sta' })).toBe(false);
+    // the live unified food-buff id (Masterwrought 11c): every buff food
+    // mints 'well_fed' (value 5 is the capstone dish's real magnitude, so
+    // the fixture walks the predicate exactly as the live aura does)
+    expect(partyFrameAuraIsRelevant({ id: 'well_fed', kind: 'buff_sta', value: 5 })).toBe(false);
     expect(partyFrameAuraIsRelevant({ id: 'rend', kind: 'dot' })).toBe(true);
     expect(partyFrameAuraIsRelevant({ id: 'wither', kind: 'buff_ap', neg: 1 })).toBe(true);
   });
@@ -189,6 +204,7 @@ describe('party frame health text and tactical information', () => {
     expect(partyFrameHealthText(75, 100, 1, format)).toBe('percent:0.75');
     expect(partyFrameHealthText(75, 100, 2, format)).toBe('number:75');
     expect(partyFrameHealthText(75, 100, 3, format)).toBe('number:75 / number:100');
+    expect(partyFrameHealthText(75, 100, 4, format)).toBe('number:75 / number:100 (percent:0.75)');
   });
 
   it('does not reveal Temporal Cascade target selection on party frames', () => {
@@ -223,6 +239,16 @@ describe('party frame signature (the per-frame short-circuit)', () => {
   it('is stable: the same party yields the same signature (so an unchanged party short-circuits)', () => {
     const pos = { x: 0, z: 0 };
     expect(partyFrameSignature(info(), 1, pos)).toBe(partyFrameSignature(info(), 1, pos));
+  });
+
+  it('changes when the selected party target changes so the raid halo repaints', () => {
+    const party = info();
+    const pos = { x: 0, z: 0 };
+    expect(
+      partyFrameSignature(party, 1, pos, undefined, DEFAULT_PARTY_FRAME_DISPLAY, undefined, 2),
+    ).not.toBe(
+      partyFrameSignature(party, 1, pos, undefined, DEFAULT_PARTY_FRAME_DISPLAY, undefined, 3),
+    );
   });
 
   it('skips the local player but encodes every other member + leader / raid / group', () => {
@@ -587,5 +613,76 @@ describe('party pets in the selector and the signature', () => {
     expect(at(PARTY_FRAME_RANGE_YD + 1), 'past it: badged').toBe(true);
     // The old threshold, which is the middle of the reported dead zone.
     expect(at(60), 'the 60yd case healers complained about now badges').toBe(true);
+  });
+});
+
+// The other half of the Aura.flask wire question (tests/snapshots.test.ts pins
+// the entity-snapshot half): the party-frame payload projects each aura through
+// preparePartyFrameAuras into an explicitly built summary, so the flask marker
+// stops there too and a party row can never badge a member's flask. The
+// projection is a hand-written object literal rather than a spread, which is
+// exactly why it needs a pin: adding one line to it would widen the payload for
+// every member of every party with nothing else red.
+describe('party frame aura summary carries no flask marker', () => {
+  // A flask-MARKED aura of a party-frame-relevant kind. Contrived on purpose:
+  // a real flask buff (buff_sta) is not relevant to a party frame at all, so it
+  // never reaches the projection, and pinning the projection needs an aura that
+  // does. What is under test is the summary's key set, not which auras qualify.
+  const markedRelevantAura: Aura = {
+    id: 'power_word_shield',
+    name: 'Psalm of Warding',
+    kind: 'absorb',
+    remaining: 12,
+    duration: 12,
+    value: 250,
+    sourceId: 7,
+    school: 'holy',
+    flask: true,
+  };
+
+  it('projects a fixed key set, so the marker never reaches a party row', () => {
+    const prepared = preparePartyFrameAuras([markedRelevantAura], 1000);
+    expect(prepared, 'the aura really reached the projection').toHaveLength(1);
+    const summary = prepared[0].summary as unknown as Record<string, unknown>;
+    expect('flask' in summary, 'the marker stopped at the projection').toBe(false);
+    // The WHOLE key set, so any other widening fails here too: id and kind
+    // always ride, remaining always rides, and neg/poolPct are conditional on a
+    // negative value and on Mending Current respectively (neither applies here).
+    expect(Object.keys(summary).sort()).toEqual(['id', 'kind', 'remaining']);
+  });
+});
+
+describe('readPartyFrameDisplayConfig', () => {
+  it('falls back to the defaults before the settings store attaches', () => {
+    expect(readPartyFrameDisplayConfig(undefined)).toEqual(DEFAULT_PARTY_FRAME_DISPLAY);
+  });
+
+  it('keeps every default for a store whose keys are all missing', () => {
+    expect(readPartyFrameDisplayConfig({ get: () => undefined })).toEqual(
+      DEFAULT_PARTY_FRAME_DISPLAY,
+    );
+  });
+
+  it('reads every key from the store, rounding the choice values', () => {
+    const values: Record<string, number | boolean> = {
+      partyFrameShowSelf: true,
+      partyFrameShowResource: false,
+      partyFrameShowAbsorbs: true,
+      partyFrameShowAuras: false,
+      partyFrameShowPets: false,
+      partyFrameStyle: 2,
+      partyFrameHealthText: 4.2,
+      partyFrameSort: 1,
+    };
+    expect(readPartyFrameDisplayConfig({ get: (key) => values[key] })).toEqual({
+      showSelf: true,
+      showResource: false,
+      showAbsorbs: true,
+      showAuras: false,
+      showPets: false,
+      presentation: 2,
+      healthText: 4,
+      sort: 1,
+    });
   });
 });

@@ -19,9 +19,14 @@ import {
 import { handlePickedEntity, hoverCursorKind } from '../src/game/interactions';
 import { tryNearbyInteraction } from '../src/game/nearby_interaction';
 import { ESCORTS } from '../src/sim/data';
-import type { Entity, QuestProgress } from '../src/sim/types';
+import type { Entity, QuestProgress, WorldQuestProgress } from '../src/sim/types';
 
 const WREN = ESCORTS.esc_fv_wren;
+if (WREN.questId === undefined) throw new Error('Wren must remain an ordinary escort quest');
+const WREN_QUEST_ID = WREN.questId;
+const CARAVAN = ESCORTS.esc_wq_eastbrook_caravan;
+if (CARAVAN.worldQuestId === undefined) throw new Error('Caravan must remain a world quest');
+const CARAVAN_QUEST_ID = CARAVAN.worldQuestId;
 const AWAY_TEXT = 'escort away';
 
 function entity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind'>): Entity {
@@ -55,7 +60,20 @@ function escorteeAt(x = WREN.start.x, z = WREN.start.z, overrides: Partial<Entit
 }
 
 function activeLog(): Map<string, QuestProgress> {
-  return new Map([[WREN.questId, { questId: WREN.questId, counts: [0], state: 'active' }]]);
+  return new Map([[WREN_QUEST_ID, { questId: WREN_QUEST_ID, counts: [0], state: 'active' }]]);
+}
+
+function activeWorldLog(): Map<string, WorldQuestProgress> {
+  return new Map([[CARAVAN_QUEST_ID, { questId: CARAVAN_QUEST_ID, count: 0, state: 'active' }]]);
+}
+
+function caravanAt(): Entity {
+  return entity({
+    id: 3,
+    kind: 'mob',
+    templateId: CARAVAN.npcMobId,
+    pos: { x: CARAVAN.start.x, y: 0, z: CARAVAN.start.z },
+  });
 }
 
 function entities(...list: Entity[]): Map<number, Entity> {
@@ -79,7 +97,7 @@ describe('decideEscortPress', () => {
 
     for (const state of ['ready', 'done'] as const) {
       const log = new Map<string, QuestProgress>([
-        [WREN.questId, { questId: WREN.questId, counts: [1], state }],
+        [WREN_QUEST_ID, { questId: WREN_QUEST_ID, counts: [1], state }],
       ]);
       expect(decideEscortPress(player.pos, entities(player, wren), log)).toEqual({ kind: 'none' });
     }
@@ -172,11 +190,19 @@ describe('every escort def in the game is startable from the client', () => {
       templateId: def.npcMobId,
       pos: { x: def.start.x, y: 0, z: def.start.z },
     });
-    const log = new Map([
-      [def.questId, { questId: def.questId, counts: [0], state: 'active' as const }],
-    ]);
+    const log = new Map<string, QuestProgress>();
+    const worldLog = new Map<string, WorldQuestProgress>();
+    if (def.worldQuestId !== undefined) {
+      worldLog.set(def.worldQuestId, {
+        questId: def.worldQuestId,
+        count: 0,
+        state: 'active',
+      });
+    } else {
+      log.set(def.questId, { questId: def.questId, counts: [0], state: 'active' });
+    }
 
-    expect(decideEscortPress(player.pos, entities(player, escortee), log)).toEqual({
+    expect(decideEscortPress(player.pos, entities(player, escortee), log, worldLog)).toEqual({
       kind: 'start',
       entityId: escortee.id,
     });
@@ -186,11 +212,14 @@ describe('every escort def in the game is startable from the client', () => {
     });
   });
 
-  it('covers all four shipped escorts, so a fifth cannot be missed silently', () => {
+  it('covers every shipped escort, so a new route cannot be missed silently', () => {
     expect(Object.keys(ESCORTS).sort()).toEqual([
       'esc_fs_bram',
       'esc_fv_wren',
       'esc_pr_navigator',
+      'esc_wq_eastbrook_caravan',
+      'esc_wq_frostveil_caravan',
+      'esc_wq_willowfen_caravan',
       'esc_ww_mosley',
     ]);
   });
@@ -252,13 +281,27 @@ describe('isEscorteeEntity', () => {
 });
 
 describe('the Interact action reaches the escort run (tryNearbyInteraction)', () => {
-  function rig(list: Entity[], player: Entity, log = activeLog()) {
+  function rig(
+    list: Entity[],
+    player: Entity,
+    log = activeLog(),
+    farmPatches: {
+      id: string;
+      zoneId: string;
+      tier: 1;
+      x: number;
+      z: number;
+      beds: { id: string; x: number; z: number }[];
+    }[] = [],
+    worldLog = new Map<string, WorldQuestProgress>(),
+  ) {
     const calls: string[] = [];
     const world = {
       playerId: player.id,
       player,
       entities: entities(player, ...list),
       questLog: log,
+      worldQuestLog: worldLog,
       targetEntity: (id: number | null) => {
         calls.push(`target:${id}`);
       },
@@ -275,6 +318,17 @@ describe('the Interact action reaches the escort run (tryNearbyInteraction)', ()
       leaveDungeon: () => false as const,
       pickUpObject: () => false as const,
       nodeHarvestableByMe: () => true,
+      // Phase 9b bed-arm seam members (the ordering arms below exercise them).
+      farmPatches,
+      myFarmPlots: [] as const,
+      harvestCrop: (bedId: string) => {
+        calls.push(`harvestCrop:${bedId}`);
+      },
+      // Phase 12 feast-arm seam member: inert here (the feast ordering arms
+      // live in tests/nearby_interaction.test.ts).
+      consumeFeast: (feastId: number) => {
+        calls.push(`consumeFeast:${feastId}`);
+      },
       harvestNode: (id: string) => {
         calls.push(`harvest:${id}`);
         return true;
@@ -286,9 +340,12 @@ describe('the Interact action reaches the escort run (tryNearbyInteraction)', ()
       openDelveBoard: () => {},
       showError: (text: string) => calls.push(`error:${text}`),
       requestSpiritHealerResurrect: () => {},
+      // Phase 9b bed-arm seam member: inert here (lane A's arms exercise it).
+      openPlantSheet: (bedId: string) => calls.push(`plantSheet:${bedId}`),
+      // The corpse harvest-choice arm's popup open: inert here.
+      openLoot: (mobId: number) => calls.push(`openCorpse:${mobId}`),
     };
-    const press = (nodes: Parameters<typeof tryNearbyInteraction>[2] = []) =>
-      tryNearbyInteraction(world, hud, nodes, null, 'too far', 'not ready', AWAY_TEXT, 'nothing');
+    const press = () => tryNearbyInteraction(world, hud, AWAY_TEXT, 'nothing');
     return { press, calls };
   }
 
@@ -300,11 +357,62 @@ describe('the Interact action reaches the escort run (tryNearbyInteraction)', ()
     expect(r.calls).toEqual([`target:${wren.id}`, 'interact']);
   });
 
+  it('opens a start dialog for an active world-quest caravan', () => {
+    const caravan = caravanAt();
+    const r = rig(
+      [caravan],
+      playerAt(CARAVAN.start.x + 1, CARAVAN.start.z),
+      new Map(),
+      [],
+      activeWorldLog(),
+    );
+
+    expect(r.press()).toBe(true);
+    expect(r.calls).toEqual([`target:${caravan.id}`, `quest:${caravan.id}`]);
+  });
+
   it('explains an empty post instead of the generic nothing-to-interact line', () => {
     const r = rig([], playerAt(WREN.start.x, WREN.start.z));
 
     expect(r.press()).toBe(false);
     expect(r.calls).toEqual([`error:${AWAY_TEXT}`]);
+  });
+
+  it('a free bed underfoot outranks the escort-away last resort', () => {
+    // Empty post (quest active, escortee absent) PLUS a bed in reach: the
+    // bed arm sits above the away line, so the press farms instead of
+    // toasting (the ordering the arm's comment claims).
+    const bed = { id: 'bed_order_1', x: WREN.start.x, z: WREN.start.z };
+    const r = rig([], playerAt(WREN.start.x, WREN.start.z), activeLog(), [
+      { id: 'patch_order', zoneId: 'eastbrook_vale', tier: 1, x: bed.x, z: bed.z, beds: [bed] },
+    ]);
+    expect(r.press()).toBe(true);
+    expect(r.calls).toEqual(['plantSheet:bed_order_1']);
+  });
+
+  it('a feast underfoot outranks the escort-away last resort (the Phase 12 arm ordering)', () => {
+    // Empty post (quest active, escortee absent) PLUS a placed feast in
+    // reach: the feast arm sits above the away line like the bed arm does,
+    // so the press eats instead of toasting.
+    const feast = entity({
+      id: 6,
+      kind: 'object',
+      templateId: 'farm_feast',
+      pos: { x: WREN.start.x, y: 0, z: WREN.start.z },
+    });
+    const r = rig([feast], playerAt(WREN.start.x, WREN.start.z));
+    expect(r.press()).toBe(true);
+    expect(r.calls).toEqual(['consumeFeast:6']);
+  });
+
+  it('an escortee in reach outranks a bed underfoot (escort start stays above the bed arm)', () => {
+    const wren = escorteeAt();
+    const bed = { id: 'bed_order_2', x: WREN.start.x + 1, z: WREN.start.z };
+    const r = rig([wren], playerAt(WREN.start.x + 1, WREN.start.z), activeLog(), [
+      { id: 'patch_order', zoneId: 'eastbrook_vale', tier: 1, x: bed.x, z: bed.z, beds: [bed] },
+    ]);
+    expect(r.press()).toBe(true);
+    expect(r.calls).toEqual([`target:${wren.id}`, 'interact']);
   });
 
   it('never swallows a corpse press: looting the ambush wave still wins', () => {
@@ -324,33 +432,15 @@ describe('the Interact action reaches the escort run (tryNearbyInteraction)', ()
     expect(r.calls).toEqual(['loot:5']);
   });
 
-  it('beats a gather node underfoot', () => {
-    const wren = escorteeAt();
-    const r = rig([wren], playerAt(WREN.start.x + 1, WREN.start.z));
-    const node = {
-      id: 'ore_1',
-      type: 'ore',
-      tier: 1,
-      pos: { x: WREN.start.x + 1, z: WREN.start.z },
-    } as const;
-
-    expect(r.press([node])).toBe(true);
-    expect(r.calls).toEqual([`target:${wren.id}`, 'interact']);
-  });
-
-  it('never eats another arm press while she is away: the node underfoot wins', () => {
-    // Regression: the away line is a last resort, not a priority. Standing at
-    // an empty post over an ore node must still harvest the node.
+  it('never gathers from an empty post: the away line shows and no harvest command is sent', () => {
+    // Intentional gathering: the generic press knows no nodes, so standing at
+    // an empty post (over an ore node or not) explains the absence rather
+    // than harvesting anything. The away line staying a LAST resort, not a
+    // priority, is pinned by the bed and feast cases above.
     const r = rig([], playerAt(WREN.start.x, WREN.start.z));
-    const node = {
-      id: 'ore_1',
-      type: 'ore',
-      tier: 1,
-      pos: { x: WREN.start.x, z: WREN.start.z },
-    } as const;
 
-    expect(r.press([node])).toBe(true);
-    expect(r.calls).toEqual(['harvest:ore_1']);
+    expect(r.press()).toBe(false);
+    expect(r.calls).toEqual([`error:${AWAY_TEXT}`]);
   });
 
   it('falls through to the generic line without the quest', () => {
@@ -363,7 +453,12 @@ describe('the Interact action reaches the escort run (tryNearbyInteraction)', ()
 });
 
 describe('a right-click reaches the escort run (handlePickedEntity)', () => {
-  function rig(wren: Entity, player: Entity, log = activeLog()) {
+  function rig(
+    wren: Entity,
+    player: Entity,
+    log = activeLog(),
+    worldLog = new Map<string, WorldQuestProgress>(),
+  ) {
     const startAutoAttack = vi.fn();
     const interact = vi.fn();
     const world = {
@@ -371,6 +466,7 @@ describe('a right-click reaches the escort run (handlePickedEntity)', () => {
       playerId: player.id,
       entities: entities(player, wren),
       questLog: log,
+      worldQuestLog: worldLog,
       targetEntity: vi.fn(),
       interact,
       enterDungeon: () => false as const,
@@ -386,6 +482,8 @@ describe('a right-click reaches the escort run (handlePickedEntity)', () => {
       showError: vi.fn(),
       closeContextMenu: vi.fn(),
       requestSpiritHealerResurrect: vi.fn(),
+      // Phase 9b bed-arm seam member: inert here (lane A's arms exercise it).
+      openPlantSheet: vi.fn(),
     };
     return { world, hud, interact, startAutoAttack };
   }
@@ -400,6 +498,21 @@ describe('a right-click reaches the escort run (handlePickedEntity)', () => {
     // She is non-hostile, so the old path fell into the attackable branch and
     // did nothing at all.
     expect(r.startAutoAttack).not.toHaveBeenCalled();
+  });
+
+  it('opens a start dialog for an active world-quest caravan through the picked path', () => {
+    const caravan = caravanAt();
+    const r = rig(
+      caravan,
+      playerAt(CARAVAN.start.x + 1, CARAVAN.start.z),
+      new Map(),
+      activeWorldLog(),
+    );
+
+    expect(handlePickedEntity(r.world, r.hud, caravan.id, 2, 0, 0)).toBe(true);
+    expect(r.hud.openQuestDialog).toHaveBeenCalledWith(caravan.id);
+    expect(r.world.targetEntity).toHaveBeenCalledWith(caravan.id);
+    expect(r.interact).not.toHaveBeenCalled();
   });
 
   it('reports too far beyond the click range', () => {

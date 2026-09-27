@@ -39,6 +39,11 @@ export const DUNGEON_END_WALL_HW = 24; // front/back wall half width
 export const PILLAR_COLLIDER_R = 1.0; // centre-aisle pillar obstacle radius
 export const TOMB_HW = 1.1; // wall-side obstacle (sarcophagus/cargo) half extents
 export const TOMB_HD = 2.1;
+// Floor-clutter debris is short enough to see and cast over: a `cameraTopY`
+// below SIGHT_HEIGHT (colliders.ts) lets the LOS low-obstacle skip clear it,
+// matching the crate/campfire precedent, while movement collision (moveTopY
+// unset) stays untouched.
+export const CLUTTER_CAMERA_TOP = 0.9;
 export const DUNGEON_WALL_HEIGHT = 8; // visual module height (2x KayKit 4u walls)
 /**
  * Boss dais height (yards): the foundation blocks the renderer stacks are 2u
@@ -48,6 +53,23 @@ export const DUNGEON_WALL_HEIGHT = 8; // visual module height (2x KayKit 4u wall
  * rim exactly like an open-world kerb (it sits inside MAX_STEP_HEIGHT).
  */
 export const DAIS_HEIGHT = 0.6;
+
+/** A raised stage disc in instance-local coordinates: the boss dais or a flanking platform. */
+export interface DaisDisc {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/**
+ * The Nythraxis flanking platforms: the crypt's raised dais object reused
+ * twice, in line with the boss's spawn and this far to the raid's left and
+ * right of it (owner call, 2026-09-11). The Binding Sigil lands on them
+ * (nythraxis_binding_sigil.ts reads the same offset), so the tank always
+ * knows where the drag goes.
+ */
+export const NYTHRAXIS_PLATFORM_SIDE_OFFSET = 30;
+export const NYTHRAXIS_PLATFORM_RADIUS = 9.5;
 
 /**
  * Standable tops for the wall-side obstacle slots, measured from the shipped
@@ -126,13 +148,22 @@ export interface DungeonLayout {
   /** chamber-waist wall stubs (sanctum's three-chamber structure) */
   stubs: WallStub[];
   /** boss dais — walkable, deliberately NO collider */
-  dais: { x: number; z: number; r: number };
+  dais: DaisDisc;
   /**
    * True when the renderer stacks the DAIS_HEIGHT foundation platform on the
    * dais: the sim's interior floor rises to match (`daisLiftAt`). Absent on
    * the flat fighting floors (arena, the Nythraxis raid).
    */
   daisRaised?: boolean;
+  /**
+   * Extra raised stages beside the boss dais (the Nythraxis flanking
+   * platforms the Binding Sigil lands on, owner call 2026-09-11): the same
+   * DAIS_HEIGHT foundation disc the crypt's raised dais is, walkable with NO
+   * obstacle collider, and ALWAYS raised whatever `daisRaised` says (a flat
+   * fighting floor may still carry them). The sim lifts the floor inside
+   * each disc (`daisLiftAt`) and the renderer stacks the blocks (placeDais).
+   */
+  platforms?: DaisDisc[];
   /** Optional room width override for oversized rooms. Defaults to the classic crypt width. */
   wallX?: number;
   endWallHw?: number;
@@ -237,35 +268,50 @@ export const SANCTUM_LAYOUT: DungeonLayout = (() => {
   };
 })();
 
-// Nythraxis' Abandoned Crypt raid room: a long dark nave ending in one large
-// fighting arena. It stays within the shared wall-width contract, but leaves the
-// central floor open so ten players can spread, stack, and reach three wardstones.
-export const NYTHRAXIS_LAYOUT: DungeonLayout = (() => {
-  const pillars: GridPoint[] = [];
-  for (const z of [18, 38, 60, 82, 106]) {
-    for (const x of [-90, -45, 45, 90]) pillars.push({ x, z });
-  }
-  return {
-    zMin: -19,
-    zMax: 126,
-    sideWallZ: 53.5,
-    sideWallHd: 73,
-    wallX: 230,
-    endWallHw: 231,
-    floorHalfX: 228,
-    pillars,
-    tombs: [
-      { x: -210, z: 20 },
-      { x: 210, z: 20 },
-      { x: -210, z: 42 },
-      { x: 210, z: 42 },
-      { x: -210, z: 64 },
-      { x: 210, z: 64 },
-    ],
-    stubs: [],
-    dais: { x: 0, z: 96, r: 13.5 },
-  };
-})();
+// Nythraxis' Abandoned Crypt raid room: one fighting hall, about 100 yd wide
+// by 100 deep (owner decision 2026-09-04, twice the first compact cut: the old
+// 460 by 145 hall let the raid stand still; the redo's floor hazards, the sigil
+// drag, and Bone Storm want a floor the raid has to share but can still run
+// across). The boss dais keeps its local position (0, 96) with 20 yd behind
+// it so the encounter's spawn-relative geometry is unchanged; six pillars sit
+// well off the centre line so the middle stays open for the drag and the
+// charges, and the tombs sit in the wall line.
+export const NYTHRAXIS_LAYOUT: DungeonLayout = {
+  zMin: 16,
+  zMax: 116,
+  sideWallZ: 66,
+  sideWallHd: 50,
+  wallX: 51,
+  endWallHw: 52,
+  floorHalfX: 50,
+  pillars: [
+    { x: -32, z: 40 },
+    { x: 32, z: 40 },
+    { x: -32, z: 62 },
+    { x: 32, z: 62 },
+    { x: -32, z: 84 },
+    { x: 32, z: 84 },
+  ],
+  tombs: [
+    { x: -48.5, z: 30 },
+    { x: 48.5, z: 30 },
+    { x: -48.5, z: 50 },
+    { x: 48.5, z: 50 },
+    { x: -48.5, z: 70 },
+    { x: 48.5, z: 70 },
+    { x: -48.5, z: 90 },
+    { x: 48.5, z: 90 },
+  ],
+  stubs: [],
+  dais: { x: 0, z: 96, r: 10 },
+  // The two flanking platforms: the crypt's raised dais reused, in line with
+  // the spawn and 30 yd to either side (clear of the pillar rows at |x| 32,
+  // z 84 and the tombs at |x| 48.5). The Binding Sigil lands on them.
+  platforms: [
+    { x: -NYTHRAXIS_PLATFORM_SIDE_OFFSET, z: 96, r: NYTHRAXIS_PLATFORM_RADIUS },
+    { x: NYTHRAXIS_PLATFORM_SIDE_OFFSET, z: 96, r: NYTHRAXIS_PLATFORM_RADIUS },
+  ],
+};
 
 // The Drowned Temple (interior 'temple'): a two-part flooded temple — a long
 // antechamber, a single chamber-waist arch at z 66 (10u centre passage), then
@@ -1100,16 +1146,24 @@ export function arenaMapForSlot(slot: number): ArenaMapDef {
 
 /**
  * The interior floor's rise above the flat room floor at an instance-local
- * point: DAIS_HEIGHT inside a raised boss dais, zero elsewhere. This is the
+ * point: DAIS_HEIGHT inside a raised boss dais or any flanking platform,
+ * zero elsewhere. This is the
  * sim half of the platform the renderer stacks; `world.ts` groundHeight adds
  * it, so mobs, spawns, loot, landings, and the camera all stand on the stage.
  */
 export function daisLiftAt(layout: DungeonLayout, lx: number, lz: number): number {
-  if (!layout.daisRaised) return 0;
-  const d = layout.dais;
-  const dx = lx - d.x;
-  const dz = lz - d.z;
-  return dx * dx + dz * dz <= d.r * d.r ? DAIS_HEIGHT : 0;
+  if (layout.daisRaised && insideDaisDisc(layout.dais, lx, lz)) return DAIS_HEIGHT;
+  for (const platform of layout.platforms ?? []) {
+    if (insideDaisDisc(platform, lx, lz)) return DAIS_HEIGHT;
+  }
+  return 0;
+}
+
+/** True inside the disc, edge inclusive. */
+export function insideDaisDisc(disc: DaisDisc, lx: number, lz: number): boolean {
+  const dx = lx - disc.x;
+  const dz = lz - disc.z;
+  return dx * dx + dz * dz <= disc.r * disc.r;
 }
 
 /**
@@ -1234,6 +1288,13 @@ export function layoutColliders(
     }
   }
   // floor clutter props (small circle per scatter point; renderer places matching props)
-  for (const c of layout.clutter ?? []) out.push({ type: 'circle', x: c.x, z: c.z, r: 0.8 });
+  for (const c of layout.clutter ?? [])
+    out.push({
+      type: 'circle',
+      x: c.x,
+      z: c.z,
+      r: 0.8,
+      cameraTopY: floorY + CLUTTER_CAMERA_TOP,
+    });
   return out;
 }

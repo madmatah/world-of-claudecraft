@@ -8,6 +8,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
+import { PERFECTING_SKILL_REQ, perfectingInfoFrom } from '../../src/sim/professions/perfecting';
+import { PlantSheetWindow } from '../../src/ui/hud/professions/farming_plant_sheet_window';
+import { PerfectingWindow } from '../../src/ui/hud/professions/perfecting_window';
 import { cleanup } from './_harness';
 
 const TOUCH_FLOOR = 40;
@@ -320,6 +323,126 @@ describe('mobile target-size: in-game touch controls are >=40x40 in landscape', 
     expectAtLeastFloor(toggle, '.prof-effect-mode-toggle');
   });
 
+  it('plant sheet controls: seed pick, three care knobs, and Plant (real painter)', () => {
+    // The real painter under the real styles, the a11y-suite idiom, so the
+    // measured markup can never drift from what a bed press renders. The
+    // knobs paint DISABLED here (a fresh bag affords none), which is exactly
+    // the state the touch floor must still honor.
+    // CAUTION: the world stub is handed over through `as never`; it must
+    // carry every member the window's buildInput reads (inventory,
+    // myFarmPlots, professionsState) or the miss is a runtime throw in this
+    // suite only.
+    const host = el('div', { id: 'plant-sheet-window', class: 'window panel' });
+    document.body.appendChild(host);
+    const world = {
+      inventory: [
+        { itemId: 'vale_wheat_seed', count: 3 },
+        { itemId: 'garden_hoe', count: 1 },
+      ],
+      myFarmPlots: [],
+      professionsState: { skills: [{ professionId: 'farming', skill: 10, maxSkill: 100 }] },
+      plantCrop: () => {},
+    };
+    const win = new PlantSheetWindow({
+      root: () => host,
+      world: () => world as never,
+      closeOthers: () => {},
+      captureFocus: () => null,
+      restoreFocus: () => {},
+    });
+    win.open('bed_eastbrook_1');
+    for (const sel of [
+      '.ps-seed',
+      '[data-knob="compost"]',
+      '[data-knob="watch"]',
+      '[data-knob="tonic"]',
+      '.ps-plant',
+    ]) {
+      const node = host.querySelector<HTMLElement>(sel);
+      expect(node, `${sel} must render`).not.toBeNull();
+      expectAtLeastFloor(node as HTMLElement, sel);
+    }
+    win.close();
+  });
+
+  it('perfecting window controls: candidate rows, the action button, close (real painter)', () => {
+    // The real painter under the real styles (the plant-sheet idiom). The
+    // window mints its own root, so it is queried by id after open. The stub
+    // is handed over `as never`, same trap as the plant sheet: it must carry
+    // every member buildView reads.
+    const world = {
+      equipment: { mainhand: 'duskforged_warblade' },
+      equipmentInstances: {},
+      // The full attempt bill: with a material missing the action button
+      // renders DISABLED and its click opens nothing, so the bind-prompt
+      // rows below would find no prompt (the first browser run's red).
+      inventory: [
+        { itemId: 'makers_ember', count: 2 },
+        { itemId: 'sundered_essence', count: 1 },
+        { itemId: 'prismglass_setting', count: 3 },
+      ],
+      craftingIdentity: { synced: true },
+      craftSkills: { weaponcrafting: PERFECTING_SKILL_REQ },
+      perfectItem: () => {},
+      perfectingInfo(ref: unknown) {
+        return perfectingInfoFrom({
+          ref,
+          inventory: world.inventory,
+          equipment: world.equipment,
+          equipmentInstances: world.equipmentInstances,
+          craftSkills: world.craftSkills,
+        } as never);
+      },
+    };
+    const win = new PerfectingWindow({
+      itemIcon: () => '',
+      moneyHtml: () => '',
+      itemTooltip: () => '',
+      attachTooltip: () => {},
+      world: () => world as never,
+      closeOthers: () => {},
+      captureFocus: () => null,
+      restoreFocus: () => {},
+    } as never);
+    win.open();
+    const root = document.getElementById('perfecting-window') as HTMLElement;
+    for (const sel of ['.pf-cand', '.pf-action', '[data-close]']) {
+      const node = root.querySelector<HTMLElement>(sel);
+      expect(node, `${sel} must render`).not.toBeNull();
+      expectAtLeastFloor(node as HTMLElement, sel);
+    }
+    // The bind-confirm prompt: BOTH actions carry the floor. The cancel
+    // shipped bare-.btn (~29px) beside a 44px confirm guarding a permanent
+    // bind, which is exactly the mis-tap bias the floor exists to prevent;
+    // unmeasured controls are how it escaped (the QA round's finding).
+    let stack = document.getElementById('prompt-stack');
+    if (!stack) {
+      stack = el('div', { id: 'prompt-stack' });
+      document.body.appendChild(stack);
+    }
+    (root.querySelector('.pf-action') as HTMLElement).click();
+    for (const sel of ['.pf-bind-confirm', '.pf-bind-cancel']) {
+      const node = stack.querySelector<HTMLElement>(sel);
+      expect(node, `${sel} must render in the bind prompt`).not.toBeNull();
+      expectAtLeastFloor(node as HTMLElement, sel);
+    }
+    (stack.querySelector('.pf-bind-cancel') as HTMLElement).click();
+    win.close();
+    // The naming dialog: reopen over a Perfected copy so the action opens it.
+    world.equipmentInstances = { mainhand: { perfected: true, boundTo: 1 } } as never;
+    world.inventory.push({ itemId: 'deed_of_making', count: 1 });
+    win.open();
+    (root.querySelector('.pf-action') as HTMLElement).click();
+    for (const sel of ['.pf-name-submit', '.pf-name-cancel']) {
+      const node = stack.querySelector<HTMLElement>(sel);
+      expect(node, `${sel} must render in the naming dialog`).not.toBeNull();
+      expectAtLeastFloor(node as HTMLElement, sel);
+    }
+    (stack.querySelector('.pf-name-cancel') as HTMLElement).click();
+    win.close();
+    root.remove();
+  });
+
   it('the per-use confirm dialog actions (R40 confirmToolEffectUse)', () => {
     // The R40 dialog made #confirm-dialog a routine mobile surface; its
     // action buttons carry the same 40px floor, scoped under the dialog id.
@@ -331,6 +454,80 @@ describe('mobile target-size: in-game touch controls are >=40x40 in landscape', 
     dialog.appendChild(actions);
     document.body.appendChild(dialog);
     expectAtLeastFloor(ok, '#confirm-dialog .cd-actions .btn');
+  });
+});
+
+// The signpost guild board's category strip and presence dot (guild board
+// categories): minted the way guild_board_window.ts renders them, inside the
+// #guild-board-window root the window-scoped rules key on.
+function guildBoardControls(): {
+  chip: HTMLElement;
+  showAll: HTMLElement;
+  presence: HTMLElement;
+} {
+  const win = el('div', { id: 'guild-board-window', class: 'window panel' });
+  win.style.display = 'flex';
+  const body = el('div', { class: 'lb-body gb-body' });
+  const strip = el('div', { class: 'gb-filters', role: 'group' });
+  const chip = el('label', { class: 'gb-filter-chip active' });
+  const box = el('input', { type: 'checkbox' });
+  const chipLabel = el('span', { class: 'gb-filter-label' });
+  chipLabel.textContent = 'New player friendly';
+  chip.append(box, chipLabel);
+  strip.appendChild(chip);
+  const empty = el('div', { class: 'lb-empty gb-filter-empty' });
+  const showAll = el('button', { type: 'button', class: 'btn gb-show-all' });
+  showAll.textContent = 'Show all guilds';
+  empty.appendChild(showAll);
+  const row = el('div', { class: 'lb-row lb-row-guild' });
+  const name = el('span', { class: 'lb-name gb-name-cell' });
+  const link = el('button', { type: 'button', class: 'gb-roster-link' });
+  link.textContent = 'Stormcallers';
+  const presence = el('button', { type: 'button', class: 'gb-presence' });
+  presence.appendChild(el('span', { class: 'soc-dot online gb-presence-dot' }));
+  name.append(link, presence);
+  row.appendChild(name);
+  body.append(strip, empty, row);
+  win.appendChild(body);
+  document.body.appendChild(win);
+  return { chip, showAll, presence };
+}
+
+describe('mobile target-size: the guild signpost board (guild board categories)', () => {
+  it('the filter chip and the Show-all button take the 40px floor', () => {
+    const { chip, showAll } = guildBoardControls();
+    expectAtLeastFloor(chip, '#guild-board-window .gb-filter-chip');
+    expectAtLeastFloor(showAll, '#guild-board-window .gb-show-all');
+  });
+
+  it('the presence dot: a 24px visual whose ::after hit extension is LIVE on all four sides', () => {
+    // The dot sits inline in a ranked row, so its visual box keeps the row
+    // rhythm at the SC 2.5.8 24px minimum and the 40px floor rides an
+    // invisible ::after hit extension (the compact tracker chip idiom above).
+    const { presence } = guildBoardControls();
+    const r = presence.getBoundingClientRect();
+    expect(r.width, `dot visual width ${r.width}`).toBeGreaterThanOrEqual(24 - EPSILON);
+    expect(r.height, `dot visual height ${r.height}`).toBeGreaterThanOrEqual(24 - EPSILON);
+    expect(r.height, `dot visual height ${r.height}`).toBeLessThan(TOUCH_FLOOR);
+    const reach =
+      Math.abs(Number.parseFloat(getComputedStyle(presence, '::after').top)) -
+      Number.parseFloat(getComputedStyle(presence).borderTopWidth);
+    expect(reach, 'the ::after reach beyond the border edge').toBe(8);
+    expect(r.height + 2 * reach, 'visual + 2x reach').toBeGreaterThanOrEqual(TOUCH_FLOOR - EPSILON);
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const inside = reach - 1;
+    const outside = reach + 1;
+    expect(document.elementFromPoint(cx, r.top - inside), 'above').toBe(presence);
+    expect(document.elementFromPoint(cx, r.bottom + inside), 'below').toBe(presence);
+    expect(document.elementFromPoint(r.left - inside, cy), 'left').toBe(presence);
+    expect(document.elementFromPoint(r.right + inside, cy), 'right').toBe(presence);
+    expect(document.elementFromPoint(cx, r.top - outside), 'beyond the reach, above').not.toBe(
+      presence,
+    );
+    expect(document.elementFromPoint(cx, r.bottom + outside), 'beyond the reach, below').not.toBe(
+      presence,
+    );
   });
 });
 
@@ -371,10 +568,43 @@ describe('desktop target-size: dense list controls clear the >=24px SC 2.5.8 flo
   });
 
   it('social tabs', () => {
-    const tab = el('button', { class: 'soc-tab' });
+    // Shipped markup: social_window mints 'soc-tab ui-tab', and the height that
+    // clears the floor is the library's --tab-h. A bare .soc-tab has kept only
+    // geometry since the tab look moved onto .ui-tab, so it would measure a
+    // padding box no shipped control ever renders.
+    const tab = el('button', { class: 'soc-tab ui-tab' });
     tab.textContent = 'Friends';
     document.body.appendChild(tab);
-    expectAtLeastDesktopFloor(tab, '.soc-tab');
+    expectAtLeastDesktopFloor(tab, '.soc-tab.ui-tab');
+  });
+
+  it('the guild board presence dot: a 24px visual whose ::after lifts it to the 36px desktop floor', () => {
+    // DESIGN.md 10.1: new chrome takes a 36px desktop hit target via padding
+    // where the visual is smaller. The dot keeps a 24px box inline in the
+    // ranked row and reaches 36px through an invisible ::after of 6px each
+    // way (components.css), proven the Reliquary eye's way below: a live hit
+    // just inside the reach, a miss just beyond it, visual + 2x reach >= 36.
+    const { presence, chip, showAll } = guildBoardControls();
+    const r = presence.getBoundingClientRect();
+    expect(r.width, `.gb-presence width ${r.width} < ${DESKTOP_FLOOR}`).toBeGreaterThanOrEqual(
+      DESKTOP_FLOOR - EPSILON,
+    );
+    expect(r.height, `.gb-presence height ${r.height} < ${DESKTOP_FLOOR}`).toBeGreaterThanOrEqual(
+      DESKTOP_FLOOR - EPSILON,
+    );
+    const reach =
+      Math.abs(Number.parseFloat(getComputedStyle(presence, '::after').top)) -
+      Number.parseFloat(getComputedStyle(presence).borderTopWidth);
+    expect(reach, 'the ::after reach beyond the border edge').toBe(6);
+    expect(r.height + 2 * reach, 'visual + 2x reach').toBeGreaterThanOrEqual(36 - EPSILON);
+    const cx = r.left + r.width / 2;
+    expect(document.elementFromPoint(cx, r.top - (reach - 1)), 'above').toBe(presence);
+    expect(document.elementFromPoint(cx, r.bottom + (reach - 1)), 'below').toBe(presence);
+    expect(document.elementFromPoint(cx, r.top - (reach + 1)), 'beyond the reach, above').not.toBe(
+      presence,
+    );
+    expectAtLeastDesktopFloor(chip, '#guild-board-window .gb-filter-chip');
+    expectAtLeastDesktopFloor(showAll, '#guild-board-window .gb-show-all');
   });
 
   it("The Reliquary's HUD-tracker eye toggle: a ~20px chip whose ::after lifts it to the 36px desktop floor", () => {

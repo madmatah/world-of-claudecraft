@@ -33,6 +33,7 @@
 
 import * as THREE from 'three';
 import type { StreetlampStyleId } from '../sim/streetlamp_style';
+import { floorVfxRenderOrder } from './floor_vfx_layer';
 import { buildDrapedGlowGeometry, type GlowPatchSite } from './ground_glow_patch';
 import { hasNightLightField, registerStaticNightLights } from './night_light_field';
 import type { NightLightSite } from './night_light_field_core';
@@ -235,7 +236,7 @@ export function buildRealmRacersLamps(
       poolMaterial,
     );
     pools.geometry.computeBoundingSphere();
-    pools.renderOrder = 1;
+    pools.renderOrder = floorVfxRenderOrder('ground', 0);
     pools.visible = false;
     rallyPoolMaterials.add(poolMaterial);
     rallyPoolMeshes.push(pools);

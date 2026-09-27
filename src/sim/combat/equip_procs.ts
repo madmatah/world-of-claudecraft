@@ -1,24 +1,27 @@
-// Legendary weapon procs ("chance on action" effects), a self-contained combat
+// Weapon and melee enchant procs ("chance on action" effects), a self-contained combat
 // system behind the SimContext seam. When the wielder lands a melee swing, a
 // damaging spell, or a heal, each matching proc on the equipped mainhand rolls once
 // and, on success, fires its effects: a Thunderfury-style chain arc, an attack-speed
 // slow, a damage-over-time, or a heal-over-time.
 //
-// Determinism / parity: the proc's rng roll only happens when the wielder actually
-// carries a proc weapon with a proc for THIS trigger. Ordinary gear (everything but
-// the two legendaries) draws no rng here, so the shared draw order, and every parity
-// golden that equips no legendary, is unchanged. The `proc.trigger !== trigger` skip,
-// the `target.dead` guard, and the duel-end grace check on a persistent hostile
-// effect (see duelJustEndedBetween below) all short-circuit BEFORE the rng draw.
+// Determinism / parity: ordinary, unenchanted gear draws no rng here. Legendary
+// procs retain their trigger, dead-target, and duel-end grace guards BEFORE their
+// rng draws. The self-only melee enchant rolls separately on a landed melee hit,
+// including a killing blow; no living primary target is required for that buff.
+// Each hand rolls at its own weapon's speed, but both hands feed ONE buff (one
+// aura id per enchant), so a second trigger refreshes rather than stacks.
 //
 // src/sim-pure: reaches Sim only through SimContext (rng/emit/applyAura/dealDamage/
 // hostilesInRadius); no DOM/Three/Math.random.
 
+import { ENCHANTS } from '../content/enchants';
 import { ITEMS } from '../data';
 import { meetsLevelRequirement } from '../item_level_req';
 import type { SimContext } from '../sim_context';
 import { duelJustEndedBetween } from '../social/duel';
 import type { Entity, WeaponProc, WeaponProcEffect, WeaponProcTrigger } from '../types';
+import { baseSwingSpeed, isCatForm } from './form_swing';
+import { runTrinketTrigger } from './trinkets';
 
 // Roll every proc on the wielder's equipped mainhand that matches `trigger`, and
 // apply the effects of each that fires. `target` is the primary target of the
@@ -29,8 +32,10 @@ export function runWeaponProcs(
   target: Entity,
   trigger: WeaponProcTrigger,
   weaponItemId?: string | null,
+  meleeHand?: 'mainhand' | 'offhand',
 ): void {
-  if (target.dead) return;
+  // A worn trinket's on-hit passives ride every weapon hit (combat/trinkets.ts).
+  if (trigger === 'weaponHit') runTrinketTrigger(ctx, wielder, target, 'weaponHit');
   // Which hand's weapon rolled procs. `undefined` = not specified: fall back to
   // the mainhand (back-compat for the spell/heal/ranged call sites and every
   // existing golden). An explicit id rolls THAT hand's weapon; an explicit
@@ -45,9 +50,11 @@ export function runWeaponProcs(
   const id = weaponItemId === undefined ? wielder.mainhandItemId : weaponItemId;
   if (!id) return;
   const item = ITEMS[id];
-  if (item?.kind !== 'weapon' || !item.weaponProcs) return;
+  if (item?.kind !== 'weapon') return;
   if (!meetsLevelRequirement(wielder.level, item)) return;
-  const procs = item.weaponProcs;
+  // Keep the historical dead-target skip for the weapon's own procs, including
+  // their rng draws, without suppressing the self-only enchant on a killing hit.
+  const procs = target.dead ? [] : (item.weaponProcs ?? []);
   for (const proc of procs) {
     if (proc.trigger !== trigger) continue;
     // A hostile persistent-aura proc (dot/attackSlow) landing on the killing
@@ -65,6 +72,56 @@ export function runWeaponProcs(
     if (isHostilePersistent && duelJustEndedBetween(ctx, target, wielder)) continue;
     if (!ctx.rng.chance(proc.chance)) continue;
     for (const eff of proc.effects) fireEffect(ctx, wielder, target, proc, eff);
+  }
+  // Explicit hand comes only from the melee hit path. The historical ranged
+  // weaponHit call keeps legendary behavior but cannot trigger a melee enchant.
+  if (trigger !== 'weaponHit' || !meleeHand || wielder.dead || wielder.kind !== 'player') return;
+  const enchantId = ctx.players.get(wielder.id)?.equipmentInstance[meleeHand]?.enchant;
+  const enchant = enchantId ? ENCHANTS[enchantId] : undefined;
+  const enchantProc = enchant?.weaponProc;
+  if (!enchant || !enchantProc) return;
+  // Cat Form has a fixed natural cadence; a slow carried stat stick must not
+  // multiply its proc frequency. Bear and ordinary swings keep item base speed.
+  const baseSpeed =
+    meleeHand === 'mainhand' && isCatForm(wielder) ? baseSwingSpeed(wielder) : item.weapon.speed;
+  const chance = Math.min(1, Math.max(0, (enchantProc.ppm * baseSpeed) / 60));
+  if (!ctx.rng.chance(chance)) return;
+  // ONE buff per wielder, keyed by the enchant alone: a dual-wielder with both
+  // weapons enchanted must never stack two copies (the v0.42 live bug, where a
+  // per-hand id suffix let the two hands grant 100 Strength together). Either
+  // hand's trigger lands on the same id, which applyAura treats as a REFRESH
+  // (timer back to full, no second application, `refresh: true` on the event).
+  // The stat the buff grants is the proc's own axis: Zeal's Strength, or a
+  // faction formula's Agility (Riftwalker's Grace). A haste term rides a
+  // SIBLING aura keyed off the same id so it refreshes with the stat buff and
+  // obeys the same never-stacks rule; buff_haste is a swing multiplier
+  // (sim.ts swingIntervalMult), which is what "2% faster melee attacks" means.
+  const statKind = enchantProc.agility !== undefined ? 'buff_agi' : 'buff_str';
+  const statValue = enchantProc.agility ?? enchantProc.strength ?? 0;
+  ctx.applyAura(wielder, {
+    id: enchant.id,
+    name: enchant.name,
+    kind: statKind,
+    value: statValue,
+    remaining: enchantProc.duration,
+    duration: enchantProc.duration,
+    sourceId: wielder.id,
+    school: 'holy',
+  });
+  if (enchantProc.hasteMult !== undefined) {
+    ctx.applyAura(wielder, {
+      id: `${enchant.id}_haste`,
+      name: enchant.name,
+      kind: 'buff_haste',
+      value: enchantProc.hasteMult,
+      remaining: enchantProc.duration,
+      duration: enchantProc.duration,
+      sourceId: wielder.id,
+      school: 'holy',
+    });
+  }
+  if (enchantProc.heal !== undefined && enchantProc.heal > 0) {
+    ctx.applyHeal(wielder, wielder, enchantProc.heal, enchant.name, enchant.id, false, false);
   }
 }
 

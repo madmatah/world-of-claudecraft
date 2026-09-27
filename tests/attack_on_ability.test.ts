@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ABILITIES } from '../src/sim/data';
 import type { AbilityEffect, Entity } from '../src/sim/types';
 import {
   abilityStartsAutoAttack,
+  confirmPendingAutoAttackEngage,
   deferAutoAttackUntilCastEnd,
   hasAutoAttackTarget,
   isPvpHostileTarget,
+  pressStartsAutoAttack,
 } from '../src/ui/hud/action_bar/attack_on_ability';
 import type { BgInfo, BgMatchInfo } from '../src/world_api/battleground';
 import type { ArenaInfo, DuelInfo } from '../src/world_api/duel_arena';
@@ -17,6 +20,30 @@ const effectsOf = (id: string): AbilityEffect[] => {
   if (!def) throw new Error(`unknown ability for test: ${id}`);
   return def.effects;
 };
+
+describe('pressStartsAutoAttack', () => {
+  it('never engages the current target on a press redirected onto a party frame', () => {
+    // A dual-purpose heal carries directDamage for its enemy arm, so the bare
+    // effect test reads it as an attack. Redirected onto a hovered ally it is a
+    // heal, and engaging would start swinging at the selected enemy.
+    for (const id of ['solar_invocation', 'scouring_mercy']) {
+      expect(abilityStartsAutoAttack(effectsOf(id)), id).toBe(true);
+      expect(pressStartsAutoAttack(effectsOf(id), false), id).toBe(true);
+      expect(pressStartsAutoAttack(effectsOf(id), true), id).toBe(false);
+    }
+    // An unredirected press is exactly the effect test.
+    expect(pressStartsAutoAttack(effectsOf('sinister_strike'), false)).toBe(true);
+    expect(pressStartsAutoAttack(effectsOf('battle_shout'), false)).toBe(false);
+  });
+
+  it('is the predicate the HUD press path engages through, fed the redirect', () => {
+    // castSlot has no unit seam: pin the call site so the redirect flag cannot be
+    // dropped while the predicate above stays green.
+    const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
+    expect(hud).toContain('pressStartsAutoAttack(resolved.effects, mouseoverPid !== null)');
+    expect(hud).not.toContain('abilityStartsAutoAttack(resolved.effects)');
+  });
+});
 
 describe('abilityStartsAutoAttack', () => {
   it('engages on damaging attacks', () => {
@@ -31,6 +58,18 @@ describe('abilityStartsAutoAttack', () => {
     expect(abilityStartsAutoAttack(effectsOf('battle_shout'))).toBe(false); // selfBuff
     expect(abilityStartsAutoAttack(effectsOf('mark_of_the_wild'))).toBe(false); // buffTarget (friendly)
     expect(abilityStartsAutoAttack(effectsOf('hour_of_judgment'))).toBe(false);
+  });
+
+  it('does not engage on a friendly groundAoE ally buff (Rune of Power)', () => {
+    // Rune of Power's groundAoE carries allyBuffPct with min/max both 0 (no damage,
+    // "min/max are ignored" per its AbilityEffect comment): it must not be classified
+    // as an attack, or the "Attack on Ability Use" QoL engages a white swing (and can
+    // pull a hostile mob) on a purely defensive/support cast that has no target.
+    expect(abilityStartsAutoAttack(effectsOf('rune_of_power'))).toBe(false);
+  });
+
+  it('still engages on a damaging groundAoE with no allyBuffPct rider (Blizzard)', () => {
+    expect(abilityStartsAutoAttack(effectsOf('blizzard'))).toBe(true);
   });
 
   it('does not engage on pure crowd control', () => {
@@ -337,5 +376,34 @@ describe('deferAutoAttackUntilCastEnd (the aggro-before-damage bug)', () => {
 
   it('engages immediately for instants (their damage lands the same tick)', () => {
     expect(deferAutoAttackUntilCastEnd(0)).toBe(false);
+  });
+});
+
+describe('confirmPendingAutoAttackEngage (the Soulwell aggro-pull bug)', () => {
+  it('keeps the request when castStart confirms the same ability', () => {
+    expect(confirmPendingAutoAttackEngage('shadow_bolt', 'shadow_bolt')).toBe('shadow_bolt');
+  });
+
+  it('drops the request when a DIFFERENT ability is the one that actually started', () => {
+    // The reported repro: a damaging cast (shadow_bolt) gets refused server-side
+    // (range/cost/cooldown/out-of-combat all skip castStart entirely), leaving the
+    // request armed with no matching castStop to consume it. The player then
+    // casts Soulwell, requiresOutOfCombat and never itself gated by
+    // abilityStartsAutoAttack (summonSoulwell classifies 'other'); its OWN
+    // castStart must drop the stale shadow_bolt request rather than let it
+    // survive to Soulwell's castStop and pull whatever the player has targeted.
+    expect(confirmPendingAutoAttackEngage('shadow_bolt', 'soulwell')).toBeNull();
+  });
+
+  it('stays null with no outstanding request', () => {
+    expect(confirmPendingAutoAttackEngage(null, 'soulwell')).toBeNull();
+  });
+
+  it('Soulwell itself never arms the deferred engage', () => {
+    // Belt-and-suspenders: the effect-table classification this bug also depends
+    // on. If summonSoulwell were ever reclassified 'damage', the button-press
+    // gate (abilityStartsAutoAttack) would arm a request for Soulwell itself,
+    // reopening the same pull on ITS OWN successful cast.
+    expect(abilityStartsAutoAttack(effectsOf('soulwell'))).toBe(false);
   });
 });

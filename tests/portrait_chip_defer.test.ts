@@ -12,9 +12,20 @@ vi.mock('../src/render/characters/portrait', () => ({
   visualPortraitDataUrl: (key: string) => (key === 'player_mech' ? mechUrl : portraitUrl),
   modularPortraitDataUrl: () => portraitUrl,
   portraitsReady: () => true,
+  composedPortraitKey: () => 'player_mage_modular:mod:sig:headshot',
+  isComposedPortraitKey: (key?: string) => key?.includes(':mod:') === true,
+  cachedPortraitByKey: () => null,
 }));
-vi.mock('../src/ui/i18n', () => ({ t: () => 'Mage portrait' }));
-vi.mock('../src/ui/icons', () => ({ iconDataUrl: () => 'data:image/png;base64,crest' }));
+// Additive, never bare (the reliquary_window_behavior lesson): only the
+// members the fixture steers stay overridden; the rest passes through.
+vi.mock('../src/ui/i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/ui/i18n')>()),
+  t: () => 'Mage portrait',
+}));
+vi.mock('../src/ui/icons', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/ui/icons')>()),
+  iconDataUrl: () => 'data:image/png;base64,crest',
+}));
 
 import { portraitChipHtml } from '../src/ui/portrait_chip';
 

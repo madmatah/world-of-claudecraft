@@ -1,9 +1,15 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
   RENDER_DIAGNOSTICS_SAMPLE_MS,
   RenderDiagnostics,
   type RenderDiagnosticsHost,
 } from '../src/render/render_diagnostics';
+import {
+  collectRenderDiagnostics,
+  setRenderCategory,
+  tagVfxSubtree,
+} from '../src/render/renderer_diagnostics';
 
 interface FakeObject {
   visible: boolean;
@@ -112,6 +118,50 @@ describe('render diagnostics census', () => {
     expect(snapshot.newMaterials.some((label) => label.startsWith('never-drawn'))).toBe(false);
   });
 
+  it('counts a count-0 InstancedMesh as no draw and no object, like the render list', () => {
+    // The gather-node reach hide and the props far bake hide through
+    // `count = 0`, which the vendored three skips before any program binds;
+    // the census must agree with renderer.info.render.calls rather than
+    // report one draw with zero triangles. A live batch of the same shape
+    // is the positive control.
+    const scene = makeObject();
+    const props = makeObject({ userData: { renderCategory: 'props' } });
+    const hidden = makeMesh('gather:ore', 20);
+    hidden.isMesh = false;
+    hidden.isInstancedMesh = true;
+    hidden.count = 0;
+    const live = makeMesh('gather:wood', 20);
+    live.isMesh = false;
+    live.isInstancedMesh = true;
+    live.count = 3;
+    props.children.push(hidden, live);
+    scene.children.push(props);
+    const { diagnostics } = makeHarness(scene);
+    const snapshot = diagnostics.collect();
+    expect(snapshot.totalObjects).toBe(1);
+    expect(snapshot.estimatedDraws).toBe(1);
+    expect(snapshot.estimatedTriangles).toBe(60);
+    expect(snapshot.categories.props.objects).toBe(1);
+    expect(snapshot.newMaterials.some((label) => label.startsWith('gather:ore'))).toBe(false);
+    expect(snapshot.newMaterials.some((label) => label.startsWith('gather:wood'))).toBe(true);
+    // The renderer-side twin applies the same skip.
+    const twin = collectRenderDiagnostics(
+      scene as unknown as Parameters<typeof collectRenderDiagnostics>[0],
+      { programs: [], memory: { textures: 0 } } as unknown as Parameters<
+        typeof collectRenderDiagnostics
+      >[1],
+      {
+        lastPrograms: 0,
+        lastTextures: 0,
+        knownMaterials: new Set(),
+        knownVisibleObjects: new Set(),
+      },
+    );
+    expect(twin.snapshot.totalObjects).toBe(1);
+    expect(twin.snapshot.estimatedDraws).toBe(1);
+    expect(twin.snapshot.estimatedTriangles).toBe(60);
+  });
+
   it('reports program and texture deltas across collects', () => {
     const harness = makeHarness(makeObject());
     expect(harness.diagnostics.collect().programDelta).toBe(10);
@@ -190,5 +240,39 @@ describe('render diagnostics sampling', () => {
     second.shutdown.value = true;
     second.idleRuns[0]();
     expect(second.diagnostics.current().totalObjects).toBe(0);
+  });
+});
+
+describe('render category tags', () => {
+  function pool(): { parent: THREE.Group; root: THREE.Group; drawables: THREE.Object3D[] } {
+    const parent = new THREE.Group();
+    const root = new THREE.Group();
+    root.visible = false;
+    const layer = new THREE.Group();
+    layer.visible = false;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+    const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial());
+    layer.add(mesh, points);
+    root.add(layer, sprite);
+    parent.add(root);
+    return { parent, root, drawables: [layer, mesh, points, sprite] };
+  }
+
+  it('setRenderCategory stamps the one object it is given', () => {
+    const { root, drawables } = pool();
+    setRenderCategory(root, 'vfx');
+    expect(root.userData.renderCategory).toBe('vfx');
+    for (const object of drawables) expect(object.userData.renderCategory).toBeUndefined();
+  });
+
+  it('tagVfxSubtree stamps vfx on the root and every descendant, hidden ones included', () => {
+    const { parent, root, drawables } = pool();
+    tagVfxSubtree(root);
+    expect(root.userData.renderCategory).toBe('vfx');
+    for (const object of drawables) expect(object.userData.renderCategory).toBe('vfx');
+    expect(parent.userData.renderCategory).toBeUndefined();
+    expect(root.visible).toBe(false);
+    expect(drawables[0].visible).toBe(false);
   });
 });

@@ -134,7 +134,31 @@ describe('generated chunk geometry is stable', () => {
     // height atlas (tests/terrain_height_parity.test.ts fixture, re-minted
     // in the same commit): the whole ten-node placement fix moves 146 of
     // its 140639 points, 0.1 percent, all inside the moved nodes' pad
-    // footprints. Re-minted again for the Proving Shore tutorial island
+    // footprints.
+    // Re-minted again for the northwest coast spit carve in applyValeCoast
+    // (src/sim/world.ts): the low beach shelf that aproned the grey cliff foot
+    // is submerged so the bay water meets the cliff, an intended, looked-at
+    // visual change. The carve only ever lowers and stays local: sampled on a
+    // 0.5yd lattice over the vale and its gap cells it moves 8704 of 1589721
+    // points, 0.5 percent, every one inside x -211.5..-132.5, z 116.5..145.5,
+    // and nothing rises anywhere. Both digests move because that window
+    // straddles the rect edge at x = -180.
+    // Re-minted again for the farming go-live's four farmer NPCs: every NPC
+    // is a calm-anchor world fixture (terrain_calm_anchors.ts pads NPCS at
+    // rIn 6 / rOut 14), and Farmer Jessica then stood beside the Eastbrook
+    // garden beds at (24.5, 32.5) (re-seated to (-15.5, -81.5) at the
+    // release/v0.41.0 merge), so her pad reshapes the vale vertices around the
+    // patch. Localization checked against the dense height atlas
+    // (tests/terrain_height_parity.test.ts fixture, re-minted in the same
+    // commit): the four pads move 60 of its 282406 points, 0.02 percent, all
+    // inside the four farmers' pad footprints (the largest under Farmer
+    // Hollis's Highwatch stand, where the natural relief diverges most from
+    // the legacy field). The gap digest is checked below with the same
+    // literal it had: Jessica's pad is far inside the rect.
+    // Upstream re-minted the same digest on its own arm over the same span,
+    // kept rather than dropped (its v0.37.0 note below records the same coast
+    // spit carve this branch's paragraph above records from its own side; both
+    // arms re-minted it once). Re-minted again for the Proving Shore tutorial island
     // (provingCoast/provingMoat reshape the Vale's west strand) and once more
     // on the v0.37.0 merge, which added the northwest coast spit carve in
     // applyValeCoast (the low beach shelf under the grey cliff foot submerged
@@ -331,7 +355,51 @@ describe('generated chunk geometry is stable', () => {
     // Proving Shore island: both sides' intended terrain changes combine, so
     // the digest matches neither parent (set from a suite run on the merged
     // tree).
-    expect(digestOf(inRect)).toBe('1d9b0a4a7e0d97c5a11c918b1a8f29c3');
+    // MERGE OF release/v0.41.0 INTO feature/masterwrought (base 9a89e3483e,
+    // release tip ff2837da1f): the release's Proving Shore island, Eastbrook
+    // rebuild rounds and Sowfield demolition land on top of this branch's
+    // four farmer pads. Parent values for the record: ours
+    // affb4c8d6201b0832458a2c2bcd0f29b, the release
+    // 1d9b0a4a7e0d97c5a11c918b1a8f29c3. MEASURED on the merged working tree
+    // (npx vitest run tests/terrain_chunk_geometry.test.ts, twice in separate
+    // processes) AFTER the same merge re-seated Farmer Jessica from (24.5,
+    // 32.5) to (-15.5, -81.5) at the rebuilt town's north-east edge: the
+    // merged digest equals the RELEASE's literal, which is what the pin below
+    // carries. The NEW seat is the measured one: the merge commit 9f130d3b7c
+    // records the (-15.5, -81.5) site on already-calm town ground, probed on a
+    // 0.5 yd lattice with zero points moved, so her calm pad moves no in-rect
+    // vertex there. The OLD seat (24.5, 32.5) has no such record; that it
+    // moved nothing is an inference, not a measurement: it sat 23.2 yd from
+    // the second forest_wolf camp at (12, 52) r26, inside that camp's own
+    // flatten disc (world.ts levels terrain to the camp-centre height within
+    // radius * 0.8 and blends it out to radius * 1.8, 46.8 yd; the seat sat
+    // in the blend band), which is camp levelling, not the town's.
+    // The branch's gap super-chunk pin (c4839177e825dbcf8dc5bcf501336fc2) is
+    // gone with the gap chunks themselves: the island claims the old vale gap
+    // cells, and gapFill.length above pins their absence.
+    // Eastbrook handoff: the five starter givers carry their existing calm
+    // pads into spaced town-square positions; the terrain generator is unchanged.
+    // Desktop/mobile captures and the rendered wolf-route collision checks
+    // were reviewed before refreshing this intentional layout fingerprint.
+    // Second release/v0.43.0 merge into feature/world-quests: the handoff's
+    // spaced givers compose with the branch's calm pads (shadow guards, freight
+    // crate and wagon). Measured on the merged tree, twice in separate processes.
+    // Re-minted for the weekly emissary (Cham Pete at (-52, -108), a calm-anchor
+    // NPC like every other). Localization checked against the dense height
+    // atlas re-minted in the same commit: 7 points move (both lanes), all within
+    // 6.3 yd of the emissary, by at most 0.053 yd.
+    // Re-minted for the Weekly Vault (PR 4052) landing on the quests integration
+    // branch: the stone hall's late terrain pad at (21, -119) and the coast road
+    // re-threaded around its western entrance regrade the harbour-quarter
+    // chunks. Probed on both trees with a 4 yd lattice: every moved height sits
+    // inside x 0..64, z -148..-20 (up to 1.7 yd at the hall footprint, under
+    // 0.02 yd along the re-threaded road), nothing moves outside the town.
+    // Measured on the merged tree; CI shard 1 read the same digest.
+    // Re-minted at the fourth release/v0.44.0 base merge: the release's Eastbrook
+    // ferry berth moved the cove's floating-prop calm pads (the retired and moved
+    // hulls, the ferry's own pad) under the seabed this rectangle covers, composed
+    // with the branch's vault hall and emissary pads. Measured on the merged tree.
+    expect(digestOf(inRect)).toBe('7872140edd9ed66524f2d242aaf823a5');
     // The gap super-chunk digest pin is gone with the gap chunks themselves
     // (the island claims the old vale gap cells); gapFill.length above pins
     // their absence.

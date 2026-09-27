@@ -2,19 +2,27 @@
 //
 // The detachable meter windows: popping Healing / Threat out of the tabbed
 // damage window, docking them back, and each panel keeping its own segment
-// paging and movable/resizable frame. The geometry math is covered by
-// tests/meters_frame_core.test.ts and the bar model by
+// paging. The two DETACHED windows keep their own MeterFrame drag; the tabbed
+// damage window is a movable HUD frame instead (HUD_FRAME_SPECS row
+// 'damageMeter'), reporting through Meters.mainFramed. The geometry math is
+// covered by tests/meters_frame_core.test.ts and the bar model by
 // tests/meters_rows_view.test.ts; this file pins the wiring between them.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SimEvent } from '../src/sim/types';
 import { Meters } from '../src/ui/meters';
+import { MeterFrame } from '../src/ui/meters_frame';
 import type { IWorld } from '../src/world_api';
 
 const detachedMarkup = (id: string) => `
   <div id="${id}" class="panel mt-panel">
     <div class="panel-title">
       <span class="mt-title-label"></span>
+      <button type="button" class="mt-mode-btn"></button>
+      <button type="button" class="mt-new-window"></button>
+      <button type="button" class="mt-reset"></button>
       <button type="button" class="mt-prev"></button>
       <button type="button" class="mt-next"></button>
       <button type="button" class="mt-close"></button>
@@ -35,6 +43,9 @@ const MARKUP = `
         <button type="button" class="mt-tab" data-tab="heal"></button>
         <button type="button" class="mt-tab" data-tab="threat"></button>
       </span>
+      <button type="button" class="mt-mode-btn"></button>
+      <button type="button" class="mt-new-window"></button>
+      <button type="button" class="mt-reset"></button>
       <button type="button" class="mt-prev"></button>
       <button type="button" class="mt-next"></button>
       <button type="button" class="mt-close"></button>
@@ -46,7 +57,7 @@ const MARKUP = `
   </div>`;
 
 function fakeWorld(): IWorld {
-  const entities = new Map<number, any>();
+  const entities = new Map<number, unknown>();
   entities.set(1, { id: 1, kind: 'player', name: 'Hero', templateId: 'warlock' });
   entities.set(2, { id: 2, kind: 'player', name: 'Pal', templateId: 'priest' });
   entities.set(51, {
@@ -135,6 +146,7 @@ function setup(storage: FakeStorage = new FakeStorage(), mobile = false) {
 describe('detachable meter windows', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    MeterFrame.clearActiveFrames();
   });
 
   it('starts with only the tabbed damage window, both detached meters closed', () => {
@@ -159,6 +171,10 @@ describe('detachable meter windows', () => {
     expect(
       el('meters-window').querySelector('.mt-tab[data-tab="dmg"]')?.classList.contains('on'),
     ).toBe(true);
+    // W12: the shared segment primitive mirrors the shipped selected tab state.
+    expect(
+      el('meters-window').querySelector('.mt-tab[data-tab="dmg"]')?.classList.contains('is-on'),
+    ).toBe(true);
     // and the damage window itself stays open
     expect(shown('meters-window')).toBe(true);
   });
@@ -174,6 +190,9 @@ describe('detachable meter windows', () => {
     expect(meters.isDetached('heal')).toBe(false);
     expect(
       el('meters-window').querySelector('.mt-tab[data-tab="heal"]')?.classList.contains('on'),
+    ).toBe(true);
+    expect(
+      el('meters-window').querySelector('.mt-tab[data-tab="heal"]')?.classList.contains('is-on'),
     ).toBe(true);
   });
 
@@ -233,15 +252,15 @@ describe('detachable meter windows', () => {
     expect(second.shown('heal-window')).toBe(false);
   });
 
-  it('restores a saved box and re-clamps it into the viewport', () => {
+  it('restores a detached window saved box and re-clamps it into the viewport', () => {
     const storage = new FakeStorage();
-    // saved off the right edge of an 1024x768 jsdom viewport
+    // saved off the right edge of an 1024x768 viewport
     storage.setItem(
-      'woc_meters_frame',
+      'woc_meters_frame_heal',
       JSON.stringify({ left: 5000, top: 5000, width: 300, height: 200 }),
     );
     const { el } = setup(storage);
-    const panel = el('meters-window');
+    const panel = el('heal-window');
     expect(panel.classList.contains('mt-framed')).toBe(true);
     expect(panel.style.position).toBe('absolute');
     // clamped back on screen rather than restored verbatim
@@ -261,75 +280,121 @@ describe('detachable meter windows', () => {
     expect(panel.style.width).toBe('');
   });
 
-  it('gives every panel a resize grip and two move handles', () => {
+  it('gives each detached window a resize grip and makes the whole panel draggable', () => {
     const { el } = setup();
-    for (const id of ['meters-window', 'heal-window', 'threat-window']) {
+    for (const id of ['heal-window', 'threat-window']) {
       expect(el(id).querySelector('.panel-resize-grip')).not.toBeNull();
-      // The title bar, plus the summary line under it: on the tabbed window the
-      // title is packed with tabs and controls, leaving little bare strip.
-      expect(el(id).querySelector('.panel-title')?.classList.contains('mt-move-handle')).toBe(true);
-      expect(el(id).querySelector('.mt-view')?.classList.contains('mt-move-handle')).toBe(true);
+      expect(el(id).classList.contains('mt-move-handle')).toBe(true);
     }
+    // The tabbed damage window carries NO MeterFrame chrome of its own: its
+    // move/resize come from the Unlock Interface registry mover, which mints
+    // its grip and corner button in the live Hud, not in this rig.
+    expect(el('meters-window').querySelector('.panel-resize-grip')).toBeNull();
+    expect(el('meters-window').querySelector('.mt-move-handle')).toBeNull();
   });
 
-  it('resets every panel back to its stylesheet anchor', () => {
+  it('resets the detached windows back to their stylesheet anchors', () => {
     const storage = new FakeStorage();
     storage.setItem(
-      'woc_meters_frame',
+      'woc_meters_frame_heal',
       JSON.stringify({ left: 100, top: 100, width: 300, height: 200 }),
     );
     const { meters, el } = setup(storage);
-    expect(el('meters-window').classList.contains('mt-framed')).toBe(true);
+    expect(el('heal-window').classList.contains('mt-framed')).toBe(true);
 
     meters.resetFrames();
-    const panel = el('meters-window');
+    const panel = el('heal-window');
     expect(panel.classList.contains('mt-framed')).toBe(false);
     expect(panel.style.left).toBe('');
     expect(panel.style.height).toBe('');
-    expect(storage.getItem('woc_meters_frame')).toBeNull();
+    expect(storage.getItem('woc_meters_frame_heal')).toBeNull();
   });
 
   it('writes no geometry on a mobile layout, where the stylesheet owns placement', () => {
     const storage = new FakeStorage();
     storage.setItem(
-      'woc_meters_frame',
+      'woc_meters_frame_heal',
       JSON.stringify({ left: 100, top: 100, width: 300, height: 200 }),
     );
     const { el } = setup(storage, true);
-    const panel = el('meters-window');
+    const panel = el('heal-window');
     expect(panel.classList.contains('mt-framed')).toBe(false);
     expect(panel.style.left).toBe('');
   });
 
-  it('opens as a plain block on a mobile layout, even with a saved box', () => {
-    const storage = new FakeStorage();
-    storage.setItem(
-      'woc_meters_frame',
-      JSON.stringify({ left: 100, top: 100, width: 300, height: 200 }),
-    );
-    const { meters, el } = setup(storage, true);
+  it('lays the tabbed window out as a column exactly while its registry box applies', () => {
+    // The damageMeter registry row's onPositioned arm calls mainFramed: an
+    // OPEN positioned panel must flip to the fixed-height flex column (the
+    // display is inline because open/closed is an inline display too), and a
+    // reset back to the dock restores the plain block.
+    const { meters, el } = setup();
     meters.toggle();
     const panel = el('meters-window');
-    // `mt-framed` is what supplies flex-direction: column, and apply() refuses to
-    // write it on a mobile layout. Opening as 'flex' regardless would lay the
-    // title, summary, hint and rows out in a ROW. Reachable rather than
-    // theoretical: mobile-touch toggles at runtime from the touch-controls
-    // setting, so a desktop player who moved a panel then turned touch controls
-    // on lands here.
-    expect(panel.classList.contains('mt-framed')).toBe(false);
     expect(panel.style.display).toBe('block');
+    meters.mainFramed(true);
+    expect(panel.style.display).toBe('flex');
+    meters.mainFramed(false);
+    expect(panel.style.display).toBe('block');
+    // Reopening remembers the framed state too.
+    meters.mainFramed(true);
+    meters.toggle();
+    meters.toggle();
+    expect(panel.style.display).toBe('flex');
   });
 
-  it('opens as a flex column on a desktop layout with the same saved box', () => {
-    const storage = new FakeStorage();
-    storage.setItem(
-      'woc_meters_frame',
-      JSON.stringify({ left: 100, top: 100, width: 300, height: 200 }),
+  it('the docked seat is an absolute, viewport-clamped slot beside the bars', () => {
+    // Source pins on the dock seat CSS: the seat is what fixed the reported
+    // "opening the meters moves the UI around" (a flex slot re-centered the
+    // whole #bottom-bar), so all three legs must hold together: the row is
+    // the containing block, the seat is absolute, and its left is CLAMPED to
+    // the #ui author width so a narrow window (1280px at UI Scale 1.2) does
+    // not push the 240px panel past the overflow:hidden root.
+    // join() rather than an import.meta URL: happy-dom swaps in its own URL
+    // class, which node:fs refuses as a path.
+    const css = readFileSync(join(import.meta.dirname, '..', 'src', 'styles', 'hud.css'), 'utf8');
+    const rowRule = css.match(/#actionbar-row\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rowRule).toContain('position: relative');
+    const seatRule = css.match(/\n {2}#meters-window\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(seatRule).toContain('position: absolute');
+    expect(seatRule).toContain(
+      'left: min(calc(100% + 8px), calc(var(--app-vw, 100vw) / var(--ui-scale, 1) / 2 + 66px))',
     );
-    const { meters, el } = setup(storage);
-    meters.toggle();
+    expect(seatRule).toContain(
+      'bottom: calc(var(--socket-size, 46px) + var(--socket-row-gap, 6px) + 32px)',
+    );
+    // And the detached state clears the seat so the mover's inline box wins.
+    const detachedRule = css.match(/#meters-window\.hud-frame-detached\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(detachedRule).toContain('left: auto');
+    expect(detachedRule).toContain('bottom: auto');
+  });
+
+  it('uses the game move cursor on the whole detached panel', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', 'src', 'styles', 'hud.css'), 'utf8');
+    const rule =
+      css.match(/\.mt-panel\.mt-move-handle,\s*\.mt-panel \.mt-move-handle\s*\{([^}]*)\}/)?.[1] ??
+      '';
+    expect(rule).toContain('cursor: var(--cursor-move, move)');
+    expect(rule).toContain('touch-action: none');
+  });
+
+  it('keeps compact meter controls at a minimum 24px pointer target', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', 'src', 'styles', 'hud.css'), 'utf8');
+    const controls = css.match(/\.mt-panel :is\(\.ui-disc, \.ui-x-btn\)\s*\{([^}]*)\}/)?.[1] ?? '';
+    // W12: the header remains 18px while its controls retain an accessible hit region.
+    expect(controls).toContain('width: 24px');
+    expect(controls).toContain('height: 24px');
+  });
+
+  it('a framed report on a CLOSED panel latches state without opening it', () => {
+    // The registry mover reports at boot (a saved box applies before the
+    // player ever opens the meters); without the isOpen guard that report
+    // would force display: flex and pop the window open uninvited. The
+    // latched state still shapes the first real open.
+    const { meters, el, shown } = setup();
     const panel = el('meters-window');
-    expect(panel.classList.contains('mt-framed')).toBe(true);
+    meters.mainFramed(true);
+    expect(shown('meters-window')).toBe(false);
+    meters.toggle();
     expect(panel.style.display).toBe('flex');
   });
 
@@ -363,17 +428,24 @@ describe('detachable meter windows', () => {
     expect(shown('heal-window')).toBe(false);
   });
 
-  it('advertises the move gesture on the handles only, never on the tab buttons', () => {
+  it('advertises the move gesture on the detached handles only, never on the tabbed window', () => {
     const { el } = setup();
-    const main = el('meters-window');
-    const move = main.querySelector('.panel-title')?.getAttribute('title') ?? '';
+    // The detached windows keep their MeterFrame drag, so their handles carry
+    // the move tooltip.
+    const heal = el('heal-window');
+    expect(heal.hasAttribute('title')).toBe(false);
+    const move = heal.querySelector('.panel-title')?.getAttribute('title') ?? '';
     expect(move).not.toBe('');
-    expect(main.querySelector('.mt-view')?.getAttribute('title')).toBe(move);
-    // A container's title is inherited by every descendant carrying none of its
-    // own, so each tab would otherwise advertise a drag that pressing it does
-    // NOT perform (onMoveStart hands a press on a control back to that control).
+    expect(heal.classList.contains('mt-move-handle')).toBe(true);
+    // The tabbed damage window's movement is the Unlock Interface registry's,
+    // so its title bar advertises no drag of its own, and the tabs stay bare
+    // (a container title would be inherited by every descendant without one).
+    const main = el('meters-window');
+    expect(main.querySelector('.panel-title')?.getAttribute('title') ?? '').toBe('');
     for (const tab of ['dmg', 'heal', 'threat']) {
-      expect(main.querySelector(`.mt-tab[data-tab="${tab}"]`)?.getAttribute('title')).toBe('');
+      expect(main.querySelector(`.mt-tab[data-tab="${tab}"]`)?.getAttribute('title') ?? '').toBe(
+        '',
+      );
     }
     // The pager and close controls keep the tooltips they set for themselves.
     for (const control of ['.mt-prev', '.mt-next', '.mt-close']) {
@@ -434,5 +506,172 @@ describe('detachable meter windows', () => {
     menus[1].select('regroup');
     rightClick('threat');
     expect(menus[2].items[0].act).toBe('separate');
+  });
+
+  it('opens segment selection menu when clicking mt-view and switches fight', () => {
+    const { meters, el, menus } = setup();
+    meters.toggle();
+
+    // Trigger two fights
+    meters.onEvent(dmg(1, 100, 'Shadow Bolt'));
+    meters.data.endEncounter();
+    meters.onEvent(dmg(1, 200, 'Shadow Bolt'));
+    meters.render(true);
+
+    const titleEl = el('meters-window').querySelector('.mt-view') as HTMLElement;
+    expect(titleEl).not.toBeNull();
+    titleEl.click();
+
+    expect(menus).toHaveLength(1);
+    const menu = menus[0];
+    expect(menu.items.length).toBeGreaterThanOrEqual(3); // Current, Fight 1, All-time
+    expect(menu.items[0].act).toBe('0');
+    expect(menu.items[1].act).toBe('1');
+
+    // Select Fight 1
+    menu.select('1');
+    expect(titleEl.textContent).toContain('1');
+  });
+
+  it('offers new window options when pressing mt-new-window button', () => {
+    const { meters, el, menus, shown } = setup();
+    meters.toggle();
+
+    const newBtn = el('meters-window').querySelector('.mt-new-window') as HTMLElement;
+    expect(newBtn).not.toBeNull();
+    newBtn.click();
+
+    expect(menus).toHaveLength(1);
+    expect(menus[0].items.map((i) => i.act)).toEqual(['heal', 'threat']);
+
+    menus[0].select('heal');
+    expect(shown('heal-window')).toBe(true);
+    expect(meters.isDetached('heal')).toBe(true);
+  });
+
+  it('docks and synchronizes resize between detached meter windows', () => {
+    const storage = new FakeStorage();
+    storage.setItem(
+      'woc_meters_frame_heal',
+      JSON.stringify({ left: 100, top: 100, width: 240, height: 160 }),
+    );
+    const { meters, el } = setup(storage);
+    meters.toggle();
+    meters.popOut('heal');
+    meters.popOut('threat');
+
+    const healEl = el('heal-window');
+    const threatEl = el('threat-window');
+
+    const healGrip = healEl.querySelector('.panel-resize-grip') as HTMLElement;
+    expect(healGrip).not.toBeNull();
+    expect(healEl.style.left).toBe('100px');
+    expect(healEl.style.top).toBe('100px');
+
+    // Move threat adjacent to heal right edge (340px)
+    const threatHandle = (
+      threatEl.matches('.mt-move-handle') ? threatEl : threatEl.querySelector('.mt-move-handle')
+    ) as HTMLElement;
+    expect(threatHandle).not.toBeNull();
+    threatHandle.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 8, clientY: 8 }),
+    );
+    document.dispatchEvent(new PointerEvent('pointermove', { clientX: 345, clientY: 105 }));
+    document.dispatchEvent(new PointerEvent('pointerup'));
+
+    // Threat should snap to 340, 100 and match height 160
+    expect(threatEl.style.left).toBe('340px');
+    expect(threatEl.style.top).toBe('100px');
+    expect(threatEl.style.height).toBe('160px');
+
+    // Resize heal: height grows by 90px (from 160px to 250px)
+    healGrip.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 340, clientY: 260 }),
+    );
+    document.dispatchEvent(new PointerEvent('pointermove', { clientX: 340, clientY: 350 }));
+    document.dispatchEvent(new PointerEvent('pointerup'));
+
+    // Both should now share the new height (250px)
+    expect(healEl.style.height).toBe('250px');
+    expect(threatEl.style.height).toBe('250px');
+  });
+
+  it('opens mode menu via mt-mode-btn or right-clicking the panel and switches mode', () => {
+    const { meters, el, menus } = setup();
+    meters.toggle();
+
+    const panelEl = el('meters-window');
+    const modeBtn = panelEl.querySelector('.mt-mode-btn') as HTMLElement;
+    expect(modeBtn).not.toBeNull();
+
+    // Click mode button to open mode menu
+    modeBtn.click();
+    expect(menus).toHaveLength(1);
+    const menu = menus[0];
+    expect(menu.items.map((i) => i.act)).toEqual([
+      'dmg',
+      'heal',
+      'dmgTaken',
+      'interrupts',
+      'deaths',
+      'threat',
+    ]);
+
+    // Select deaths mode
+    menu.select('deaths');
+    expect(panelEl.querySelector('.mt-view')?.textContent).toContain('Deaths');
+
+    // Right-clicking the panel also opens the mode menu
+    panelEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(menus).toHaveLength(2);
+    menus[1].select('dmgTaken');
+    expect(panelEl.querySelector('.mt-view')?.textContent).toContain('Damage Taken');
+  });
+
+  it('clicking a player row drills down into ability breakdown and back button returns', () => {
+    const { meters, el } = setup();
+    meters.toggle();
+    meters.onEvent(dmg(1, 100, 'Shadow Bolt'));
+    meters.onEvent(dmg(1, 50, 'Corruption'));
+    meters.update();
+    meters.render(true);
+
+    const panelEl = el('meters-window');
+    const backBtn = panelEl.querySelector('.mt-back-btn') as HTMLElement;
+    expect(backBtn).not.toBeNull();
+    expect(backBtn.style.display).toBe('none');
+
+    // Find player row for Hero
+    const rows = panelEl.querySelectorAll('.mt-row');
+    const heroRow = rows[0] as HTMLElement;
+    expect(heroRow.querySelector('.mt-label')?.textContent).toBe('Hero');
+
+    // Click row to drill down into player breakdown
+    heroRow.click();
+    expect(backBtn.style.display).not.toBe('none');
+    expect(panelEl.querySelector('.mt-view')?.textContent).toContain('Hero');
+
+    // Breakdown rows show abilities
+    const abilityRows = panelEl.querySelectorAll('.mt-row');
+    const firstAbility = abilityRows[0] as HTMLElement;
+    expect(firstAbility.querySelector('.mt-label')?.textContent).toBe('Shadow Bolt');
+
+    // Click back button to return to player list
+    backBtn.click();
+    expect(backBtn.style.display).toBe('none');
+    expect(heroRow.querySelector('.mt-label')?.textContent).toBe('Hero');
+  });
+
+  it('right-clicking the reset button opens fight and all-time reset options', () => {
+    const { meters, el, menus } = setup();
+    meters.toggle();
+
+    const panelEl = el('meters-window');
+    const resetBtn = panelEl.querySelector('.mt-reset') as HTMLElement;
+    expect(resetBtn).not.toBeNull();
+
+    resetBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(menus).toHaveLength(1);
+    expect(menus[0].items.map((i) => i.act)).toEqual(['current', 'all']);
   });
 });

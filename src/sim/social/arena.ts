@@ -31,6 +31,8 @@ import {
   restoreMatchPet,
   snapshotMatchPet,
 } from '../pet/pet_match_return';
+import { releaseCorpseHarvest } from '../professions/corpse_harvest_session';
+import { removeMatchFeasts } from '../professions/feast_lifecycle';
 import { awardFiestaCompletionHonor, awardRankedArenaResultHonor, honorTeamIdentity } from '../pvp';
 import { aurasSurvivingCleanSlate, SICKNESS_AURA_IDS, UNSTUCK_SICKNESS_ID } from '../resurrection';
 import type { ArenaMatch, ArenaQueueUnit, ArenaReturnPools, PlayerMeta } from '../sim';
@@ -47,7 +49,11 @@ import {
   type Entity,
   emptyMoveInput,
 } from '../types';
-import { clearCooldownsPreservingUnstuck } from '../unstuck_cooldown';
+import {
+  clearCooldownsPreservingUnstuck,
+  restoreCooldownsPreservingUnstuck,
+} from '../unstuck_cooldown';
+import { recordWeeklyPvpWin } from '../weekly_rewards';
 import { duelFor } from './duel';
 
 // Deep-copy the CC diminishing-return map so a snapshot never shares mutable
@@ -69,7 +75,13 @@ export function cloneAbilityCharges(
   src: Entity['abilityCharges'],
 ): ArenaReturnPools['abilityCharges'] {
   const out: ArenaReturnPools['abilityCharges'] = {};
-  if (src) for (const [id, state] of Object.entries(src)) out[id] = { ...state };
+  // The per-charge timers are copied too: spends push onto recharges[] in place,
+  // so a shared array would let the live pool rewrite the snapshot's timers.
+  if (src) {
+    for (const [id, state] of Object.entries(src)) {
+      out[id] = state.recharges ? { ...state, recharges: [...state.recharges] } : { ...state };
+    }
+  }
   return out;
 }
 
@@ -98,7 +110,9 @@ export function snapshotArenaReturnPools(e: Entity): ArenaReturnPools {
 // player, so the hp/resource clamp below has to see the drained maxHp, not the
 // healthy one. Everything else is a straight restore.
 export function restoreArenaReturnPools(ctx: SimContext, e: Entity, pools: ArenaReturnPools): void {
-  e.cooldowns = new Map(pools.cooldowns);
+  // The two hidden /unstuck timers are the one thing the parenthesis does not swallow: a
+  // recovery inside the match keeps its cooldown and its sickness window on the way out.
+  e.cooldowns = restoreCooldownsPreservingUnstuck(e.cooldowns, pools.cooldowns);
   e.abilityCharges =
     Object.keys(pools.abilityCharges).length > 0
       ? cloneAbilityCharges(pools.abilityCharges)
@@ -1080,6 +1094,9 @@ export function readyArenaFighter(
       : e.resourceType === 'energy' || e.resourceType === 'focus'
         ? 100
         : 0;
+  // The top-off covers the druid's parked Cat Form energy too, so a fighter who
+  // walked in drained is not short on the first shift (combat/cat_form_energy.ts).
+  e.parkedEnergyDeficit = 0;
   // Target retention is a separate concern from clearPrep (clean slate vs
   // fight-start top-off): only the countdown-end call site passes
   // keepValidTargetPids, so a selection made during prep survives the gates
@@ -1100,7 +1117,15 @@ export function readyArenaFighter(
   delete e.queuedOnSwingCostMultiplier;
   e.queuedCastAbility = null;
   e.queuedCastAim = null;
+  e.queuedCastTargetId = null;
   emitRainOfFireStop(ctx, e);
+  // An in-flight corpse-harvest cast owns a reservation + a frozen session
+  // beyond `castingAbility` itself (professions/corpse_harvest_session.ts);
+  // blanking the cast flag alone would strand both. Explicit, idempotent
+  // release here, the same shape the damage/death hub uses, rather than the
+  // general `cancelCast` (which would also fire ability-specific interrupt
+  // side effects unrelated to an ordinary arena/Fiesta seat reset).
+  releaseCorpseHarvest(ctx, e.id);
   e.castingAbility = null;
   e.castRemaining = 0;
   e.castTargetId = null;
@@ -1196,6 +1221,7 @@ export function endArenaMatch(
         // (RANKED_ARENA_LOSS_HONOR), so this call site stays a plain report of
         // what happened.
         if (reason !== 'forfeit') {
+          if (won === true && !match.practice) recordWeeklyPvpWin(ctx, pid);
           awardRankedArenaResultHonor(
             ctx,
             meta,
@@ -1272,6 +1298,7 @@ export function endArenaMatch(
 // Teleport all fighters back to where they queued, fully cleansed, and
 // release the instance slot.
 export function returnFromArena(ctx: SimContext, match: ArenaMatch): void {
+  removeMatchFeasts(ctx, 'arena', match.id);
   for (const pid of arenaAllPids(match)) ctx.arenaMatches.delete(pid);
   // Slot numbers collide across pools (pit slot 2 vs maze slot 2), so a yumi
   // match MUST free the maze pool, never the pit's; it also drops its cats.

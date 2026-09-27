@@ -112,8 +112,20 @@ export function entityHasNoBody(
 export interface EntityGateStandIn {
   /** the gate wrapper the call site invokes. `spiritCompileGate` is the one
    *  that is not a renderer wrapper: the puppet pool takes the host's gate
-   *  through `setSpiritCompileGate` and consults it inside its own spawn. */
-  gate: 'gateViewOnCompile' | 'gateSwapOnCompile' | 'gateSwapFlagOnCompile' | 'spiritCompileGate';
+   *  through `setSpiritCompileGate` and consults it inside its own spawn.
+   *  `attachSceneGroupGated` (gated_scene_attach.ts) is the world-group twin
+   *  of the view gate, registered where it hides something a player acts on:
+   *  the farm module, whose plots and feast tables ride the host's gate
+   *  through it (the renderer's own zone-feature attach and the coach trail
+   *  hide scenery and guidance built before any live frame, not entities; the
+   *  Affliction familiar's first attach hides a cosmetic companion whose one
+   *  state, Possess the Evil Eye, stays on the player's buff bar). */
+  gate:
+    | 'gateViewOnCompile'
+    | 'gateSwapOnCompile'
+    | 'gateSwapFlagOnCompile'
+    | 'spiritCompileGate'
+    | 'attachSceneGroupGated';
   /** repo-relative source file the call site lives in */
   file: string;
   /** exact call-site text, so the pin fails when the wiring moves or is dropped */
@@ -142,11 +154,11 @@ export const ENTITY_GATE_STAND_INS: readonly EntityGateStandIn[] = [
   {
     gate: 'gateSwapFlagOnCompile',
     file: 'src/render/renderer.ts',
-    callSite: 'this.farBakeLane.enqueue((settled) => this.gateSwapFlagOnCompile(target, settled)',
+    callSite: '(settled) => this.gateSwapFlagOnCompile(target, settled),',
     hides:
-      'the freshly baked far mesh and its shadow proxy; the SAME injected gate also stages the transparent effect clones (visual.ts stageEffectSwap), which hide nothing at all, and reveals the face decals of a body built with them deferred (visual.ts attachDeferredDecals), which hide only themselves',
+      'the freshly baked far mesh and its shadow proxy; the SAME injected gate also stages the transparent effect clones (visual.ts stageEffectSwap), which hide nothing at all, reveals the face decals of a body built with them deferred (visual.ts attachDeferredDecals), which hide only themselves, and holds the first mount of the Moonwing and Gloamveil form adornments (characters/form_adornments.ts), which also hide only themselves',
     standIn:
-      'the articulated rig, held by farMeshShown (characters/far_lod_reveal_core.ts); for the effect-clone use, the body itself, still drawing its current opaque materials until the swap commits; for the deferred decals, the same body, drawn whole from the frame it entered range with only its stubble and makeup paint arriving late',
+      'the articulated rig, held by farMeshShown (characters/far_lod_reveal_core.ts); for the effect-clone use, the body itself, still drawing its current opaque materials until the swap commits; for the deferred decals, the same body, drawn whole from the frame it entered range with only its stubble and makeup paint arriving late; for the form adornments, the same body in its form tint, with only the cosmetic antlers, crescent, wings or veil arriving a link later',
   },
   {
     gate: 'gateSwapFlagOnCompile',
@@ -165,8 +177,11 @@ export const ENTITY_GATE_STAND_INS: readonly EntityGateStandIn[] = [
   {
     gate: 'gateSwapFlagOnCompile',
     file: 'src/render/renderer.ts',
-    callSite: 'this.gateSwapFlagOnCompile(v.mountVisual.root, () => {',
-    hides: 'a newly summoned mount',
+    // The gate is invoked from mount_lifecycle.ts syncMountVisual through the
+    // renderer's one MountViewHost; this is the host arm that reaches the
+    // wrapper, so it is the call site the scan sees.
+    callSite: 'gateSwapFlagOnCompile: (root, done) => this.gateSwapFlagOnCompile(root, done),',
+    hides: 'a newly summoned mount (mount_lifecycle.ts syncMountVisual, via the MountViewHost)',
     standIn: 'the rider, who keeps drawing on foot at seat lift 0',
   },
   {
@@ -184,5 +199,23 @@ export const ENTITY_GATE_STAND_INS: readonly EntityGateStandIn[] = [
       'the spirit apparition of ONE cast, plus the entrance beat fx.ts spiritAt plays only on a successful spawn (its dust, its ring and its light pulse) and the creature call: the gate REFUSES the spawn rather than holding it, because a spirit that pops in late is worse than one that never came, and the puppet goes to the front of the warm-up queue for the next cast',
     standIn:
       "the rest of the ability's impact sequence, which sequencer.ts runs whatever spiritAt answers: the impact flash and shake, the archetype extras, the motifs and the authored linger. The apparition is one optional beat of a spectacle, never the entity a player acts on, and the refusals are counted as gpuPrep.gates.spiritSpawnsRefused",
+  },
+  {
+    gate: 'attachSceneGroupGated',
+    file: 'src/render/farm_patches.ts',
+    callSite: 'void attachSceneGroupGated(',
+    hides:
+      "the viewer's own plot's growth-stage mesh on its create and on every rebuild (a stage advance, a wet-band flip), and a placed feast's table on its first appearance in interest scope; both link under the host gate as the label kinds farm-plot and farm-feast, and a group retired before its gate settles (its plot replaced again or removed, its feast despawned) is never shown",
+    standIn:
+      'for a plot: the static bed drawn at boot by buildFarmPatchProps (never gated, drawn at every tier) and, on a rebuild, the OUTGOING stage mesh, which keeps drawing until the replacement links and is released on that settle (or at once when the plot is removed meanwhile, so a harvest still bares the bed on the row frame); for a feast: the feast ENTITY itself, whose own view (the invisible click proxy, raycastable through the hold) and nameplate (nameplate_view.ts feastNear, shown within INTERACT_RANGE + 1, exactly where the feast is actionable) never ride this gate; beyond eating range the table is decoration that shows when its programs link, bounded by GATED_ATTACH_WATCHDOG_MS, and warm in practice because the farm program anchors staged after the first-paint boundary retain every farm program',
+  },
+  {
+    gate: 'attachSceneGroupGated',
+    file: 'src/render/mobile_stations.ts',
+    callSite: 'void attachSceneGroupGated(',
+    hides:
+      "a placed mobile crafting station's prop cluster (the town station's bonfire, cauldron or anvil with its clutter, mobile_stations_core.ts) on its first appearance in interest scope, under the label kind mobile-station; a group retired before its gate settles (the station replaced or despawned) is never shown",
+    standIn:
+      "the station ENTITY itself, whose own view (the invisible click proxy the feast also gets, quest_objects.ts buildGroundQuestObject with no item) and nameplate (nameplate_view.ts feastNear, which admits a mobile-station templateId within INTERACT_RANGE + 1) never ride this gate, so the owner's name and the tool read on approach whatever the link state; the crafting gate itself reads the sim slot, never the prop, so a held cluster delays decoration only, bounded by GATED_ATTACH_WATCHDOG_MS",
   },
 ];

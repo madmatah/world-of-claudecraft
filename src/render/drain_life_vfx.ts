@@ -3,6 +3,7 @@ import {
   AFFLICTION_FAMILIAR_LOCAL_X,
   AFFLICTION_FAMILIAR_LOCAL_Z,
 } from './affliction_familiar_core';
+import { tagVfxSubtree } from './renderer_diagnostics';
 import type { VfxOffsetAnchorResolver } from './vfx_anchor';
 
 const CHANNEL_POOL_SIZE = 12;
@@ -87,6 +88,10 @@ const DRAIN_FRAGMENT_SHADER = `
     float stream = 0.68 + 0.32 * sin(vLong * 34.0 + uTime * 10.0 * uMotion + uPhase);
     float flicker = 0.82 + 0.18 * sin(vLong * 17.0 - uTime * 5.0 * uMotion + uPhase);
     float alpha = edge * endFade * stream * flicker * uOpacity;
+    // The channel tapers to nothing at both ends and both edges: early-out
+    // below the additive floor rather than blend a transparent fragment the
+    // bloom re-reads (vfx.ts / ability_vfx/overlay_sprites.ts idiom).
+    if (alpha < 0.004) discard;
     gl_FragColor = vec4(uColor * (1.0 + stream * 0.7), alpha);
   }
 `;
@@ -152,9 +157,9 @@ export class DrainLifeVfx {
       veil.renderOrder = 5;
       const group = new THREE.Group();
       group.name = 'drain-life-vfx-slot';
-      group.userData.renderCategory = 'vfx';
       group.userData.flowDirection = 'target-to-caster';
       group.add(veil, flow, core);
+      tagVfxSubtree(group);
       group.visible = false;
       scene.add(group);
       this.slots.push({

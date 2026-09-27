@@ -1,12 +1,13 @@
 import { ITEMS } from '../../../sim/data';
-import type { ItemDef, LootRollChoice, SimEvent } from '../../../sim/types';
+import type { ItemDef, ItemInstancePayload, LootRollChoice, SimEvent } from '../../../sim/types';
 import type { IWorld } from '../../../world_api';
 import { itemDisplayName } from '../../entity_i18n';
 import { esc } from '../../esc';
 import { formatNumber, t } from '../../i18n';
 import { itemNameColor } from '../../item_name_color';
 import { knownItemDef } from '../../known_item';
-import type { PainterHostWriters } from '../../painter_host';
+import { lootQualityAriaName, lootQualityBadgeHtml } from '../../loot_quality_view';
+import type { PainterHostPresentation, PainterHostWriters } from '../../painter_host';
 import { unknownItemIconHtml } from '../../unknown_item_icon';
 import { reconcileLootRolls } from './loot_roll_reconcile';
 import {
@@ -23,6 +24,20 @@ type TimedRoll<T> = { event: T; receivedAt: number; durationMs: number };
 // resume it rather than restart it.
 type DismissedMasterRoll = { at: number; receivedAt: number; durationMs: number };
 
+const QUALITY_NAME_CLASS: Readonly<Record<string, string>> = {
+  poor: 'q-poor',
+  common: 'q-common',
+  uncommon: 'q-uncommon',
+  rare: 'q-rare',
+  epic: 'q-epic',
+  legendary: 'q-legendary',
+};
+
+function lootRollNameClass(item: ItemDef | undefined, quality: string): string {
+  if (item?.kind === 'quest') return 'q-quest';
+  return Object.hasOwn(QUALITY_NAME_CLASS, quality) ? QUALITY_NAME_CLASS[quality] : 'q-common';
+}
+
 type LootRollWorld = Pick<
   IWorld,
   | 'activeLootRolls'
@@ -38,8 +53,11 @@ export interface LootRollControllerDeps {
   world(): LootRollWorld;
   now(): number;
   isMobileLayout(): boolean;
-  itemIcon(item: ItemDef): string;
-  itemTooltip(item: ItemDef): string;
+  /** The PainterHostPresentation.itemIcon signature, named from the seam
+   *  rather than re-typed; the quality parameter is shape uniformity only
+   *  here, since no copy payload reaches this surface, and is never passed. */
+  itemIcon: PainterHostPresentation['itemIcon'];
+  itemTooltip(item: ItemDef, instance?: ItemInstancePayload): string;
   attachTooltip(element: HTMLElement, html: () => string): void;
   // Dismisses the shared #tooltip box immediately. render() tears down and
   // rebuilds the whole loot-roll subtree on every repaint, so an element the
@@ -66,7 +84,7 @@ function candidateKey(candidates: { pid: number; name: string }[]): string {
 // A stale-client unknown def renders nothing rather than guessing.
 function bindsOnPickupNoteHtml(item: ItemDef | undefined): string {
   if (!item?.soulbound) return '';
-  return `<div class="loot-roll-bind">${esc(t('itemUi.lootRoll.bindsOnPickup'))}</div>`;
+  return `<div class="loot-roll-bind ui-meta ui-muted">${esc(t('itemUi.lootRoll.bindsOnPickup'))}</div>`;
 }
 
 /** Owns loot-roll prompt state, authoritative reconciliation, timers, and DOM. */
@@ -120,7 +138,14 @@ export class LootRollController {
     this.updateTimers(now);
   }
 
-  closeForItem(text: string): void {
+  closeForItem(text: string, exactRollId?: number): void {
+    if (exactRollId !== undefined) {
+      this.activeRolls.delete(exactRollId);
+      this.activeMasterRolls.delete(exactRollId);
+      this.statusRows = this.statusRows.filter((row) => row.rollId !== exactRollId);
+      this.render();
+      return;
+    }
     const match =
       /^.+ wins \[\[i:([A-Za-z0-9_]+)\]\] \(\d+\)$/.exec(text) ??
       /^Everyone passed on \[\[i:([A-Za-z0-9_]+)\]\]\.$/.exec(text) ??
@@ -402,13 +427,13 @@ export class LootRollController {
           <span class="loot-roll-vote-chip ${entry.choice ?? 'undecided'}">${entry.choice ? esc(t(`itemUi.lootRoll.${entry.choice}`)) : ''}</span>
         </span>`,
       )
-      .join('');
+      .join('<span class="loot-roll-separator" aria-hidden="true">·</span>');
     const count = t('itemUi.lootRoll.rolled', {
       answered: formatNumber(status.answered, { maximumFractionDigits: 0 }),
       total: formatNumber(status.total, { maximumFractionDigits: 0 }),
     });
-    return `<div class="loot-roll-votes" aria-hidden="true">
-      <div class="loot-roll-votes-count">${esc(count)}</div>
+    return `<div class="loot-roll-votes loot-roll-status" aria-hidden="true">
+      <div class="loot-roll-votes-count ui-meta ui-muted">${esc(count)}</div>
       <div class="loot-roll-votes-list">${votes}</div>
     </div>`;
   }
@@ -460,35 +485,42 @@ export class LootRollController {
       const item = knownItemDef(ITEMS, event.itemId);
       const itemName = item ? itemDisplayName(item) : event.itemName;
       const quality = item?.quality ?? event.quality ?? 'common';
+      const nameClass = lootRollNameClass(item, quality);
       const nameColor = itemNameColor({ kind: item?.kind, quality });
       const status = statusByRoll.get(rollId);
       const row = this.deps.document.createElement('div');
-      row.className = 'loot-roll panel';
+      row.className = 'loot-roll panel ui-panel-strong';
       row.dataset.rollId = String(rollId);
       this.deps.writers.setStyleProp(row, '--loot-roll-frac', '1.000');
       row.innerHTML = `
         <div class="loot-roll-item">
           ${item ? this.deps.itemIcon(item) : unknownItemIconHtml(event.itemId, quality)}
           <div class="loot-roll-copy">
-            <div class="loot-roll-title">${esc(t('itemUi.lootRoll.title'))}</div>
-            <div class="loot-roll-name" style="color:${nameColor}">${esc(itemName)}</div>
+            <div class="loot-roll-title ui-cin ui-muted">${esc(t('itemUi.lootRoll.title'))}</div>
+            <div class="loot-roll-name ui-outline ${nameClass}" style="color:${nameColor}">${esc(itemName)}</div>
+            ${lootQualityBadgeHtml(event.instance, { labelled: true })}
             ${bindsOnPickupNoteHtml(item)}
           </div>
         </div>
-        <div class="loot-roll-timer" aria-hidden="true"><span></span></div>
+        <div class="loot-roll-timer ui-bar" aria-hidden="true"><span class="ui-bar-fill"></span></div>
         ${status ? this.votesHtml(status) : ''}
         <div class="loot-roll-actions">
-          <button type="button" class="loot-roll-btn need" data-choice="need">${esc(t('itemUi.lootRoll.need'))}</button>
-          <button type="button" class="loot-roll-btn greed" data-choice="greed">${esc(t('itemUi.lootRoll.greed'))}</button>
-          <button type="button" class="loot-roll-btn pass" data-choice="pass">${esc(t('itemUi.lootRoll.pass'))}</button>
+          <button type="button" class="loot-roll-btn loot-roll-btn--need need ui-btn" data-choice="need">${esc(t('itemUi.lootRoll.need'))}</button>
+          <button type="button" class="loot-roll-btn greed ui-btn ui-btn--gold" data-choice="greed">${esc(t('itemUi.lootRoll.greed'))}</button>
+          <button type="button" class="loot-roll-btn pass ui-btn ui-btn--red" data-choice="pass">${esc(t('itemUi.lootRoll.pass'))}</button>
         </div>`;
       const itemElement = row.querySelector<HTMLElement>('.loot-roll-item');
       if (item && itemElement) {
-        this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item));
+        this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item, event.instance));
       }
       row.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => {
         const choice = button.dataset.choice as LootRollChoice;
-        button.setAttribute('aria-label', t(`itemUi.lootRoll.${choice}Aria`, { item: itemName }));
+        button.setAttribute(
+          'aria-label',
+          t(`itemUi.lootRoll.${choice}Aria`, {
+            item: lootQualityAriaName(itemName, event.instance),
+          }),
+        );
         button.addEventListener('click', () => this.submit(rollId, choice));
       });
       root.appendChild(row);
@@ -499,9 +531,10 @@ export class LootRollController {
       const item = knownItemDef(ITEMS, status.itemId);
       const itemName = item ? itemDisplayName(item) : status.itemName;
       const quality = item?.quality ?? status.quality ?? 'common';
+      const nameClass = lootRollNameClass(item, quality);
       const nameColor = itemNameColor({ kind: item?.kind, quality });
       const row = this.deps.document.createElement('div');
-      row.className = 'loot-roll panel watch';
+      row.className = 'loot-roll panel ui-panel-strong watch';
       row.dataset.rollId = String(status.rollId);
       row.dataset.watch = '1';
       this.deps.writers.setStyleProp(row, '--loot-roll-frac', '1.000');
@@ -509,15 +542,16 @@ export class LootRollController {
         <div class="loot-roll-item">
           ${item ? this.deps.itemIcon(item) : unknownItemIconHtml(status.itemId, quality)}
           <div class="loot-roll-copy">
-            <div class="loot-roll-title">${esc(t('itemUi.lootRoll.title'))}</div>
-            <div class="loot-roll-name" style="color:${nameColor}">${esc(itemName)}</div>
+            <div class="loot-roll-title ui-cin ui-muted">${esc(t('itemUi.lootRoll.title'))}</div>
+            <div class="loot-roll-name ui-outline ${nameClass}" style="color:${nameColor}">${esc(itemName)}</div>
+            ${lootQualityBadgeHtml(status.instance, { labelled: true })}
           </div>
         </div>
-        <div class="loot-roll-timer" aria-hidden="true"><span></span></div>
+        <div class="loot-roll-timer ui-bar" aria-hidden="true"><span class="ui-bar-fill"></span></div>
         ${this.votesHtml(status)}`;
       const itemElement = row.querySelector<HTMLElement>('.loot-roll-item');
       if (item && itemElement) {
-        this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item));
+        this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item, status.instance));
       }
       root.appendChild(row);
     }
@@ -532,36 +566,38 @@ export class LootRollController {
     const item = knownItemDef(ITEMS, event.itemId);
     const itemName = item ? itemDisplayName(item) : event.itemName;
     const quality = item?.quality ?? event.quality ?? 'common';
+    const nameClass = lootRollNameClass(item, quality);
     const nameColor = itemNameColor({ kind: item?.kind, quality });
     const row = this.deps.document.createElement('div');
-    row.className = 'loot-roll panel master';
+    row.className = 'loot-roll panel ui-panel-strong master';
     row.dataset.rollId = String(rollId);
     row.dataset.master = '1';
     this.deps.writers.setStyleProp(row, '--loot-roll-frac', '1.000');
     const picks = event.candidates
       .map(
         (candidate) =>
-          `<label><input type="checkbox" class="ml-pick" value="${candidate.pid}"><span>${esc(candidate.name)}</span></label>`,
+          `<label><input type="checkbox" class="ml-pick ui-check" value="${candidate.pid}"><span>${esc(candidate.name)}</span></label>`,
       )
       .join('');
     row.innerHTML = `
       <div class="loot-roll-item">
         ${item ? this.deps.itemIcon(item) : unknownItemIconHtml(event.itemId, quality)}
         <div class="loot-roll-copy">
-          <div class="loot-roll-title">${esc(t('hudChrome.masterLoot.assignPrompt', { item: itemName }))}</div>
-          <div class="loot-roll-name" style="color:${nameColor}">${esc(itemName)}</div>
-          ${bindsOnPickupNoteHtml(item)}
+          <div class="loot-roll-title ui-cin ui-muted">${esc(t('hudChrome.masterLoot.assignPrompt', { item: itemName }))}</div>
+          <div class="loot-roll-name ui-outline ${nameClass}" style="color:${nameColor}">${esc(itemName)}</div>
+          ${lootQualityBadgeHtml(event.instance, { labelled: true })}
+            ${bindsOnPickupNoteHtml(item)}
         </div>
       </div>
-      <div class="loot-roll-timer" aria-hidden="true"><span></span></div>
+      <div class="loot-roll-timer ui-bar" aria-hidden="true"><span class="ui-bar-fill"></span></div>
       <div class="master-loot-picks">
-        <label class="ml-all-row"><input type="checkbox" class="ml-all"><span>${esc(t('hudChrome.masterLoot.selectAll'))}</span></label>
+        <label class="ml-all-row"><input type="checkbox" class="ml-all ui-check"><span>${esc(t('hudChrome.masterLoot.selectAll'))}</span></label>
         ${picks}
       </div>
-      <div class="loot-roll-actions"><button type="button" class="loot-roll-btn assign ml-roll" disabled>${esc(t('hudChrome.masterLoot.rollButton'))}</button></div>`;
+      <div class="loot-roll-actions"><button type="button" class="loot-roll-btn assign ml-roll ui-btn ui-btn--red" disabled>${esc(t('hudChrome.masterLoot.rollButton'))}</button></div>`;
     const itemElement = row.querySelector<HTMLElement>('.loot-roll-item');
     if (item && itemElement) {
-      this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item));
+      this.deps.attachTooltip(itemElement, () => this.deps.itemTooltip(item, event.instance));
     }
     const selectAll = row.querySelector<HTMLInputElement>('.ml-all');
     const pickElements = [...row.querySelectorAll<HTMLInputElement>('.ml-pick')];

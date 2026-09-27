@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: this suite pins literal template source text.
+
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { stripComments } from './helpers/strip_comments';
@@ -52,6 +54,40 @@ const activityBetween = (start: string, end: string): string => {
   return activitySrc.slice(from, to);
 };
 
+// The Browse detail pane (the selected listing, the bid form, buy-now, cancel,
+// the terms field) lives in src/ui/woc_market_detail_html.ts (the same monolith
+// ratchet extraction as the activity rows, moved verbatim): its discipline pins
+// anchor there. detailSrcRaw keeps the whitespace for the composition-order
+// slice; detailSrc is comment-stripped for the presence/ordering pins.
+const detailSrcRaw = readFileSync(
+  new URL('../src/ui/woc_market_detail_html.ts', import.meta.url),
+  'utf8',
+);
+const detailSrc = stripComments(detailSrcRaw);
+const detailBetween = (start: string, end: string): string => {
+  const from = detailSrcRaw.indexOf(start);
+  expect(from, `anchor missing: ${start}`).toBeGreaterThanOrEqual(0);
+  const to = detailSrcRaw.indexOf(end, from);
+  expect(to, `anchor missing after ${start}: ${end}`).toBeGreaterThan(from);
+  return detailSrcRaw.slice(from, to);
+};
+const detailBetweenCode = (start: string, end: string): string => {
+  const from = detailSrc.indexOf(start);
+  expect(from, `anchor missing: ${start}`).toBeGreaterThanOrEqual(0);
+  const to = detailSrc.indexOf(end, from);
+  expect(to, `anchor missing after ${start}: ${end}`).toBeGreaterThan(from);
+  return detailSrc.slice(from, to);
+};
+// confirmFieldsHtml is the LAST function in the detail builder, so its slice
+// runs to end of file (no trailing anchor).
+const detailConfirmFields = detailSrc.slice(detailSrc.indexOf('function confirmFieldsHtml('));
+
+// The Sales History tab rows live in src/ui/woc_market_sales_html.ts (a full
+// pane, its own builder, the same extraction precedent).
+const salesSrc = stripComments(
+  readFileSync(new URL('../src/ui/woc_market_sales_html.ts', import.meta.url), 'utf8'),
+);
+
 describe('woc_market_window: no magic color values', () => {
   it('carries no raw hex color literal (QUALITY_COLOR + var(--...) are the only channels)', () => {
     // The (?<!&) guard skips the pager's numeric HTML entities (&#8249; and
@@ -70,7 +106,10 @@ describe('woc_market_window: no magic color values', () => {
     // and the Object.hasOwn guard, so a raw QUALITY_COLOR index (whose ??
     // never fires on a prototype-key quality) must not come back.
     expect(painter).toContain("import { itemNameColor } from './item_name_color';");
-    expect(painter).toContain('itemNameColor({ quality })');
+    const chrome = readFileSync(new URL('../src/ui/woc_market_chrome.ts', import.meta.url), 'utf8');
+    expect(painter).toContain('return wocItemCellHtml(');
+    expect(chrome).toContain('itemNameColor({ quality })');
+    expect(chrome).not.toContain('QUALITY_COLOR[');
     expect(painter).toContain('itemNameColor({');
     expect(painter).not.toContain('QUALITY_COLOR[');
   });
@@ -137,19 +176,70 @@ describe('woc_market_window: cold-window contract', () => {
     expect(read).toBeGreaterThanOrEqual(0);
     expect(wipe).toBeGreaterThan(read);
     expect(write).toBeGreaterThan(inner.indexOf('this.wire(root, model)'));
+    // ...and AFTER the focus restore: restoreFirstEnabled's contract is the
+    // bare focus() (focus_restore.ts states the policy), which scrolls the
+    // focused control into view in real browsers. Written the other way
+    // round, every slow-band rebuild with the filter bar focused yanked the
+    // browse pane back to the top. happy-dom models no scroll-on-focus, so
+    // the rig cannot hold this behaviorally and the order pin is the guard.
+    expect(write).toBeGreaterThan(inner.indexOf('restoreFirstEnabled('));
     // Keyed, so a tab switch or a different listing still starts at the top
     // rather than inheriting an offset into content that no longer exists.
     expect(inner).toContain('if (keys[name] !== this.renderedScrollKey[name]) continue;');
-    expect(painter).toContain("return { body: this.tab, detail: `${this.tab}:${listing ?? ''}` };");
+    // The keying and the keeper table live in the view core (the monolith
+    // ratchet's named seam); the window consumes them by import.
+    const viewCore = readFileSync(new URL('../src/ui/woc_market_view.ts', import.meta.url), 'utf8');
+    expect(viewCore).toContain("return { body: tab, detail: `${tab}:${detailListingId ?? ''}` };");
     // Both containers, named. A table of one would pass every count above.
-    expect(painter).toContain("['body', '.wm-body'],");
-    expect(painter).toContain("['detail', '.wm-detail'],");
+    expect(viewCore).toContain("['body', '.wm-body'],");
+    expect(viewCore).toContain("['detail', '.wm-detail'],");
+  });
+
+  it('background repaints hold while a native dropdown may be open, paint only', () => {
+    // A rebuild replaces a focused <select>, and a replaced select's open
+    // dropdown closes with it out from under the pointer (the reported
+    // Browse-filter bug). native_select_hold.ts owns the open heuristic and
+    // its focus bounding; BOTH background drivers consult it: the slow-band
+    // poll and the wallet fan-out.
+    // betweenCode, not between: a commented-out guard must not satisfy this.
+    const refresh = betweenCode('refreshIfChanged(): void {', 'private pollFromServer');
+    const hold = 'if (this.selectHold?.holdRepaints()) return;';
+    expect(refresh).toContain(hold);
+    // The hold sits AFTER the poll: only the PAINT waits, the data stays
+    // fresh, so releasing the hold repaints current state immediately.
+    expect(refresh.indexOf('this.pollFromServer();')).toBeLessThan(refresh.indexOf(hold));
+    const wallet = betweenCode('onWalletChanged(): void {', 'private buildModel');
+    expect(wallet).toContain('if (this.selectHold?.holdRepaints()) {');
+    // A skipped wallet beat re-arms: the beat is event-driven with no retry,
+    // so without this flag an empty static page strands the card stale.
+    expect(wallet).toContain('this.walletRepaintDue = true;');
+    expect(refresh).toContain('if (sig === this.lastSig && !this.walletRepaintDue) return;');
+    // The hold attaches on the FIRST render, ahead of the window's own delegated
+    // listeners (its change disarm must run while the select is still attached,
+    // before onChange rebuilds the subtree), and never in the constructor: the
+    // deps contract is lazy closures, and hud.ts builds these painters as field
+    // initializers over a bare root cast.
+    const built = betweenCode('if (!this.built) {', 'const model = this.buildModel();');
+    const attach = 'this.selectHold = createNativeSelectHold(root);';
+    expect(built).toContain(attach);
+    // FIRST in the block, not merely ahead of change: ahead of the dialog-root
+    // mark and every listener, so a later insertion cannot slip in front.
+    expect(built.indexOf(attach)).toBeLessThan(built.indexOf('markDialogRoot('));
+    expect(built.indexOf(attach)).toBeLessThan(built.indexOf('root.addEventListener('));
+    expect(betweenCode('constructor(private readonly deps', 'get isOpen()')).not.toContain(
+      'createNativeSelectHold',
+    );
+    // Every read of the hold is null-safe: a wallet beat can reach a
+    // never-rendered window (hud.ts fans it out with no isOpen gate), and a
+    // third call site added with a bare `.holdRepaints()` would throw there.
+    expect(code).not.toMatch(/this\.selectHold(?!\s*[?=:])/);
   });
 
   it('keeps the wocMarketViewSig repaint guard the hud_update_drive registry names', () => {
     // refreshIfChanged() must bail on an unmoved digest, or the slow-band poll
-    // rebuilds the whole subtree every 500 ms.
-    expect(painter).toContain('if (sig === this.lastSig) return;');
+    // rebuilds the whole subtree every 500 ms (walletRepaintDue is the one
+    // override: a wallet beat skipped under the dropdown hold).
+    expect(painter).toContain('if (sig === this.lastSig && !this.walletRepaintDue) return;');
     // BOTH halves. Pinning only the comparison let the assignment be deleted,
     // which leaves lastSig at '' forever so every slow-band poll rebuilds the
     // whole subtree while this guard still reported the signature present.
@@ -314,11 +404,15 @@ describe('woc_market_window: i18n and escaping discipline', () => {
     // Accessible names are t() output interpolated into HTML, so each one
     // must pass through esc(); a bare English aria-label would also dodge the
     // i18n catalog entirely.
-    // BOTH sources: the My Activities rows carry their aria-labels in the
-    // extracted builder now, and the discipline follows the markup.
+    // EVERY source: the My Activities rows, the Browse detail pane, and the
+    // Sales History table (its Seller/Buyer seller-link cells) carry their
+    // aria-labels in extracted builders now, and the discipline follows the
+    // markup.
     const segments = [
       ...painter.split('aria-label="').slice(1),
       ...activitySrc.split('aria-label="').slice(1),
+      ...detailSrc.split('aria-label="').slice(1),
+      ...salesSrc.split('aria-label="').slice(1),
     ];
     // AT the real count (10), not "> 0", which one surviving attribute
     // satisfied. A floor rather than an exact count so adding a labelled
@@ -372,7 +466,14 @@ describe('woc_market_window: every class it emits is actually styled', () => {
   // Comments are STRIPPED before harvesting selectors: these sheets name plenty
   // of classes in prose, and crediting a class as styled because a comment
   // mentions it would let a rename be "verified" by documentation.
-  const sheets = ['components.css', 'hud.css', 'base.css', 'layout.css', 'hud.mobile.css']
+  const sheets = [
+    'library.css',
+    'components.css',
+    'hud.css',
+    'base.css',
+    'layout.css',
+    'hud.mobile.css',
+  ]
     .map((f) => readFileSync(new URL(`../src/styles/${f}`, import.meta.url), 'utf8'))
     .join('\n')
     .replace(/\/\*[\s\S]*?\*\//g, ' ');
@@ -396,7 +497,10 @@ describe('woc_market_window: every class it emits is actually styled', () => {
         if (cls !== '' && !cls.endsWith('-')) found.add(cls);
       }
     };
-    for (const m of painter.matchAll(/class="([^"]*)"/g)) {
+    // The window plus the two pane builders it composes (the detail pane and
+    // the Sales History table moved to their own files on the monolith ratchet;
+    // their classes must still be styled, so they are harvested here too).
+    for (const m of `${painter}\n${detailSrc}\n${salesSrc}`.matchAll(/class="([^"]*)"/g)) {
       const raw = m[1];
       // The static half of the attribute, with every ${...} hole removed.
       add(raw.replace(/\$\{[\s\S]*?\}/g, ' '));
@@ -407,7 +511,7 @@ describe('woc_market_window: every class it emits is actually styled', () => {
       }
     }
     for (const key of ['stripClass', 'tabClass', 'selectedClass']) {
-      for (const m of painter.matchAll(new RegExp(`${key}: '([^']+)'`, 'g'))) found.add(m[1]);
+      for (const m of painter.matchAll(new RegExp(`${key}: '([^']+)'`, 'g'))) add(m[1]);
     }
     // The badge states are built by concatenating a view-model enum onto a
     // prefix, so no literal for either spelling exists in this file at all.
@@ -425,20 +529,15 @@ describe('woc_market_window: every class it emits is actually styled', () => {
     expect(emitted().length).toBeGreaterThanOrEqual(50);
   });
 
-  it('keeps the stateful tab and primary rules above the window-wide button rule', () => {
-    // A specificity trap that already bit once. The window-wide chrome rule is
-    // `#woc-market-window button:not(.x-btn)`, and :not() carries its argument's
-    // specificity, making it (1,1,1). A plain `#woc-market-window .wm-tab-selected`
-    // is (1,1,0), so it LOSES however late it sits, and the selected tab silently
-    // stopped reading as selected: state a player navigates by, erased by a rule
-    // added to fix something else. Writing them as `button.<class>` ties the
-    // specificity so source order decides, and they come later.
+  it('keeps the Exchange geometry hooks after the window-wide button rule', () => {
+    // Shared ui primitives own the look; these hooks retain Exchange geometry
+    // and must continue to outrank the window-wide sizing rule.
     const css = readFileSync(new URL('../src/styles/components.css', import.meta.url), 'utf8');
     for (const cls of ['wm-tab', 'wm-tab-selected', 'wm-primary']) {
       expect(css, `${cls} must be scoped as button.${cls}`).toContain(
         `#woc-market-window button.${cls}`,
       );
-      // And never as the bare class, which is the losing form.
+      // And never as the bare class, which would lose the scoped geometry.
       expect(css.includes(`#woc-market-window .${cls} {`), `bare .${cls} rule loses`).toBe(false);
     }
     // Order still has to hold: the generic rule must come FIRST. Both anchors
@@ -472,8 +571,8 @@ describe('woc_market_window: every class it emits is actually styled', () => {
     // .panel-title + .x-btn + the close glyph are what every other window uses
     // and the only close markup base.css styles; the invented .window-header /
     // .window-close pair is what produced the unstyled header.
-    expect(painter).toContain('<div class="panel-title">');
-    expect(painter).toContain('class="x-btn" data-close');
+    expect(painter).toContain('<div class="panel-title ui-win-head">');
+    expect(painter).toContain('class="x-btn ui-x-btn" data-close');
     expect(painter).toContain("svgIcon('close')");
     // Matched as MARKUP, not as bare text: the painter's own comment names both
     // retired classes to explain why they went away.
@@ -487,6 +586,33 @@ describe('woc_market_window: every class it emits is actually styled', () => {
     // nothing when clicked.
     expect(painter).toContain('[data-action], [data-close], .wm-row-open, .wm-row');
     expect(painter).toContain("target.hasAttribute('data-close')");
+  });
+});
+
+describe('woc_market_window: the Sales History names are trade click-throughs', () => {
+  it('renders BOTH the Seller and Buyer names as seller-view links, like Browse', () => {
+    // The click-through into "Recent trades by {name}" is the same seller-view
+    // action Browse rows carry; the Sales History table opens it from either
+    // party name. The window's delegated handler and the pane are shared, so a
+    // regex over the builder is enough here (behavior rides the rig).
+    expect(salesSrc).toContain('data-action="seller-view"');
+    expect(salesSrc).toContain('class="wm-seller-link"');
+    // Both columns go through the one nameLink helper, so neither can drift to
+    // a plain, unclickable name.
+    expect(salesSrc).toContain('nameLink(r.sellerName)');
+    expect(salesSrc).toContain('nameLink(r.buyerName)');
+    // The aria names the person the same way Browse does (reused key, no new
+    // string): "View recent trades by {name}".
+    expect(salesSrc).toContain('hudChrome.wocMarket.sellerLinkAria');
+  });
+
+  it('reaches the pane from any tab: the body dispatch renders it before the tab', () => {
+    // The seller pane used to live inside browseHtml; it now sits on the body
+    // dispatch ahead of the tab switch, so a Sales History name opens it too and
+    // Back drops to whatever tab is live.
+    const body = between('const body =', 'return `${header}');
+    expect(body.indexOf('this.sellerPane')).toBeLessThan(body.indexOf("model.tab === 'browse'"));
+    expect(body).toContain('wocSellerPaneHtml({');
   });
 });
 
@@ -529,7 +655,6 @@ describe('woc_market_window: the item inspector on hover', () => {
     // row's own id so the hover target survives a poll rebuild.
     for (const key of [
       '`browse:${r.id}`',
-      '`detail:${d.row.id}`',
       // The sell tab keys off the CHOSEN row now, not a row in a rendered list.
       '`sell:${selected.index}`',
       // ...and off each OPTION in the open picker, which is a surface
@@ -539,6 +664,8 @@ describe('woc_market_window: the item inspector on hover', () => {
     ]) {
       expect(painter, `missing tooltip key ${key}`).toContain(key);
     }
+    // The detail pane keys its item cell in its extracted builder.
+    expect(detailSrc, 'missing detail tooltip key').toContain('`detail:${d.row.id}`');
     // The My Activities rows key their cells in the extracted builder.
     for (const key of [
       '`activity:${l.id}`',
@@ -547,18 +674,22 @@ describe('woc_market_window: the item inspector on hover', () => {
     ]) {
       expect(activitySrc, `missing tooltip key ${key}`).toContain(key);
     }
+    // The Sales History rows key their cells in their own builder.
+    expect(salesSrc, 'missing history tooltip key').toContain('`history:${r.id}`');
     // Every itemCellHtml call passes a key: a 3-arg call would register nothing
-    // and silently render an un-hoverable cell. The builder renders through
-    // host.itemCell with its own literal keys (pinned above); the window's
+    // and silently render an un-hoverable cell. The builders render through
+    // host.itemCell with their own literal keys (pinned above); the window's
     // delegate is a bind, not a call, so it cannot dodge this scan.
     const calls = [
       ...(painter.match(/this\.itemCellHtml\([^)]*\)/g) ?? []),
       ...(activitySrc.match(/host\.itemCell\([^)]*\)/g) ?? []),
+      ...(detailSrc.match(/host\.itemCell\([^)]*\)/g) ?? []),
+      ...(salesSrc.match(/host\.itemCell\([^)]*\)/g) ?? []),
     ];
     expect(calls.length).toBeGreaterThanOrEqual(4);
     for (const call of calls) {
       expect(call, `itemCellHtml without a key: ${call}`).toMatch(
-        /,\s*`(browse|detail|sell|activity):/,
+        /,\s*`(browse|detail|sell|activity|history):/,
       );
     }
   });
@@ -661,7 +792,7 @@ describe('woc_market_window: the sell tab is an ARIA combobox', () => {
     // A real cell, so the shared stats tooltip still attaches to it.
     expect(sell).toContain('`sell:${selected.index}`');
     // The clear button reuses the shared .x-btn chrome family and its close glyph.
-    expect(sell).toContain('class="x-btn wm-combo-clear"');
+    expect(sell).toContain('class="x-btn ui-x-btn wm-combo-clear"');
     expect(sell).toContain('data-action="sell-clear"');
     expect(sell).toContain("svgIcon('close')");
   });
@@ -820,7 +951,7 @@ describe('woc_market_window: the sell tab is an ARIA combobox', () => {
   });
 
   it('closes on focusout only when focus leaves the whole combobox', () => {
-    const out = between('private onFocusOut(e: FocusEvent): void {', 'private scrollKeys(');
+    const out = between('private onFocusOut(e: FocusEvent): void {', 'private sellMatches(');
     expect(out).toContain('combo.contains(next)');
   });
 
@@ -832,7 +963,7 @@ describe('woc_market_window: the sell tab is an ARIA combobox', () => {
     // as closed and Enter/Escape fell through to dropdownKeyNav's collapsed
     // branch: the widget looked like it had broken state, not a focus problem.
     expect(painter).toContain('private rendering = false');
-    const out = between('private onFocusOut(e: FocusEvent): void {', 'private scrollKeys(');
+    const out = between('private onFocusOut(e: FocusEvent): void {', 'private sellMatches(');
     expect(out).toContain('if (this.rendering');
     // The flag must cover the focus RESTORE too, which is itself a focus move.
     const render = between('render(): void {', 'private renderInner(');
@@ -844,7 +975,7 @@ describe('woc_market_window: the sell tab is an ARIA combobox', () => {
   it('does NOT rely on isConnected to tell a rebuild from a real blur', () => {
     // The first attempt did, and it silently failed: the node is still attached at
     // the moment focusout fires, so the guard passed every time.
-    const out = between('private onFocusOut(e: FocusEvent): void {', 'private scrollKeys(');
+    const out = between('private onFocusOut(e: FocusEvent): void {', 'private sellMatches(');
     expect(out).not.toContain('isConnected');
   });
 
@@ -1116,8 +1247,8 @@ describe('woc_market_window: a fixed-price listing can satisfy the guards buyNow
     // why nothing caught it. (The two-factor field this once also carried is gone:
     // 2FA came off the paying side, and the custody side now uses the wallet
     // step-up, never a typed code.)
-    const detail = between('private detailPaneHtml(', 'private bidFormHtml(');
-    expect(detail).toContain('this.confirmFieldsHtml(model)');
+    const detail = detailBetween('function wocDetailPaneHtml(', 'function bidFormHtml(');
+    expect(detail).toContain('confirmFieldsHtml(model, host)');
     // Only when the bid form is absent: a combined listing would otherwise render
     // the same data-field twice and a reader keyed on it would pick whichever
     // came first.
@@ -1128,7 +1259,7 @@ describe('woc_market_window: a fixed-price listing can satisfy the guards buyNow
     // moving it after the button, both still passed. The pane is assembled here, so
     // this is the sequence that decides what a player sees.
     const parts = detail
-      .slice(detail.indexOf('      estimate +'), detail.indexOf('      cancel +'))
+      .slice(detail.indexOf('    estimate +'), detail.indexOf('    cancel +'))
       .split('+')
       .map((piece) => piece.trim())
       .filter(Boolean);
@@ -1140,15 +1271,15 @@ describe('woc_market_window: a fixed-price listing can satisfy the guards buyNow
     // name. This was two fields until 2FA came off the Exchange's paying side; the
     // helper stays because both the bid form and the buy-now path still need the
     // terms checkbox, which is the whole reason it was extracted.
-    const fields = between('private confirmFieldsHtml(', 'private sellHtml(');
+    const fields = detailConfirmFields;
     expect(fields).toContain('data-field="accept-terms"');
     expect(fields).toContain("t('hudChrome.wocMarket.termsLabel')");
     // The bid form consumes the same helper rather than keeping its own copy.
-    const bid = between('private bidFormHtml(', 'private confirmFieldsHtml(');
-    expect(bid).toContain('this.confirmFieldsHtml(model)');
+    const bid = detailBetween('function bidFormHtml(', 'function confirmFieldsHtml(');
+    expect(bid).toContain('confirmFieldsHtml(model, host)');
     expect(bid).not.toContain('data-field="accept-terms"');
     // Exactly one RENDER site, so no path can emit a duplicate.
-    expect(painter.match(/(?<!\[)data-field="accept-terms"(?!\])/g) ?? []).toHaveLength(1);
+    expect(detailSrc.match(/(?<!\[)data-field="accept-terms"(?!\])/g) ?? []).toHaveLength(1);
   });
 
   it('sends the terms flag from both paying paths', () => {
@@ -1302,13 +1433,15 @@ describe('woc_market_window: the bid $WOC preview', () => {
   });
 
   it('reuses the trade arm’s wording so the two surfaces read identically', () => {
-    expect(painter).toContain("t('hudChrome.trade.woc.equivalent'");
+    // The bid-equivalence line renders in the detail builder now (the monolith
+    // ratchet extraction); the window feeds it the figure as host state.
+    expect(detailSrc).toContain("t('hudChrome.trade.woc.equivalent'");
   });
 
   it('shows nothing at all until the server has quoted a figure', () => {
     // An empty or cleared field must not keep displaying the rate for the number
-    // that used to be there.
-    expect(painter).toContain('this.bidEquivalentTokens === null');
+    // that used to be there. The gate lives with the markup, on host state.
+    expect(detailSrc).toContain('host.bidEquivalentTokens === null');
   });
 });
 
@@ -1318,8 +1451,8 @@ describe('woc_market_window: a price the wallet cannot cover', () => {
   // held as window state, and what matters is that each gate reaches the shared
   // predicate and takes the button with it.
   it('gates the BID on the shared predicate, not a hand-rolled comparison', () => {
-    const form = between('private bidFormHtml(', 'private confirmFieldsHtml');
-    expect(form).toContain('overWalletBalance(this.bidEquivalentTokens, this.walletTokens())');
+    const form = detailBetween('function bidFormHtml(', 'function confirmFieldsHtml');
+    expect(form).toContain('overWalletBalance(host.bidEquivalentTokens, host.walletTokens)');
     expect(form, 'and the button actually goes dead').toContain('|| overBid ?');
     expect(form, 'with the figure carrying it too').toContain("' over-balance'");
     expect(form, 'and never colour alone').toContain(
@@ -1330,11 +1463,11 @@ describe('woc_market_window: a price the wallet cannot cover', () => {
   it('gates BUY NOW on its own quote, since the detail estimate prices the bid', () => {
     // listingDetail estimates currentBidCents ?? startCents, which is not the
     // buy-now price: reusing it would compare the wrong number. The chrome
-    // builder renders the face, so the gate rides its disabled and
-    // overBalance args from here.
-    expect(painter).toContain('overWalletBalance(this.buyNowTokens, this.walletTokens())');
-    expect(painter).toContain('|| overBuyNow,');
-    expect(painter).toContain('overBalance: overBuyNow,');
+    // builder renders the face, so the detail builder feeds it disabled and
+    // overBalance from the host's own buy-now quote.
+    expect(detailSrc).toContain('overWalletBalance(host.buyNowTokens, host.walletTokens)');
+    expect(detailSrc).toContain('|| overBuyNow,');
+    expect(detailSrc).toContain('overBalance: overBuyNow,');
   });
 
   it('reads the VERIFIED balance, not a merely-connected wallet', () => {
@@ -1760,16 +1893,16 @@ describe('woc_market_window: the Activity tab is an honest, actionable ledger (H
     // canCancelListing: active, no cancel intent, unbid); the browse detail
     // pane rides the same one behind its mine check.
     expect(activity).toContain('canCancelListing(l)');
-    expect(code).toContain('d.row.mine && canCancelListing(d.row)');
+    expect(detailSrc).toContain('d.row.mine && canCancelListing(d.row)');
     expect(activity).toContain('data-action="cancel-listing"');
     // Focus survives the poll rebuild (the window-family focus-key contract).
-    expect(activity).toContain(`wm-activity-cancel-\${l.id}`);
+    expect(activity).toContain(`wm-activity-cancel-\${esc(l.id)}`);
   });
 });
 
 describe('woc_market_window: informed commitment before the first charge (H13/R9)', () => {
-  const bidForm = betweenCode('private bidFormHtml(', 'private confirmFieldsHtml(');
-  const confirmFields = betweenCode('private confirmFieldsHtml(', 'private sellHtml(');
+  const bidForm = detailBetweenCode('function bidFormHtml(', 'function confirmFieldsHtml(');
+  const confirmFields = detailConfirmFields;
   // The disclosure markup lives in the chrome builders (the monolith
   // ratchet's extraction); the discipline pins follow it there, and the
   // window keeps the ordering pin: the composed well still precedes the
@@ -1809,7 +1942,7 @@ describe('woc_market_window: informed commitment before the first charge (H13/R9
     // the well BEFORE the button, where the player still decides.
     expect(bidForm).toContain('wocBidDisclosuresHtml({');
     expect(bidForm).toContain(
-      'settlementWindowText: this.countdown(model.settlementWindowSeconds)',
+      'settlementWindowText: host.countdown(model.settlementWindowSeconds)',
     );
     expect(bidForm.indexOf('wocBidDisclosuresHtml(')).toBeLessThan(bidForm.indexOf('place-bid'));
   });
@@ -1822,8 +1955,8 @@ describe('woc_market_window: informed commitment before the first charge (H13/R9
     expect(buyNowFace.indexOf('buyNowNote')).toBeLessThan(
       buyNowFace.indexOf('data-action="buy-now"'),
     );
-    // And the window renders that builder for every buy-now face.
-    const detail = betweenCode('private detailPaneHtml(', 'private bidFormHtml(');
+    // And the detail builder renders that face for every buy-now listing.
+    const detail = detailBetweenCode('function wocDetailPaneHtml(', 'function bidFormHtml(');
     expect(detail).toContain('wocBuyNowHtml({');
   });
 
@@ -1831,11 +1964,40 @@ describe('woc_market_window: informed commitment before the first charge (H13/R9
     expect(confirmFields).toContain('hudChrome.wocMarket.termsLabel');
     // The href comes from the shared shell-aware resolver (src/ui/terms_link.ts):
     // same-origin on the site, the canonical page from the desktop and native
-    // shells, where a bare '/terms' was a dead link or an app reboot.
-    expect(confirmFields).toContain('termsUrlFor(globalThis.location?.origin');
+    // shells, where a bare '/terms' was a dead link or an app reboot. The origin
+    // reaches the pure builder through the host bag (it touches no browser
+    // global); the window resolves globalThis.location and passes it in.
+    expect(confirmFields).toContain('termsUrlFor(host.origin)');
+    expect(painter).toContain('origin: globalThis.location?.origin');
     expect(confirmFields).not.toContain('href="/terms"');
     expect(confirmFields).toContain('hudChrome.wocMarket.termsLink');
     // Still hidden once acceptance is durably recorded.
     expect(confirmFields).toContain('model.activity?.termsAccepted');
+  });
+});
+
+describe('woc_market_window: the wallet card can be hidden (the mobile reconnect prompt)', () => {
+  it('drops the card while the live kind matches the dismissed one, and only then', () => {
+    // render() hands the chrome builder null instead of the view when the pure
+    // core says the card is hidden; paintedWalletSig still latches the LIVE view,
+    // so onWalletChanged() repaints (and the card returns) when the kind moves.
+    expect(painter).toContain(
+      'wallet: walletCardHidden(wallet.kind, this.walletCardDismissed) ? null : wallet,',
+    );
+    expect(painter).toContain('this.paintedWalletSig = wocWalletCardSig(wallet);');
+    expect(painter).toContain('private walletCardDismissed = loadWalletCardDismissal();');
+  });
+
+  it('the dismiss click arm stores the KIND, persists it, and repaints', () => {
+    const arm = painter.slice(
+      painter.indexOf("case 'dismiss-wallet-card': {"),
+      painter.indexOf("case 'connect-wallet':"),
+    );
+    expect(arm).toContain('const kind = walletConnectionView().kind;');
+    // A non-dismissible kind can only reach here through a stale DOM; refuse it.
+    expect(arm).toContain('if (!walletCardDismissible(kind)) break;');
+    expect(arm).toContain('this.walletCardDismissed = kind;');
+    expect(arm).toContain('saveWalletCardDismissal(kind);');
+    expect(arm).toContain('this.render();');
   });
 });

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BG_BASES,
   BG_GRAVEYARDS,
+  BG_HALF_X,
+  BG_HALF_Z,
   battlegroundColliders,
   bgFieldPlanWalls,
 } from '../src/sim/battleground_layout';
@@ -30,8 +33,15 @@ import {
   moveToGraveyardForUnstuck,
   nearestOverworldGraveyard,
   RES_HEALER_HP_FRACTION,
+  reviveAtGraveyardForUnstuck,
 } from '../src/sim/spirit';
-import { type BlockerDef, MAX_LEVEL, type SimEvent, type WorldContent } from '../src/sim/types';
+import {
+  type BlockerDef,
+  emptyMoveInput,
+  MAX_LEVEL,
+  type SimEvent,
+  type WorldContent,
+} from '../src/sim/types';
 import {
   UNSTUCK_COOLDOWN_ID,
   UNSTUCK_COUNTDOWN_SECONDS,
@@ -39,6 +49,13 @@ import {
   UNSTUCK_SUCCESS_COOLDOWN_SECONDS,
   unstuckLocationAt,
 } from '../src/sim/unstuck';
+import {
+  clearCooldownsPreservingUnstuck,
+  markUnstuckCompleted,
+  restoreCooldownsPreservingUnstuck,
+  UNSTUCK_RECENT_ID,
+  UNSTUCK_SICKNESS_WINDOW_SECONDS,
+} from '../src/sim/unstuck_cooldown';
 
 type Event = Extract<SimEvent, { type: 'unstuck' }>;
 
@@ -168,6 +185,42 @@ function forceBattlegroundWallTrap(
   return p;
 }
 
+function forceOutboardBattlegroundWallTrap(
+  sim: Sim,
+  match: NonNullable<ReturnType<Sim['bgMatchFor']>>,
+  pid: number,
+): Sim['player'] {
+  const wall = required(
+    battlegroundColliders().find(
+      (candidate) =>
+        candidate.type === 'obb' &&
+        !candidate.standable &&
+        (Math.abs(candidate.x) > BG_HALF_X + PLAYER_BODY_RADIUS + 1 ||
+          Math.abs(candidate.z) > BG_HALF_Z + PLAYER_BODY_RADIUS + 1),
+    ),
+    'outboard battleground wall collider',
+  );
+  const origin = battlegroundOrigin(match.slot);
+  const p = required(sim.entities.get(pid), 'trapped battleground player');
+  p.pos = sim.groundPos(origin.x + wall.x, origin.z + wall.z);
+  p.prevPos = { ...p.pos };
+  p.vx = 0;
+  p.vy = 0;
+  p.vz = 0;
+  p.onGround = true;
+  p.jumping = false;
+  p.inCombat = false;
+  p.combatTimer = 999;
+  sim.ctx.rebucket(p);
+  expect(
+    Math.abs(p.pos.x - origin.x) > BG_HALF_X + PLAYER_BODY_RADIUS + 1 ||
+      Math.abs(p.pos.z - origin.z) > BG_HALF_Z + PLAYER_BODY_RADIUS + 1,
+  ).toBe(true);
+  const resolved = resolvePosition(sim.cfg.seed, p.pos.x, p.pos.z, PLAYER_BODY_RADIUS);
+  expect(Math.hypot(resolved.x - p.pos.x, resolved.z - p.pos.z)).toBeGreaterThan(0.01);
+  return p;
+}
+
 function forceBattlegroundWallContact(
   sim: Sim,
   match: NonNullable<ReturnType<Sim['bgMatchFor']>>,
@@ -209,6 +262,51 @@ function forceBattlegroundWallContact(
   p.combatTimer = 999;
   const meta = required(sim.meta(pid), 'battleground player metadata');
   meta.moveInput.forward = true;
+  sim.ctx.rebucket(p);
+  const resolved = resolvePosition(sim.cfg.seed, p.pos.x, p.pos.z, PLAYER_BODY_RADIUS);
+  expect(Math.hypot(resolved.x - p.pos.x, resolved.z - p.pos.z)).toBe(0);
+  return p;
+}
+
+function forceExactBattlegroundWallContact(
+  sim: Sim,
+  match: NonNullable<ReturnType<Sim['bgMatchFor']>>,
+  pid: number,
+): Sim['player'] {
+  const origin = battlegroundOrigin(match.slot);
+  const p = required(sim.entities.get(pid), 'exact-contact battleground player');
+  let contact: { x: number; z: number } | null = null;
+  for (const wall of battlegroundColliders()) {
+    if (wall.type !== 'obb' || wall.moveTopY !== undefined || wall.hw < 1 || wall.hd < 1) continue;
+    const axes = [
+      { x: Math.cos(wall.rot), z: -Math.sin(wall.rot), d: wall.hw },
+      { x: -Math.cos(wall.rot), z: Math.sin(wall.rot), d: wall.hw },
+      { x: Math.sin(wall.rot), z: Math.cos(wall.rot), d: wall.hd },
+      { x: -Math.sin(wall.rot), z: -Math.cos(wall.rot), d: wall.hd },
+    ];
+    for (const axis of axes) {
+      const x = origin.x + wall.x + axis.x * (axis.d + PLAYER_BODY_RADIUS);
+      const z = origin.z + wall.z + axis.z * (axis.d + PLAYER_BODY_RADIUS);
+      const resolved = resolvePosition(sim.cfg.seed, x, z, PLAYER_BODY_RADIUS);
+      if (Math.hypot(resolved.x - x, resolved.z - z) <= 1e-6) {
+        contact = { x, z };
+        break;
+      }
+    }
+    if (contact) break;
+  }
+  contact = required(contact, 'exact battleground wall-contact point');
+  p.pos = sim.groundPos(contact.x, contact.z);
+  p.prevPos = { ...p.pos };
+  p.vx = 0;
+  p.vy = 0;
+  p.vz = 0;
+  p.onGround = true;
+  p.jumping = false;
+  p.inCombat = false;
+  p.combatTimer = 999;
+  const meta = required(sim.meta(pid), 'battleground player metadata');
+  meta.moveInput = emptyMoveInput();
   sim.ctx.rebucket(p);
   const resolved = resolvePosition(sim.cfg.seed, p.pos.x, p.pos.z, PLAYER_BODY_RADIUS);
   expect(Math.hypot(resolved.x - p.pos.x, resolved.z - p.pos.z)).toBe(0);
@@ -452,6 +550,9 @@ describe('unstuck graveyard move while alive', () => {
   } {
     const sim = makeWorld();
     sim.setPlayerLevel(level);
+    // A repeat inside the sickness window, so the completion charges the sickness these
+    // tests are about. The free first use has its own block ('unstuck sickness window').
+    markUnstuckCompleted(sim.player.cooldowns);
     const { player } = accepted(sim);
     const events = eventsOf(tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20));
     const event = events.find(
@@ -483,8 +584,9 @@ describe('unstuck graveyard move while alive', () => {
   });
 
   it('charges Unstuck Sickness rather than The Keeper’s Toll, and clears momentum', () => {
-    const { player } = runCompletion();
+    const { player, event } = runCompletion();
 
+    expect(event.sickness).toBe(true);
     expect(player.auras.some((aura) => aura.id === RESURRECTION_SICKNESS_ID)).toBe(false);
     const sickness = required(
       player.auras.find((aura) => aura.id === UNSTUCK_SICKNESS_ID),
@@ -508,14 +610,17 @@ describe('unstuck graveyard move while alive', () => {
     ).toBe(UNSTUCK_SICKNESS_DURATION);
     expect(UNSTUCK_SICKNESS_DURATION).toBe(5 * 60);
 
-    const { player: exempt } = runCompletion(9);
+    const { player: exempt, event: exemptEvent } = runCompletion(9);
     expect(exempt.auras.some((aura) => aura.id === UNSTUCK_SICKNESS_ID)).toBe(false);
+    // The event reports what actually landed: nothing, even though this was a repeat.
+    expect(exemptEvent.sickness).toBe(false);
     expect(exempt.dead).toBe(false);
   });
 
   it('never stacks a second whole-stat drain on top of The Keeper’s Toll', () => {
     const sim = makeWorld();
     sim.setPlayerLevel(MAX_LEVEL);
+    markUnstuckCompleted(sim.player.cooldowns);
     const { player } = accepted(sim);
     applyResurrectionSickness(sim.ctx, player);
     const drained = player.stats.str;
@@ -534,6 +639,7 @@ describe('unstuck graveyard move while alive', () => {
   it('logs the displaced Keeper’s Toll fading, which no snapshot would reveal', () => {
     const sim = makeWorld();
     sim.setPlayerLevel(MAX_LEVEL);
+    markUnstuckCompleted(sim.player.cooldowns);
     const { player } = accepted(sim);
     applyResurrectionSickness(sim.ctx, player);
     sim.drainEvents();
@@ -692,12 +798,16 @@ describe('unstuck while dead', () => {
     const player = killed(sim);
     const graveyard = nearestOverworldGraveyard(START.x, START.z);
     expect(player.ghost).toBe(false);
+    // A repeat inside the sickness window; the free first revive is covered in the
+    // 'unstuck sickness window' block.
+    markUnstuckCompleted(player.cooldowns);
 
     expect(sim.unstuck(player.id)).toBe(true);
     sim.drainEvents();
     const completed = completionOf(sim);
 
     expect(completed?.reason).toBe('revived_at_graveyard');
+    expect(completed?.sickness).toBe(true);
     expect(completed?.destination).toMatchObject(graveyard);
     expect(player.pos).toMatchObject(graveyard);
     expect(player.prevPos).toEqual(player.pos);
@@ -730,6 +840,8 @@ describe('unstuck while dead', () => {
     sim.drainEvents();
     expect(player.ghost).toBe(true);
     const graveyard = nearestOverworldGraveyard(player.pos.x, player.pos.z);
+    // A repeat inside the sickness window (see the block above).
+    markUnstuckCompleted(player.cooldowns);
 
     expect(sim.unstuck(player.id)).toBe(true);
     sim.drainEvents();
@@ -822,6 +934,88 @@ describe('unstuck while dead', () => {
 });
 
 describe('unstuck area identity', () => {
+  it('accepts a battleground inside-wall location through match-owned area identity', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceBattlegroundWallTrap(sim, match, pid);
+    const origin = battlegroundOrigin(match.slot);
+    const localX = player.pos.x - origin.x;
+    const localZ = player.pos.z - origin.z;
+
+    expect(Math.abs(localX)).toBeLessThan(BG_HALF_X);
+    expect(Math.abs(localZ)).toBeLessThan(BG_HALF_Z);
+    expect(unstuckLocationAt(sim.ctx, pid, player.pos)?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+
+    expect(sim.unstuck(pid)).toBe(true);
+    const startEvents = eventsOf(sim.drainEvents());
+    expect(startEvents).toContainEqual({
+      type: 'unstuck',
+      phase: 'started',
+      seconds: UNSTUCK_COUNTDOWN_SECONDS,
+      pid,
+    });
+    expect(startEvents).not.toContainEqual(
+      expect.objectContaining({ phase: 'blocked', reason: 'invalid_area', pid }),
+    );
+
+    const completed = eventsOf(tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20)).find(
+      (event): event is Extract<Event, { phase: 'completed' }> => event.phase === 'completed',
+    );
+
+    expect(completed?.reason).toBe('moved_to_graveyard');
+    expect(completed?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expect(isBgPos(player.pos.x)).toBe(true);
+    const plot = BG_GRAVEYARDS[0];
+    expect(Math.abs(player.pos.x - (origin.x + plot.x))).toBeLessThanOrEqual(plot.hw);
+    expect(Math.abs(player.pos.z - (origin.z + plot.z))).toBeLessThanOrEqual(plot.hd);
+  });
+
+  it('keeps battleground identity when the team graveyard falls back to a clear spawn', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceBattlegroundWallTrap(sim, match, pid);
+    const origin = battlegroundOrigin(match.slot);
+    const originalPlot = { ...BG_GRAVEYARDS[0] };
+
+    Object.assign(BG_GRAVEYARDS[0], { x: 50, z: -140, hw: 0.25, hd: 0.25 });
+    try {
+      expect(sim.unstuck(pid)).toBe(true);
+      sim.drainEvents();
+      const completed = eventsOf(tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20)).find(
+        (event): event is Extract<Event, { phase: 'completed' }> => event.phase === 'completed',
+      );
+
+      expect(completed?.area).toMatchObject({
+        kind: 'battleground',
+        id: 'thornhollow_fields',
+        instanceId: String(match.id),
+        slot: match.slot,
+      });
+      expect(completed?.reason).toBe('moved_to_graveyard');
+      expect(sim.bgMatchFor(pid)).toBe(match);
+      expect(
+        BG_BASES[0].spawns.some(
+          (spawn) =>
+            Math.abs(player.pos.x - (origin.x + spawn.x)) < 1e-6 &&
+            Math.abs(player.pos.z - (origin.z + spawn.z)) < 1e-6,
+        ),
+      ).toBe(true);
+      expect(completed?.destination.localX).toBeCloseTo(player.pos.x - origin.x, 6);
+      expect(completed?.destination.localZ).toBeCloseTo(player.pos.z - origin.z, 6);
+    } finally {
+      Object.assign(BG_GRAVEYARDS[0], originalPlot);
+    }
+  });
+
   it('completes a battleground wall-trap attempt at a safe team graveyard location', () => {
     const { sim, match, pid } = activeBattleground();
     const player = forceBattlegroundWallTrap(sim, match, pid);
@@ -857,6 +1051,93 @@ describe('unstuck area identity', () => {
     const plot = BG_GRAVEYARDS[0];
     expect(Math.abs(player.pos.x - (origin.x + plot.x))).toBeLessThanOrEqual(plot.hw);
     expect(Math.abs(player.pos.z - (origin.z + plot.z))).toBeLessThanOrEqual(plot.hd);
+  });
+
+  it('accepts a battleground perimeter-wall trap beyond the playable footprint margin', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = required(sim.entities.get(pid), 'battleground player');
+    const origin = battlegroundOrigin(match.slot);
+    player.pos = sim.groundPos(origin.x + BG_HALF_X + PLAYER_BODY_RADIUS + 0.05, origin.z);
+    player.prevPos = { ...player.pos };
+    player.vx = 0;
+    player.vy = 0;
+    player.vz = 0;
+    player.onGround = true;
+    player.jumping = false;
+    player.inCombat = false;
+    player.combatTimer = 999;
+    sim.ctx.rebucket(player);
+
+    const resolved = resolvePosition(sim.cfg.seed, player.pos.x, player.pos.z, PLAYER_BODY_RADIUS);
+    expect(Math.hypot(resolved.x - player.pos.x, resolved.z - player.pos.z)).toBeGreaterThan(0.01);
+    expect(unstuckLocationAt(sim.ctx, pid, player.pos)?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    const events = tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20);
+    const completed = eventsOf(events).find((event) => event.phase === 'completed');
+
+    expect(completed?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expect(isBgPos(player.pos.x)).toBe(true);
+    const plot = BG_GRAVEYARDS[0];
+    expect(Math.abs(player.pos.x - (origin.x + plot.x))).toBeLessThanOrEqual(plot.hw);
+    expect(Math.abs(player.pos.z - (origin.z + plot.z))).toBeLessThanOrEqual(plot.hd);
+  });
+
+  it('accepts a battleground trap in generated outboard wall geometry', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceOutboardBattlegroundWallTrap(sim, match, pid);
+    const origin = battlegroundOrigin(match.slot);
+
+    expect(unstuckLocationAt(sim.ctx, pid, player.pos)?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    const events = tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20);
+    const completed = eventsOf(events).find((event) => event.phase === 'completed');
+
+    expect(completed?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    const plot = BG_GRAVEYARDS[0];
+    expect(Math.abs(player.pos.x - (origin.x + plot.x))).toBeLessThanOrEqual(plot.hw);
+    expect(Math.abs(player.pos.z - (origin.z + plot.z))).toBeLessThanOrEqual(plot.hd);
+  });
+
+  it('rejects exact battleground wall contact without wall pressure as a shortcut', () => {
+    const { sim, match, pid } = activeBattleground();
+    forceExactBattlegroundWallContact(sim, match, pid);
+
+    expect(sim.unstuck(pid)).toBe(false);
+    expect(eventsOf(sim.drainEvents())).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'blocked',
+        reason: 'competitive',
+        pid,
+      }),
+    );
+    expect(required(sim.meta(pid), 'battleground player metadata').pendingUnstuck).toBeNull();
   });
 
   it('completes a battleground wall-press ESC attempt while movement input is still held', () => {
@@ -927,6 +1208,102 @@ describe('unstuck area identity', () => {
       ),
     ).toBeLessThanOrEqual(Math.hypot(BG_GRAVEYARDS[0].hw, BG_GRAVEYARDS[0].hd));
     expect(meta.moveInput.forward).toBe(false);
+  });
+
+  it('completes a battleground ESC attempt when menu neutral input leaves residual wall velocity', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceBattlegroundWallContact(sim, match, pid);
+    const meta = required(sim.meta(pid), 'battleground player metadata');
+    const origin = battlegroundOrigin(match.slot);
+    const wallX = Math.sin(player.facing);
+    const wallZ = Math.cos(player.facing);
+
+    meta.moveInput.forward = false;
+    player.vx = wallX * 0.2;
+    player.vz = wallZ * 0.2;
+    sim.drainEvents();
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    const events = tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20);
+    const completed = eventsOf(events).find((event) => event.phase === 'completed');
+
+    expect(completed?.area).toMatchObject({
+      kind: 'battleground',
+      id: 'thornhollow_fields',
+      instanceId: String(match.id),
+      slot: match.slot,
+    });
+    expect(completed?.destination.localX).toBeCloseTo(player.pos.x - origin.x, 6);
+    expect(completed?.destination.localZ).toBeCloseTo(player.pos.z - origin.z, 6);
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expect(isBgPos(player.pos.x)).toBe(true);
+    expect(
+      Math.hypot(
+        player.pos.x - (origin.x + BG_GRAVEYARDS[0].x),
+        player.pos.z - (origin.z + BG_GRAVEYARDS[0].z),
+      ),
+    ).toBeLessThanOrEqual(Math.hypot(BG_GRAVEYARDS[0].hw, BG_GRAVEYARDS[0].hd));
+    expect(meta.moveInput.forward).toBe(false);
+  });
+
+  it('cancels a residual-velocity battleground ESC attempt after fresh clear movement input', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceBattlegroundWallContact(sim, match, pid);
+    const meta = required(sim.meta(pid), 'battleground player metadata');
+    const wallX = Math.sin(player.facing);
+    const wallZ = Math.cos(player.facing);
+
+    meta.moveInput.forward = false;
+    player.vx = wallX * 0.2;
+    player.vz = wallZ * 0.2;
+    sim.drainEvents();
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+
+    player.facing += Math.PI / 2;
+    player.prevFacing = player.facing;
+    meta.moveInput.forward = true;
+    expect(eventsOf(sim.tick())).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'cancelled',
+        reason: 'moved',
+        pid,
+      }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+    expect(sim.bgMatchFor(pid)).toBe(match);
+  });
+
+  it('cancels a battleground wall-press ESC attempt that reaches clear footing', () => {
+    const { sim, match, pid } = activeBattleground();
+    const player = forceBattlegroundWallContact(sim, match, pid);
+    const meta = required(sim.meta(pid), 'battleground player metadata');
+    const origin = battlegroundOrigin(match.slot);
+    const spawn = BG_BASES[0].spawns[0];
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    meta.moveInput.forward = false;
+    placeOnGround(sim, pid, origin.x + spawn.x, origin.z + spawn.z);
+
+    const resolved = resolvePosition(sim.cfg.seed, player.pos.x, player.pos.z, PLAYER_BODY_RADIUS);
+    expect(Math.hypot(resolved.x - player.pos.x, resolved.z - player.pos.z)).toBeLessThanOrEqual(
+      1e-6,
+    );
+    expect(eventsOf(sim.tick())).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'cancelled',
+        reason: 'moved',
+        pid,
+      }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expect(isBgPos(player.pos.x)).toBe(true);
   });
 
   it('expires the battleground wall-press ESC grace instead of creating a delayed shortcut', () => {
@@ -1173,5 +1550,312 @@ describe('unstuck area identity', () => {
     const sim = makeWorld();
     const privateBand = sim.groundPos(INSTANCE_X_BASE + 7_000, -1_000);
     expect(unstuckLocationAt(sim.ctx, sim.player.id, privateBand)).toBeNull();
+  });
+});
+
+// The Unstuck Sickness window (src/sim/unstuck_cooldown.ts): the first completed /unstuck
+// in an hour is free, a repeat inside the window opened by the previous completion charges
+// the sickness, and the window slides from the latest use. Measured in played time like
+// every persisted cooldown, so a relog can never shorten it.
+describe('unstuck sickness window', () => {
+  type Completed = Extract<Event, { phase: 'completed' }>;
+
+  function complete(sim: Sim): Completed {
+    expect(sim.unstuck(sim.player.id)).toBe(true);
+    sim.drainEvents();
+    return required(
+      eventsOf(tickMany(sim, UNSTUCK_COUNTDOWN_SECONDS * 20)).find(
+        (event): event is Completed => event.phase === 'completed',
+      ),
+      'completed event',
+    );
+  }
+
+  // The success cooldown alone blocks a second attempt for five minutes. These tests are
+  // about the window (an hour of played time), so they lift that cooldown between
+  // attempts rather than ticking through it.
+  function readyAgain(sim: Sim): void {
+    sim.player.cooldowns.delete(UNSTUCK_COOLDOWN_ID);
+  }
+
+  function hasUnstuckSickness(player: Sim['player']): boolean {
+    return player.auras.some((aura) => aura.id === UNSTUCK_SICKNESS_ID);
+  }
+
+  it('charges nothing on the first unstuck in an hour and opens the window', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    const maxHpBefore = player.maxHp;
+
+    const event = complete(sim);
+
+    expect(event.reason).toBe('moved_to_graveyard');
+    expect(event.sickness).toBe(false);
+    // Free means free of the debuff, never free of the move itself.
+    expect(player.pos).toMatchObject(nearestOverworldGraveyard(START.x, START.z));
+    expect(hasUnstuckSickness(player)).toBe(false);
+    expect(player.auras.some((aura) => aura.kind === 'buff_allstats_pct')).toBe(false);
+    expect(player.maxHp).toBe(maxHpBefore);
+    expect(player.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+    expect(player.cooldowns.get(UNSTUCK_COOLDOWN_ID)).toBe(UNSTUCK_SUCCESS_COOLDOWN_SECONDS);
+    expect(UNSTUCK_SICKNESS_WINDOW_SECONDS).toBe(60 * 60);
+    // Both ids are persisted JSONB keys (cooldowns.abilities) and restore-allowlist tokens:
+    // renaming either would orphan every in-flight timer on live characters.
+    expect(UNSTUCK_RECENT_ID).toBe('system_unstuck_recent');
+    expect(UNSTUCK_COOLDOWN_ID).toBe('system_unstuck');
+  });
+
+  it('charges Unstuck Sickness on a second unstuck inside the window', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    complete(sim);
+    tickMany(sim, 20 * 60); // a minute later: well inside the hour
+    readyAgain(sim);
+
+    const event = complete(sim);
+
+    expect(event.sickness).toBe(true);
+    const sickness = required(
+      player.auras.find((aura) => aura.id === UNSTUCK_SICKNESS_ID),
+      'unstuck sickness aura',
+    );
+    expect(sickness.remaining).toBe(unstuckSicknessDuration(player.level));
+  });
+
+  it('slides the window from the latest completion rather than the first', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    complete(sim);
+    // Half a minute of window left from the first use (more than the countdown, since the
+    // charge is decided at completion): still a repeat, and the repeat re-opens the window
+    // in full, so a chain of uses stays charged until a whole quiet hour has passed.
+    player.cooldowns.set(UNSTUCK_RECENT_ID, 30);
+    readyAgain(sim);
+
+    const repeat = complete(sim);
+
+    expect(repeat.sickness).toBe(true);
+    expect(player.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+  });
+
+  it('is free again once the window has run out', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    complete(sim);
+    // Let the tick retire the marker the way an hour of play would (the timer update
+    // deletes a cooldown once it reaches zero) rather than deleting it by hand.
+    player.cooldowns.set(UNSTUCK_RECENT_ID, 0.01);
+    tickMany(sim, 1);
+    expect(player.cooldowns.has(UNSTUCK_RECENT_ID)).toBe(false);
+    readyAgain(sim);
+
+    const event = complete(sim);
+
+    expect(event.sickness).toBe(false);
+    expect(hasUnstuckSickness(player)).toBe(false);
+  });
+
+  it('reports no sickness for a repeat by a character below the sickness floor', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(9);
+    const player = sim.player;
+    markUnstuckCompleted(player.cooldowns);
+
+    const event = complete(sim);
+
+    expect(event.sickness).toBe(false);
+    expect(hasUnstuckSickness(player)).toBe(false);
+  });
+
+  it('applies the same free first use to a revive from death', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    sim.ctx.dealDamage(null, player, player.maxHp * 10, false, 'physical', null, 'hit');
+    expect(player.dead).toBe(true);
+    sim.drainEvents();
+
+    const event = complete(sim);
+
+    expect(event.reason).toBe('revived_at_graveyard');
+    expect(event.sickness).toBe(false);
+    expect(player.dead).toBe(false);
+    expect(player.ghost).toBe(false);
+    expect(hasUnstuckSickness(player)).toBe(false);
+    expect(player.auras.some((aura) => aura.id === RESURRECTION_SICKNESS_ID)).toBe(false);
+    expect(player.hp).toBe(Math.max(1, Math.round(player.maxHp * RES_HEALER_HP_FRACTION)));
+    expect(player.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+  });
+
+  it('applies the same free first use to a released ghost', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    sim.ctx.dealDamage(null, player, player.maxHp * 10, false, 'physical', null, 'hit');
+    sim.releaseSpirit();
+    sim.drainEvents();
+    expect(player.ghost).toBe(true);
+
+    const event = complete(sim);
+
+    expect(event.reason).toBe('revived_at_graveyard');
+    expect(event.sickness).toBe(false);
+    expect(player.dead).toBe(false);
+    expect(player.ghost).toBe(false);
+    expect(hasUnstuckSickness(player)).toBe(false);
+    expect(player.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+  });
+
+  it("leaves an existing Keeper's Toll untouched on a free revive", () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const player = sim.player;
+    applyResurrectionSickness(sim.ctx, player);
+    const tollBefore = required(
+      player.auras.find((aura) => aura.id === RESURRECTION_SICKNESS_ID),
+      'the toll',
+    ).remaining;
+    sim.ctx.dealDamage(null, player, player.maxHp * 10, false, 'physical', null, 'hit');
+    expect(player.dead).toBe(true);
+    sim.drainEvents();
+
+    const event = complete(sim);
+
+    // A charged revive would have displaced the 10-minute Toll with the 5-minute Unstuck
+    // drain; a free one launders nothing: the Toll survives at its full remaining (auras
+    // freeze on a corpse, so the countdown burnt none of it off).
+    expect(event.sickness).toBe(false);
+    expect(player.dead).toBe(false);
+    expect(hasUnstuckSickness(player)).toBe(false);
+    const toll = required(
+      player.auras.find((aura) => aura.id === RESURRECTION_SICKNESS_ID),
+      'the toll after the free revive',
+    );
+    expect(toll.remaining).toBe(tollBefore);
+    expect(player.auras.filter((aura) => aura.kind === 'buff_allstats_pct')).toHaveLength(1);
+  });
+
+  it('charges by default when the outcome helpers are called directly', () => {
+    // The unstuck system passes the charge explicitly; a direct caller that omits it keeps
+    // the historical "never free" contract, which is what makes the default load-bearing.
+    const moved = makeWorld();
+    moved.setPlayerLevel(MAX_LEVEL);
+    expect(moveToGraveyardForUnstuck(moved.ctx, moved.player.id)).toBe(true);
+    expect(hasUnstuckSickness(moved.player)).toBe(true);
+
+    const revived = makeWorld();
+    revived.setPlayerLevel(MAX_LEVEL);
+    const body = revived.player;
+    revived.ctx.dealDamage(null, body, body.maxHp * 10, false, 'physical', null, 'hit');
+    expect(body.dead).toBe(true);
+    expect(reviveAtGraveyardForUnstuck(revived.ctx, body.id)).toBe(true);
+    expect(body.dead).toBe(false);
+    expect(hasUnstuckSickness(body)).toBe(true);
+
+    // And the return value reports what landed: nothing below the sickness floor.
+    const exempt = makeWorld();
+    exempt.setPlayerLevel(9);
+    expect(moveToGraveyardForUnstuck(exempt.ctx, exempt.player.id)).toBe(false);
+    expect(hasUnstuckSickness(exempt.player)).toBe(false);
+  });
+
+  it('keeps the window through a relog, so logging out cannot reset it', () => {
+    const sim = makeWorld();
+    sim.setPlayerLevel(MAX_LEVEL);
+    const pid = sim.player.id;
+    complete(sim);
+    tickMany(sim, 20 * 30); // half a minute burnt off the window
+    const remaining = required(sim.player.cooldowns.get(UNSTUCK_RECENT_ID), 'window marker');
+    expect(remaining).toBeLessThan(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+    const state = required(sim.serializeCharacter(pid), 'serialized character');
+    expect(state.cooldowns?.abilities?.[UNSTUCK_RECENT_ID]).toBe(remaining);
+
+    const restored = new Sim({ seed: SEED, playerClass: 'warrior', noPlayer: true });
+    const restoredPid = restored.addPlayer('warrior', 'Wayfinder', { state });
+    const restoredPlayer = required(restored.entities.get(restoredPid), 'restored player');
+    expect(restoredPlayer.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(remaining);
+
+    // And it still counts: the next completion in the restored world is a charged repeat.
+    restoredPlayer.combatTimer = 999;
+    restoredPlayer.inCombat = false;
+    restoredPlayer.onGround = true;
+    restoredPlayer.jumping = false;
+    restoredPlayer.vx = 0;
+    restoredPlayer.vy = 0;
+    restoredPlayer.vz = 0;
+    readyAgain(restored);
+    restored.drainEvents();
+    const event = complete(restored);
+    expect(event.sickness).toBe(true);
+    expect(hasUnstuckSickness(restoredPlayer)).toBe(true);
+  });
+
+  it('survives the competitive reset that clears ability cooldowns', () => {
+    const cooldowns = new Map<string, number>([
+      ['charge', 12],
+      [UNSTUCK_COOLDOWN_ID, UNSTUCK_RETRY_SECONDS],
+      [UNSTUCK_RECENT_ID, 1234],
+    ]);
+
+    clearCooldownsPreservingUnstuck(cooldowns);
+
+    expect([...cooldowns]).toEqual([
+      [UNSTUCK_COOLDOWN_ID, UNSTUCK_RETRY_SECONDS],
+      [UNSTUCK_RECENT_ID, 1234],
+    ]);
+  });
+
+  it('survives the match-exit pool restore that hands pre-match cooldowns back', () => {
+    // Carried in: an ability cooldown and a nearly spent retry timer. Live at match end: a
+    // window opened inside the match, a fresher retry timer, and an ability cooldown the
+    // parenthesis must NOT hand back.
+    const carriedIn = new Map<string, number>([
+      ['charge', 12],
+      [UNSTUCK_COOLDOWN_ID, 3],
+    ]);
+    const live = new Map<string, number>([
+      ['bloodrage', 20],
+      [UNSTUCK_COOLDOWN_ID, UNSTUCK_SUCCESS_COOLDOWN_SECONDS],
+      [UNSTUCK_RECENT_ID, UNSTUCK_SICKNESS_WINDOW_SECONDS - 30],
+    ]);
+
+    const restored = restoreCooldownsPreservingUnstuck(live, carriedIn);
+
+    expect([...restored].sort()).toEqual(
+      [
+        ['charge', 12],
+        [UNSTUCK_COOLDOWN_ID, UNSTUCK_SUCCESS_COOLDOWN_SECONDS],
+        [UNSTUCK_RECENT_ID, UNSTUCK_SICKNESS_WINDOW_SECONDS - 30],
+      ].sort(),
+    );
+    // Neither input is touched, and a carried-in value that is LARGER than the live one
+    // wins the other way round (the parenthesis never shortens either timer).
+    expect(live.get('bloodrage')).toBe(20);
+    expect(carriedIn.get(UNSTUCK_COOLDOWN_ID)).toBe(3);
+    expect(
+      restoreCooldownsPreservingUnstuck(
+        new Map([[UNSTUCK_RECENT_ID, 5]]),
+        new Map([[UNSTUCK_RECENT_ID, 500]]),
+      ).get(UNSTUCK_RECENT_ID),
+    ).toBe(500);
+  });
+
+  it('stays out of the /cooldowns readout like the retry cooldown', () => {
+    const sim = makeWorld();
+    const pid = sim.player.id;
+    complete(sim);
+    expect(sim.player.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+    sim.drainEvents();
+
+    sim.chat('/cooldowns', pid);
+
+    const readout = sim
+      .drainEvents()
+      .find((event): event is Extract<SimEvent, { type: 'error' }> => event.type === 'error');
+    expect(readout?.text).toBe('No abilities are on cooldown.');
   });
 });

@@ -71,6 +71,12 @@ import {
 import { addThreat } from '../src/sim/threat';
 import { DT, type Entity, type SimEvent } from '../src/sim/types';
 import { UNSTUCK_COUNTDOWN_SECONDS } from '../src/sim/unstuck';
+import {
+  markUnstuckCompleted,
+  UNSTUCK_COOLDOWN_ID,
+  UNSTUCK_RECENT_ID,
+  UNSTUCK_SICKNESS_WINDOW_SECONDS,
+} from '../src/sim/unstuck_cooldown';
 import { groundHeight } from '../src/sim/world';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
@@ -117,7 +123,12 @@ function acceptAllBgOffers(sim: Sim): void {
 }
 
 // Ten solo players, queued, offered, and accepted, so a 5v5 is live.
-function tenInQueue(): { sim: Sim; pids: number[] } {
+// `beforeQueue` runs once the ten stand in the overworld and BEFORE anyone
+// queues, for arms about what a fighter carries INTO the match.
+function tenInQueue(beforeQueue?: (sim: Sim, pids: number[]) => void): {
+  sim: Sim;
+  pids: number[];
+} {
   const sim = makeWorld();
   const pids: number[] = [];
   const classes = ['warrior', 'mage', 'priest', 'rogue', 'hunter'] as const;
@@ -127,6 +138,7 @@ function tenInQueue(): { sim: Sim; pids: number[] } {
     must(sim.entities.get(pid), 'entity').level = 20; // the queue floor (BG_MIN_LEVEL)
     pids.push(pid);
   }
+  beforeQueue?.(sim, pids);
   for (const pid of pids) sim.bgQueueJoin(pid);
   // The pop lands as an OFFER now (battleground_proposal.ts); accepting it is
   // what seats the match, so every helper that wants a live 5v5 answers first.
@@ -1261,6 +1273,8 @@ describe('Thornhollow Fields: the graveyard rite', () => {
     const e = forceIntoBgWallTrap(sim, match, pid);
     e.facing = Math.PI / 2;
     e.prevFacing = -Math.PI / 2;
+    // A repeat inside the sickness window: the battleground completion must charge it too.
+    markUnstuckCompleted(e.cooldowns);
 
     expect(sim.unstuck(pid)).toBe(true);
     sim.drainEvents();
@@ -1466,6 +1480,8 @@ describe('Thornhollow Fields: the graveyard rite', () => {
 
     const originalPlot = { ...BG_GRAVEYARDS[0] };
     Object.assign(BG_GRAVEYARDS[0], { x: 50, z: -140, hw: 0.25, hd: 0.25 });
+    // A repeat inside the sickness window, so the fallback spawn charges it as well.
+    markUnstuckCompleted(e.cooldowns);
     try {
       expect(sim.unstuck(pid)).toBe(true);
       sim.drainEvents();
@@ -1515,7 +1531,80 @@ describe('Thornhollow Fields: the graveyard rite', () => {
     expectClearPlayerPosition(sim, e);
     expect(Math.hypot(e.pos.x - before.x, e.pos.z - before.z)).toBeGreaterThan(10);
     expect(completed?.distance).toBeGreaterThan(10);
-    expect(e.auras.some((aura) => aura.id === UNSTUCK_SICKNESS_ID)).toBe(true);
+    // The first Unstuck in an hour is free in a battleground exactly as in the overworld.
+    expect(completed?.sickness).toBe(false);
+    expect(e.auras.some((aura) => aura.id === UNSTUCK_SICKNESS_ID)).toBe(false);
+  });
+
+  it('keeps the sickness window and cooldown opened inside the match on the way home', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    const e = forceIntoBgWallTrap(sim, match, pid);
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    for (let i = 0; i < UNSTUCK_COUNTDOWN_SECONDS * 20; i++) sim.tick();
+    expect(e.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+
+    // The match is a parenthesis for everything else (pools come back as carried in), but
+    // the two hidden /unstuck timers are the one thing it must not swallow, or a recovery
+    // inside a battleground would hand out a second free use in the overworld.
+    endBgMatch(sim.ctx, match, 0, 'caps');
+    for (let i = 0; i < 20 * (BG_END_HOLD + 1); i++) sim.tick(); // run out the hold
+    expect(sim.bgMatchFor(pid)).toBeNull();
+    expect(isBgPos(e.pos.x)).toBe(false);
+    const window = must(e.cooldowns.get(UNSTUCK_RECENT_ID), 'window marker after the match');
+    expect(window).toBeGreaterThan(0);
+    expect(window).toBeLessThanOrEqual(UNSTUCK_SICKNESS_WINDOW_SECONDS);
+    expect(must(e.cooldowns.get(UNSTUCK_COOLDOWN_ID), 'retry cooldown')).toBeGreaterThan(0);
+  });
+
+  it('moves a dead body without charging it, and says so', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    const e = must(sim.entities.get(pid), 'entity');
+    const meta = must(sim.meta(pid), 'meta');
+    // A dead, unreleased body is the one dead state the battleground gate lets through
+    // (a ghost is refused as competitive). Emulate the frozen corpse directly: the wave
+    // clock would otherwise raise it mid-countdown, which is a different contract.
+    e.dead = true;
+    e.ghost = false;
+    e.hp = 0;
+    e.vx = 0;
+    e.vy = 0;
+    e.vz = 0;
+    e.inCombat = false;
+    e.combatTimer = 999;
+    // A repeat inside the window: the arm where a charge is owed but cannot land, since a
+    // body is only moved (the battleground revives by wave, never here).
+    markUnstuckCompleted(e.cooldowns);
+    e.cooldowns.set(UNSTUCK_RECENT_ID, 40);
+
+    expect(sim.unstuck(pid)).toBe(true);
+    sim.drainEvents();
+    const pending = must(meta.pendingUnstuck, 'pending unstuck');
+    expect(pending.startedDead).toBe(true);
+    const events: SimEvent[] = [];
+    for (let i = 0; i < UNSTUCK_COUNTDOWN_SECONDS * 20 && meta.pendingUnstuck; i++) {
+      events.push(...sim.tick());
+    }
+    const completed = events.find(
+      (event): event is Extract<SimEvent, { type: 'unstuck'; phase: 'completed' }> =>
+        event.type === 'unstuck' && event.phase === 'completed' && event.pid === pid,
+    );
+
+    expect(completed?.reason).toBe('moved_to_graveyard');
+    // The event reports what landed, not what was owed.
+    expect(completed?.sickness).toBe(false);
+    expect(e.dead).toBe(true);
+    expect(e.auras.some((aura) => aura.id === UNSTUCK_SICKNESS_ID)).toBe(false);
+    expect(inGraveyard(sim, match, pid, 0)).toBe(true);
+    // Still a completion: the window re-opens in full so the next use is a repeat.
+    expect(e.cooldowns.get(UNSTUCK_RECENT_ID)).toBe(UNSTUCK_SICKNESS_WINDOW_SECONDS);
   });
 
   it('refuses Unstuck for an alive flag carrier before the completion teleport can run', () => {
@@ -2442,8 +2531,9 @@ describe('Thornhollow Fields: runes, hostility, and the match clock', () => {
     expect(BG_WAVE_PERIOD).toBe(10);
     expect(BG_WAVE_OFFSET).toBe(5);
     expect(BG_POWER_RUNE_VALUE).toBeCloseTo(0.15, 10);
-    expect(BATTLEGROUND_WIN_HONOR).toBe(60);
-    expect(BATTLEGROUND_LOSS_HONOR).toBe(20);
+    // Doubled 2026-09-25 (owner tuning, with King of the Hill).
+    expect(BATTLEGROUND_WIN_HONOR).toBe(120);
+    expect(BATTLEGROUND_LOSS_HONOR).toBe(40);
     // the one deliberate zero-sum exception: the loser-side rating floor
     expect(BG_MIN_RATING).toBe(100);
   });
@@ -3144,11 +3234,11 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     // paid "log in, win once, log off" better than it paid playing a session.
     // A flat 20 is a judgment about what a daily hook is worth, so asserting it
     // against BATTLEGROUND_WIN_HONOR would restate the shape that was removed.
-    expect(BATTLEGROUND_FIRST_WIN_BONUS_HONOR).toBe(20);
+    expect(BATTLEGROUND_FIRST_WIN_BONUS_HONOR).toBe(40);
     // The property that actually matters: first win to repeat win is 1.33x, in
     // line with the delve daily's ~1.6x rather than the old 3x.
     const firstWin = BATTLEGROUND_WIN_HONOR + BATTLEGROUND_FIRST_WIN_BONUS_HONOR;
-    expect(firstWin).toBe(80);
+    expect(firstWin).toBe(160);
     expect(firstWin / BATTLEGROUND_WIN_HONOR).toBeLessThan(1.5);
   });
 
@@ -3302,14 +3392,25 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(true);
     sim.resetDay = '2026-08-10'; // Monday: the chip drops on the rollover
     expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(false);
-    // The 12-hour early open: Friday, once the host's lead probe reads Saturday.
-    sim.resetDay = '2026-08-07';
-    sim.eventLeadDay = '2026-08-08';
-    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(true);
-    // No host calendar, no event (headless and parity runs stay untouched).
-    sim.resetDay = '';
-    sim.eventLeadDay = '';
-    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(false);
+    // The 12-hour early open: Friday, once the host's lead probe reads
+    // Saturday. A FRESH world: Sim.resetDay is monotone non-decreasing
+    // (tests/reset_day_guard.test.ts), so walking the shared sim back from
+    // Monday to Friday would be a held no-op and the arm would pass through
+    // the lead probe alone.
+    const friday = makeWorld();
+    const fridayPid = friday.addPlayer('warrior', 'Early');
+    friday.resetDay = '2026-08-07';
+    expect(must(friday.bgInfoFor(fridayPid), 'bg info').doubleHonorActive).toBe(false);
+    friday.eventLeadDay = '2026-08-08';
+    expect(must(friday.bgInfoFor(fridayPid), 'bg info').doubleHonorActive).toBe(true);
+    // No host calendar, no event (headless and parity runs stay untouched): a
+    // world NEVER fed a day, because '' after a known day is held by the same
+    // monotone setter and would exercise nothing.
+    const headless = makeWorld();
+    const headlessPid = headless.addPlayer('warrior', 'Quiet');
+    expect(headless.resetDay).toBe('');
+    expect(headless.eventLeadDay).toBe('');
+    expect(must(headless.bgInfoFor(headlessPid), 'bg info').doubleHonorActive).toBe(false);
   });
 
   it('an UNRATED dev match never claims it', () => {
@@ -3782,10 +3883,14 @@ describe('the outcome log stays observability-only', () => {
     // is only safe while nothing gameplay-facing reads it, which no type can
     // express, so the reference set is pinned here.
     const root = new URL('..', import.meta.url);
-    const hits = execFileSync('grep', ['-rl', 'bgOutcomes', 'src', 'server', 'headless'], {
-      cwd: fileURLToPath(root),
-      encoding: 'utf8',
-    })
+    const hits = execFileSync(
+      'git',
+      ['grep', '-l', 'bgOutcomes', '--', 'src', 'server', 'headless'],
+      {
+        cwd: fileURLToPath(root),
+        encoding: 'utf8',
+      },
+    )
       .split('\n')
       .filter(Boolean)
       .sort();
@@ -4801,5 +4906,74 @@ describe('Thornhollow Fields: /bg reaches the whole match, both teams', () => {
 
     expect(sim.chat('/bg postgame leak check', speaker)).toBeNull();
     expect(errorTexts(sim.tick())).toContain('You are not in a battleground.');
+  });
+});
+
+// Masterwrought phase 10 QA: the recorded flask accounting for Thornhollow
+// Fields, pinned BEHAVIORALLY (the caller scan in tests/resurrection.test.ts is
+// the proxy; this is the claim). A flask quaffed INSIDE an active match rides
+// through a death and the wave respawn (handleDeath filters through
+// aurasSurvivingDeath, and the wave raises the fighter with clearPrep: false),
+// which is the classic-era rule the ledger records. It does NOT ride through the
+// match's own parenthesis: seating and the countdown end run readyArenaFighter
+// with clearPrep: true (the clean slate), so a flask carried IN is gone at the
+// gates and one quaffed inside is gone at the end. Both halves are pinned so
+// the accounting cannot silently drift in either direction again, and the seat
+// is pinned on its own (a flask quaffed BEFORE the pop, not during the form-up),
+// because a probe that softened the seat alone stayed green under the
+// countdown-end arm.
+describe('flask auras across a Thornhollow Fields match (the phase 10 accounting)', () => {
+  const FLASK = 'ironhusk_flask';
+  const flaskAuras = (sim: Sim, pid: number) =>
+    must(sim.entities.get(pid), 'entity').auras.filter((a) => a.flask === true);
+
+  it('a flask carried in from the overworld is wiped at the SEAT (placeInBg), before the countdown', () => {
+    let carrier = -1;
+    const { sim, pids } = tenInQueue((s, ps) => {
+      carrier = ps[0];
+      s.addItem(FLASK, 1, carrier);
+      s.useItem(FLASK, carrier);
+      expect(flaskAuras(s, carrier), 'worn in the overworld, before the queue').toHaveLength(1);
+    });
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    expect(match.state, 'seated, the countdown has not ended').toBe('countdown');
+    expect([...match.teams[0], ...match.teams[1]]).toContain(carrier);
+    expect(flaskAuras(sim, carrier), 'the seat ran the clean slate').toHaveLength(0);
+  });
+
+  it('a flask quaffed inside the match rides through a death and the wave respawn', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    sim.addItem(FLASK, 1, pid);
+    sim.useItem(FLASK, pid);
+    expect(flaskAuras(sim, pid), 'the flask is worn before the death').toHaveLength(1);
+    kill(sim, pid, match.teams[1][0]);
+    expect(must(sim.entities.get(pid), 'entity').dead).toBe(true);
+    expect(flaskAuras(sim, pid), 'the death handler keeps the marker').toHaveLength(1);
+    sim.releaseSpirit(pid);
+    expect(flaskAuras(sim, pid), 'the graveyard release keeps it too').toHaveLength(1);
+    // The next wave raises the fighter (clearPrep: false): flask still worn.
+    for (let i = 0; i < 20 * (BG_WAVE_PERIOD + 1); i++) {
+      sim.tick();
+      if (!must(sim.entities.get(pid), 'entity').dead) break;
+    }
+    const e = must(sim.entities.get(pid), 'entity');
+    expect(e.dead, 'the wave raised the fighter').toBe(false);
+    expect(flaskAuras(sim, pid), 'the wave respawn keeps the flask').toHaveLength(1);
+  });
+
+  it('a flask quaffed during the form-up is cleared at the countdown end (the clean slate the match starts on)', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    const pid = match.teams[0][0];
+    // Quaffed while the match is still forming up (seated, before active).
+    sim.addItem(FLASK, 1, pid);
+    sim.useItem(FLASK, pid);
+    expect(flaskAuras(sim, pid), 'worn during the form-up').toHaveLength(1);
+    toActive(sim, match);
+    expect(match.state).toBe('active');
+    expect(flaskAuras(sim, pid), 'the countdown end ran the clean slate').toHaveLength(0);
   });
 });

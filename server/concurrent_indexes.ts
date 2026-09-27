@@ -34,6 +34,9 @@ import {
   BANK_LEDGER_CONTAINER_INDEX_SQL,
   BANK_LEDGER_CONTAINER_INVALID_INDEX_CHECK_SQL,
   BANK_LEDGER_CONTAINER_INVALID_INDEX_DROP_SQL,
+  BANK_LEDGER_GUILD_MONEY_INDEX_SQL,
+  BANK_LEDGER_GUILD_MONEY_INVALID_INDEX_CHECK_SQL,
+  BANK_LEDGER_GUILD_MONEY_INVALID_INDEX_DROP_SQL,
 } from './bank_ledger_indexes';
 import {
   CHAT_VIOLATIONS_RETENTION_INDEX_SQL,
@@ -68,6 +71,11 @@ import {
   WOC_MARKET_OPS_CLOSED_INVALID_INDEX_CHECK_SQL,
   WOC_MARKET_OPS_CLOSED_INVALID_INDEX_DROP_SQL,
 } from './woc_market_ops_listings_index';
+import {
+  WOC_MARKET_SALES_REALM_INDEX_SQL,
+  WOC_MARKET_SALES_REALM_INVALID_INDEX_CHECK_SQL,
+  WOC_MARKET_SALES_REALM_INVALID_INDEX_DROP_SQL,
+} from './woc_market_sales_realm_index';
 import {
   WOC_MARKET_SALES_SELLER_INDEX_SQL,
   WOC_MARKET_SALES_SELLER_INVALID_INDEX_CHECK_SQL,
@@ -189,5 +197,24 @@ export const CONCURRENT_INDEX_MIGRATIONS: readonly ConcurrentIndexMigration[] = 
     createSql: BANK_LEDGER_ACCOUNT_LARGE_INDEX_SQL,
     checkSql: BANK_LEDGER_ACCOUNT_LARGE_INVALID_INDEX_CHECK_SQL,
     dropSql: BANK_LEDGER_ACCOUNT_LARGE_INVALID_INDEX_DROP_SQL,
+  },
+  // The guild bank history's sparse MONEY slice (guild_bank_log_db.ts): a
+  // partial index over the money ops of the guild container so a Money page
+  // is a bounded scan rather than a heap walk past every item row. See
+  // bank_ledger_indexes.ts.
+  {
+    name: 'bank_ledger_container_money_recent',
+    createSql: BANK_LEDGER_GUILD_MONEY_INDEX_SQL,
+    checkSql: BANK_LEDGER_GUILD_MONEY_INVALID_INDEX_CHECK_SQL,
+    dropSql: BANK_LEDGER_GUILD_MONEY_INVALID_INDEX_DROP_SQL,
+  },
+  // The Exchange's realm-wide Sales History read (woc_market_db.ts
+  // salesForRealm). Appended after every prior migration, never moved (the
+  // order is pinned). See woc_market_sales_realm_index.ts.
+  {
+    name: 'woc_market_sales_realm_created',
+    createSql: WOC_MARKET_SALES_REALM_INDEX_SQL,
+    checkSql: WOC_MARKET_SALES_REALM_INVALID_INDEX_CHECK_SQL,
+    dropSql: WOC_MARKET_SALES_REALM_INVALID_INDEX_DROP_SQL,
   },
 ];

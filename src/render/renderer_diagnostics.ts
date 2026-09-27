@@ -135,6 +135,14 @@ export function setRenderCategory(obj: THREE.Object3D, category: RenderDiagnosti
   obj.userData.renderCategory = category;
 }
 
+// The ability-VFX prewarm walk (ability_vfx/prewarm.ts) selects on each
+// object's OWN tag, never an inherited one, so a pool whose root group alone
+// carries 'vfx' hands it no drawable. Call once the pool is fully built: an
+// object added later is not tagged.
+export function tagVfxSubtree(root: THREE.Object3D): void {
+  root.traverse((obj) => setRenderCategory(obj, 'vfx'));
+}
+
 function materialLabels(material: THREE.Material | THREE.Material[] | undefined): string[] {
   const mats = Array.isArray(material) ? material : material ? [material] : [];
   return mats.map((mat) => `${mat.name || mat.type}:${mat.uuid.slice(0, 8)}`);
@@ -210,7 +218,10 @@ export function collectRenderDiagnostics(
       const hasPoints = Boolean(renderable.isPoints);
       const hasSprite = Boolean(renderable.isSprite);
       const hasLine = Boolean(renderable.isLine || renderable.isLineSegments);
-      if (hasMesh || hasPoints || hasSprite || hasLine) {
+      // A count-0 InstancedMesh is skipped by three's render list before any
+      // program binds: neither a draw nor an object here.
+      const drawsNothing = Boolean(renderable.isInstancedMesh) && renderable.count === 0;
+      if (!drawsNothing && (hasMesh || hasPoints || hasSprite || hasLine)) {
         const geometry = renderable.geometry;
         const material = renderable.material;
         const stat = categoryStats(categories, category);

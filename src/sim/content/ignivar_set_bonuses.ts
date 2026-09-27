@@ -30,6 +30,7 @@
 // `src/sim`-pure; no rng, no clock.
 
 import type { TalentEffect } from './talents';
+import { VANGUARD_SET_ENGINE_BONUSES } from './vanguard_set_bonuses';
 
 export interface SetEngineBonusTier {
   pieces: number;
@@ -119,9 +120,10 @@ export const CINDERFANG_2PC_VENOM_STAGE_REFUND = 20;
  *  per Lights Out cast. */
 export const SMOLDERSTRIKE_4PC_MIRRORED_BLADES_REFUND_SEC = 6;
 /** Ashveil 4pc: the Veiled Edge aura VALUE baked at arm time (base
- *  VEILED_EDGE_BONUS 1). consumeVeiledEdge returns 1 + value, so 2 reads
- *  back as the promised triple. */
-export const ASHVEIL_4PC_VEILED_EDGE_BONUS = 2;
+ *  VEILED_EDGE_BONUS 0.5, v0.42 Skulduggery pass). consumeVeiledEdge returns
+ *  1 + value, so 1 reads back as the promised double (was 2 -> triple,
+ *  halved alongside the base bonus: +200% -> +100%). */
+export const ASHVEIL_4PC_VEILED_EDGE_BONUS = 1;
 
 // Audited constants for the bespoke priest bends (read by the class-module
 // call sites AND pinned by tests, so the copy cannot drift from the code).
@@ -137,17 +139,11 @@ export const EMBERSCREED_2PC_DOCTRINE_CONVERSION_BONUS = 0.1;
 export const EMBERSCREED_4PC_HYMN_WINDOW_SEC = 10;
 /** Emberscreed 4pc: the internal cooldown between empower grants. */
 export const EMBERSCREED_4PC_HYMN_ICD_SEC = 15;
-/** Benison Dawnweave 2pc: Seraphic Vigil's resolved rescue heal (base 180
- *  x the 1.5 buffPct row; heal_echo is in neither the integral nor the
- *  scalable buff-kind sets, so the resolved value is exactly this flat 270). */
-export const BENISON_2PC_VIGIL_RESCUE_HEAL = 270;
-/** Benison Dawnweave 4pc: the mend on the Vigil's ally, as a fraction of the
- *  ALLY'S max health, paid over the duration below. */
-export const BENISON_4PC_MEND_PCT_MAX = 0.15;
-/** Benison Dawnweave 4pc: mend duration in seconds. */
-export const BENISON_4PC_MEND_DURATION_SEC = 10;
-/** Benison Dawnweave 4pc: seconds between mend ticks (5 ticks total). */
-export const BENISON_4PC_MEND_TICK_INTERVAL_SEC = 2;
+/** Benison Dawnweave: direct prayers prepare Choirmend and an instant follow-up. */
+export const BENISON_2PC_HEAL_PER_STACK = 0.1;
+export const BENISON_2PC_MAX_STACKS = 3;
+export const BENISON_4PC_WHISPER_HEAL_BONUS = 1;
+export const BENISON_4PC_WHISPER_WINDOW_SEC = 60;
 /** Vesperash 2pc: seconds cut from Call Tithefiend's cooldown (base 30). */
 export const VESPERASH_2PC_TITHEFIEND_COOLDOWN_CUT_SEC = 6;
 /** Vesperash 4pc: multiplier on the Tithefiend's per-hit mana return (base
@@ -156,15 +152,22 @@ export const VESPERASH_4PC_MANA_RETURN_MULT = 2;
 
 // Audited constants for the bespoke shaman bends (read by the class-module
 // call sites AND pinned by tests, so the copy cannot drift from the code).
-/** Stormkindled 2pc: Thunder granted by Unleash Weapon on Pyrebrand (base
- *  PYREBRAND_UNLEASH_THUNDER 2). With 3 or more already banked part of the
- *  grant overcaps at the 5-charge cap (disclosed by the set doc). */
-export const STORMKINDLED_2PC_UNLEASH_THUNDER = 3;
+/** Stormkindled 2pc (v0.44 Thundercall rework): Arc Overload's proc chance
+ *  (base ARC_OVERLOAD_CHANCE 0.2 in combat/shaman_thundercall_kit.ts). Replaced
+ *  the Unleash-only Thunder bend, which live wearers barely pressed. */
+export const STORMKINDLED_2PC_ARC_OVERLOAD_CHANCE = 0.3;
 /** Stormkindled 4pc: Earthen Jolt's per-Thunder vent bonus (base
  *  EARTHEN_JOLT_BONUS_PER_CHARGE 0.25): the full 5-charge vent goes
  *  2.25x -> 2.5x, and Primal Mastery's 1.25 vent window still MULTIPLIES the
  *  result (3.125x in-window, disclosed). Faultwake stays untouched. */
 export const STORMKINDLED_4PC_EARTHEN_JOLT_BONUS_PER_CHARGE = 0.3;
+/** Stormkindled 4pc (v0.44 Thundercall rework): the lava_burst dmgPct row. The
+ *  printed number is 20 percent DELIVERED: the accumulator is additive
+ *  (talent_hit_mult.ts, 1 + spellDmgPct + dmgPct) and a committed Thundercall at
+ *  the raid's level 20+ carries the fully scaled Earthen Fury mastery's 0.15
+ *  spellDmgPct plus the 0.05 offense-only bonus, so the baseline is 1.2 and the
+ *  row is 0.2 x 1.2 = 0.24 (1.44 / 1.2 = 1.2 exactly), the Moonscorch shape. */
+export const STORMKINDLED_4PC_MAGMA_BURST_DMG_PCT = 0.24;
 /** Warspirit Emberscale 2pc: cadence steps per Ancestral Strike (base 2 at
  *  the combat/auto_attack.ts call site). */
 export const WARSPIRIT_EMBERSCALE_2PC_CADENCE_STEPS = 3;
@@ -206,6 +209,9 @@ export const SPRINGMENDER_4PC_CHAIN_HARVEST_MULT = 1.5;
 export const CHRONOWEAVE_2PC_ECHO_CONVERT_SINGLE = 0.5;
 /** Chronoweave 4pc: seconds cut from Temporal Cascade's cooldown (base 17). */
 export const CHRONOWEAVE_4PC_CASCADE_COOLDOWN_CUT_SEC = 5;
+/** Chronoweave 4pc: offsets the extra casts unlocked by its cooldown cut.
+ *  170 * 0.7 = 119 mana every 12 sec, almost the base 170 every 17 sec. */
+export const CHRONOWEAVE_4PC_CASCADE_COST_PCT = -0.3;
 /** Pyroclast 2pc: the Scald guaranteed-crit execute threshold as a fraction
  *  of the target's max health (base SCORCH_EXECUTE_HP 0.3). Retuned 0.5 to
  *  0.35 (2026-08-30): at 0.5 the entire bottom half of a fight played at the
@@ -257,12 +263,16 @@ export const GRAVEBRAND_4PC_UNISON_DAMAGE_MULT = 1.25;
 export const RUINCALLER_2PC_CONFLAGRATE_BONUS_CHARGES = 1;
 /** Ruincaller 4pc: the chaos_bolt dmgPct row. The printed number is 20
  *  percent DELIVERED: the accumulator is additive (talent_hit_mult.ts,
- *  1 + spellDmgPct + dmgPct) and a committed Ruination carries the 0.1
- *  spec-baseline spellDmgPct floor (spec_baselines.ts), so the real baseline
- *  is 1.1 and the row is 0.2 x 1.1 = 0.22 (1.32 / 1.1 = 1.20 exactly). The
- *  set doc's bracketed 0.2 assumed a bare 1.0 baseline (the Warspirit 4pc
- *  deviation shape); recorded as a deviation in the wave's PR notes. */
-export const RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT = 0.22;
+ *  1 + spellDmgPct + dmgPct + the v0.42.0 offense-only spec bonus). A
+ *  committed Ruination carries the 0.1 spec-baseline spellDmgPct floor
+ *  (spec_baselines.ts) PLUS the v0.42.0 Ruination offense-only spell bonus
+ *  of 0.11 (spec_output_tuning.ts), so the real baseline is 1.21 (was 1.1
+ *  pre-v0.42.0) and the row is 0.2 x 1.21 = 0.242 (1.452 / 1.21 = 1.20
+ *  exactly). Re-derived for the v0.42.0 rebalance so the tooltip's 20
+ *  percent stays literally true; the set doc's bracketed 0.2 assumed a bare
+ *  1.0 baseline (the Warspirit 4pc deviation shape); recorded as a
+ *  deviation in the wave's PR notes. */
+export const RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT = 0.242;
 
 // Audited constants for the bespoke druid bends (read by the class-module
 // call sites AND pinned by tests, so the copy cannot drift from the code).
@@ -295,9 +305,12 @@ export const CINDERBARK_2PC_EXTRA_OLD_BLOOD_CHANCE = 0.3;
 /** Cinderbark 4pc: the marrowbreak dmgPct row. The printed number is 30
  *  percent DELIVERED: a committed Wildfang at the raid's level 20+ carries
  *  the fully scaled Primal Heart mastery's 0.5 meleeDmgPct (no other row
- *  targets marrowbreak), so the baseline is 1.5 and the row is
- *  0.3 x 1.5 = 0.45 (1.95 / 1.5 = 1.30 exactly). */
-export const CINDERBARK_4PC_MARROWBREAK_DMG_PCT = 0.45;
+ *  targets marrowbreak) PLUS the v0.42.0 Wildfang offense-only physical
+ *  bonus of 0.15 (spec_output_tuning.ts), so the baseline is 1.65 (was 1.5
+ *  pre-v0.42.0) and the row is 0.3 x 1.65 = 0.495 (2.145 / 1.65 = 1.30
+ *  exactly). Re-derived for the v0.42.0 rebalance so the tooltip's 30
+ *  percent stays literally true. */
+export const CINDERBARK_4PC_MARROWBREAK_DMG_PCT = 0.495;
 /** Grovespring 2pc: multiplier on Swiftmend's RESOLVED consumeAura heal
  *  (bespoke eff.heal rewrite in applyTalentMods, the set doc's named hook:
  *  no generic knob reaches the consumeAura heal without folding into the
@@ -318,6 +331,8 @@ export const GROVESPRING_4PC_VERDANCE_BANK = 1;
 /** The engine payloads, keyed by set id (the `set` tag on each member item
  *  and the ItemSet id in item_sets.ts). Tiers ascend by pieces. */
 export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> = {
+  // Warfare Season 2 (content/vanguard_set_bonuses.ts).
+  ...VANGUARD_SET_ENGINE_BONUSES,
   // ---- Warrior ----
   slagbreaker: [
     {
@@ -689,32 +704,20 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
   benison_dawnweave: [
     {
       pieces: 2,
-      // Seraphic Vigil's rescue 180 -> 270: buffPct 0.5 scales the RESOLVED
-      // buffTarget heal_echo value (heal_echo is in neither the integral nor
-      // the scalable buff-kind sets, so the resolved value is exactly the
-      // flat 270 the tooltip promises). The {buff} description splice
-      // reads the same resolved value, so the printed number stays honest
-      // for wearers and everyone else. Deterministic, no rng involved.
       effect: {
-        ability: [{ ability: 'seraphic_vigil', buffPct: 0.5 }],
         global: { castPushbackReduction: 1 },
-        tuning: { vigilRescueHeal: BENISON_2PC_VIGIL_RESCUE_HEAL },
+        tuning: {
+          prayerHealPerStack: BENISON_2PC_HEAL_PER_STACK,
+          prayerMaxStacks: BENISON_2PC_MAX_STACKS,
+        },
       },
     },
     {
       pieces: 4,
-      // Bespoke: when a Vigil triggers, its ally is also mended for 15
-      // percent of the ALLY'S max health over 10 sec. Hooked at the
-      // vigil-trigger POINT in damage.ts beside priestOnVigilTriggered
-      // (which stays talent-gated for Incarnate Spirit; the set arm is
-      // flag-gated instead, combat/priest/benison.ts). Replaces the killed
-      // cooldown-reset idea: Twin Covenant's charge model deletes the
-      // cooldowns entry, making cooldownRefund a hard no-op. Draws no rng.
       effect: {
         tuning: {
-          mendPctMaxHp: BENISON_4PC_MEND_PCT_MAX,
-          mendDurationSec: BENISON_4PC_MEND_DURATION_SEC,
-          mendTickIntervalSec: BENISON_4PC_MEND_TICK_INTERVAL_SEC,
+          whisperHealBonus: BENISON_4PC_WHISPER_HEAL_BONUS,
+          whisperWindowSec: BENISON_4PC_WHISPER_WINDOW_SEC,
         },
       },
     },
@@ -760,16 +763,15 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
   stormkindled: [
     {
       pieces: 2,
-      // Unleash Weapon on Pyrebrand grants 3 Thunder instead of 2: a constant
-      // bend at the ONE grant site (combat/shaman_unleash_weapon.ts,
-      // applyPyrebrandUnleash). With 3 or more already banked part of the
-      // grant overcaps at the 5-charge cap (disclosed). The caster 2pc
-      // pushback rider rides the generic global knob. Deterministic for
-      // everyone: the Unleash damage and crit rolls are unchanged, only the
-      // rng-free grant amount moves.
+      // v0.44 Thundercall rework: Arc Overload procs 30 percent of the time
+      // instead of 20, read at the ONE roll site (rollArcOverload in
+      // combat/shaman_thundercall_kit.ts). Same single draw per landed hit for
+      // wearers and non-wearers; only the threshold moves, so the rng stream
+      // position never changes. The caster 2pc pushback rider rides the
+      // generic global knob.
       effect: {
         global: { castPushbackReduction: 1 },
-        tuning: { pyrebrandUnleashThunder: STORMKINDLED_2PC_UNLEASH_THUNDER },
+        tuning: { arcOverloadChance: STORMKINDLED_2PC_ARC_OVERLOAD_CHANCE },
       },
     },
     {
@@ -785,8 +787,11 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
       // literals static (the paladin vowkeeper chances, the warrior Enrage
       // duration), so they are flagged to the maintainer rather than given
       // new tooltip plumbing here.
+      // v0.44 Thundercall rework adds the Magma Burst row: 20 percent more
+      // damage DELIVERED (see STORMKINDLED_4PC_MAGMA_BURST_DMG_PCT). Draws no rng.
       effect: {
         tuning: { earthenJoltBonusPerThunder: STORMKINDLED_4PC_EARTHEN_JOLT_BONUS_PER_CHARGE },
+        ability: [{ ability: 'lava_burst', dmgPct: STORMKINDLED_4PC_MAGMA_BURST_DMG_PCT }],
       },
     },
   ],
@@ -887,8 +892,9 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
   chronoweave: [
     {
       pieces: 2,
-      // Temporal Echo converts 50 percent of single-target Arcane damage
-      // instead of 40: bespoke bend at placeTemporalEcho, the ONE placement
+      // Temporal Echo converts 50 percent of other single-target Arcane damage;
+      // the Surge/Darts driver weight turns that coefficient into 200 percent
+      // instead of the baseline 160: bespoke bend at placeTemporalEcho, the ONE placement
       // write whose baked rate both combat (echoConvertRate) and the aura
       // tooltip (value) read back. Snapshot-at-placement: a mark placed
       // before a gear change keeps its placed rate until re-cast. The UI
@@ -903,16 +909,17 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
     },
     {
       pieces: 4,
-      // Temporal Cascade 17 -> 12 sec: a cooldownFlat row on the resolved
-      // entry, so the engine's cooldown set and the HUD's printed cooldown
-      // read the same number. Touches no rate constants, no classifier, no
-      // wire (the set doc's final-round sizing); no talent row targets
+      // Temporal Cascade 17 -> 12 sec and 170 -> 119 mana: one resolved
+      // ability row keeps the faster set cadence neutral in mana per second.
+      // The engine and HUD therefore read the same cooldown and cost. Touches
+      // no rate constants, classifier, or wire; no talent row targets
       // temporal_cascade, so there is no row overlap. Deterministic.
       effect: {
         ability: [
           {
             ability: 'temporal_cascade',
             cooldownFlat: -CHRONOWEAVE_4PC_CASCADE_COOLDOWN_CUT_SEC,
+            costPct: CHRONOWEAVE_4PC_CASCADE_COST_PCT,
           },
         ],
       },
@@ -951,7 +958,7 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
       // noteSpellHit seam (frostMageOnSpellHit in combat/frost_mage.ts),
       // because the base bank site in frostMageAfterCast cannot see the crit
       // flag. The 5-Icicle cap stays untouched and load-bearing (its three
-      // hardcoded readers keep it), and Frozen Orb pulses stay single-bank
+      // hardcoded readers keep it), and Frostglobe pulses stay single-bank
       // (the set doc's disclosed dead zone). gainIcicle draws no rng, so the
       // stream is byte-identical for everyone. The caster 2pc pushback rider
       // rides the generic global knob.
@@ -1052,12 +1059,13 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
       pieces: 4,
       // Ruinbolt strikes 20 percent harder, DELIVERED: the additive
       // accumulator (talent_hit_mult.ts) folds this row beside the committed
-      // spec's 0.1 spellDmgPct baseline floor, so the row is 0.22
-      // (1.32 / 1.1 = 1.20 exactly; the constant's doc note records the set
-      // doc's 0.2-vs-0.22 deviation). The chaos_bolt tooltip's {damage}
-      // splice reads the resolved effect, so the printed number tracks the
-      // bend for wearers automatically. No other row targets chaos_bolt, so
-      // there is no row overlap. Deterministic.
+      // spec's 0.1 spellDmgPct baseline floor plus the v0.42.0 Ruination
+      // offense-only spell bonus of 0.11, so the real baseline is 1.21 and
+      // the row is 0.242 (1.452 / 1.21 = 1.20 exactly; the constant's doc
+      // note records the set doc's 0.2-vs-0.242 deviation). The chaos_bolt
+      // tooltip's {damage} splice reads the resolved effect, so the printed
+      // number tracks the bend for wearers automatically. No other row
+      // targets chaos_bolt, so there is no row overlap. Deterministic.
       effect: {
         ability: [{ ability: 'chaos_bolt', dmgPct: RUINCALLER_4PC_CHAOS_BOLT_DMG_PCT }],
       },
@@ -1133,7 +1141,8 @@ export const SET_ENGINE_BONUSES: Record<string, readonly SetEngineBonusTier[]> =
     {
       pieces: 4,
       // Marrowbreak hits 30 percent harder (the dmgPct row, DELIVERED
-      // against the 1.5 Primal Heart baseline) and its emergency guard no
+      // against the 1.65 post-v0.42.0 Primal Heart + Wildfang baseline, was
+      // 1.5 pre-v0.42.0) and its emergency guard no
       // longer replaces the strike: the replacement lives at the ONE
       // directDamage break in effect_dispatch.ts, now flag-gated, so wearers
       // below half health land the strike (with its authored flat-110 mult-2

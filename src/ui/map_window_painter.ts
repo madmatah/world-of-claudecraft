@@ -60,10 +60,12 @@ import {
   stationMarkerArtId,
 } from './map_marker_icon_art';
 import type { MapMarkerProfile } from './map_marker_profile_core';
+import type { MapAtlasFilters, MapAtlasRoute } from './map_sidebar_view';
 import {
   buildOverworldMapModel,
   type MapAllyMarker,
   type MapDetail,
+  type MapFarmPatchMarker,
   type MapGatherNodeMarker,
   type MapNavigationMarker,
   type MapNpcMarker,
@@ -75,8 +77,11 @@ import {
   type MapServiceMarker,
   type MapStationMarker,
   type MapViewRect,
+  type MapWorldBossMarker,
+  type MapWorldQuestMarker,
   type OverworldMapModel,
 } from './map_window_view';
+import { sharedQuestTracking } from './quest_tracking_core';
 import { TextSpriteCache, type TextSpriteStyle } from './text_sprite_cache';
 
 // Label / title typography (Georgia, matching the inline site verbatim).
@@ -115,6 +120,42 @@ const QUEST_BADGE_FONT = 'bold 12px Georgia';
 const QUEST_BADGE_GAP = 2; // px between badges when one area serves two quests
 const QUEST_BADGE_LINE_WIDTH = 1.5;
 const QUEST_BADGE_TEXT_LIFT = 4; // px above the arc center to optically center digits
+const WORLD_QUEST_BADGE_OUTER_ADD = 2;
+const WORLD_QUEST_BADGE_INNER_RATIO = 0.62;
+const WORLD_QUEST_STAR_RADIUS_RATIO = 0.72;
+const WORLD_QUEST_STAR_CORNER_RATIO = 0.34;
+const WORLD_QUEST_CHECK_WIDTH_RATIO = 0.22;
+const WORLD_BOSS_SKULL_CRANIUM_RATIO = 0.34;
+const WORLD_BOSS_SKULL_JAW_HALF_RATIO = 0.22;
+const WORLD_BOSS_SKULL_JAW_TOP_RATIO = 0.13;
+const WORLD_BOSS_SKULL_JAW_HEIGHT_RATIO = 0.26;
+const WORLD_BOSS_SKULL_EYE_RATIO = 0.085;
+
+function drawWorldBossSkull(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  fill: string,
+  socket: string,
+): void {
+  const craniumRadius = radius * WORLD_BOSS_SKULL_CRANIUM_RATIO;
+  const jawHalf = radius * WORLD_BOSS_SKULL_JAW_HALF_RATIO;
+  const jawTop = y + radius * WORLD_BOSS_SKULL_JAW_TOP_RATIO;
+  const jawHeight = radius * WORLD_BOSS_SKULL_JAW_HEIGHT_RATIO;
+  const eyeRadius = radius * WORLD_BOSS_SKULL_EYE_RATIO;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(x, y - radius * 0.08, craniumRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(x - jawHalf, jawTop, jawHalf * 2, jawHeight);
+  ctx.fillStyle = socket;
+  ctx.beginPath();
+  ctx.arc(x - craniumRadius * 0.42, y - radius * 0.08, eyeRadius, 0, Math.PI * 2);
+  ctx.arc(x + craniumRadius * 0.42, y - radius * 0.08, eyeRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(x - eyeRadius * 0.35, jawTop, eyeRadius * 0.7, jawHeight);
+}
 // Zone-map gathering fallbacks mirror the loader's cached state grammar while
 // an image is loading or unavailable. The normal painted path is one blit.
 const GATHER_READY_RADIUS_RATIO = 0.275;
@@ -159,6 +200,7 @@ interface MapPaintGeometry {
   readonly pingLineWidth: number;
   readonly gatherGlowExtra: number;
   readonly gatherFallbackScale: number;
+  readonly farmPatchRadius: number;
 }
 
 /** Frozen responsive geometry selected once per redraw. The compact canvas is
@@ -191,6 +233,7 @@ const MAP_PAINT_GEOMETRY = Object.freeze({
     pingLineWidth: 3,
     gatherGlowExtra: 4,
     gatherFallbackScale: 1,
+    farmPatchRadius: 6.5,
   }),
   compact: Object.freeze({
     markerOutlineWidth: 2,
@@ -218,8 +261,17 @@ const MAP_PAINT_GEOMETRY = Object.freeze({
     pingLineWidth: 4,
     gatherGlowExtra: 6,
     gatherFallbackScale: 1.4,
+    farmPatchRadius: 9,
   }),
 } as const satisfies Readonly<Record<MapMarkerProfile, Readonly<MapPaintGeometry>>>);
+// Farm-patch sprout, as fractions of the badge radius: where the two leaves
+// and the stem meet (the crown, above centre), and where each leaf's inner
+// heel sits (just below centre, so the leaves read as a pair springing from
+// one stalk). minimap_painter.ts repeats these ratios for the same silhouette
+// at its own smaller radius, the way both surfaces repeat the station diamond.
+const FARM_SPROUT_CROWN = 0.2;
+const FARM_SPROUT_HEEL_X = 0.15;
+const FARM_SPROUT_HEEL_Y = 0.25;
 // Herb clover: three petal offsets as fractions of radius (equilateral).
 const HERB_PETAL_OFFSET = 0.55;
 const HERB_PETAL_SCALE = 0.55;
@@ -316,6 +368,10 @@ export const MAP_COLOR_TOKENS = {
   npcQuestRepeat: '--color-map-npc-quest-repeat',
   questAreaFill: '--color-map-quest-area-fill',
   questAreaStroke: '--color-map-quest-area-stroke',
+  worldQuestAreaFill: '--color-map-world-quest-area-fill',
+  worldQuestAreaStroke: '--color-map-world-quest-area-stroke',
+  worldQuestAvailable: '--color-map-world-quest-available',
+  worldBoss: '--color-map-world-boss',
   questBadgeFill: '--color-map-quest-badge-fill',
   questBadgeText: '--color-map-quest-badge-text',
   player: '--color-map-player',
@@ -448,6 +504,12 @@ export interface MapPaintOptions {
   center: { x: number; z: number } | null;
   /** Dungeon Finder "Show on Map" highlight in world coords, or null. */
   ping?: { x: number; z: number } | null;
+  /** Player-controlled atlas layers. */
+  filters?: Readonly<MapAtlasFilters>;
+  /** Selected atlas quest route in world coordinates. */
+  route?: MapAtlasRoute | null;
+  /** Selected emblem whose objective area is expanded. */
+  selectedWorldQuestId?: string | null;
 }
 
 /** What the painter reports back so Hud can update its drag state + cursor,
@@ -456,6 +518,8 @@ export interface MapPaintResult {
   view: MapViewRect;
   cursor: 'grab' | 'default';
   questAreas: MapQuestAreaMarker[];
+  worldQuests: MapWorldQuestMarker[];
+  worldBosses: MapWorldBossMarker[];
   /** The quest-giver markers of this paint, for the hover tooltip's hit-test. */
   npcs: MapNpcMarker[];
   /** The gather-node icons of this paint, for the hover tooltip's hit-test. */
@@ -464,6 +528,8 @@ export interface MapPaintResult {
   stations: MapStationMarker[];
   /** The civic-service badges of this paint, for hover/tap hit-testing. */
   services: MapServiceMarker[];
+  /** The farming garden-bed badges of this paint, for hover/tap hit-testing. */
+  farmPatches: MapFarmPatchMarker[];
   /** Stable route badges and host-fair nearby Rift entrances for hit-testing. */
   navigation: MapNavigationMarker[];
   /** Direct references to the already-painted live/landmark model for a11y output. */
@@ -539,7 +605,11 @@ export class MapWindowPainter {
       canvasSize: opts.canvasSize,
       decorations,
       ping: opts.ping ?? null,
+      selectedWorldQuestId: opts.selectedWorldQuestId ?? null,
       markerProfile: profile,
+      filters: opts.filters,
+      route: opts.route,
+      untrackedQuestIds: sharedQuestTracking().untrackedIds(),
     });
     const colors = this.resolveColors();
     this.draw(ctx, model, opts.zoneBg, opts.canvasSize, colors, profile);
@@ -547,10 +617,13 @@ export class MapWindowPainter {
       view: model.view,
       cursor: model.cursor,
       questAreas: model.questAreas,
+      worldQuests: model.worldQuests,
+      worldBosses: model.worldBosses,
       npcs: model.npcs,
       gatherNodes: model.gatherNodes,
       stations: model.stations,
       services: model.services,
+      farmPatches: model.farmPatches,
       navigation: model.navigation,
       player: model.player,
       allies: model.allies,
@@ -598,6 +671,18 @@ export class MapWindowPainter {
     // The castle plans, over the terrain and under the quest / label layers.
     if (model.castles.length > 0) this.drawCastlePlan(ctx, model.castles, colors);
 
+    if (model.route) {
+      ctx.save();
+      ctx.strokeStyle = colors.ping;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(model.route.from.mx, model.route.from.my);
+      ctx.lineTo(model.route.to.mx, model.route.to.my);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Active-quest objective areas: translucent blue blobs (classic quest-POI
     // style) over where each objective's targets live, drawn under the title /
     // POI / quest-marker layers so their text and symbols stay readable on top.
@@ -639,6 +724,22 @@ export class MapWindowPainter {
             badgeNumber,
           );
         }
+      }
+    }
+
+    // A selected world quest reveals its distinct objective ring. The center emblem
+    // is drawn later, above resource and navigation markers, so it remains the
+    // interaction anchor even when authored content overlaps the objective.
+    if (model.worldQuests.length > 0) {
+      ctx.fillStyle = colors.worldQuestAreaFill;
+      ctx.strokeStyle = colors.worldQuestAreaStroke;
+      ctx.lineWidth = QUEST_AREA_LINE_WIDTH;
+      for (const marker of model.worldQuests) {
+        if (!marker.areaVisible) continue;
+        ctx.beginPath();
+        ctx.arc(marker.mx, marker.my, marker.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
     }
 
@@ -714,6 +815,43 @@ export class MapWindowPainter {
       }
     }
 
+    // Farming garden beds share the static-landmark layer and painted-size
+    // family with stations. The procedural sprout remains the deliberate
+    // fallback if the committed sprite is unavailable. Tier-identical
+    // (fairness): the pin is actionable information, never preset- or
+    // governor-gated.
+    for (const patch of model.farmPatches) {
+      const sizeId = profile === 'compact' ? 'mapStationCompact' : 'mapStation';
+      const sprite = this.markerArt.sprite('farm-patch', sizeId);
+      if (sprite) {
+        const size = MAP_MARKER_SIZES[sizeId];
+        ctx.drawImage(sprite, Math.round(patch.mx - size / 2), Math.round(patch.my - size / 2));
+        continue;
+      }
+      const radius = geometry.farmPatchRadius;
+      const crownY = patch.my - radius * FARM_SPROUT_CROWN;
+      const heelX = radius * FARM_SPROUT_HEEL_X;
+      const heelY = patch.my + radius * FARM_SPROUT_HEEL_Y;
+      ctx.fillStyle = colors.stall;
+      ctx.strokeStyle = colors.outline;
+      ctx.lineWidth = geometry.markerOutlineWidth;
+      ctx.beginPath();
+      ctx.moveTo(patch.mx, crownY);
+      ctx.lineTo(patch.mx - radius, patch.my - radius);
+      ctx.lineTo(patch.mx - heelX, heelY);
+      ctx.closePath();
+      ctx.moveTo(patch.mx, crownY);
+      ctx.lineTo(patch.mx + radius, patch.my - radius);
+      ctx.lineTo(patch.mx + heelX, heelY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(patch.mx, crownY);
+      ctx.lineTo(patch.mx, patch.my + radius);
+      ctx.stroke();
+    }
+
     // Zone title (drawn on-canvas; the world map has no DOM zone label). Inside
     // a rift, show the generated floor name + rank instead of the overworld
     // zone, mirroring minimap_painter's zone-label override.
@@ -735,7 +873,7 @@ export class MapWindowPainter {
       lineWidth: geometry.textOutlineWidth,
     };
     for (const poi of model.pois) {
-      this.labels.draw(ctx, zonePoiLabel(poi.zoneId, poi.poiIndex), poi.mx, poi.my, poiLabel);
+      this.labels.draw(ctx, zonePoiLabel(poi.zoneId, poi.poiIndex), poi.mx, poi.labelMy, poiLabel);
     }
 
     // Dungeon entrance portals: a purple dot plus the dungeon name above it. The
@@ -794,6 +932,77 @@ export class MapWindowPainter {
       } else {
         drawMapNavigationFallback(ctx, marker, size, colors, geometry);
       }
+    }
+
+    // Circular world-quest emblem. An available quest is blue with a dark
+    // center; an active quest switches to the gold/bright completion grammar.
+    for (const marker of model.worldQuests) {
+      const outer = geometry.questBadgeRadius + WORLD_QUEST_BADGE_OUTER_ADD;
+      const inner = outer * WORLD_QUEST_BADGE_INNER_RATIO;
+      ctx.fillStyle =
+        marker.state === 'active' ? colors.questBadgeFill : colors.worldQuestAvailable;
+      ctx.strokeStyle = colors.outline;
+      ctx.lineWidth = geometry.questBadgeLineWidth;
+      ctx.beginPath();
+      ctx.arc(marker.mx, marker.my, outer, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = marker.state === 'active' ? colors.player : colors.questBadgeText;
+      ctx.beginPath();
+      ctx.arc(marker.mx, marker.my, inner, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (marker.state === 'active') {
+        ctx.strokeStyle = colors.questBadgeText;
+        ctx.lineWidth = Math.max(2, inner * WORLD_QUEST_CHECK_WIDTH_RATIO);
+        ctx.beginPath();
+        ctx.moveTo(marker.mx - inner * 0.55, marker.my);
+        ctx.lineTo(marker.mx - inner * 0.12, marker.my + inner * 0.45);
+        ctx.lineTo(marker.mx + inner * 0.62, marker.my - inner * 0.45);
+        ctx.stroke();
+        continue;
+      }
+
+      const star = inner * WORLD_QUEST_STAR_RADIUS_RATIO;
+      ctx.fillStyle = colors.worldQuestAvailable;
+      ctx.beginPath();
+      ctx.moveTo(marker.mx, marker.my - star);
+      ctx.lineTo(
+        marker.mx + star * WORLD_QUEST_STAR_CORNER_RATIO,
+        marker.my - star * WORLD_QUEST_STAR_CORNER_RATIO,
+      );
+      ctx.lineTo(marker.mx + star, marker.my);
+      ctx.lineTo(
+        marker.mx + star * WORLD_QUEST_STAR_CORNER_RATIO,
+        marker.my + star * WORLD_QUEST_STAR_CORNER_RATIO,
+      );
+      ctx.lineTo(marker.mx, marker.my + star);
+      ctx.lineTo(
+        marker.mx - star * WORLD_QUEST_STAR_CORNER_RATIO,
+        marker.my + star * WORLD_QUEST_STAR_CORNER_RATIO,
+      );
+      ctx.lineTo(marker.mx - star, marker.my);
+      ctx.lineTo(
+        marker.mx - star * WORLD_QUEST_STAR_CORNER_RATIO,
+        marker.my - star * WORLD_QUEST_STAR_CORNER_RATIO,
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // The fixed-position world boss has no disclosure area. A purple badge and
+    // procedural skull keep both identity cues visible without text or emoji.
+    for (const marker of model.worldBosses) {
+      const radius = geometry.questBadgeRadius + WORLD_QUEST_BADGE_OUTER_ADD;
+      ctx.fillStyle = colors.worldBoss;
+      ctx.strokeStyle = colors.outline;
+      ctx.lineWidth = geometry.questBadgeLineWidth;
+      ctx.beginPath();
+      ctx.arc(marker.mx, marker.my, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      drawWorldBossSkull(ctx, marker.mx, marker.my, radius, colors.player, colors.outline);
     }
 
     // Dungeon Finder "Show on Map" highlight: a steady double ring around the

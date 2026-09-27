@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { IGNIVAR_WATER_CLEANSE_RADIUS } from '../sim/encounters/ignivar';
 import { type IgnivarConduitState, ignivarConduitStateForTemplate } from '../sim/ignivar_arena';
+import { floorVfxRenderOrder } from './floor_vfx_layer';
 import { GFX, surfaceMat } from './gfx';
 import { markSharedGeometry, markSharedMaterial } from './shared_resource';
 
@@ -20,8 +21,10 @@ export const IGNIVAR_CONDUIT_ACTIVE_BEACON_NAME = 'ignivarWaterActiveBeacon';
 const templates = new Map<IgnivarConduitState, THREE.Group>();
 let stableTemplate: THREE.Group | null = null;
 
-function sharedMaterial(options: Parameters<typeof surfaceMat>[0]): THREE.Material {
-  return markSharedMaterial(surfaceMat(options));
+function sharedMaterial(name: string, options: Parameters<typeof surfaceMat>[0]): THREE.Material {
+  const material = markSharedMaterial(surfaceMat(options));
+  material.name = `ignivarConduit:${name}`;
+  return material;
 }
 
 function mesh(geometry: THREE.BufferGeometry, material: THREE.Material, y: number): THREE.Mesh {
@@ -33,11 +36,12 @@ function mesh(geometry: THREE.BufferGeometry, material: THREE.Material, y: numbe
 }
 
 function waterGlowMaterial(
+  name: string,
   color: number,
   opacity: number,
   blending: THREE.Blending = THREE.AdditiveBlending,
 ): THREE.MeshBasicMaterial {
-  return markSharedMaterial(
+  const material = markSharedMaterial(
     new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -48,6 +52,8 @@ function waterGlowMaterial(
       toneMapped: false,
     }),
   );
+  material.name = `ignivarConduit:${name}`;
+  return material;
 }
 
 function horizontalMesh(
@@ -63,8 +69,8 @@ function horizontalMesh(
 }
 
 function addReadyVisual(group: THREE.Group): void {
-  const readyMaterial = waterGlowMaterial(0x5bdcf3, 0.78);
-  const coreMaterial = waterGlowMaterial(0x9af3ff, 0.92, THREE.NormalBlending);
+  const readyMaterial = waterGlowMaterial('readyPool', 0x5bdcf3, 0.78);
+  const coreMaterial = waterGlowMaterial('readyCore', 0x9af3ff, 0.92, THREE.NormalBlending);
   const marker = new THREE.Group();
   marker.name = 'ignivarWaterReadyMarker';
   marker.userData.ignivarConduitLayer = 'readyBeacon';
@@ -73,12 +79,12 @@ function addReadyVisual(group: THREE.Group): void {
   core.name = 'ignivarWaterReadyCore';
   core.castShadow = false;
   core.receiveShadow = false;
-  core.renderOrder = 3;
+  core.renderOrder = floorVfxRenderOrder('encounter', 2);
   marker.add(core);
 
   const halo = horizontalMesh(new THREE.TorusGeometry(0.62, 0.065, 6, 24), readyMaterial, 1.58);
   halo.name = 'ignivarWaterReadyHalo';
-  halo.renderOrder = 2;
+  halo.renderOrder = floorVfxRenderOrder('encounter', 1);
   marker.add(halo);
 
   const lowerHalo = horizontalMesh(
@@ -94,13 +100,13 @@ function addReadyVisual(group: THREE.Group): void {
   // player camera instead of being hidden inside its own base.
   const aimRing = horizontalMesh(new THREE.RingGeometry(1.48, 1.72, 32), readyMaterial, 0.94);
   aimRing.name = IGNIVAR_CONDUIT_READY_AIM_RING_NAME;
-  aimRing.renderOrder = 2;
+  aimRing.renderOrder = floorVfxRenderOrder('encounter', 1);
   marker.add(aimRing);
   group.add(marker);
 }
 
 function addCooldownVisual(group: THREE.Group, sealMaterial: THREE.Material): void {
-  const capMaterial = sharedMaterial({
+  const capMaterial = sharedMaterial('cooldownCap', {
     color: 0x202a2d,
     roughness: 0.98,
     metalness: 0.02,
@@ -125,17 +131,17 @@ function buildActivationRune(): THREE.Group {
   const rune = new THREE.Group();
   rune.name = IGNIVAR_CONDUIT_ACTIVATION_RUNE_NAME;
   rune.userData.ignivarConduitLayer = 'activationRune';
-  const runeMaterial = waterGlowMaterial(0x45dcff, 0.9);
+  const runeMaterial = waterGlowMaterial('activationRune', 0x45dcff, 0.9);
 
   const outer = horizontalMesh(new THREE.RingGeometry(2.5, 2.78, 8), runeMaterial, 0.055);
   outer.name = 'ignivarWaterActivationRuneGlow';
-  outer.renderOrder = 4;
+  outer.renderOrder = floorVfxRenderOrder('encounter', 3);
   rune.add(outer);
 
   const inner = horizontalMesh(new THREE.RingGeometry(1.03, 1.17, 8), runeMaterial, 0.915);
   inner.name = 'ignivarWaterActivationRuneInner';
   inner.rotation.z = Math.PI / 8;
-  inner.renderOrder = 4;
+  inner.renderOrder = floorVfxRenderOrder('encounter', 3);
   rune.add(inner);
 
   const spokeGeometry = new THREE.BoxGeometry(0.085, 0.025, 1.35);
@@ -145,7 +151,7 @@ function buildActivationRune(): THREE.Group {
     spoke.rotation.y = (index * Math.PI) / 4;
     spoke.castShadow = false;
     spoke.receiveShadow = false;
-    spoke.renderOrder = 4;
+    spoke.renderOrder = floorVfxRenderOrder('encounter', 3);
     rune.add(spoke);
   }
   return rune;
@@ -169,7 +175,7 @@ function buildSteamEnergy(material: THREE.Material): THREE.Group {
     halo.name = haloSpec.name;
     halo.rotation.y = haloSpec.tilt;
     halo.rotation.z = index * 0.42;
-    halo.renderOrder = 5;
+    halo.renderOrder = floorVfxRenderOrder('encounter', 4);
     steam.add(halo);
   }
   return steam;
@@ -179,35 +185,40 @@ function buildActiveBeacon(): THREE.Group {
   const beacon = new THREE.Group();
   beacon.name = IGNIVAR_CONDUIT_ACTIVE_BEACON_NAME;
   beacon.userData.ignivarConduitLayer = 'activeBeacon';
-  const outerMaterial = waterGlowMaterial(0x3fdcff, 0.34);
-  const coreMaterial = waterGlowMaterial(0xd9fcff, 0.92);
-  const crownMaterial = waterGlowMaterial(0x8ff4ff, 0.9);
+  const outerMaterial = waterGlowMaterial('beaconOuter', 0x3fdcff, 0.34);
+  const coreMaterial = waterGlowMaterial('beaconCore', 0xd9fcff, 0.92);
+  const crownMaterial = waterGlowMaterial('beaconCrown', 0x8ff4ff, 0.9);
 
   const outer = mesh(new THREE.CylinderGeometry(0.72, 0.5, 6.2, 16, 1, true), outerMaterial, 3.55);
   outer.name = 'ignivarWaterActiveBeaconOuter';
   outer.castShadow = false;
   outer.receiveShadow = false;
-  outer.renderOrder = 6;
+  outer.renderOrder = floorVfxRenderOrder('encounter', 5);
 
   const core = mesh(new THREE.CylinderGeometry(0.16, 0.25, 6.5, 12, 1, true), coreMaterial, 3.65);
   core.name = 'ignivarWaterActiveBeaconCore';
   core.castShadow = false;
   core.receiveShadow = false;
-  core.renderOrder = 7;
+  core.renderOrder = floorVfxRenderOrder('encounter', 6);
 
   const crown = horizontalMesh(new THREE.TorusGeometry(1.18, 0.1, 8, 32), crownMaterial, 6.65);
   crown.name = 'ignivarWaterActiveBeaconCrown';
-  crown.renderOrder = 7;
+  crown.renderOrder = floorVfxRenderOrder('encounter', 6);
   beacon.add(outer, core, crown);
   return beacon;
 }
 
 function addActiveVisual(group: THREE.Group): void {
-  const footprintMaterial = waterGlowMaterial(0x269dcc, 0.14, THREE.NormalBlending);
-  const boundaryMaterial = waterGlowMaterial(0x55e6ff, 0.82);
-  const columnMaterial = waterGlowMaterial(0x4bdcf6, 0.48, THREE.NormalBlending);
-  const coreMaterial = waterGlowMaterial(0xb8f8ff, 0.78);
-  const steamMaterial = waterGlowMaterial(0xa8f5ff, 0.25, THREE.NormalBlending);
+  const footprintMaterial = waterGlowMaterial(
+    'cleanseFootprint',
+    0x269dcc,
+    0.14,
+    THREE.NormalBlending,
+  );
+  const boundaryMaterial = waterGlowMaterial('cleanseBoundary', 0x55e6ff, 0.82);
+  const columnMaterial = waterGlowMaterial('jetColumn', 0x4bdcf6, 0.48, THREE.NormalBlending);
+  const coreMaterial = waterGlowMaterial('jetCore', 0xb8f8ff, 0.78);
+  const steamMaterial = waterGlowMaterial('steam', 0xa8f5ff, 0.25, THREE.NormalBlending);
 
   const cleanseZone = new THREE.Group();
   cleanseZone.name = 'ignivarWaterCleanseZone';
@@ -218,7 +229,7 @@ function addActiveVisual(group: THREE.Group): void {
     0.025,
   );
   footprint.name = IGNIVAR_CONDUIT_CLEANSE_FOOTPRINT_NAME;
-  footprint.renderOrder = 1;
+  footprint.renderOrder = floorVfxRenderOrder('encounter', 0);
   cleanseZone.add(footprint);
 
   const boundary = horizontalMesh(
@@ -231,7 +242,7 @@ function addActiveVisual(group: THREE.Group): void {
     0.04,
   );
   boundary.name = IGNIVAR_CONDUIT_CLEANSE_BOUNDARY_NAME;
-  boundary.renderOrder = 3;
+  boundary.renderOrder = floorVfxRenderOrder('encounter', 2);
   cleanseZone.add(boundary, buildActivationRune());
   group.add(cleanseZone);
 
@@ -246,14 +257,14 @@ function addActiveVisual(group: THREE.Group): void {
   outer.name = 'ignivarWaterColumnOuter';
   outer.castShadow = false;
   outer.receiveShadow = false;
-  outer.renderOrder = 4;
+  outer.renderOrder = floorVfxRenderOrder('encounter', 3);
   jet.add(outer);
 
   const core = mesh(new THREE.CylinderGeometry(0.34, 0.46, 2.95, 14, 1, true), coreMaterial, 2.15);
   core.name = 'ignivarWaterColumnCore';
   core.castShadow = false;
   core.receiveShadow = false;
-  core.renderOrder = 5;
+  core.renderOrder = floorVfxRenderOrder('encounter', 4);
   jet.add(core, buildSteamEnergy(steamMaterial));
   group.add(jet, buildActiveBeacon());
 }
@@ -267,7 +278,7 @@ function buildTemplate(state: IgnivarConduitState): THREE.Group {
   // view draws only the readable water-state layers (the cleanse pool, the
   // ready aim marker, the active jet, the cooldown seal), so they render on
   // the pump the player already sees rather than a second stone plinth.
-  const rim = sharedMaterial({
+  const rim = sharedMaterial('rim', {
     color: 0x62564e,
     roughness: 0.82,
     metalness: 0.08,

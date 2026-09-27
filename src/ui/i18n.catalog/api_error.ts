@@ -175,6 +175,8 @@ export const apiErrorStrings = {
     swag_tier: 'Reach a higher rank to claim this.',
     // reuses hudChrome.discord.swag.needPoints
     swag_points: 'Not enough points.',
+    // The queue-pings toggle body was not a boolean (server/discord_queue_pings.ts).
+    invalid_input: 'Invalid input.',
   },
   deeds: {
     invalid_input: 'Invalid input.',
@@ -184,6 +186,10 @@ export const apiErrorStrings = {
   guilds: {
     invalid_roster_name: 'Invalid guild name.',
     unknown: 'No guild by that name.',
+  },
+  // The public world-quest scoreboard read (server/world_quest_leaderboard.ts).
+  world_quests: {
+    unknown_board: 'No scoreboard by that name.',
   },
   // steam: the env-gated Steam link family (server/steam/). Linking mirrors
   // deed unlocks to Steam achievements; it is never a sign-in method.
@@ -239,6 +245,13 @@ export const apiErrorStrings = {
     reason_required: 'A reason is required.',
     invalid_duration: 'Enter a mark duration of at least one second.',
     not_marked: 'That account is not marked.',
+  },
+  // kick: the admin-panel kick of a live player (server/admin_kick_api.ts).
+  // Operator-facing copy: only the admin dashboard ever receives these codes.
+  kick: {
+    reason_required: 'A reason is required.',
+    admin_target: 'Operator accounts cannot be kicked.',
+    target_offline: 'That player is no longer online on this realm.',
   },
   // woc_market: the config-gated $WOC Exchange family
   // (server/woc_market_routes.ts). USD-denominated auctions settled in $WOC;

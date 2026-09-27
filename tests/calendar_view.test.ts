@@ -3,6 +3,7 @@
 // placement, month arithmetic, and the officer predicate. All date math is
 // UTC and driven by explicit inputs, so results are deterministic.
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   buildCalendarMonth,
@@ -123,11 +124,56 @@ describe('month arithmetic and permissions', () => {
     expect(monthOfIso('2026-07-03')).toEqual({ year: 2026, month: 6 });
   });
 
-  it('lets only officers and the leader manage guild events', () => {
-    expect(canManageGuildEvents('leader')).toBe(true);
-    expect(canManageGuildEvents('officer')).toBe(true);
-    expect(canManageGuildEvents('member')).toBe(false);
+  it('lets only officers and the leader manage guild events (the default ladder)', () => {
+    expect(canManageGuildEvents({ rank: 'leader' })).toBe(true);
+    expect(canManageGuildEvents({ rank: 'officer' })).toBe(true);
+    expect(canManageGuildEvents({ rank: 'member' })).toBe(false);
     expect(canManageGuildEvents(null)).toBe(false);
     expect(canManageGuildEvents(undefined)).toBe(false);
+  });
+
+  it('follows the guild ladder: a custom rank granted Calendar may manage, a revoked officer may not', () => {
+    const ranks = [
+      { id: 'leader', name: '', perms: [] },
+      { id: 'officer', name: 'Council', perms: ['invite' as const] },
+      { id: 'r1', name: 'Scribe', perms: ['events' as const] },
+      { id: 'member', name: '', perms: [] },
+    ];
+    expect(canManageGuildEvents({ rank: 'r1', ranks })).toBe(true);
+    expect(canManageGuildEvents({ rank: 'officer', ranks })).toBe(false);
+    expect(canManageGuildEvents({ rank: 'leader', ranks })).toBe(true);
+    // An id the ladder does not know resolves to the joining rank (fail closed).
+    expect(canManageGuildEvents({ rank: 'r9', ranks })).toBe(false);
+  });
+});
+
+// The guild calendar's composer (W25, the window-shell finding): "Book an event"
+// used to render at the end of the scrolling day pane, so a busy day pushed the
+// Add button out of sight. It now paints into its own pinned band below the pane.
+describe('calendar_window: the composer is pinned below the day pane', () => {
+  const painter = readFileSync(new URL('../src/ui/calendar_window.ts', import.meta.url), 'utf8');
+  const components = readFileSync(
+    new URL('../src/styles/components.css', import.meta.url),
+    'utf8',
+  ).replace(/\s+/g, ' ');
+
+  it('mints a foot element as a sibling of the scrolling pane', () => {
+    expect(painter).toContain('<div class="cal-day-foot" id="cal-day-foot"></div>');
+    expect(painter.indexOf('cal-day-pane" id="cal-day-pane')).toBeLessThan(
+      painter.indexOf('cal-day-foot" id="cal-day-foot'),
+    );
+  });
+
+  it('renders the composer into the foot, never into the pane, and wires it there', () => {
+    expect(painter).toContain("foot.innerHTML = composing ? form : '';");
+    expect(painter).toContain("foot.querySelector('#cal-ev-add')");
+    expect(painter).not.toContain("pane.querySelector('#cal-ev-add')");
+    // Clearing the selection clears both halves, or a stale composer would stay.
+    expect(painter).toMatch(/pane\.innerHTML = '';\s*foot\.innerHTML = '';/);
+  });
+
+  it('keeps the foot out of the scroll and collapsed when there is nothing to compose', () => {
+    expect(components).toContain('.cal-day-foot { flex: none; margin-top: var(--spacing-sm); }');
+    expect(components).toContain('.cal-day-foot:empty { display: none; }');
   });
 });

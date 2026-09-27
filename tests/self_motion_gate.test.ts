@@ -38,6 +38,7 @@ const enabledArgs = (over: Partial<SelfMotionGateArgs> = {}): SelfMotionGateArgs
   playerImmobilized: false,
   posX: OPEN_WORLD_X,
   climbing: undefined,
+  leaping: undefined,
   riftFloor: null,
   ...over,
 });
@@ -82,6 +83,7 @@ describe('selfMotionPredictionEnabled', () => {
       { movementFrozen: true },
       { playerImmobilized: true },
       { climbing: true },
+      { leaping: true },
       { driveControlsLocked: true },
     ];
     for (const over of cases) {
@@ -89,13 +91,16 @@ describe('selfMotionPredictionEnabled', () => {
     }
   });
 
-  it('is off inside a delve and inside a rift before the rift floor descriptor arrives', () => {
-    const delveX = DELVE_X_MIN;
+  it('is off inside a rift before the rift floor descriptor arrives', () => {
     const riftX = RIFT_X_MIN;
-    expect(isDelvePos(delveX)).toBe(true);
     expect(isRiftPos(riftX)).toBe(true);
-    expect(selfMotionPredictionEnabled(enabledArgs({ posX: delveX }))).toBe(false);
     expect(selfMotionPredictionEnabled(enabledArgs({ posX: riftX }))).toBe(false);
+  });
+
+  it('is on inside a delve (issue #3480): no delve exclusion left in the gate', () => {
+    const delveX = DELVE_X_MIN;
+    expect(isDelvePos(delveX)).toBe(true);
+    expect(selfMotionPredictionEnabled(enabledArgs({ posX: delveX }))).toBe(true);
   });
 
   it('is on inside a rift once the mirrored rift floor descriptor is present', () => {
@@ -106,5 +111,14 @@ describe('selfMotionPredictionEnabled', () => {
   it('treats only an explicit climbing:true as a climb', () => {
     expect(selfMotionPredictionEnabled(enabledArgs({ climbing: false }))).toBe(true);
     expect(selfMotionPredictionEnabled(enabledArgs({ climbing: undefined }))).toBe(true);
+  });
+
+  it('is off mid-flight on a Vaulting Charge leap arc', () => {
+    expect(selfMotionPredictionEnabled(enabledArgs({ leaping: true }))).toBe(false);
+  });
+
+  it('treats only an explicit leaping:true as an active leap', () => {
+    expect(selfMotionPredictionEnabled(enabledArgs({ leaping: false }))).toBe(true);
+    expect(selfMotionPredictionEnabled(enabledArgs({ leaping: undefined }))).toBe(true);
   });
 });

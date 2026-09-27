@@ -28,13 +28,17 @@
 // are honest data and a future caller may want them; this painter simply renders
 // none of it.
 
+import { talentsFor } from '../../../sim/content/talents';
+import type { PlayerClass } from '../../../sim/types';
 import { currencyIconHtml } from '../../currency_art';
 import { markDialogRoot } from '../../dialog_root';
 import { itemDisplayName, tEntity } from '../../entity_i18n';
 import { esc } from '../../esc';
 import { focusedWithin, restoreFirstEnabled } from '../../focus_restore';
 import { formatNumber, t } from '../../i18n';
+import { itemNameColor } from '../../item_name_color';
 import type { PainterHostPresentation } from '../../painter_host';
+import { tTalent } from '../../talent_i18n';
 import { svgIcon } from '../../ui_icons';
 import type { WarfareShopOffer, WarfareShopSection, WarfareShopView } from './warfare_vendor_view';
 
@@ -75,7 +79,7 @@ function appendOfferTile(
   const { itemId, item, honor, affordable, owned } = offer;
   const tile = document.createElement('button');
   tile.type = 'button';
-  tile.className = owned ? 'vendor-item warfare-owned' : 'vendor-item';
+  tile.className = owned ? 'vendor-item ui-card warfare-owned' : 'vendor-item ui-card';
   tile.disabled = !affordable;
   // Keyed on the SECTION plus the item id so the restore ladder can never land
   // on a same-named tile in another section (the sectioned window's version of
@@ -95,7 +99,7 @@ function appendOfferTile(
   const ownedMark = owned
     ? `<span class="vi-sub">${esc(t('hudChrome.warfareShop.owned'))}</span>`
     : '';
-  tile.innerHTML = `${deps.itemIcon(item)}<span class="vi-name">${esc(itemName)}${ownedMark}</span><span class="vi-price"><span class="warfare-price${affordable ? '' : ' unaffordable'}">${currencyIconHtml('honor')}${esc(price)}</span></span>`;
+  tile.innerHTML = `<span class="ui-socket ui-socket--bag">${deps.itemIcon(item)}</span><span class="vi-name" style="color:${itemNameColor(item)}">${esc(itemName)}${ownedMark}</span><span class="vi-price ui-money"><span class="warfare-price${affordable ? '' : ' unaffordable'}">${currencyIconHtml('honor')}${esc(price)}</span></span>`;
   tile.addEventListener('click', () => deps.onBuy(itemId));
   deps.attachTooltip(
     tile,
@@ -105,6 +109,13 @@ function appendOfferTile(
 }
 
 /** Paint the WARFARE shop panel from a prepared view. */
+/** The translated spec name for a Season 2 set, or null (entry tier, unknown). */
+function setSpecName(spec: { cls: string; spec: string } | undefined): string | null {
+  if (!spec) return null;
+  const def = talentsFor(spec.cls as PlayerClass)?.specs.find((s) => s.id === spec.spec);
+  return def ? tTalent({ kind: 'talentSpec', spec: def, field: 'name' }) : null;
+}
+
 export function renderWarfareVendorWindow(
   el: HTMLElement,
   vendorName: string,
@@ -129,22 +140,43 @@ export function renderWarfareVendorWindow(
 
   const title = t('itemUi.vendor.goodsTitle', { name: vendorName });
   markDialogRoot(el, { label: title });
-  el.innerHTML = `<div class="panel-title"><span>${esc(title)}</span><button type="button" class="x-btn" data-close data-focus-key="close" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
+  el.innerHTML = `<div class="panel-title ui-win-head"><span class="ui-win-title">${esc(title)}</span><button type="button" class="x-btn ui-x-btn" data-close data-focus-key="close" aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
 
   const balance = document.createElement('div');
   balance.className = 'warfare-balance';
   balance.innerHTML = `${currencyIconHtml('honor')}${esc(t('hudChrome.warfare.balance', { amount: count(view.balance) }))}`;
   el.appendChild(balance);
 
+  let group: WarfareShopSection['group'] | null = null;
   for (const section of view.sections) {
     // Guard mirrors the vendor window's grids: never leave a dead empty node.
     // It covers the HEADING as well as the grid, because a title with nothing
     // under it is the deader of the two. buildWarfareVendorView emits no empty
     // section today; this stays correct if it ever does.
     if (section.offers.length === 0) continue;
+    // A group heading (Warfare Season 2 above the entry tier) whenever the
+    // group changes, so the two tiers read as two blocks.
+    if (section.group !== group) {
+      group = section.group;
+      const groupHeading = document.createElement('div');
+      groupHeading.className = 'vendor-section-title warfare-group-title';
+      groupHeading.textContent =
+        group === 'season2'
+          ? t('hudChrome.warfareShop.groupSeason2')
+          : t('hudChrome.warfareShop.groupEntry');
+      el.appendChild(groupHeading);
+    }
     const heading = document.createElement('div');
     heading.className = 'vendor-section-title';
     heading.textContent = sectionTitleText(section);
+    // A Season 2 set names the spec it is built for beside the set name.
+    const specName = section.kind === 'set' ? setSpecName(section.spec) : null;
+    if (specName) {
+      const spec = document.createElement('span');
+      spec.className = 'warfare-set-spec';
+      spec.textContent = specName;
+      heading.appendChild(spec);
+    }
     el.appendChild(heading);
     const grid = document.createElement('div');
     grid.className = 'vendor-goods-grid';

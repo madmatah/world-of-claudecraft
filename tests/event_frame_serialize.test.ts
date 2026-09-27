@@ -555,6 +555,44 @@ describe('routeEvents bot-detector observation and serialize-once shape', () => 
     }
   });
 
+  it('prefilters the server-only craftRoll audit event: never stringified, never delivered', () => {
+    // craft_roll_events (server/craft_roll_events.ts) is the only consumer of
+    // craftRoll; the roll values it carries must never reach a client frame,
+    // its own recipient included.
+    const server = new GameServer();
+    const fc = fakeWs();
+    const crafter = joinServer(server, fc, 1, 'Roller');
+    fc.sent.length = 0;
+    const batch: SimEvent[] = [
+      {
+        type: 'craftRoll',
+        kind: 'perfecting',
+        recipeId: 'recipe_wyrmfall_pendant',
+        itemId: 'wyrmfall_pendant',
+        roll: 0.91,
+        chance: 0.8,
+        success: false,
+        rankBefore: 0,
+        rankAfter: 0,
+        pid: crafter.pid,
+      },
+      {
+        type: 'chat',
+        fromPid: crafter.pid,
+        from: 'Roller',
+        channel: 'general',
+        text: 'after',
+      },
+    ];
+    const stringifySpy = vi.spyOn(JSON, 'stringify');
+    stringifySpy.mockClear();
+    routeRaw(server, batch);
+    expect(stringifySpy).toHaveBeenCalledTimes(1);
+    stringifySpy.mockRestore();
+    for (const frame of fc.sent) expect(frame).not.toContain('craftRoll');
+    expect(fc.sent.some((frame) => frame.includes('after'))).toBe(true);
+  });
+
   it('serializes each event exactly once for the whole batch, not once per session', () => {
     const server = new GameServer();
     const sessions: ClientSession[] = [];
@@ -599,6 +637,20 @@ describe('event_frame pure assembly', () => {
     ] as unknown as SimEvent[];
     expect(filterRoutableEvents(events)).toBe(events);
     expect(filterRoutableEvents([])).toEqual([]);
+  });
+
+  it('filterRoutableEvents drops the server-only lootRollAwarded (its consumer is the Discord card, never a client)', () => {
+    const award = {
+      type: 'lootRollAwarded',
+      rollId: 3,
+      itemId: 'greyjaw_hide_boots',
+      itemName: 'Greyjaw Hide Boots',
+      quality: 'uncommon',
+      pid: 7,
+    };
+    const loot = { type: 'loot', text: 'Aaa wins [[i:greyjaw_hide_boots]] (88)', pid: 7 };
+    const events = [loot, award] as unknown as SimEvent[];
+    expect(filterRoutableEvents(events)).toEqual([loot]);
   });
 
   it('serializeEventFragments stringifies each event once, index-aligned', () => {
@@ -648,6 +700,7 @@ describe('routeEvents selection guards', () => {
     const event: SimEvent = {
       type: 'noticeboard',
       noticeboardId: 'noticeboard_eastbrook',
+      boardId: 'eastbrook_noticeboard',
       state: 'empty',
       pid: reader.pid,
     };
@@ -657,6 +710,7 @@ describe('routeEvents selection guards', () => {
       eventsFrame({
         type: 'noticeboard',
         noticeboardId: 'noticeboard_eastbrook',
+        boardId: 'eastbrook_noticeboard',
         state: 'empty',
         pid: reader.pid,
       }),
@@ -714,5 +768,67 @@ describe('routeEvents selection guards', () => {
     fa.sent.length = 0;
     routeRaw(server, []);
     expect(fa.sent).toEqual([]);
+  });
+
+  it('a spectator frame merges the anchor pid, its OWN pid, and the broadcast set in BATCH order', () => {
+    // The per-pid index (server/event_pid_index.ts) walks three separate lists
+    // for a spectating session; this is the case that would come out reordered
+    // if they were walked one after another instead of merged by original index.
+    // Authored so the three sources INTERLEAVE: own, broadcast, anchor, own,
+    // broadcast, anchor. A concatenating walk would emit them grouped instead.
+    const server = new GameServer();
+    const fWatcher = fakeWs();
+    const watcher = joinServer(server, fWatcher, 1, 'Watcher');
+    const fTarget = fakeWs();
+    const target = joinServer(server, fTarget, 2, 'Target');
+    const fSender = fakeWs();
+    const sender = joinServer(server, fSender, 3, 'Sender');
+    watcher.spectating = {
+      characterId: target.characterId,
+      name: 'Target',
+      savedPos: { ...entityPos(server, watcher.pid) },
+      priorGm: false,
+      stowedPet: null,
+    };
+    fWatcher.sent.length = 0;
+
+    const ownWhisper = (text: string): SimEvent => ({
+      type: 'chat',
+      fromPid: sender.pid,
+      from: 'Sender',
+      channel: 'whisper',
+      text,
+      pid: watcher.pid,
+    });
+    const worldSay = (text: string): SimEvent => ({
+      type: 'chat',
+      fromPid: sender.pid,
+      from: 'Sender',
+      channel: 'say',
+      text,
+    });
+    const anchorLoot = (itemId: string): SimEvent =>
+      ({ type: 'loot', pid: target.pid, itemId, count: 1 }) as unknown as SimEvent;
+
+    routeRaw(server, [
+      ownWhisper('own-1'),
+      worldSay('world-1'),
+      anchorLoot('anchor_1'),
+      ownWhisper('own-2'),
+      worldSay('world-2'),
+      anchorLoot('anchor_2'),
+    ]);
+
+    expect(fWatcher.sent).toHaveLength(1);
+    const list = (JSON.parse(fWatcher.sent[0]) as { list: { text?: string; itemId?: string }[] })
+      .list;
+    expect(list.map((ev) => ev.text ?? ev.itemId)).toEqual([
+      'own-1',
+      'world-1',
+      'anchor_1',
+      'own-2',
+      'world-2',
+      'anchor_2',
+    ]);
   });
 });

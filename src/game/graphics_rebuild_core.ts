@@ -15,6 +15,7 @@ export const GRAPHICS_REBUILD_KEYS = Object.freeze([
   'characterDetail',
   'dynamicLights',
   'particleEffects',
+  'ghostFade',
 ] as const);
 
 export type GraphicsSettingsKey = (typeof GRAPHICS_REBUILD_KEYS)[number];
@@ -33,6 +34,21 @@ export function normalizeGraphicsSettingsSnapshot(
         : range.def;
   }
   return Object.freeze(snapshot);
+}
+
+/**
+ * The applied snapshot at boot, read from stored settings. Derived from
+ * GRAPHICS_REBUILD_KEYS so a new dial can never be left out: a hand-written
+ * key list once read only the round-10 knobs and let every round-12 dial
+ * silently fall back to its High/Full/On default, which the options panel
+ * displayed under Advanced and the next Apply made live.
+ */
+export function captureGraphicsSettingsSnapshot(
+  read: (key: GraphicsSettingsKey) => number,
+): Readonly<GraphicsSettingsSnapshot> {
+  const stored: Partial<GraphicsSettingsSnapshot> = {};
+  for (const key of GRAPHICS_REBUILD_KEYS) stored[key] = read(key);
+  return normalizeGraphicsSettingsSnapshot(stored);
 }
 
 export function graphicsSettingsSnapshotsEqual(
@@ -76,12 +92,17 @@ export const GRAPHICS_DIAL_KEYS: readonly GraphicsDialKey[] = Object.freeze(
  *   (the exact medium-tier map size).
  * - high: the documented "Advanced-Medium" profile settingsFor's high tier
  *   copies (basic worn surface, reduced carpet, cavity relief) + the full
- *   high-tier post stack (SMAA + bloom + half-res AO) and 4096 shadows.
+ *   high-tier post stack (SMAA + bloom + half-res AO). The shadow dial's top
+ *   rung is one of the differences that cannot round-trip: the high TIER
+ *   renders a 2560 map, while the dial's High rung is the 4096 showcase
+ *   allocation, and no rung expresses "2560 WITH terrain-cast shadows" (the
+ *   Medium rung sheds those). The seed keeps the top rung, so a High-preset
+ *   mix carried into Advanced keeps terrain casting and buys the finer map.
  * - ultra: full relief/carpet/worn layers at the ultra execution, full-res
  *   AO, the 128-cell water field.
  * - insane: ultra plus the 4-tap full-clamp worn walk and the 8yd vista grid
- *   (shadows top out at High's 4096 map everywhere: the shadow dial is
- *   capped at level 1 and the retired 8192 rung clamps down to it).
+ *   (shadows top out at the dial's 4096 rung everywhere: it is capped at
+ *   level 1 and the retired 8192 rung clamps down to it).
  * The per-effect binaries (antiAliasing, bloomQuality, characterDetail) read
  * 0 Off / 1 On; ambientOcclusion adds the 0.5 half-resolution middle; the
  * viewDistance and waterQuality ladders map 0/0.5/1/2 onto whole render
@@ -102,6 +123,7 @@ const ADVANCED_DIAL_SEEDS: Readonly<Record<number, Readonly<Record<GraphicsDialK
     characterDetail: 0,
     dynamicLights: 1,
     particleEffects: 1,
+    ghostFade: 0,
   }),
   2: Object.freeze({
     terrainDetail: 0.5,
@@ -120,6 +142,7 @@ const ADVANCED_DIAL_SEEDS: Readonly<Record<number, Readonly<Record<GraphicsDialK
     characterDetail: 1,
     dynamicLights: 1,
     particleEffects: 1,
+    ghostFade: 0,
   }),
   3: Object.freeze({
     terrainDetail: 0.5,
@@ -135,6 +158,7 @@ const ADVANCED_DIAL_SEEDS: Readonly<Record<number, Readonly<Record<GraphicsDialK
     characterDetail: 1,
     dynamicLights: 1,
     particleEffects: 1,
+    ghostFade: 1,
   }),
   4: Object.freeze({
     terrainDetail: 2,
@@ -150,6 +174,7 @@ const ADVANCED_DIAL_SEEDS: Readonly<Record<number, Readonly<Record<GraphicsDialK
     characterDetail: 1,
     dynamicLights: 1,
     particleEffects: 1,
+    ghostFade: 1,
   }),
   6: Object.freeze({
     terrainDetail: 2,
@@ -165,6 +190,7 @@ const ADVANCED_DIAL_SEEDS: Readonly<Record<number, Readonly<Record<GraphicsDialK
     characterDetail: 1,
     dynamicLights: 1,
     particleEffects: 1,
+    ghostFade: 1,
   }),
 };
 

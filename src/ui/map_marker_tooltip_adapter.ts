@@ -8,6 +8,7 @@ import type { MapSemanticAccessibilityCore } from './map_semantic_accessibility_
 import {
   MAP_NPC_GLYPH_HIT_RADIUS,
   MAP_TOUCH_POINT_HIT_RADIUS_CSS_PX,
+  type MapFarmPatchMarker,
   type MapGatherNodeMarker,
   type MapNavigationMarker,
   type MapNpcMarker,
@@ -15,8 +16,12 @@ import {
   type MapQuestAreaMarker,
   type MapServiceMarker,
   type MapStationMarker,
+  type MapWorldBossMarker,
+  type MapWorldQuestMarker,
   mapPointMarkerHitsInto,
   questAreaObjectivesAtInto,
+  worldBossMarkerAt,
+  worldQuestMarkerAt,
 } from './map_window_view';
 
 export interface MapMarkerTooltipResolvers {
@@ -25,6 +30,9 @@ export interface MapMarkerTooltipResolvers {
   station(marker: MapStationMarker): string;
   service(marker: MapServiceMarker): string;
   gather(marker: MapGatherNodeMarker): string;
+  farm(marker: MapFarmPatchMarker): string;
+  worldQuest(marker: MapWorldQuestMarker): string;
+  worldBoss(marker: MapWorldBossMarker): string;
   questArea(refs: readonly QuestObjectiveRef[], activeCount: number): string;
   paint(html: string, clientX: number, clientY: number): void;
 }
@@ -44,11 +52,14 @@ export function showMapMarkerTooltipAt(
   clientY: number,
   touchTarget: boolean,
   questAreas: readonly MapQuestAreaMarker[],
+  worldQuests: readonly MapWorldQuestMarker[],
+  worldBosses: readonly MapWorldBossMarker[],
   npcs: readonly MapNpcMarker[],
   gatherNodes: readonly MapGatherNodeMarker[],
   stations: readonly MapStationMarker[],
   services: readonly MapServiceMarker[],
   navigation: readonly MapNavigationMarker[],
+  farmPatches: readonly MapFarmPatchMarker[],
   pointHits: MapPointMarkerHit[],
   questObjectives: QuestObjectiveRef[],
   semantics: MapSemanticAccessibilityCore,
@@ -56,11 +67,14 @@ export function showMapMarkerTooltipAt(
 ): boolean {
   if (
     questAreas.length === 0 &&
+    worldQuests.length === 0 &&
+    worldBosses.length === 0 &&
     npcs.length === 0 &&
     gatherNodes.length === 0 &&
     stations.length === 0 &&
     services.length === 0 &&
     navigation.length === 0 &&
+    farmPatches.length === 0 &&
     semantics.instanceMarkers.length === 0
   )
     return false;
@@ -71,7 +85,14 @@ export function showMapMarkerTooltipAt(
     ? MAP_TOUCH_POINT_HIT_RADIUS_CSS_PX * geometry.backingPerCssPx
     : MAP_NPC_GLYPH_HIT_RADIUS;
   const semanticText = semantics.tooltipAt(cx, cy, radius);
-  let html = semanticText ? `<div class="tt-title">${esc(semanticText)}</div>` : '';
+  const worldBoss = worldBossMarkerAt(worldBosses, cx, cy, radius);
+  const worldQuest = worldQuestMarkerAt(worldQuests, cx, cy, radius);
+  let html = worldBoss
+    ? resolvers.worldBoss(worldBoss)
+    : worldQuest
+      ? resolvers.worldQuest(worldQuest)
+      : '';
+  if (!html && semanticText) html = `<div class="tt-title">${esc(semanticText)}</div>`;
   const pointHitCount = html
     ? 0
     : mapPointMarkerHitsInto(
@@ -80,6 +101,7 @@ export function showMapMarkerTooltipAt(
         services,
         stations,
         gatherNodes,
+        farmPatches,
         cx,
         cy,
         radius,
@@ -91,6 +113,7 @@ export function showMapMarkerTooltipAt(
     else if (hit.kind === 'navigation') html = resolvers.navigation(hit.marker);
     else if (hit.kind === 'station') html = resolvers.station(hit.marker);
     else if (hit.kind === 'service') html = resolvers.service(hit.marker);
+    else if (hit.kind === 'farm') html = resolvers.farm(hit.marker);
     else html = resolvers.gather(hit.marker);
     if (html) break;
   }

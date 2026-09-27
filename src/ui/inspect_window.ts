@@ -44,7 +44,7 @@ import {
   holderTierDisplayName,
 } from './holder_tier';
 import { formatNumber, t } from './i18n';
-import { iconDataUrl, QUALITY_COLOR } from './icons';
+import { iconDataUrl } from './icons';
 import {
   buildInspectRemoteView,
   buildInspectView,
@@ -57,10 +57,11 @@ import {
   type InspectHolderModel,
 } from './inspect_view';
 import type { PainterHostPresentation } from './painter_host';
-import { hydratePortraits, portraitChipHtml } from './portrait_chip';
+import { hydratePortraits, type ModularLook, portraitChipHtml } from './portrait_chip';
 import { qualityGlowShadow } from './quality_glow';
 import { curatorRankNameKey } from './reliquary_view';
 import { svgIcon } from './ui_icons';
+import { wornItemCellParts } from './worn_item_cell_view';
 
 /** The inspected entity fields the painter reads (a structural subset of the
  *  live EntityView / ClientWorld mirror; all already client-side). */
@@ -128,6 +129,10 @@ export interface InspectWindowDeps extends PainterHostPresentation {
       mainhand: string | null;
       weaponSkinId: string | null;
       offhand: string | null;
+      /** The inspected player's authored look (their `app` identity field),
+       *  so the turntable shows the face they built, not the stock class rig;
+       *  null for a pre-creator character. */
+      look: ModularLook | null;
     },
   ): void;
 }
@@ -165,6 +170,17 @@ export class InspectWindow {
     e: InspectEntity,
     now: number,
     selfStanding?: { curatorRank: number; owned: number; total: number } | null,
+    // The viewer's own LIVE worn payloads (IWorld.equipmentInstances), passed
+    // only for self-inspect, same doctrine as selfStanding: the entity mirror
+    // is eqi-shaped ONLINE (no perfected), so without this the self card's
+    // Unique-Equipped tag would diverge between hosts (2026-08-27 ruling).
+    selfEquippedInstances?: Partial<Record<EquipSlot, ItemInstancePayload>>,
+    // The inspected player's authored look, resolved by the Hud from the LIVE
+    // entity through the render layer's look provider (modularLookFor). A
+    // parameter for the same reason as selfStanding: InspectEntity mirrors the
+    // wire, and a composed look is a render-layer resolution over it, not a
+    // wire field, so the window never casts the mirror back to an Entity.
+    look?: ModularLook | null,
   ): void {
     const cls = e.templateId as PlayerClass;
     const el = this.deps.root();
@@ -185,6 +201,7 @@ export class InspectWindow {
         relicsTotal: typeof e.relicsTotal === 'number' ? e.relicsTotal : null,
         selfStanding: selfStanding ?? null,
         equippedItems: e.equippedItems,
+        equippedInstances: selfEquippedInstances ?? e.equippedInstances,
         holderTier: e.holderTier ?? 0,
         holderBalance: e.holderBalance ?? null,
         discordTier: e.discordTier ?? 0,
@@ -202,7 +219,7 @@ export class InspectWindow {
     );
     markDialogRoot(el, { labelledBy: 'inspect-window-title' });
     const { header } = model;
-    const standingHtml = `<div class="inspect-meta">${esc(
+    const standingHtml = `<div class="inspect-meta ui-chip ui-num">${esc(
       t('itemUi.equipment.levelClass', {
         level: formatNumber(header.level, { maximumFractionDigits: 0 }),
         className: classDisplayName(cls),
@@ -215,7 +232,7 @@ export class InspectWindow {
       this.curatorHtml(model.badges.curator);
     el.innerHTML =
       this.panelTitleHtml() +
-      `<div class="inspect-card">` +
+      `<div class="inspect-card ui-card">` +
       this.headerHtml(header) +
       `<div class="inspect-standing-row">${standingHtml}</div>` +
       (honorHtml ? `<div class="inspect-honor-rail">${honorHtml}</div>` : '') +
@@ -223,13 +240,14 @@ export class InspectWindow {
       // The class-colored model stage, delivered as a CSS custom property so the
       // stylesheet paints the border / glow / haze in the inspected player's hue.
       `<div class="inspect-equip">` +
-      `<div class="inspect-equip-title">${esc(t('classDetails.sections.equipment'))}</div>` +
+      `<div class="inspect-equip-title ui-h">${esc(t('classDetails.sections.equipment'))}</div>` +
       `<div class="paperdoll inspect-paperdoll">` +
       `<div class="equip-col" id="inspect-equip-left"></div>` +
       `<div class="char-model-panel inspect-model-panel" style="--inspect-class-color:${header.classColor}">` +
       `<div id="inspect-model-preview" class="char-model-preview" role="img" aria-label="${esc(t('hudChrome.character.modelPreview'))}"></div>` +
       `</div>` +
       `<div class="equip-col equip-col-right" id="inspect-equip-right"></div>` +
+      `<div class="equip-row-weapons" id="inspect-equip-weapons"></div>` +
       `</div></div>`;
     hydratePortraits(el);
     // Degrade a failed Discord avatar to the plain status badge (never the browser's
@@ -243,10 +261,10 @@ export class InspectWindow {
     }
     const leftCol = el.querySelector('#inspect-equip-left');
     const rightCol = el.querySelector('#inspect-equip-right');
-    for (const cell of model.gear.left)
-      leftCol?.appendChild(this.buildSlotRow(cell, e.equippedInstances[cell.slot]));
-    for (const cell of model.gear.right)
-      rightCol?.appendChild(this.buildSlotRow(cell, e.equippedInstances[cell.slot]));
+    for (const cell of model.gear.left) leftCol?.appendChild(this.buildSlotRow(cell));
+    for (const cell of model.gear.right) rightCol?.appendChild(this.buildSlotRow(cell));
+    const weaponsRow = el.querySelector('#inspect-equip-weapons');
+    for (const cell of model.gear.weapons) weaponsRow?.appendChild(this.buildSlotRow(cell));
     const stage = el.querySelector<HTMLElement>('#inspect-model-preview');
     if (stage) {
       this.deps.mountPreview(stage, {
@@ -256,6 +274,7 @@ export class InspectWindow {
         mainhand: e.equippedItems.mainhand ?? null,
         offhand: e.equippedItems.offhand ?? null,
         weaponSkinId: e.weaponSkinId ?? null,
+        look: look ?? null,
       });
     }
     el.querySelector('[data-close]')?.addEventListener('click', () => this.close());
@@ -270,13 +289,15 @@ export class InspectWindow {
     this.deps.closeOthers();
     const model = buildInspectRemoteView(profile);
     markDialogRoot(el, { labelledBy: 'inspect-window-title' });
-    const guildHtml = model.guild ? `<div class="inspect-meta">${esc(model.guild)}</div>` : '';
+    const guildHtml = model.guild
+      ? `<div class="inspect-meta ui-meta ui-muted">${esc(model.guild)}</div>`
+      : '';
     el.innerHTML =
       this.panelTitleHtml() +
-      `<div class="inspect-card inspect-card-remote">` +
+      `<div class="inspect-card inspect-card-remote ui-card">` +
       portraitChipHtml({ cls: model.cls, skin: profile.skin, name: model.name, variant: 'lg' }) +
       `<div class="inspect-name">${esc(model.name)}</div>` +
-      `<div class="inspect-meta">${esc(
+      `<div class="inspect-meta ui-meta ui-muted">${esc(
         t('itemUi.equipment.levelClass', {
           level: formatNumber(model.level, { maximumFractionDigits: 0 }),
           className: classDisplayName(model.cls),
@@ -291,27 +312,34 @@ export class InspectWindow {
 
   private panelTitleHtml(): string {
     return (
-      `<div class="panel-title"><span id="inspect-window-title">${esc(t('character.profile'))}</span>` +
-      `<button type="button" class="x-btn" data-close aria-label="${esc(t('character.closeProfile'))}">${svgIcon('close')}</button></div>`
+      `<div class="panel-title ui-win-head"><span id="inspect-window-title" class="ui-win-title">${esc(t('character.profile'))}</span>` +
+      `<button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('character.closeProfile'))}">${svgIcon('close')}</button></div>`
     );
   }
 
   // One read-only equipment row for the inspect window: icon, slot name, and the
   // equipped item (quality-tinted, quality-glow socket) with its tooltip. No
-  // unequip / drag affordances (another player's gear is view-only).
-  private buildSlotRow(cell: PaperdollSlot, instance?: ItemInstancePayload): HTMLElement {
-    const { slot, item } = cell;
+  // unequip / drag affordances (another player's gear is view-only). Like the
+  // character sheet's buildSlotRow, the row describes the worn COPY (the
+  // all-surfaces item-cell rule): the cell's eqi-projected instance drives the
+  // effective quality (row color, icon rim, glow) and a promoted copy's
+  // player-chosen name replaces the def name. The chosen name is
+  // player-authored text, so it is esc'd raw, never through t().
+  private buildSlotRow(cell: PaperdollSlot): HTMLElement {
+    const { slot, item, instance } = cell;
     const row = document.createElement('div');
     row.className = 'equip-slot';
-    const qColor = item ? (QUALITY_COLOR[item.quality ?? 'common'] ?? '') : '';
+    const parts = item ? wornItemCellParts(item, instance) : null;
+    const wornName = parts ? parts.name : null;
+    const qColor = parts ? parts.color : '';
     const icon = item
-      ? this.deps.itemIcon(item)
+      ? this.deps.itemIcon(item, parts?.quality)
       : `<img class="item-icon" src="${iconDataUrl('item', 'slot_empty')}" alt="" draggable="false">`;
-    row.innerHTML = `${icon}<div><div class="slot-name">${esc(this.deps.slotName(slot))}</div><div class="slot-item"${item ? ` style="color:${qColor}"` : ''}>${item ? esc(itemDisplayName(item)) : esc(t('itemUi.equipment.empty'))}</div></div>`;
+    row.innerHTML = `<span class="equip-quality-socket">${icon}${parts?.qualityBadgeLabelled ?? ''}</span><div><div class="slot-name">${esc(this.deps.slotName(slot))}</div><div class="slot-item"${item ? ` style="color:${qColor}"` : ''}>${wornName !== null ? esc(wornName) : esc(t('itemUi.equipment.empty'))}</div></div>`;
     if (item) {
       const iconEl = row.querySelector<HTMLImageElement>('.item-icon');
       if (iconEl) iconEl.style.boxShadow = qualityGlowShadow(qColor);
-      this.deps.attachTooltip(row, () => this.deps.itemTooltip(item, instance));
+      this.deps.attachTooltip(row, () => this.deps.itemTooltip(item, instance ?? undefined));
     }
     return row;
   }
@@ -321,13 +349,13 @@ export class InspectWindow {
       ? `<div class="inspect-title">${esc(header.deedTitle)}</div>`
       : '';
     const border = header.border;
-    if (!border) return `<div class="inspect-name">${esc(header.name)}</div>${titleHtml}`;
+    if (!border) return `<div class="inspect-name ui-cin">${esc(header.name)}</div>${titleHtml}`;
     return (
       `<div class="inspect-heraldry-banner"${this.borderAttrs(border)}>` +
       `<div class="inspect-heraldry-face deed-heraldry-plaque deed-heraldry-plaque-ceremonial"${this.borderIdentityAttrs(border)}>` +
       deedHeraldryMotifSvg(border.motif, 'deed-heraldry-pattern') +
       `<div class="inspect-heraldry-copy">` +
-      `<div class="inspect-name">${esc(header.name)}</div>` +
+      `<div class="inspect-name ui-cin">${esc(header.name)}</div>` +
       titleHtml +
       `</div></div>` +
       `<span class="deed-heraldry-seal" aria-hidden="true">${deedHeraldryMotifSvg(border.motif, 'deed-heraldry-seal-art')}</span>` +
@@ -367,7 +395,7 @@ export class InspectWindow {
       rank: formatNumber(curator.rank, { maximumFractionDigits: 0 }),
     });
     return (
-      `<div class="inspect-meta inspect-reliquary">` +
+      `<div class="inspect-meta inspect-reliquary ui-chip ui-num">` +
       `${esc(t('hudChrome.reliquary.charCompletionLabel'))}: ${esc(pair)} · ${esc(rankName)}` +
       `</div>`
     );
@@ -382,7 +410,7 @@ export class InspectWindow {
       rank: formatNumber(curator.rank, { maximumFractionDigits: 0 }),
     });
     return (
-      `<div class="inspect-holder">` +
+      `<div class="inspect-holder ui-card">` +
       // alt="" like the three sibling tier badges: the row already prints the
       // rung name and a sub-line, so a localized alt on the art made a screen
       // reader announce the same row three times. sigilCaption keeps the job of
@@ -395,7 +423,7 @@ export class InspectWindow {
       `<img class="${curatorSigilBadgeClass()}" style="--curator-glow:${CURATOR_SIGIL_GLOW}" src="${curatorSigilDataUrl()}" alt="" draggable="false">` +
       `<div class="inspect-holder-text">` +
       `<div class="inspect-holder-name">${esc(rankName)}</div>` +
-      `<div class="inspect-holder-sub">${esc(t('hudChrome.reliquary.sigilCaption'))}</div>` +
+      `<div class="inspect-holder-sub ui-meta ui-muted">${esc(t('hudChrome.reliquary.sigilCaption'))}</div>` +
       `</div></div>`
     );
   }
@@ -413,11 +441,11 @@ export class InspectWindow {
           )
         : esc(t('wallet.holder'));
     return (
-      `<div class="inspect-holder">` +
+      `<div class="inspect-holder ui-card">` +
       `<img class="${holderCardBadgeClass(tierDef)}" style="--holder-glow:${tierDef.glow}" src="${holderTierBadgeDataUrl(tierDef)}" alt="" draggable="false">` +
       `<div class="inspect-holder-text">` +
       `<div class="inspect-holder-name">${esc(holderTierDisplayName(tierDef))}</div>` +
-      `<div class="inspect-holder-sub">${sub}</div>` +
+      `<div class="inspect-holder-sub ui-meta ui-muted">${sub}</div>` +
       `</div></div>`
     );
   }
@@ -429,18 +457,18 @@ export class InspectWindow {
       : `<img class="inspect-holder-badge" src="${discordStatusBadgeDataUrl(discord.tierIndex)}" alt="" draggable="false">`;
     const memberSinceHtml =
       discord.memberDays !== null
-        ? `<div class="inspect-holder-sub">${esc(t('hudChrome.discord.memberSince'))}: ${esc(t('hudChrome.discord.memberSinceDays', { days: formatNumber(discord.memberDays, { maximumFractionDigits: 0 }) }))}</div>`
+        ? `<div class="inspect-holder-sub ui-meta ui-muted">${esc(t('hudChrome.discord.memberSince'))}: ${esc(t('hudChrome.discord.memberSinceDays', { days: formatNumber(discord.memberDays, { maximumFractionDigits: 0 }) }))}</div>`
         : '';
     const roleLabel = discordRoleTagLabel(discord.role);
     const roleHtml = roleLabel
-      ? `<div class="inspect-holder-sub inspect-discord-role">${esc(roleLabel)}</div>`
+      ? `<div class="inspect-holder-sub inspect-discord-role ui-meta ui-muted">${esc(roleLabel)}</div>`
       : '';
     return (
-      `<div class="inspect-holder">` +
+      `<div class="inspect-holder ui-card">` +
       img +
       `<div class="inspect-holder-text">` +
       `<div class="inspect-holder-name">${esc(discord.name ? discord.name : discordStatusDisplayName(discord.tierIndex))}</div>` +
-      `<div class="inspect-holder-sub">${esc(t('hudChrome.discord.title'))} · ${esc(discordStatusDisplayName(discord.tierIndex))}</div>` +
+      `<div class="inspect-holder-sub ui-meta ui-muted">${esc(t('hudChrome.discord.title'))} · ${esc(discordStatusDisplayName(discord.tierIndex))}</div>` +
       memberSinceHtml +
       roleHtml +
       `</div></div>`
@@ -457,14 +485,14 @@ export class InspectWindow {
         })
       : t('hudChrome.devBadge.contributor');
     const devLoginHtml = dev.githubLogin
-      ? `<div class="inspect-holder-sub inspect-dev-login">@${esc(dev.githubLogin)}</div>`
+      ? `<div class="inspect-holder-sub inspect-dev-login ui-meta ui-muted">@${esc(dev.githubLogin)}</div>`
       : '';
     return (
-      `<div class="inspect-holder">` +
+      `<div class="inspect-holder ui-card">` +
       `<img class="${devCardBadgeClass(devTierDef)}" style="--dev-glow:${devTierDef.glow}" src="${devTierBadgeDataUrl(devTierDef)}" alt="" draggable="false">` +
       `<div class="inspect-holder-text">` +
       `<div class="inspect-holder-name">${esc(devTierDisplayName(devTierDef))}</div>` +
-      `<div class="inspect-holder-sub">${esc(devSub)}</div>` +
+      `<div class="inspect-holder-sub ui-meta ui-muted">${esc(devSub)}</div>` +
       devLoginHtml +
       `</div></div>`
     );

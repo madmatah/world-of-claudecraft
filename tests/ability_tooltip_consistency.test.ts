@@ -51,7 +51,13 @@ const NUMBER_ALLOWLIST: Record<string, number[]> = {
   // "generating 9 rage and stunning it for 1 sec": both are constants in the
   // charge arm of effect_dispatch.ts, not effect fields.
   charge: [9, 1],
-  bear_charge: [9, 1],
+  // Bruin Rush also cites its Pin rider (combat/druid_engines.ts: the 3 sec
+  // window, the 50% slow, the 4 sec Pin), engine constants like the 9 and 1.
+  bear_charge: [9, 1, 3, 50, 4],
+  // Slinkstrike cites the Old Blood cap it banks toward. That 3 is
+  // OLD_BLOOD_STAGES (combat/druid_engines.ts), an engine constant the bank
+  // site enforces, not a field on the stun effect that could drift by rank.
+  pounce: [3],
   // "30% more threat": the stance threat multiplier inside threatModifier.
   // Bear form's "armor +110%" and "maximum health +30%" are the
   // recalcPlayerStats multipliers (2.1 and 1.3, the v0.38 tank-parity pass)
@@ -70,8 +76,10 @@ const NUMBER_ALLOWLIST: Record<string, number[]> = {
   // Baleful Roar cites the same compel window plus its own aoeTaunt radius.
   challenging_roar: [3, 10],
   // "attack power +8 plus 2 per level": the cat-form AP constants in
-  // recalcPlayerStats (entity.ts), not effect fields.
-  cat_form: [8, 2],
+  // recalcPlayerStats (entity.ts), not effect fields. "you move 15% faster":
+  // CAT_FORM_MOVE_MULT (types.ts), read by moveSpeedMult; the form_cat effect
+  // value is the threat multiplier.
+  cat_form: [8, 2, 15],
   // "for 30 sec": the sunder aura duration hardcoded in effect_dispatch.ts.
   faerie_fire: [30],
   sunder_armor: [30],
@@ -81,6 +89,11 @@ const NUMBER_ALLOWLIST: Record<string, number[]> = {
   // its combo scaling): "5 combo points: N sec" is derived from base+perCombo,
   // not a raw effect field.
   kidney_shot: [5, 6],
+  // Takedown (id hamstring_bite) states its resolved max the way Low Blow does.
+  hamstring_bite: [5, 6],
+  // Lunge's 60% weapon strike lands on arrival through combat/druid_lunge.ts
+  // (LUNGE_WEAPON_MULT), so it is not an effect field on the def.
+  lunge: [60],
   slice_and_dice: [5, 32],
   rupture: [2, 6, 5, 16],
   expose_armor: [2, 5, 30],
@@ -116,7 +129,7 @@ const NUMBER_ALLOWLIST: Record<string, number[]> = {
   // Thundercall and Stonebound values live in their spec runtime modules.
   lightning_bolt: [1, 5],
   rockbiter_weapon: [3, 10, 15, 20, 40],
-  earth_shock: [3, 5, 125],
+  earth_shock: [3, 5, 25, 125],
   // Spiritmend deposits are calculated after the direct heal resolves.
   healing_wave: [12, 30, 50],
   // Unleash Weapon dispatches to four spec enchant implementations. Their
@@ -201,7 +214,7 @@ function proseNumbers(description: string): number[] {
 }
 
 const PLACEHOLDERS = /\$([a-zA-Z])/g;
-const SUPPORTED = new Set(['d', 'o', 'b', 't', 'h', 'e', 'p', 'g', 's', 'a']);
+const SUPPORTED = new Set(['d', 'o', 'b', 't', 'h', 'e', 'p', 'g', 's', 'a', 'x', 'y', 'z']);
 
 describe('ability descriptions match their resolved effects', () => {
   const classes = Object.keys(CLASSES) as PlayerClass[];
@@ -240,7 +253,14 @@ describe('ability descriptions match their resolved effects', () => {
           if (desc.includes('$t')) {
             expect(abilityDurationValue(known), `${at}: $t has no timed effect`).not.toBeNull();
           }
-          if (/\$(?:h|e|p|g|s|a)/.test(desc)) {
+          if (desc.includes('$h')) {
+            expect(
+              abilityTemporalHourglassValues(known) ??
+                known.effects.find((effect) => effect.type === 'heal'),
+              `${at}: $h has no healing effect`,
+            ).toBeTruthy();
+          }
+          if (/\$(?:e|p|g|s|a)/.test(desc)) {
             expect(
               abilityTemporalHourglassValues(known),
               `${at}: Hourglass placeholders have no temporalHourglass effect`,

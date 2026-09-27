@@ -1,19 +1,13 @@
+import type { EntityWireView } from './entity_wire_cache';
+
+export type { EntityWireView };
+
 export interface SentEntityVersions {
   idVer: number;
   dynVer: number;
   auraVer: number;
   sentAtTick: number;
   settled: boolean;
-}
-
-export interface EntityWireView {
-  idVer: number;
-  dynVer: number;
-  auraVer: number;
-  fullJson: string;
-  liteJson: string;
-  fullAuraJson: string;
-  liteAuraJson: string;
 }
 
 /**

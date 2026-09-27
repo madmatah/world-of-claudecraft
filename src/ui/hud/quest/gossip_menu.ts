@@ -28,6 +28,18 @@ export interface GossipMenuContent {
   hasDelveBoard: boolean;
   hasCardMaster: boolean;
   hasTraining: boolean;
+  /** A farmer NPC's husk-to-compost trade row (the farming go-live, gated on
+   *  the NpcDef farmer flag). Its own field so a farmer with no quest and no
+   *  stock still keeps the dialog open for the trade. */
+  hasFarmer: boolean;
+  /** The World Quest taskmaster's board row (NpcDef worldQuestBoard): the
+   *  route to the map's world-quest rail. Its own field so the taskmaster,
+   *  who has no quest and no stock, keeps the dialog open for it. */
+  hasWorldQuestBoard: boolean;
+  /** The Clue Scroll talk or hand-over row (clue_step_row_view.ts): the active
+   *  hunt's current step targets this NPC. Its own field so a plain quest
+   *  giver with nothing else to offer still keeps the dialog open for it. */
+  hasClueStep: boolean;
 }
 
 export function gossipMenuIsEmpty(content: GossipMenuContent): boolean {
@@ -41,6 +53,9 @@ export function gossipMenuIsEmpty(content: GossipMenuContent): boolean {
     !content.hasCrucibleVendor &&
     !content.hasDelveBoard &&
     !content.hasCardMaster &&
-    !content.hasTraining
+    !content.hasTraining &&
+    !content.hasFarmer &&
+    !content.hasWorldQuestBoard &&
+    !content.hasClueStep
   );
 }

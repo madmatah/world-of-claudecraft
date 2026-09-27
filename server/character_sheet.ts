@@ -13,6 +13,7 @@
 // recalcPlayerStats (through characterDerivedStats), zone via zoneAt, spec via
 // the talents specLabel, virtualLevel via the types helper.
 
+import { accountDeedLookup, accountRelicLookup, type HasLookup } from '../src/sim/account_ledger';
 import { DEED_ORDER, DEEDS } from '../src/sim/content/deeds';
 import {
   computeTalentModifiers,
@@ -23,6 +24,7 @@ import {
 } from '../src/sim/content/talents';
 import { ITEMS, zoneAt } from '../src/sim/data';
 import { completionCounts } from '../src/sim/deeds_completion';
+import { DEV_BADGE_TITLE_ENGLISH, devBadgeTitleTier } from '../src/sim/dev_badge_titles';
 import { characterDerivedStats } from '../src/sim/entity';
 import { bagOwnedMounts } from '../src/sim/mounts';
 import {
@@ -60,7 +62,23 @@ export interface CharacterSheetInput {
   // ISO timestamp for the sheet; defaults to now(). Pass the row's updated_at
   // when available so the field reflects the character, not the request time.
   updatedAt?: string;
+  // The account ledger (server/account_ledger_db.ts), pre-fetched like
+  // guild/rank so the sheet's Reliquary pair reads ACCOUNT-wide, the same
+  // union the in-game window and the inspect card show (jgyy's public-sheet
+  // read from PR #3933). Absent means the caller fetched none: the pair then
+  // reads the character's own fills only (a degraded, never a wrong, aggregate).
+  accountLedger?: AccountLedgerLookup;
 }
+
+/** The account ledger as the sheet needs it: membership only. The join-time
+ *  AccountLedger (Maps) satisfies it; the sheets pass the cached ids-only
+ *  AccountLedgerKeys (Sets) so earner detail never enters a public handler. */
+export interface AccountLedgerLookup {
+  deeds: HasLookup;
+  relics: HasLookup;
+}
+
+const NO_LEDGER: AccountLedgerLookup = { deeds: new Set<string>(), relics: new Set<string>() };
 
 export interface MoneySplit {
   gold: number;
@@ -121,12 +139,16 @@ export interface SheetDeeds {
 }
 
 /** English display text for a selected title (sheet.deeds.activeTitle, a deed
- *  id from the state blob), or null when unset, stale/content-drifted, or not
+ *  id or a developer-badge rung title id from the state blob), or null when unset, stale/content-drifted, or not
  *  a title reward. English by design: the only consumer is the
  *  English-by-design /c/ SSR page; client surfaces localize the id through
  *  deed_i18n instead, and the JSON sheet keeps carrying the raw id. */
 export function sheetTitleText(activeTitle: string | null): string | null {
   if (!activeTitle) return null;
+  // A developer-badge rung title is not a deed (src/sim/dev_badge_titles.ts):
+  // its English text is the rung name.
+  const rung = devBadgeTitleTier(activeTitle);
+  if (rung) return DEV_BADGE_TITLE_ENGLISH[rung.key];
   const reward = DEEDS[activeTitle]?.reward;
   return reward?.kind === 'title' ? reward.text : null;
 }
@@ -212,10 +234,16 @@ export const RELIQUARY_MARK_ENGLISH: ReadonlyMap<string, string> = new Map([
   ['masterwork:armorcrafting', 'Armorcrafting Masterwork'],
   ['masterwork:tailoring', 'Tailoring Masterwork'],
   ['masterwork:leatherworking', 'Leatherworking Masterwork'],
+  ['masterwork:jewelcrafting', 'Jewelcrafting Masterwork'],
+  ['masterwork:inscription', 'Inscription Masterwork'],
   ['masterwork:engineering', 'Engineering Masterwork'],
   ['gather_event:pristine_vein', 'Pristine Vein'],
   ['gather_event:ancient_heartwood', 'Ancient Heartwood'],
   ['gather_event:moonlit_bloom', 'Moonlit Bloom'],
+  // masterwrought Phase 18: the farm-bed field note's cell landed, so its row
+  // is owed here in the same change (sheetRelicRecentText answers null for an
+  // unknown id, and the /c/ SSR page silently drops the entry).
+  ['gather_event:golden_harvest', 'Golden Harvest'],
   ['gather_event:perfect_specimen', 'Perfect Specimen'],
   // Rares of the Realm kill proofs (Phase 21): 'Slain: <mob display name>',
   // names verbatim from MOBS (tests/character_sheet.test.ts derives the pin).
@@ -306,7 +334,10 @@ export function sheetRecentRelicsFromSaved(saved: CharacterState['reliquary']): 
  * Mount ownership scans bags + bank reins (same bags+bank seam as live
  * ownedMounts); skins are account cosmetics and are deliberately omitted.
  */
-export function sheetReliquaryFromState(state: CharacterState): SheetReliquary {
+export function sheetReliquaryFromState(
+  state: CharacterState,
+  accountLedger?: AccountLedgerLookup,
+): SheetReliquary {
   const itemsDiscovered = new Set(state.deedStats?.itemsDiscovered ?? []);
   // Narrow restores: this path wants the marks set and the recent ring, not the
   // whole state, so it no longer rebuilds firstFind and the counts map (and the
@@ -327,7 +358,14 @@ export function sheetReliquaryFromState(state: CharacterState): SheetReliquary {
   const inv = [...(state.inventory ?? []), ...(state.bank?.inventory ?? [])];
   const ownedMounts = new Set(bagOwnedMounts(inv));
   const deedsEarned = new Set(Object.keys(state.deeds ?? {}));
-  const opts = { itemsDiscovered, marks, ownedMounts, deedsEarned };
+  // Account-wide when the ledger rode along: the same union the window reads.
+  const ledger = accountLedger ?? NO_LEDGER;
+  const opts = {
+    itemsDiscovered: accountRelicLookup(itemsDiscovered, ledger, 'item'),
+    marks: accountRelicLookup(marks, ledger, 'mark'),
+    ownedMounts: accountRelicLookup(ownedMounts, ledger, 'mount'),
+    deedsEarned: accountDeedLookup(deedsEarned, ledger),
+  };
   const completion = catalogCharacterCompletion(opts);
   return {
     owned: completion.owned,
@@ -503,7 +541,7 @@ export function characterSheet(input: CharacterSheetInput): CharacterSheet {
     // Character-scoped completion pair, rank, and the capped recent-finds
     // strip (ids + kinds). Never firstFind, never the obtain tally, never the
     // full marks set.
-    reliquary: sheetReliquaryFromState(state),
+    reliquary: sheetReliquaryFromState(state, input.accountLedger),
     rank: rank ?? null,
     profileUrl,
     visibility,

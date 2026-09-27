@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { BEACON_SPIRAL } from '../src/sim/beacon_spiral';
-import { CASTLE, LAST_SPRING } from '../src/sim/castle_layout';
+import { LAST_SPRING } from '../src/sim/content/ember_coast';
 import { STABLE_FLAT } from '../src/sim/content/mounts';
 import {
   ARENA_SLOT_COUNT,
@@ -39,8 +39,11 @@ import {
   YUMI_MAZE_X,
   yumiMazeOrigin,
 } from '../src/sim/data';
+import { FERRY_PIER_DECKS } from '../src/sim/ferry_piers';
 import { GALE_HARBOR_DECKS, type GaleDeckDef } from '../src/sim/gale_harbor';
+import { KEEP_SITE } from '../src/sim/keep_site';
 import { REACH_DECKS } from '../src/sim/reach_decks';
+import { SEA_CHANNEL_CARVES } from '../src/sim/sea_channels';
 import {
   computeBorderEdges,
   GARDEN_BED_PADS,
@@ -218,8 +221,13 @@ function buildPoints(): HeightPoint[] {
     addStencil(`Evergarden bed pad ${i}`, pad.x, pad.z, pad.r + 4);
   }
 
-  addRect('Last Keep castle pad', CASTLE.pad.x0, CASTLE.pad.x1, CASTLE.pad.z0, CASTLE.pad.z1);
-  addRect('Last Keep inner ward', CASTLE.ward.x0, CASTLE.ward.x1, CASTLE.ward.z0, CASTLE.ward.z1);
+  addRect(
+    'Last Keep site pad',
+    KEEP_SITE.pad.x0,
+    KEEP_SITE.pad.x1,
+    KEEP_SITE.pad.z0,
+    KEEP_SITE.pad.z1,
+  );
   addRect(
     'Highwatch stable pad',
     STABLE_FLAT.x1 - STABLE_FLAT.falloff,
@@ -242,6 +250,13 @@ function buildPoints(): HeightPoint[] {
     addDeck(`Galecrest deck ${i}`, GALE_HARBOR_DECKS[i]);
   }
   for (let i = 0; i < REACH_DECKS.length; i++) addDeck(`Palmreach deck ${i}`, REACH_DECKS[i]);
+  for (let i = 0; i < FERRY_PIER_DECKS.length; i++) {
+    addDeck(`Ferry pier deck ${i}`, FERRY_PIER_DECKS[i]);
+  }
+  for (let i = 0; i < SEA_CHANNEL_CARVES.length; i++) {
+    const c = SEA_CHANNEL_CARVES[i];
+    addStencil(`sea channel ${i}`, c.x, c.z, c.radius * 1.6);
+  }
 
   const instanceXs = new Set<number>([
     DUNGEON_X_THRESHOLD,

@@ -11,6 +11,14 @@
 import type { TranslationKey } from '../i18n.catalog';
 
 export const es_ES: Partial<Record<TranslationKey, string>> = {
+  'questUi.worldQuest.forge.failed':
+    '¡Demasiados errores! El metal se agrietó. Habla con Mara para volver a intentarlo.',
+  'questUi.worldQuest.forge.replay':
+    'Habla con Mara para volver a intentarlo. Las recompensas se ganan una vez por rotación.',
+  'questUi.worldQuest.horde.failed': 'Defensa fallida. ¡Vuelve a intentarlo!',
+  'questUi.worldQuest.investigation.cleared':
+    'Sargento Alric: Ese soldado está localizado. Compara las demás historias con nuestros registros e vuelve a intentarlo.',
+  'questUi.worldQuest.traceRetry': 'Habla con el instructor para volver a intentarlo.',
   'hud.errors.tradeAlreadyTrading': 'Ese jugador ya está tradeando.',
   'hudChrome.emotes.question': '¿Tío?',
   'hudChrome.professions.ctaRaiseSpecialized':
@@ -26,7 +34,7 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
   'highscores.title': 'Tabla de clasificaciones',
   'wiki.title': 'Wiki y guía del juego',
   'news.title': 'Noticias y actualizaciones',
-  'download.title': 'Descargar lanzador de escritorio',
+  'download.title': 'Descarga la aplicación de escritorio',
   'download.macCta': 'Descargar version macOS',
   'download.windowsPending': 'Compilacion de Windows pendiente.',
   'mode.onlineTitle': 'Jugar en línea',
@@ -64,7 +72,7 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
   'controls.friends': 'Amigos y hermandad',
   'controls.chat': 'Abrir chat',
   'seo.description':
-    'Emprende una aventura épica en World of ClaudeCraft, un micro-MMO de estilo clásico jugable directamente en tu navegador. Únete a un mundo compartido persistente, sube de nivel tus clases y derrota a tus enemigos.',
+    'Juega a World of ClaudeCraft, un MMO de navegador gratuito. Explora, completa misiones y recorre mazmorras con amigos. No hace falta descargar nada.',
   'a11y.goHome': 'Ir a la página de inicio',
   'a11y.characterActions': 'Acciones del personaje',
   'a11y.githubProject': 'Abrir el proyecto World of ClaudeCraft en GitHub',
@@ -146,16 +154,16 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
   'delveUi.board.marks': 'Marcas de Profundidad: {count}',
   'delveUi.board.openDelveAria': 'Abrir el Tablón de Profundidades desde {name}',
   'delveUi.board.title': 'Tablón de Profundidades',
-  'delveUi.boss.varric.bell.log': 'El Diácono Varric empieza a tañer la campana funeraria.',
-  'delveUi.boss.varric.bell.warning': '¡Apártate del Diácono Varric!',
+  'delveUi.boss.varric.bell.log': 'El Diácono Vandric empieza a tañer la campana funeraria.',
+  'delveUi.boss.varric.bell.warning': '¡Apártate del Diácono Vandric!',
   'delveUi.boss.varric.mid30': 'La campana funeraria responde a cada nombre que pronuncia.',
   'delveUi.boss.varric.mid60':
-    'El Diácono Varric lee nombres del registro con un júbilo tembloroso.',
+    'El Diácono Vandric lee nombres del registro con un júbilo tembloroso.',
   'delveUi.boss.varric.pull':
     'Pisas el polvo sagrado con un propósito impuro. Arrodíllate y deja que te cuenten.',
-  'delveUi.boss.varric.raise.emote': '¡El Diácono Varric invoca nombres desde las tumbas rotas!',
+  'delveUi.boss.varric.raise.emote': '¡El Diácono Vandric invoca nombres desde las tumbas rotas!',
   'delveUi.boss.varric.raise.interrupt_ok': 'El rito sepulcral vacila.',
-  'delveUi.boss.varric.raise.log': 'El Diácono Varric empieza a alzar a los muertos.',
+  'delveUi.boss.varric.raise.log': 'El Diácono Vandric empieza a alzar a los muertos.',
   'delveUi.boss.varric.raise.object': 'La tumba agrietada se estremece con un aliento robado.',
   'delveUi.boss.varric.raise.warning': '¡Detén el rito sepulcral!',
   'delveUi.companion.tessa.combat_start':
@@ -197,8 +205,6 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
   'entities.abilities.blazing_barrier.description':
     'Rodéate de fuego para absorber {damage} de daño durante 60 s. (Fuego)',
   'entities.abilities.cold_snap.name': 'Llamada invernal',
-  'entities.abilities.cold_snap.description':
-    'Restablece el tiempo de reutilización de Paso centelleante, Velo de Escarcha e Invisibilidad mejorada. (Talento de mago)',
   'entities.abilities.greater_invisibility.name': 'Invisibilidad mejorada',
   'entities.abilities.hot_streak.name': 'Racha ardiente',
   'entities.abilities.hot_streak.description':
@@ -324,7 +330,6 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
   'hudChrome.auraEffect.imbueRange': 'Arma imbuida: {min} a {max} de daño extra con Verdict',
   'hudChrome.auraEffect.stealth': 'Encubierto; velocidad de movimiento reducida un {pct}%',
   'hudChrome.auraEffect.formBear': 'Forma de Bruin: mayor salud y armadura',
-  'hudChrome.auraEffect.formCat': 'Forma felina, daño cuerpo a cuerpo y energía',
   'hudChrome.auraEffect.formTravel': 'Forma Fleet: velocidad de desplazamiento aumentada un {pct}%',
   'hudChrome.auraEffect.defensiveStance': 'Guarded Stance: menos daño recibido, más amenaza',
   'hudChrome.auraEffect.righteousFury':
@@ -474,7 +479,7 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
     'Añade 1 de Ritual de Veneno y prolonga tu herida de Desgarro venenoso 6 s (nunca supera los 20 s).',
   'entities.items.soul_stone.name': 'Piedra de alma',
   'hud.pet.abyssalChainDesc':
-    'Ordena a tu Gloomshade que arrastre a un enemigo normal de más de 8 m y hasta 20 m de vuelta hacia sí. Los jefes no pueden ser arrastrados. Tiempo de reutilización: 15 segundos. Haz clic con el botón derecho, mantén la pulsación táctil, o pulsa Mayús+Intro para alternar el lanzamiento automático.',
+    'Ordena a tu Duskmurk que arrastre a un enemigo normal de más de 8 m y hasta 20 m de vuelta hacia sí. Los jefes no pueden ser arrastrados. Tiempo de reutilización: 15 segundos. Haz clic con el botón derecho, mantén la pulsación táctil, o pulsa Mayús+Intro para alternar el lanzamiento automático.',
   'hud.pet.autocastOff':
     'Lanzamiento automático desactivado. Haz clic con el botón derecho, mantén la pulsación táctil, o pulsa Mayús+Intro para activarlo.',
   'hud.pet.autocastOn':
@@ -487,8 +492,6 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
     'Reduce el daño recibido un {pct}%. El {mana}% de todo el daño que infliges se convierte en maná',
   'hudChrome.auraEffect.galeheartWeapon':
     'Completar la cadencia del Espíritu Guerrero de {steps} golpes hace eco del golpe {count} veces, infligiendo un {pct}% de su daño como daño de Naturaleza',
-  'hudChrome.warlock.doomMeterLock': 'Bloquear la barra de recurso de Aflicción',
-  'hudChrome.warlock.doomMeterUnlock': 'Mover la barra de recurso de Aflicción',
   'hudChrome.warlock.fateThreadsStatus': '{value} de {max} Hilos del destino.',
   'hudChrome.bags.itemAriaLocked': '{item}, cantidad {count}, artículo bloqueado',
   'hudChrome.bags.itemLockedLine': 'Artículo bloqueado',
@@ -529,4 +532,7 @@ export const es_ES: Partial<Record<TranslationKey, string>> = {
     'Todavía se está completando una compra para este personaje. Vuelve a intentarlo en un momento.',
   'hudChrome.wocStore.charter.outage':
     'No se pudo confirmar la compra. Vuelve a intentarlo con este botón y no se te cobrará dos veces. Si recargas el juego antes, puedes perder esa protección.',
+  'hudChrome.bags.capacityPools':
+    'Artículos {generalUsed}/{generalTotal}, materiales {materialsUsed}/{materialsTotal}',
+  'hudChrome.bags.emptyMaterialsOnly': 'Solo para materiales',
 };

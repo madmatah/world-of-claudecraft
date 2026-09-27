@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancedDialSeed,
+  captureGraphicsSettingsSnapshot,
   GRAPHICS_DIAL_KEYS,
   GRAPHICS_PRESET_ADVANCED,
   GRAPHICS_REBUILD_KEYS,
@@ -16,6 +17,32 @@ import { gfxInternalsForTest, graphicsPresetLabel } from '../src/render/gfx';
 import { waterFieldPlan } from '../src/render/water_core';
 
 describe('graphics rebuild settings snapshot', () => {
+  it('captures EVERY rebuild key from stored settings (no dial falls back to its default)', () => {
+    // Regression: the boot-time applied snapshot read only the six round-10
+    // keys, so a stored Advanced mix with the round-12 dials at Low (view
+    // distance, water, AO, bloom, AA, character detail) came back as their
+    // High/Full/On defaults: the panel displayed them, and the next Apply
+    // made them live.
+    const stored: Record<string, number> = {};
+    for (const key of GRAPHICS_REBUILD_KEYS) stored[key] = SETTING_RANGES[key].min;
+    stored.graphicsPreset = GRAPHICS_PRESET_ADVANCED;
+    stored.characterDetail = 1;
+    const reads: string[] = [];
+    const snapshot = captureGraphicsSettingsSnapshot((key) => {
+      reads.push(key);
+      return stored[key];
+    });
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(reads).toEqual([...GRAPHICS_REBUILD_KEYS]);
+    for (const key of GRAPHICS_REBUILD_KEYS) expect(snapshot[key]).toBe(stored[key]);
+    expect(snapshot.viewDistance).toBe(0);
+    expect(snapshot.waterQuality).toBe(0);
+    expect(snapshot.ambientOcclusion).toBe(0);
+    expect(snapshot.bloomQuality).toBe(0);
+    expect(snapshot.antiAliasing).toBe(0);
+    expect(snapshot.characterDetail).toBe(1);
+  });
+
   it('pins the complete ordered preference surface', () => {
     expect(GRAPHICS_REBUILD_KEYS).toEqual([
       'graphicsPreset',
@@ -32,6 +59,7 @@ describe('graphics rebuild settings snapshot', () => {
       'characterDetail',
       'dynamicLights',
       'particleEffects',
+      'ghostFade',
     ]);
     expect(Object.isFrozen(GRAPHICS_REBUILD_KEYS)).toBe(true);
   });
@@ -59,6 +87,7 @@ describe('graphics rebuild settings snapshot', () => {
       characterDetail: SETTING_RANGES.characterDetail.def,
       dynamicLights: SETTING_RANGES.dynamicLights.def,
       particleEffects: SETTING_RANGES.particleEffects.def,
+      ghostFade: SETTING_RANGES.ghostFade.def,
     });
     expect(Object.isFrozen(snapshot)).toBe(true);
   });
@@ -97,8 +126,8 @@ describe('per-system dial staging (round 12)', () => {
     // is medium's exact 2560 map, high is the documented Advanced-Medium
     // profile plus the full high post stack (SMAA + bloom + half-res AO),
     // ultra adds full-res AO and the 128-cell water field, insane the 4-tap
-    // worn walk and the 8yd vista grid; shadows top out at High's 4096 map
-    // everywhere (the dial is capped at level 1).
+    // worn walk and the 8yd vista grid; shadows top out at the dial's 4096
+    // rung everywhere (it is capped at level 1).
     expect(advancedDialSeed(1)).toEqual({
       terrainDetail: 0,
       foliageDensity: 0,
@@ -113,6 +142,7 @@ describe('per-system dial staging (round 12)', () => {
       characterDetail: 0,
       dynamicLights: 1,
       particleEffects: 1,
+      ghostFade: 0,
     });
     expect(advancedDialSeed(2)).toEqual({
       terrainDetail: 0.5,
@@ -128,6 +158,7 @@ describe('per-system dial staging (round 12)', () => {
       characterDetail: 1,
       dynamicLights: 1,
       particleEffects: 1,
+      ghostFade: 0,
     });
     expect(advancedDialSeed(3)).toEqual({
       terrainDetail: 0.5,
@@ -143,6 +174,7 @@ describe('per-system dial staging (round 12)', () => {
       characterDetail: 1,
       dynamicLights: 1,
       particleEffects: 1,
+      ghostFade: 1,
     });
     expect(advancedDialSeed(4)).toEqual({
       terrainDetail: 2,
@@ -158,6 +190,7 @@ describe('per-system dial staging (round 12)', () => {
       characterDetail: 1,
       dynamicLights: 1,
       particleEffects: 1,
+      ghostFade: 1,
     });
     expect(advancedDialSeed(6)).toEqual({
       terrainDetail: 2,
@@ -173,6 +206,7 @@ describe('per-system dial staging (round 12)', () => {
       characterDetail: 1,
       dynamicLights: 1,
       particleEffects: 1,
+      ghostFade: 1,
     });
     // Advanced itself (and anything unknown) seeds the stored defaults.
     const defaults = Object.fromEntries(
@@ -366,7 +400,6 @@ describe('dial seeds versus the real gfx.ts tier ladder', () => {
       'surfaceDetail',
       'surfaceDetailTaps',
       'surfaceDetailClampK',
-      'shadowMap',
       'composer',
       'ao',
       'aoFullRes',
@@ -375,6 +408,14 @@ describe('dial seeds versus the real gfx.ts tier ladder', () => {
       'farCharacterAnimScale',
     ] as const;
     for (const knob of highKnobs) expect(advancedFor(3)[knob], `high ${knob}`).toEqual(high[knob]);
+    // shadowMap is deliberately NOT in that list. The high tier renders the
+    // 2560 working map, the dial's top rung is the 4096 showcase allocation,
+    // and no rung expresses "2560 WITH terrain-cast shadows" (the Medium rung
+    // sheds those), so the High seed keeps the top rung and the map size does
+    // not round-trip. Pinned here so the deviation stays deliberate.
+    expect(high.shadowMap).toBe(2560);
+    expect(advancedFor(3).shadowMap).toBe(4096);
+    expect(advancedFor(3).terrainCastShadows).toBe(high.terrainCastShadows);
 
     const ultra = settingsFor('ultra', desktopHints);
     const ultraKnobs = [
@@ -470,5 +511,38 @@ describe('dial seeds versus the real gfx.ts tier ladder', () => {
     expect(lowVfx.bucketBaselines.vfx).toBe(base.bucketBands.vfx.min);
     // Non-vfx buckets are untouched by the dial.
     expect(lowVfx.bucketBands.grass).toEqual(base.bucketBands.grass);
+  });
+});
+
+describe('camera ghost style', () => {
+  const { settingsFor } = gfxInternalsForTest;
+  const desktop = {
+    search: '',
+    maxTouchPoints: 0,
+    coarsePointer: false,
+    narrowViewport: false,
+    platform: 'other' as const,
+  };
+
+  it('dithers on the low and medium tiers and blends above them', () => {
+    expect(settingsFor('low', desktop).ditheredGhostFade).toBe(true);
+    expect(settingsFor('medium', desktop).ditheredGhostFade).toBe(true);
+    expect(settingsFor('high', desktop).ditheredGhostFade).toBe(false);
+    expect(settingsFor('ultra', desktop).ditheredGhostFade).toBe(false);
+    expect(settingsFor('insane', desktop).ditheredGhostFade).toBe(false);
+  });
+
+  it('lets the Advanced dial pick either style on any base tier', () => {
+    const advanced = (tier: 'low' | 'ultra', ghostFade: number) =>
+      settingsFor(tier, { ...desktop, graphicsPreset: 5, ...advancedDialSeed(4), ghostFade });
+    expect(advanced('ultra', 0).ditheredGhostFade).toBe(true);
+    expect(advanced('low', 1).ditheredGhostFade).toBe(false);
+  });
+
+  it('seeds the dial from the preset the player leaves, so switching to Advanced changes nothing', () => {
+    expect(advancedDialSeed(1).ghostFade).toBe(0);
+    expect(advancedDialSeed(2).ghostFade).toBe(0);
+    expect(advancedDialSeed(3).ghostFade).toBe(1);
+    expect(advancedDialSeed(4).ghostFade).toBe(1);
   });
 });

@@ -17,7 +17,6 @@ import {
   renderItemArtAuditPreview,
   updateItemArtAuditVerdict,
 } from '../scripts/lib/item_art_audit.mjs';
-import { ITEMS } from '../src/sim/data';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporaryRoots: string[] = [];
@@ -737,6 +736,80 @@ describe('item-art audit builder', () => {
     ).toThrow('Resolved audit item is absent from the current catalog: absent_blade');
   });
 
+  it('exempts declared pending-art ids from the missing-art sweep, policed in both directions', async () => {
+    // The farming branch ships procedural icons as declared debt
+    // (ITEM_ART_PENDING); the audit honors exactly that declaration and
+    // nothing else. Three arms: the undeclared def still reds, a phantom
+    // declaration reds, and a declared id that GAINS art reds until it is
+    // struck from the pending set (the self-clearing direction).
+    const root = mkdtempSync(path.join(tmpdir(), 'woc-item-art-pending-'));
+    temporaryRoots.push(root);
+    const itemDirectory = 'public/ui/items';
+    const outputDirectory = 'tmp/item-art-audit';
+    mkdirSync(path.join(root, itemDirectory), { recursive: true });
+    const red = await sharp({
+      create: { width: 128, height: 128, channels: 3, background: { r: 150, g: 24, b: 35 } },
+    })
+      .webp({ quality: 82 })
+      .toBuffer();
+    writeFileSync(path.join(root, itemDirectory, 'alpha_blade.webp'), red);
+    const items = {
+      alpha_blade: { name: 'Alpha Blade', kind: 'weapon', quality: 'common' },
+      gamma_root: { name: 'Gamma Root', kind: 'junk', quality: 'common' },
+    };
+    const mapping = { entries: [{ itemId: 'alpha_blade' }], generatedBatches: [] };
+    const base = {
+      repoRoot: root,
+      itemDirectory,
+      outputDirectory,
+      renderOutputs: false,
+      items,
+      mapping,
+    };
+    await expect(buildItemArtAudit(base)).rejects.toThrow(
+      'Live item definitions without dedicated art: gamma_root',
+    );
+    const build = await buildItemArtAudit({ ...base, pendingArtIds: ['gamma_root'] });
+    // liveItemCount is the ART-SUBJECT universe: two live defs minus the one
+    // declared debt id.
+    expect(build.catalog.liveItemCount).toBe(1);
+    expect(build.catalog.catalogCount).toBe(1);
+    // The debt term is its own expected literal: an audit run that pins BOTH
+    // halves reds when the pending set grows even though liveItemCount is
+    // structurally blind to a def that joins the catalog and the debt at
+    // once. Conforms arm, then the violates arm one off in each direction.
+    await buildItemArtAudit({
+      ...base,
+      pendingArtIds: ['gamma_root'],
+      expected: { pendingArtCount: 1 },
+    });
+    await expect(
+      buildItemArtAudit({
+        ...base,
+        pendingArtIds: ['gamma_root'],
+        expected: { pendingArtCount: 0 },
+      }),
+    ).rejects.toThrow('Unexpected pending procedural-art debt count');
+    await expect(
+      buildItemArtAudit({
+        ...base,
+        pendingArtIds: ['gamma_root'],
+        expected: { pendingArtCount: 2 },
+      }),
+    ).rejects.toThrow('Unexpected pending procedural-art debt count');
+    await expect(buildItemArtAudit({ ...base, pendingArtIds: ['ghost_id'] })).rejects.toThrow(
+      'pending-art id ghost_id is not a live item definition',
+    );
+    await expect(
+      buildItemArtAudit({ ...base, pendingArtIds: ['alpha_blade', 'gamma_root'] }),
+    ).rejects.toThrow('pending-art id alpha_blade has shipping art');
+  });
+
+  // Declared 60s allowance: this arm execs the real CLI twice (help plus a
+  // full --verify-only, which esbuild-bundles the sim and sharp-decodes 907
+  // committed files, itself budgeted 30s), and under full-suite worker
+  // contention the pair runs past the 20s repo default (21.4s observed at the
+  // farming Phase 6 QA gate) while taking ~7s in isolation.
   it('exposes the fresh-checkout rebuild and explicit verdict-refresh CLI', () => {
     const help = execFileSync(process.execPath, ['scripts/item_art_audit.mjs', '--help'], {
       cwd: repoRoot,
@@ -746,10 +819,12 @@ describe('item-art audit builder', () => {
     expect(help).toContain('--verify-only');
     expect(help).toContain('--refresh-verdict');
     expect(help).toContain('tmp/imagegen/item-art-consistency/final-audit');
+    expect(help).toContain(
+      'docs/achievements/masterwrought-art-completion-2026-09-02/final-item-art-audit-verdict.json',
+    );
 
-    // The current digest includes the Passing Stone addition and the seven reviewed painted bag
-    // replacements. `verdict: null` is the point: verify-only validates the live catalog without
-    // rewriting the committed visual verdict.
+    // `verdict: null` is the point: verify-only validates the live catalog
+    // without rewriting the committed visual verdict.
     const verified = JSON.parse(
       execFileSync(process.execPath, ['scripts/item_art_audit.mjs', '--verify-only'], {
         cwd: repoRoot,
@@ -757,24 +832,61 @@ describe('item-art audit builder', () => {
         timeout: 30_000,
       }),
     ) as Record<string, unknown>;
+    // Restored post-merge (release/v0.42.0 into professions): neither
+    // pre-merge parent's pin matches the merged tree (professions HEAD:
+    // catalogCount 1256; release: catalogCount 1069). These are the measured
+    // values from `node scripts/item_art_audit.mjs --verify-only` run
+    // directly on the merged tree (see the matching restore in
+    // scripts/item_art_audit.mjs's `expected` block), not invented or
+    // derived from either parent.
+    // OSSBrain PR #3781 reconcile: the release's own arm (1281 / 1299) and
+    // the OSSBrain candidate's arm (1071 / 1089, its two disjoint reins items
+    // on the shared 1069 / 1087 base) are additive, so 1069 + 212 + 2 = 1283
+    // and 1087 + 212 + 2 = 1301. The sha/bytes below are measured directly
+    // from `node scripts/item_art_audit.mjs --verify-only` run on the merged
+    // tree, not invented or derived from either parent.
+    // PR3941: measured again after retiring the five premium reins.
+    // Clue Scrolls (2026-09-17): measured again on the tree carrying the 15
+    // faction quartermaster items (which landed without moving this block)
+    // plus the two clue items (clue_scroll, treasure_casket): 1304 / 1322,
+    // the sha/bytes straight from `--verify-only` on this tree.
+    // the Viridian Valestrider's reins (PR 4175, release/v0.44.0 base merge): 1306 / 1324, re-minted on the merged tree.
+    // Warfare Season 2: measured again with its four painted weapons, 1288 / 1306 on the release.
     expect(verified).toMatchObject({
       catalogPath: 'tmp/imagegen/item-art-consistency/final-audit/catalog.json',
-      catalogSha256: 'de2dae43730ac6011269ba1564534a23f1cfcd2d721b66f6b1a2fa74228515ee',
-      catalogBytes: 567686,
-      rendererFingerprint: 'd80ff4868f979e1717e106c889b7d6505841caf8d4cf887776ecb60848b1b2b7',
-      catalogCount: 1041,
-      liveItemCount: 1056,
-      generatedHeroicDefinitions: 64,
-      heroicDefinitionsWithOwnWebp: 48,
-      heroicWeaponArtAliases: 16,
-      groupCount: 22,
-      sheetPageCount: 27,
-      sheetCount: 216,
-      sheetModeCounts: Object.fromEntries(ITEM_ART_AUDIT_MODES.map((mode) => [mode, 27])),
+      // Re-minted on the quests integration branch: the catalog carries the 15
+      // faction quartermaster owners, the Emissary's Cache chest and the two
+      // Clue Scroll items (1305 / 1323). Re-minted again with the faction
+      // ladder rework's 17 rows (faction-ladder-icons-2026-09-23): 1322 /
+      // 1340, sha and bytes straight from `--verify-only` on this tree; 1323 / 1341
+      // with the Viridian Valestrider's reins (release/v0.44.0 base merge), re-measured the same way. 1341 / 1359 with the trinket slot's 18 trinkets (PR 4173) landed on the integration branch (a 26th group and a 32nd sheet page), sha and bytes re-measured with `--verify-only` on the merged tree.
+      // 1345 / 1498 with Warfare Season 2 (release/v0.44.0, second base merge 2026-09-26)'s four
+      // painted weapons, re-measured with `--verify-only` on the merged tree.
+      catalogSha256: 'c8684228613b25ee179809c6ee8ff1cd4927b1c8095345d065f76cacbe984e25',
+      catalogBytes: 732562,
+      rendererFingerprint: '41f5404c4d6d9643c8f03b9d88a8546e44564cc03a1baabdd4a72cb9258a2da7',
+      catalogCount: 1345,
+      liveItemCount: 1363,
+      generatedHeroicDefinitions: 78,
+      heroicDefinitionsWithOwnWebp: 59,
+      heroicWeaponArtAliases: 19,
+      groupCount: 26,
+      sheetPageCount: 32,
+      sheetCount: 256,
+      sheetModeCounts: {
+        '128-color': 32,
+        '40-color': 32,
+        '28-color': 32,
+        '22-color': 32,
+        '28-grayscale': 32,
+        '64-circle': 32,
+        'small-multiview': 32,
+        identity: 32,
+      },
       sheetSetSha256: null,
-      shippingCatalogSha256: 'f4d9c8f07e37a13c944b5ea4cf70da045f42f1154784b1da6605ff1c237c4924',
+      shippingCatalogSha256: '1170e76dfd06331e3c77020777a55ac5608f587e2e8f852dc2a9c3e7a3907c7e',
       machineChecksPassed: true,
       verdict: null,
     });
-  });
+  }, 60_000);
 });

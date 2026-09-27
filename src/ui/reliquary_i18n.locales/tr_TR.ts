@@ -142,6 +142,10 @@ export const table: ReliquaryLocaleTable = {
     name: 'Savaş Cephaneliği',
     desc: 'Zorlukla kazanılmış şerefle satın alınan Savaş takıları ve silahları.',
   },
+  conquerors_vanguard_gallery: {
+    name: 'Öncü Galerisi',
+    desc: 'Savaş 2. sezonun uzmanlık setleri ve silahları, onurla satın alınır.',
+  },
   horizons_vault_of_ages: {
     name: 'Çağlar Hazinesi',
     desc: 'Geçmiş bir çağdan kaldırılmış hazineler. Bu yadigârlar artık kazanılamaz; hazine, onları saklayan kıdemlileri onurlandırır.',
@@ -151,19 +155,33 @@ export const table: ReliquaryLocaleTable = {
     desc: "Kişisel Yarık halkaları: dereceli bir Yarık'ın ilk tamamlamasını kazanan gruptaki her şampiyon için basılır. Bir karakter yalnızca kendisininkini taşıyabilir.",
   },
   conquerors_ignivar: {
-    name: 'Crucible of the Last Spring',
-    desc: "Ignivar, Herald of the Last Flame'den çıkan epik ganimetler.",
+    name: 'Son Pınar Potası',
+    desc: 'Ignivar, Son Alevin Habercisi’nden çıkan epik ganimetler.',
   },
   conquerors_ignivar_heroic: {
-    name: 'Kahramanca: Crucible of the Last Spring',
-    desc: "Ignivar, Herald of the Last Flame'den yalnızca kahramanca modda düşen silahlar.",
+    name: 'Kahramanca: Son Pınar Potası',
+    desc: 'Ignivar, Son Alevin Habercisi’nden yalnızca kahramanca modda düşen silahlar ve baskın tılsımları.',
   },
   conquerors_varkhul: {
-    name: 'The Inner Crucible',
-    desc: "Varkhul, Forgefather of the Last Flame'den çıkan epik ganimetler.",
+    name: 'İç Pota',
+    desc: 'Varkhul, Son Alevin Demirhane Babası’ndan çıkan epik ganimetler.',
   },
   conquerors_varkhul_heroic: {
-    name: 'Kahramanca: The Inner Crucible',
-    desc: "Varkhul, Forgefather of the Last Flame'den yalnızca kahramanca modda düşen kalkanlar ve silahlar.",
+    name: 'Kahramanca: İç Pota',
+    desc: 'Varkhul, Son Alevin Demirhane Babası’ndan yalnızca kahramanca modda düşen kalkanlar, silahlar ve baskın tılsımları.',
+  },
+  conquerors_set_bramblehide: {
+    name: "Roots'un Dikenli Postu",
+    desc: "Roots'un Dikenli Postu'nun eksiksiz deri ailesi.",
+  },
+  professions_crucible: {
+    desc: 'Her biri göğüs, bel ve ayak parçası sunan on bir raid yapımı koleksiyon. El kitapları ve formüller kutsal emanet değil, bilgidir.',
+
+    name: 'Pota Ustalığı',
+  },
+
+  professions_forgebreaker: {
+    name: 'Dövme Kıran',
+    desc: "Ocaktan özgürleşen Son Pınar'ın sesi, kendi yaptığın bir çekicin içinde taşınır.",
   },
 };

@@ -76,12 +76,13 @@ function renderBagsHarness(
     isPersonalBankTab: () => false,
     isGuildBankTab: () => false,
     isVaultBankTab: () => false,
-    confirmVendorSell: () => true,
+    sellConfirmPolicy: () => ({ enabled: true, minQualityRank: 1 }),
     pendingPetFeed: () => false,
     closeVendor: noop,
     closeBank: noop,
     onClosed: noop,
     addItemToTrade: noop,
+    tradeOfferHeadroom: () => 0,
     stageMarketSell: noop,
     stageMailParcel: noop,
     insertItemChatLink: noop,
@@ -155,9 +156,12 @@ describe('bags_window: accessibility contract', () => {
 });
 
 describe('bags_window: load-bearing behaviors preserved', () => {
-  it('uses the branded Claudium icon and matching balance color', () => {
+  it('uses the branded Claudium icon and shared money-row primitives', () => {
     expect(hud).toContain('src="/claudium/icons/claudium_coin_64.webp"');
-    expect(components).toMatch(/\.claudium-launcher\s*\{[^}]*color:\s*#9eeeff;/s);
+    // W7 hands wallet color and interaction paint to the shared button and chip primitives.
+    expect(painter).toContain("'[data-wallet-action], [data-claudium-launcher]'");
+    expect(painter).toContain("control.classList.add('ui-btn')");
+    expect(painter).toContain("classList.add('ui-chip')");
   });
 
   it('reuses bag_filter via buildBagGrid (does not re-derive the filter)', () => {
@@ -390,8 +394,9 @@ describe('bags_window: bank-deposit mode wiring', () => {
 
   it('registers the deposit prompt class so close() tears it down (no orphaned modal)', () => {
     expect(painter).toContain('.bank-deposit-prompt');
+    // The trade offer-quantity prompt rides the same teardown selector.
     expect(painter).toContain(
-      "'.discard-item-prompt, .sell-quantity-prompt, .sell-confirm-prompt, .bank-deposit-prompt'",
+      "'.discard-item-prompt, .sell-quantity-prompt, .sell-confirm-prompt, .bank-deposit-prompt, .trade-offer-prompt'",
     );
   });
 
@@ -408,7 +413,11 @@ describe('bags_window: bank-deposit mode wiring', () => {
       /\(key === 'hudChrome\.bank\.depositHint' \|\|\s*key === 'hudChrome\.bank\.guildDepositHint' \|\|\s*key === 'hudChrome\.bank\.vaultDepositHint'\) &&\s*bankDepositOpensPrompt\(s\)/,
     );
     expect(code).toContain("t('hudChrome.bank.depositPartialHint')");
-    expect(code).toContain('+ extra + partial + equipDrag + destroy + link');
+    // Whitespace-tolerant: the composition now carries materialSourcesForDisplay(s)
+    // as a third itemTooltip argument and is Biome-wrapped across several lines,
+    // so an exact single-line substring can no longer match; the CONJUNCTION of
+    // all five hint fragments in order is what is load-bearing here.
+    expect(code).toMatch(/\+\s*extra\s*\+\s*partial\s*\+\s*equipDrag\s*\+\s*destroy\s*\+\s*link/);
   });
 });
 
@@ -523,7 +532,11 @@ describe('bags_window: touch peek + bank-cluster close', () => {
     // right-click without a live DOM harness.
     const start = painter.indexOf('private runBagAction(');
     const body = painter.slice(start, painter.indexOf('\n  }\n', start));
-    expect(body).toMatch(/case 'trade':\s*this\.deps\.addItemToTrade\(s\.itemId\);/);
+    // The trade arm now guards a shift-click offer-quantity prompt first (the
+    // bank withdraw prompt's trade twin); the plain-click stage still follows.
+    expect(body).toMatch(
+      /case 'trade': \{[\s\S]*?this\.showTradeQuantityPrompt\(s\.itemId, headroom\);[\s\S]*?this\.deps\.addItemToTrade\(s\.itemId\);/,
+    );
     expect(body).toMatch(
       /case 'mailAttach':\s*this\.deps\.stageMailParcel\(s\.itemId, s\.instance\);/,
     );
@@ -531,15 +544,62 @@ describe('bags_window: touch peek + bank-cluster close', () => {
       /case 'marketSell':\s*this\.deps\.stageMarketSell\(s\.itemId, s\.instance\);/,
     );
     expect(body).toMatch(/case 'bankDeposit': \{/);
-    // feedPet and useItem now also forward WHICH bag copy was clicked, so the
-    // call no longer ends at `s.itemId`. These pins are about REACHABILITY from
-    // the shared dispatch, so they match the call opening and leave the argument
-    // list to tests/item_copy_addressing_guard.
-    expect(body).toMatch(/case 'petFeed':\s*this\.deps\.world\(\)\.feedPet\(s\.itemId/);
+    // feedPet and useItem now also forward WHICH bag copy was clicked, resolved
+    // through copyRefFor, which REFUSES a stale click rather than falling back
+    // to an id-only command that would spend an id-mate. These pins are about
+    // REACHABILITY from the shared dispatch, so they match through the refusal
+    // guard to the call opening and leave the argument list to
+    // tests/item_copy_addressing_guard.
+    expect(body).toMatch(
+      /case 'petFeed':[\s\S]{0,200}?const at = this\.copyRefFor\(s\);\s*if \(!at\) return;\s*this\.deps\.world\(\)\.feedPet\(s\.itemId, at\);/,
+    );
     // The 'use' case tries the gathering-tool routing first (#2343) and only
     // falls back to the plain useItem command when the hook declines.
     expect(body).toMatch(
-      /case 'use': \{[\s\S]{0,400}?if \(!item \|\| !this\.deps\.useGatherTool\(item\)\) \{[\s\S]{0,200}?this\.deps\.world\(\)\.useItem\(s\.itemId/,
+      /case 'use': \{[\s\S]{0,400}?if \(!item \|\| !this\.deps\.useGatherTool\(item\)\) \{[\s\S]{0,300}?this\.deps\.world\(\)\.useItem\(s\.itemId, at\);/,
+    );
+  });
+
+  it('routes the placeFeast case to world.placeFeast() exactly once, never useItem (Farming Phase 12)', () => {
+    // The classification half lives in bags_view.test.ts; this pins that the
+    // dispatch actually reaches the IWorldFarming verb. Comment-stripped
+    // (line comments first, then blocks) so prose naming useItem cannot
+    // trip the negative arm, sliced to the case's own break so the claim
+    // cannot ride the neighboring 'use' case.
+    const code = painter.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const start = code.indexOf('private runBagAction(');
+    expect(start).toBeGreaterThan(-1);
+    const body = code.slice(start, code.indexOf('\n  }\n', start));
+    const caseAt = body.indexOf("case 'placeFeast':");
+    expect(caseAt).toBeGreaterThan(-1);
+    const caseEnd = body.indexOf('break;', caseAt);
+    expect(caseEnd).toBeGreaterThan(caseAt);
+    const caseBody = body.slice(caseAt, caseEnd);
+    // The verb now carries the clicked COPY (Phase 18, bags-feast-clicked-copy):
+    // the resolve refuses a stale click before the send, and the send names the
+    // copy rather than leaving the server's id-only walk to pick one.
+    expect(caseBody).toContain('const at = this.copyRefFor(s);');
+    expect(caseBody).toContain('if (!at) return;');
+    expect(caseBody).toContain('this.deps.world().placeFeast(at)');
+    expect(caseBody).not.toContain('useItem');
+    // Exactly one placeFeast call in the whole dispatch: the case is the one
+    // client entry point for the verb (the reachability suite pins the file).
+    expect(body.split('.placeFeast(').length - 1).toBe(1);
+  });
+
+  it('mail-attach-blocked-bound shows the specific bound reason, distinct from the generic mail deny', () => {
+    // A per-copy transfer lock (an armed disenchant typed secondary, or an
+    // already-traded boundTo copy) is not simply "unmailable": it clears once
+    // traded in person. The click deny must voice the same specific reason the
+    // sim's own send-time noMailBound refusal uses, never the generic line the
+    // def-level (quest/noMarketList) deny below still correctly uses.
+    const start = painter.indexOf('private runBagAction(');
+    const body = painter.slice(start, painter.indexOf('\n  }\n', start));
+    expect(body).toMatch(
+      /case 'mailAttachBlockedBound':[\s\S]{0,500}?this\.deps\.showError\(t\('hudChrome\.mailbox\.result\.noMailBound'\)\);\s*return;/,
+    );
+    expect(body).toMatch(
+      /case 'mailAttachBlocked':\s*this\.deps\.showError\(t\('hudChrome\.mailbox\.cannotMail'\)\);\s*return;/,
     );
   });
 });
@@ -571,7 +631,21 @@ describe('bags_window: right-click uses, dragging destroys/equips', () => {
   });
 
   it('the world drop opens the destroy prompt and honors the noDiscard refusal', () => {
-    expect(painter).toContain('promptDestroy(itemId: string, count: number): void');
+    // The prompt takes the dragged COPY's identity (its pick-up index plus its
+    // pin), not a bare index: the bags shift mid-drag, and an index alone can
+    // come to name a different copy of the same id by the time the drop lands.
+    expect(painter).toContain(
+      'promptDestroy(itemId: string, count: number, ref: DraggedCopyRef | null = null): void',
+    );
+    // The touch drag ghost carries the copy's rim too (never exercised by the
+    // marker rig, whose render does not start a drag, so pinned here over
+    // COMMENT-STRIPPED source: it is the only coverage of that read, and a
+    // commented-out arrow must not satisfy it). The destroy prompt's TARGETED
+    // single-copy arm is behavioral (tests/bags_vendor_sell_confirm.test.ts).
+    const ghostCode = painter.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect(ghostCode).toMatch(
+      /ghostHtml: \(\) =>\s*this\.deps\.itemIcon\(item, wornItemCellParts\(item, s\.instance\)\.quality\),/,
+    );
     expect(painter).toContain('destroyAction(itemId: string): BagDestroyAction');
     expect(painter).toContain("t('hudChrome.bags.cannotDestroy')");
     // The HUD installs the canvas as the world drop target with exactly those seams.
@@ -597,17 +671,17 @@ describe('bags_window: a vendor click confirms before selling anything but true 
   // tests/bags_vendor_sell_confirm.test.ts against the real BagsWindow; these
   // source pins are the no-magic-values-file's own idiom for anchoring the
   // wiring text they exercise.
-  it('imports vendorSellIsInstant from bags_view and gates the plain-click arm on it', () => {
-    expect(painter).toContain('vendorSellIsInstant');
+  it('gates the plain-click arm on the sell-confirm policy (vendor_sell_confirm_policy.ts)', () => {
+    expect(painter).toContain('vendorSaleNeedsConfirm');
     const body = painter.slice(
       painter.indexOf('private sellBagItem('),
       painter.indexOf('private showSellConfirmPrompt('),
     );
-    // The confirmVendorSell setting (a player opt-out) folds into the same
-    // instant gate: off treats every item as instant, restoring the classic
-    // one-click sale.
-    expect(body).toContain('!this.deps.confirmVendorSell()');
-    expect(body).toContain('vendorSellIsInstant(item, slot.instance, slot.craftedRecipeId);');
+    // The sell-confirm policy (the confirmVendorSell opt-out plus the quality
+    // threshold) folds into the same instant gate: a sale the policy does not
+    // confirm is instant, restoring the classic one-click sale.
+    expect(body).toContain('this.deps.sellConfirmPolicy()');
+    expect(body).toContain('const instant = !vendorSaleNeedsConfirm(');
     expect(body).toContain('!instant');
     expect(body).toContain('this.showSellConfirmPrompt(item, slot)');
     // Ctrl/meta and shift both still confirm a non-instant sale (the review-round
@@ -622,10 +696,11 @@ describe('bags_window: a vendor click confirms before selling anything but true 
   });
 
   it('the confirm prompt re-resolves the live slot at submit and refuses on a mismatch', () => {
-    const body = painter.slice(
-      painter.indexOf('private showSellConfirmPrompt('),
-      painter.indexOf('private showSellConfirmPrompt(') + 2200,
-    );
+    // Comment-stripped source (the source-text pin trap), sliced to the next
+    // method boundary rather than a magic length that rots on every edit.
+    const stripped = painter.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const start = stripped.indexOf('private showSellConfirmPrompt(');
+    const body = stripped.slice(start, stripped.indexOf('\n  private ', start + 1));
     // Re-resolved by reference identity at SUBMIT time, not the index captured
     // when the dialog opened: the whole point of this fix is that a stale
     // selection must REFUSE rather than fall back to an itemId-only sellItem
@@ -667,13 +742,19 @@ describe('bags_window: styles for the drag affordances', () => {
 });
 
 describe('bags_window: per-copy instance tooltip forwarding (Professions 2.0)', () => {
-  it("forwards the slot's instance payload into the widened itemTooltip dep", () => {
+  it("forwards the slot's instance payload AND its material composition into the widened itemTooltip dep", () => {
     // The bank arm has a model-level pin (bank_view.test.ts BankSlotModel
     // .instance passthrough); the bags arm is a direct painter call, so the
     // call site itself is the load-bearing surface: dropping `s.instance`
     // reverts every bag tooltip to def-only while all pure-core suites stay
     // green (the exact regression class the widened dep was added for).
-    expect(painter).toContain('this.deps.itemTooltip(item, s.instance)');
+    // The call now also carries materialSourcesForDisplay(s), the per-unit
+    // provenance a material stack's tooltip needs (the source-count algebra):
+    // dropping that third argument would silently blind every material
+    // tooltip to who gathered/signed the units it holds.
+    expect(painter).toContain(
+      'this.deps.itemTooltip(item, s.instance, materialSourcesForDisplay(s))',
+    );
   });
 });
 
@@ -706,7 +787,8 @@ describe('bags_window: unknown-id stacks stay visible (stale-client guard, R34)'
     expect(body).toContain('unknownItemIconHtml(s.itemId)');
     // The cell keeps the shared bag-cell styling at the default rung and its
     // count badge, so an unknown stack reads like a stack, not a hole.
-    expect(body).toContain("row.className = 'bag-item q-common'");
+    // W7 gives fallback stacks the same shared socket ownership as known bag cells.
+    expect(body).toContain("row.className = 'bag-item ui-socket ui-socket--bag q-common'");
     expect(body).toContain('bi-count');
     // The aria channel carries the UNKNOWN signal (the tooltip is hover-only),
     // plus the raw id; the tooltip title is the raw id with the unknown
@@ -808,7 +890,9 @@ describe('bags_window: the bag-bar counter pools readout (phase 08)', () => {
       28,
     );
     const counter = root.querySelector('.bag-capacity');
-    expect(counter?.textContent).toBe('2/28');
+    // Issue #3795: the inline text names both pools once a satchel is equipped
+    // (the summed pair alone reads roomy while the general pool refuses).
+    expect(counter?.textContent).toBe('Items 1/16, Materials 1/12');
     expect(counter?.getAttribute('aria-label')).toBe(
       'Bag slots used: 2 of 28. General items: 1 of 16. Materials: 1 of 12.',
     );
@@ -876,5 +960,44 @@ describe('bags_window: the bag-bar counter pools readout (phase 08)', () => {
     const rebuilt = root.querySelector('.bag-capacity') as HTMLElement;
     expect(rebuilt).not.toBe(counter);
     expect(document.activeElement).toBe(rebuilt);
+  });
+});
+
+describe('bags_window: the grid fills the window it lives in (W24)', () => {
+  it('lays the sockets out as fluid auto-fill tracks, never a fixed centred count', () => {
+    // The review finding: a fixed six-column band centred in the body left dead
+    // space down both sides of every bag. Tracks now auto-fill the body width
+    // with the bag socket species as the floor, so the grid grows with the
+    // window (and with the wider vendor / bank companion docks).
+    expect(components).toContain(
+      'grid-template-columns: repeat(auto-fill, minmax(var(--socket-size-bag), 1fr));',
+    );
+    expect(components).not.toContain('grid-template-columns: repeat(6, 40px);');
+    // The socket species token itself is unchanged: cells still floor at 40px.
+    expect(tokens).toContain('--socket-size-bag: 40px;');
+  });
+
+  it('sizes the window to its content from the bottom anchor, capped for full bags', () => {
+    // Review round 2: a fixed 560px sheet left a small bag with a tall empty
+    // grid; the window is bottom-anchored, so an auto height grows upward with
+    // the slots and the cap keeps a full bag scrolling inside the viewport.
+    const bags = /\n {2}#bags \{([^}]*)\}/.exec(components)?.[1] ?? '';
+    expect(bags).toContain('height: auto;');
+    expect(bags).toContain('max-height: min(560px, calc(100vh - 18px));');
+    expect(bags).not.toContain('height: 560px;');
+  });
+
+  it('keeps every chrome row at its natural height so the grid is the one scroller', () => {
+    for (const row of ['#bags .panel-title', '#bags .bag-bar', '#bags .bag-filter-bar']) {
+      expect(components).toContain(`${row} {\n    flex: none;\n  }`);
+    }
+    expect(components).toContain('#bags .bag-grid {\n    flex: 1 1 auto;\n    min-height: 0;');
+  });
+
+  it('seats the money block as a ruled footer row pinned to the bottom edge', () => {
+    const money = /#bags \.money \{([^}]*)\}/.exec(components)?.[1] ?? '';
+    expect(money).toContain('flex: none;');
+    expect(money).toContain('border-top: 1px solid var(--color-border-showcase);');
+    expect(money).toContain('padding-top: var(--spacing-sm);');
   });
 });

@@ -2,11 +2,21 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   createBackgroundGpuQueue,
+  GPU_QUEUE_SHUTDOWN_ERROR_NAME,
   GPU_WORK_PRIORITY,
   type GpuWorkAdmission,
   type GpuWorkAdmissionCandidate,
+  isGpuQueueShutdown,
 } from '../src/render/background_gpu_queue';
 import { withHiddenPrewarmGroups } from '../src/render/prewarm_pass';
+
+/** What every rejection of a shut-down queue looks like: the shutdown name, the
+ *  caller's message, the caller's error as `cause`. */
+const shutdownShape = (reason: Error) => ({
+  name: GPU_QUEUE_SHUTDOWN_ERROR_NAME,
+  message: reason.message,
+  cause: reason,
+});
 
 describe('createBackgroundGpuQueue', () => {
   it('serializes independent GPU lanes without overlap', async () => {
@@ -71,15 +81,40 @@ describe('createBackgroundGpuQueue', () => {
     await Promise.resolve();
 
     const shutdownError = new Error('renderer generation ended');
-    const pendingRejected = expect(pending).rejects.toBe(shutdownError);
+    const pendingRejected = expect(pending).rejects.toMatchObject(shutdownShape(shutdownError));
     const shutdown = queue.shutdown(shutdownError).then(() => events.push('shutdown'));
     expect(queue.shutdown()).toBe(queue.shutdown());
-    await expect(queue.run(async () => {})).rejects.toBe(shutdownError);
+    await expect(queue.run(async () => {})).rejects.toMatchObject(shutdownShape(shutdownError));
     expect(events).toEqual(['active:start']);
 
     releaseActive();
     await Promise.all([active, pendingRejected, shutdown]);
     expect(events).toEqual(['active:start', 'shutdown']);
+  });
+
+  it('names its shutdown rejection so a client can tell the expected exit from a fault', async () => {
+    const queue = createBackgroundGpuQueue();
+    const reason = new Error('Renderer shut down');
+    await queue.shutdown(reason);
+    const rejection = queue.run(async () => {}).catch((error: unknown) => error);
+    const error = await rejection;
+    expect(isGpuQueueShutdown(error)).toBe(true);
+    expect(error).toMatchObject(shutdownShape(reason));
+    // The caller's own object is never renamed.
+    expect(reason.name).toBe('Error');
+    expect(isGpuQueueShutdown(new Error('unit failed'))).toBe(false);
+    // A reason of another class (its own name) classifies the same way.
+    const abort = new Error('renderer torn down');
+    abort.name = 'AbortError';
+    const aborted = createBackgroundGpuQueue();
+    await aborted.shutdown(abort);
+    const abortRejection = await aborted.run(async () => {}).catch((e: unknown) => e);
+    expect(isGpuQueueShutdown(abortRejection)).toBe(true);
+    expect(abortRejection).toMatchObject(shutdownShape(abort));
+    expect(abort.name).toBe('AbortError');
+    const idle = createBackgroundGpuQueue();
+    await idle.shutdown();
+    expect(isGpuQueueShutdown(await idle.run(async () => {}).catch((e: unknown) => e))).toBe(true);
   });
 
   it('shuts down idempotently while idle', async () => {
@@ -1331,7 +1366,7 @@ describe('createBackgroundGpuQueue', () => {
     await flush();
 
     const shutdownError = new Error('renderer generation ended');
-    const parkedRejected = expect(parked).rejects.toBe(shutdownError);
+    const parkedRejected = expect(parked).rejects.toMatchObject(shutdownShape(shutdownError));
     let shutdownDone = false;
     const shutdown = queue.shutdown(shutdownError).then(() => {
       shutdownDone = true;
@@ -1395,19 +1430,27 @@ describe('createBackgroundGpuQueue', () => {
     expect(features).toContain('this.backgroundGpuWork.run(');
     expect(archetypes).toContain('this.backgroundGpuWork.run(');
     expect(texture).toContain('this.backgroundGpuWork.run(');
-    expect(initial).toContain(
+    // The resume lane's per-unit policy lives in the runner module the
+    // renderer binds its queue to (src/render/prewarm_resume_runner.ts).
+    expect(initial).toContain('runResumeUnit(unit, entry, {');
+    expect(initial).toContain('queue: this.backgroundGpuWork,');
+    const runner = readFileSync(
+      new URL('../src/render/prewarm_resume_runner.ts', import.meta.url),
+      'utf8',
+    );
+    expect(runner).toContain(
       'const priority = debt ? GPU_WORK_PRIORITY.BOOT_DEBT : GPU_WORK_PRIORITY.BOOT_RESUME;',
     );
-    expect(initial).toMatch(
-      /this\.backgroundGpuWork\.run\(piece\.run, priority, piece\.id, \{\s+releaseTail: true,\s+\}\),/,
+    expect(runner).toContain(
+      'deps.queue.run(piece.run, priority, piece.id, { releaseTail: true }),',
     );
     // A debt ROOT piece is one link and releases its tail under the cap; a
     // debt BATCH (no pieces) still holds it, cosmetic resume releases it.
-    expect(initial).toContain('releaseTail: !debt,');
+    expect(runner).toContain('{ releaseTail: !debt }');
     // The class decision itself must stay wired to the owning entry: with
     // `const debt = false` (or the wrong id) every priority claim above
     // silently degrades to BOOT_RESUME with the suite green (QA finding B1).
-    expect(initial).toContain('const debt = prewarmResumeIsDebt(entry.id);');
+    expect(runner).toContain('const debt = prewarmResumeIsDebt(entry.id);');
     // The frame clock is a SINGLE call site whose failure mode is silent good
     // news: drop it, or let an early return get in front of it, and every unit
     // reports frameGapMs 0 and an empty blockiest, which reads as "the lane cost
@@ -1417,9 +1460,11 @@ describe('createBackgroundGpuQueue', () => {
     // That semantic lives ONLY at the call site: move noteStart into the unit's
     // completion continuation and the counter silently inverts its meaning while
     // every unit test stays green, because the ledger itself is just arithmetic.
-    const runUnit = initial.slice(initial.indexOf('runUnit: (unit, entry) => {'));
-    const noteAt = runUnit.indexOf('resumeLedger.noteStart(entry.id);');
-    const runAt = runUnit.indexOf('return this.backgroundGpuWork.run(');
+    // The runner notes the start before any queue work (the binding hands it
+    // the renderer's ledger and queue).
+    expect(initial).toContain('ledger: resumeLedger,');
+    const noteAt = runner.indexOf('deps.ledger.noteStart(entry.id);');
+    const runAt = runner.indexOf('deps.queue.run(', noteAt);
     expect(noteAt).toBeGreaterThan(-1);
     expect(runAt).toBeGreaterThan(noteAt);
 

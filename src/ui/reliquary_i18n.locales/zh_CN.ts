@@ -11,6 +11,10 @@
 import type { ReliquaryLocaleTable } from '../reliquary_i18n';
 
 export const table: ReliquaryLocaleTable = {
+  professions_crucible: {
+    name: '熔炉匠艺',
+    desc: '十一套团队副本制作套装，每套均包含胸甲、腰带和鞋靴。图样与配方属于知识，不列为藏品。',
+  },
   // Dungeon, delve and world-boss pages: entities.* names verbatim.
   conquerors_hollow_crypt: {
     name: '空洞墓穴',
@@ -162,6 +166,10 @@ export const table: ReliquaryLocaleTable = {
     name: '战争兵器库',
     desc: '以来之不易的荣誉购得的战争饰品与武器。',
   },
+  conquerors_vanguard_gallery: {
+    name: '先锋展厅',
+    desc: '战争第二赛季的专精套装与武器，用荣誉购买。',
+  },
   // Vault of Ages (Phase 21): composed from the shipped vault noun (the
   // col_reliquary_complete title reads 宝库策展人).
   horizons_vault_of_ages: {
@@ -181,7 +189,7 @@ export const table: ReliquaryLocaleTable = {
   },
   conquerors_ignivar_heroic: {
     name: '英雄：最后泉源熔炉',
-    desc: '伊格尼瓦，末焰使者身上仅限英雄难度掉落的武器。',
+    desc: '伊格尼瓦，末焰使者身上仅限英雄难度掉落的武器，以及团队副本饰品。',
   },
   conquerors_varkhul: {
     name: '内环熔炉',
@@ -189,6 +197,14 @@ export const table: ReliquaryLocaleTable = {
   },
   conquerors_varkhul_heroic: {
     name: '英雄：内环熔炉',
-    desc: '末焰锻父瓦尔库尔身上仅限英雄难度掉落的盾牌与武器。',
+    desc: '末焰锻父瓦尔库尔身上仅限英雄难度掉落的盾牌、副手圣物与武器。',
+  },
+  professions_forgebreaker: {
+    name: '碎炉者',
+    desc: '末泉的声音从锻炉中解放，寄宿在你亲手打造的战锤中。',
+  },
+  conquerors_set_bramblehide: {
+    name: '鲁茨的荆棘皮甲',
+    desc: '完整的荆棘皮甲系列。',
   },
 };

@@ -25,7 +25,9 @@
 // legendary kit (orbit motes, aurora, spin) or vice versa; the escalation ramp
 // is the whole point of the collections.
 import * as THREE from 'three';
+import { addRimGlow, GFX } from './gfx';
 import { isSharedTexture, markSharedTexture } from './shared_resource';
+import { DEFAULT_WEAPON_POINT_MAX_PX, maxPointSizePx } from './vfx_screen_bounds_core';
 import {
   WEAPON_EMISSIVE_IDLE_CACHE_MAX,
   WeaponEmissiveDerivationCache,
@@ -35,6 +37,7 @@ import {
   type WeaponEmissiveTint,
   weaponEmissiveCacheKey,
 } from './weapon_vfx_emissive_core';
+import { applyRiggedWornDetail } from './worn_stone';
 
 // ---------------------------------------------------------------------------
 // Palettes + tier presets (colors from the Armory Codex swatches)
@@ -1495,7 +1498,7 @@ export const WEAPON_VFX: Record<string, WeaponVfxSpec> = {
 
   winterbite: {
     tier: 'epic',
-    name: 'Winterbite',
+    name: 'Wintergnaw',
     type: 'bow',
     lore: 'A bow of silvered steel and blue ice, a glowing frozen core in the riser and a nocked arrow of solid ice trailing cold.',
     emissive: { intensity: 1.35 },
@@ -2382,6 +2385,7 @@ function makeMotes(b: THREE.Box3, c: WeaponVfxMotes): VfxPart {
     uniforms: {
       uTime: { value: 0 },
       uScale: { value: 600 },
+      uMaxPx: { value: DEFAULT_WEAPON_POINT_MAX_PX },
       uMap: { value: starFlareTex() },
       uColorA: { value: new THREE.Color(c.colorA) },
       uColorB: { value: new THREE.Color(c.colorB) },
@@ -2392,7 +2396,7 @@ function makeMotes(b: THREE.Box3, c: WeaponVfxMotes): VfxPart {
       attribute float aTiltX; attribute float aTiltZ; attribute float aSize;
       attribute float aMix; attribute float aSeed; attribute float aBob;
       attribute float aEcc;
-      uniform float uTime; uniform float uScale;
+      uniform float uTime; uniform float uScale; uniform float uMaxPx;
       varying float vMix; varying float vTw;
       void main() {
         float a = aPhase + uTime * aSpeed;
@@ -2405,7 +2409,7 @@ function makeMotes(b: THREE.Box3, c: WeaponVfxMotes): VfxPart {
         vMix = aMix;
         vTw = 0.7 + 0.3 * sin(uTime * (1.5 + aSeed * 2.5) + aSeed * 40.0);
         vec4 mv = modelViewMatrix * vec4(position + p, 1.0);
-        gl_PointSize = aSize * uScale / max(0.15, -mv.z);
+        gl_PointSize = min(aSize * uScale / max(0.15, -mv.z), uMaxPx);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -2462,6 +2466,7 @@ function makeDrift(b: THREE.Box3, c: WeaponVfxDrift): VfxPart {
     uniforms: {
       uTime: { value: 0 },
       uScale: { value: 600 },
+      uMaxPx: { value: DEFAULT_WEAPON_POINT_MAX_PX },
       uMap: { value: softDiscTex() },
       uColorA: { value: new THREE.Color(c.colorA) },
       uColorB: { value: new THREE.Color(c.colorB) },
@@ -2471,7 +2476,7 @@ function makeDrift(b: THREE.Box3, c: WeaponVfxDrift): VfxPart {
     vertexShader: `
       attribute vec3 aVel; attribute float aLife; attribute float aPhase;
       attribute float aSize; attribute float aSeed; attribute float aSwirl;
-      uniform float uTime; uniform float uScale; uniform float uGrow;
+      uniform float uTime; uniform float uScale; uniform float uGrow; uniform float uMaxPx;
       varying float vFade; varying float vSeed;
       void main() {
         float ft = fract(uTime / aLife + aPhase);
@@ -2483,7 +2488,7 @@ function makeDrift(b: THREE.Box3, c: WeaponVfxDrift): VfxPart {
         vSeed = aSeed;
         float size = aSize * (1.0 + uGrow * ft);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = size * uScale / max(0.15, -mv.z);
+        gl_PointSize = min(size * uScale / max(0.15, -mv.z), uMaxPx);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -2526,13 +2531,14 @@ function makeTwinkles(root: THREE.Object3D, b: THREE.Box3, c: WeaponVfxTwinkles)
     uniforms: {
       uTime: { value: 0 },
       uScale: { value: 600 },
+      uMaxPx: { value: DEFAULT_WEAPON_POINT_MAX_PX },
       uMap: { value: c.star ? starFlareTex() : softDiscTex() },
       uColor: { value: new THREE.Color(c.color) },
       uOpacity: { value: 1 },
     },
     vertexShader: `
       attribute float aSeed; attribute float aSize; attribute float aRate;
-      uniform float uTime; uniform float uScale;
+      uniform float uTime; uniform float uScale; uniform float uMaxPx;
       varying float vI;
       void main() {
         // clamp() is load-bearing: GLSL leaves the precision of sin() to the
@@ -2542,7 +2548,7 @@ function makeTwinkles(root: THREE.Object3D, b: THREE.Box3, c: WeaponVfxTwinkles)
         float w = clamp(0.5 + 0.5 * sin(uTime * aRate * 6.2831 + aSeed * 6.2831), 0.0, 1.0);
         vI = pow(w, 9.0);
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = aSize * uScale * (0.55 + 0.45 * vI) / max(0.15, -mv.z);
+        gl_PointSize = min(aSize * uScale * (0.55 + 0.45 * vI) / max(0.15, -mv.z), uMaxPx);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -2866,6 +2872,17 @@ export interface WeaponVfxCreateOptions {
    * scene) leaves this off and keeps a light that lights immediately.
    */
   budgetedLight?: boolean;
+  /**
+   * Mount the cast light at all. A handful of hand-tuned skins ship
+   * `light: 0` (weapon_vfx_tuning.ts), which used to build the PointLight
+   * anyway, park it in the rig, and let the point-light budget rank a light
+   * whose intensity every update() drove straight back to zero: it holds one of
+   * the fixed counted slots away from a light that would actually shine, and
+   * pays a per-frame ancestor walk for it. The caller knows the effective
+   * tuning (visual.ts resolves it before the rig is built) so it decides.
+   * Default true, which is every showcase and preview host.
+   */
+  withLight?: boolean;
 }
 
 /** Scene-census bucket for every weapon-skin VFX rig (the `?perf` overlay's
@@ -2875,7 +2892,8 @@ export const WEAPON_VFX_RENDER_CATEGORY = 'weaponvfx';
 export interface WeaponVfxHandle {
   group: THREE.Group;
   sceneExtras: THREE.Group;
-  light: THREE.PointLight;
+  /** Null when the skin's tuning mutes the light (see withLight). */
+  light: THREE.PointLight | null;
   tier: WeaponVfxTier;
   spec: WeaponVfxSpec;
   tuning: WeaponVfxTuning;
@@ -2893,6 +2911,7 @@ export function createWeaponVfx(
     grounded = true,
     backdrop: withBackdrop = grounded,
     budgetedLight = false,
+    withLight = true,
   }: WeaponVfxCreateOptions = {},
 ): WeaponVfxHandle {
   const tier = TIERS[spec.tier];
@@ -2984,15 +3003,19 @@ export function createWeaponVfx(
     ...tier.light,
     ...(spec.light ?? {}),
   };
-  const light = new THREE.PointLight(lightSpec.color, lightSpec.intensity, lightSpec.distance, 2);
-  // World-rendered weapon lights move with the held model and drive their own
-  // flicker. The renderer still ranks them inside its fixed point-light count.
-  light.userData.budgetDynamic = true;
-  // Born hidden on a budgeted path: the budget, not this constructor, decides
-  // whether the light is counted. See budgetedLight in WeaponVfxCreateOptions.
-  if (budgetedLight) light.visible = false;
-  light.position.copy(resolvePoint(b, lightSpec.at ?? { yF: 0.7 }));
-  group.add(light);
+  const light = withLight
+    ? new THREE.PointLight(lightSpec.color, lightSpec.intensity, lightSpec.distance, 2)
+    : null;
+  if (light) {
+    // World-rendered weapon lights move with the held model and drive their own
+    // flicker. The renderer still ranks them inside its fixed point-light count.
+    light.userData.budgetDynamic = true;
+    // Born hidden on a budgeted path: the budget, not this constructor, decides
+    // whether the light is counted. See budgetedLight in WeaponVfxCreateOptions.
+    if (budgetedLight) light.visible = false;
+    light.position.copy(resolvePoint(b, lightSpec.at ?? { yF: 0.7 }));
+    group.add(light);
+  }
 
   // 4. Spec'd particle components.
   for (const c of spec.fx ?? []) {
@@ -3088,8 +3111,15 @@ export function createWeaponVfx(
     setPixelScale(devicePxHeight: number) {
       // Device px per world unit at distance 1 for a 35-degree vertical fov.
       const s = (devicePxHeight * 0.5) / Math.tan((35 * Math.PI) / 360);
+      // gl_PointSize here divides by view depth, so it diverges as the weapon
+      // approaches the near plane: a sprite that would paint a quarter of the
+      // frame is pure additive fill the composer bloom then re-reads. The
+      // ceiling sits far above any ordinary camera distance
+      // (vfx_screen_bounds_core.ts), so it only trims that close-range case.
+      const maxPx = maxPointSizePx(devicePxHeight);
       for (const m of allMats) {
         if (m.uniforms?.uScale) m.uniforms.uScale.value = s;
+        if (m.uniforms?.uMaxPx) m.uniforms.uMaxPx.value = maxPx;
       }
     },
     update(dt: number) {
@@ -3105,12 +3135,15 @@ export function createWeaponVfx(
           prev.mat.emissiveIntensity = e.intensity * glowPulse * tuning.glow;
         }
       }
-      const flick =
-        1 -
-        lightSpec.flicker +
-        lightSpec.flicker *
-          (0.6 * Math.sin(time * lightSpec.hz * 6.4) + 0.4 * Math.sin(time * lightSpec.hz * 17.3));
-      light.intensity = lightSpec.intensity * flick * tuning.light;
+      if (light) {
+        const flick =
+          1 -
+          lightSpec.flicker +
+          lightSpec.flicker *
+            (0.6 * Math.sin(time * lightSpec.hz * 6.4) +
+              0.4 * Math.sin(time * lightSpec.hz * 17.3));
+        light.intensity = lightSpec.intensity * flick * tuning.light;
+      }
     },
     dispose() {
       if (rigDisposed) return;
@@ -3210,6 +3243,74 @@ function weaponVfxPrewarmHostMap(): THREE.Texture {
 }
 
 /**
+ * The shipped GLB material shape of each catalog skin, as far as it reaches a
+ * program cache key. Every skin's main material carries base colour,
+ * metal-rough, normal and occlusion textures and is opaque; what varies is
+ * `doubleSided`, and one GLB adds an untextured part. Pinned against each
+ * GLB's own JSON by tests/weapon_skin_prewarm_host.test.ts, so a re-exported
+ * skin that changes either fails there instead of linking live.
+ */
+export const WEAPON_VFX_DOUBLE_SIDED_SKINS: ReadonlySet<string> = new Set([
+  'ice_fang',
+  'solheim_last_light_of_the_dawn',
+  'skyrender_the_firmament_s_wound',
+  'cosmarch_spire_of_the_endless_void',
+  'meteorlatch_the_sky_s_last_judgment',
+  'rude_awakening_sword',
+  'rimecrusher',
+  'frostbite',
+  'shard_of_everwinter',
+  'forgeheart_stave',
+]);
+
+/** Untextured, single-sided extra materials, by GLB material name. */
+export const WEAPON_VFX_UNTEXTURED_PARTS: Readonly<Record<string, readonly string[]>> = {
+  astravyr_fang_of_the_fallen_star: ['ring_gold'],
+};
+
+/**
+ * The textured host surface, in the class and texture slots the worn skin
+ * draws on this tier (characters/assets.ts buildTintedClone): a Lambert with
+ * its map on the Lambert tier; otherwise the GLB's standard material with its
+ * normal and occlusion maps plus the silhouette rim glow, which
+ * characters/visual.ts carries into its hook-preserving isolation clone. The
+ * metal-rough maps are left out because deriveEmissive nulls them on the live
+ * weapon too. Only slot presence reaches the key, so the one-pixel map fills
+ * every slot.
+ */
+function prewarmHostTexturedMaterial(side: THREE.Side): THREE.Material {
+  const map = weaponVfxPrewarmHostMap();
+  const name = 'weapon-vfx-prewarm-host:textured';
+  if (!GFX.standardMaterials) {
+    return new THREE.MeshLambertMaterial({ name, color: 0xffffff, map, side });
+  }
+  const material = new THREE.MeshStandardMaterial({
+    name,
+    color: 0xffffff,
+    map,
+    normalMap: map,
+    aoMap: map,
+    side,
+  });
+  addRimGlow(material);
+  return material;
+}
+
+/** An untextured part: deriveEmissive takes its flat-tint arm, and the GLB
+ *  name routes the same worn layer buildTintedClone gives that name. The
+ *  routing reads the name once, and three's key never does, so the host takes
+ *  its own name afterwards and a program label tells it from the live part. */
+function prewarmHostUntexturedMaterial(part: string): THREE.Material {
+  const name = `weapon-vfx-prewarm-host:${part}`;
+  if (!GFX.standardMaterials) return new THREE.MeshLambertMaterial({ name, color: 0xffffff });
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, name: part });
+  addRimGlow(material);
+  applyRiggedWornDetail(material);
+  material.name = name;
+  return material;
+}
+
+/**
  * Builds one deterministic, hidden prewarm unit for a real catalog skin.
  *
  * The unit boundary is intentionally the skin, not a component family. A
@@ -3227,28 +3328,46 @@ export function buildWeaponVfxPrewarmSkinGroup(key: string): THREE.Group {
   group.name = `weapon-vfx-program-prewarm:${key}`;
   group.userData.renderCategory = 'prewarm';
 
-  const host = new THREE.Mesh(
-    new THREE.BoxGeometry(0.1, 1, 0.1),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, map: weaponVfxPrewarmHostMap() }),
-  );
-  host.name = `prewarm-skin-host:${key}`;
-  host.frustumCulled = false;
-
+  const surfaces: THREE.Mesh[] = [];
   let handle: WeaponVfxHandle | null = null;
   let disposed = false;
   const cleanup = (): void => {
     if (disposed) return;
     disposed = true;
     handle?.dispose();
-    host.geometry.dispose();
-    (host.material as THREE.Material).dispose();
+    for (const surface of surfaces) {
+      surface.geometry.dispose();
+      (surface.material as THREE.Material).dispose();
+    }
   };
   try {
+    // The host is the SHAPE of the worn skin's material on this tier, one
+    // surface per GLB material: a host keyed differently warms a program no
+    // live sighting asks for and leaves the real one to link on the first
+    // arrival.
+    const side = WEAPON_VFX_DOUBLE_SIDED_SKINS.has(key) ? THREE.DoubleSide : THREE.FrontSide;
+    const host = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 1, 0.1),
+      prewarmHostTexturedMaterial(side),
+    );
+    host.name = `prewarm-skin-host:${key}`;
+    host.frustumCulled = false;
+    surfaces.push(host);
+    for (const part of WEAPON_VFX_UNTEXTURED_PARTS[key] ?? []) {
+      // The GLB part has no UVs; neither does its twin.
+      const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+      geometry.deleteAttribute('uv');
+      const surface = new THREE.Mesh(geometry, prewarmHostUntexturedMaterial(part));
+      surface.name = `prewarm-skin-host:${key}:${part}`;
+      surface.frustumCulled = false;
+      host.add(surface);
+      surfaces.push(surface);
+    }
     handle = createWeaponVfx(host, spec, { grounded: false });
     // A visible light would change the scene's light counts, and those counts
     // are part of every program cache key: one extra point light here and the
     // whole boot compile warms keys no live frame ever asks for.
-    handle.light.visible = false;
+    if (handle.light) handle.light.visible = false;
     // The boot prewarm group is census-tagged 'prewarm' as a whole; keep the
     // rigs inside that bucket rather than reporting as live skins.
     handle.group.userData.renderCategory = 'prewarm';

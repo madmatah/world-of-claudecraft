@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../src/sim/types';
 import { MeterData } from '../src/ui/meters';
+import { breakdownKey } from '../src/ui/meters_breakdown_view';
+import { buildMeterRows } from '../src/ui/meters_rows_view';
 import type { IWorld } from '../src/world_api';
 
 // minimal IWorld stand-in: entity map + player + party
@@ -74,6 +76,29 @@ describe('combat meters', () => {
     // label follows the beefiest mob fought
     expect(m.current!.label).toBe('Gorrak');
     expect(m.current!.mainMobId).toBe(51);
+  });
+
+  it('credits an absorb (a shield soaking a hit) to the shielder as healing, under the shield name', () => {
+    const w = fakeWorld();
+    const party = new Set([1, 2]);
+    const m = new MeterData(0);
+    const absorb = {
+      type: 'absorb',
+      sourceId: 2,
+      targetId: 1,
+      amount: 45,
+      ability: 'Temporal Aegis',
+      abilityId: 'temporal_aegis',
+    } as SimEvent;
+    m.onEvent(absorb, w, party, 1000);
+    expect(m.current).not.toBeNull();
+    const t = m.current!.tallies.get(2)!;
+    expect(t.heal).toBe(45);
+    expect(t.healByAbility.get(breakdownKey(null, 'Temporal Aegis'))?.amount).toBe(45);
+    expect(m.allTime.tallies.get(2)!.heal).toBe(45);
+    // A mob's own shield (source outside the party) is not party healing.
+    m.onEvent({ ...(absorb as object), sourceId: 50, targetId: 50 } as SimEvent, w, party, 1500);
+    expect(m.current!.tallies.get(50)).toBeUndefined();
   });
 
   it('ignores a cueOnly heal2 (the HoT-application sound cue): no encounter opens, no tally, no lastActivity bump', () => {
@@ -162,7 +187,18 @@ describe('combat meters', () => {
     const m = new MeterData(0);
     m.onEvent(dmg(50, 1, 12), w, party, 1000); // wolf bites the tank
     expect(m.current).not.toBeNull();
-    expect(m.current!.tallies.size).toBe(0);
+    expect(m.current!.tallies.get(1)?.dmg ?? 0).toBe(0);
+    expect(m.current!.tallies.get(1)?.dmgTaken).toBe(12);
+    expect(
+      buildMeterRows({
+        tallies: m.current!.tallies.values(),
+        tab: 'dmg',
+        liveThreat: null,
+        petsByOwner: null,
+        mainMobId: null,
+        aggroPid: null,
+      }),
+    ).toEqual([]);
   });
 
   it('folds controlled pet damage into its owner row instead of giving the pet its own', () => {
@@ -467,5 +503,147 @@ describe('combat meters', () => {
     expect(m.current!.tallies.get(1)!.dmg).toBe(7);
     expect(m.current!.tallies.has(2)).toBe(false);
     expect(m.history.length).toBe(1); // pull 1 alone, still in history
+  });
+  describe('PvP hits on a player target (duel, arena, battleground)', () => {
+    // Duel opponent: a player entity that is NOT in the party set.
+    const pvpWorld = (): IWorld => {
+      const w = fakeWorld();
+      w.entities.set(3, { id: 3, kind: 'player', name: 'Rival', templateId: 'rogue' } as never);
+      return w;
+    };
+
+    it('tallies party damage dealt to a player target and labels the segment after the opponent', () => {
+      const w = pvpWorld();
+      const party = new Set([1, 2]);
+      const m = new MeterData(0);
+      m.onEvent(dmg(1, 3, 40, 'Mortal Strike'), w, party, 1000);
+      m.onEvent(dmg(1, 3, 25), w, party, 1500);
+      expect(m.current).not.toBeNull();
+      expect(m.current!.tallies.get(1)!.dmg).toBe(65);
+      expect([...m.current!.tallies.get(1)!.dmgByAbility.values()]).toEqual([
+        { ability: 'Mortal Strike', petName: null, amount: 40 },
+        { ability: null, petName: null, amount: 25 },
+      ]);
+      expect(m.allTime.tallies.get(1)!.dmg).toBe(65);
+      expect(m.current!.label).toBe('Rival');
+      // A player target is never a threat subject: the Threat tab stays mob-only.
+      expect(m.current!.mainMobId).toBeNull();
+      expect(m.current!.mainMobTemplateId).toBeNull();
+      expect(m.current!.threatSnapshotByMob.size).toBe(0);
+    });
+
+    it('does not credit the opponent hitting a party member, and keeps a mob label over a duel label', () => {
+      const w = pvpWorld();
+      const party = new Set([1, 2]);
+      const m = new MeterData(0);
+      m.onEvent(dmg(3, 1, 80), w, party, 1000); // opponent hits me: keeps the segment alive, no row
+      expect(m.current).not.toBeNull();
+      expect(m.current!.tallies.has(3)).toBe(false);
+      m.onEvent(dmg(1, 50, 10), w, party, 1200); // a mob joins the fight
+      m.onEvent(dmg(1, 3, 30), w, party, 1400);
+      expect(m.current!.tallies.get(1)!.dmg).toBe(40);
+      expect(m.current!.label).toBe('Wolf');
+      expect(m.current!.mainMobId).toBe(50);
+    });
+
+    it('never credits a self-sourced DoT tick or a hit on a party member, and keeps the default label', () => {
+      const w = pvpWorld();
+      const party = new Set([1, 2]);
+      const m = new MeterData(0);
+      m.onEvent(dmg(1, 1, 3, 'Bad Air'), w, party, 1000); // delve affix ticking on myself
+      m.onEvent(dmg(1, 2, 12, 'Whirlwind'), w, party, 1200); // party member as the target
+      expect(m.current).not.toBeNull();
+      expect(m.current!.tallies.has(1)).toBe(false);
+      expect(m.current!.label).toBe('Combat');
+      m.onEvent(dmg(1, 999, 40), w, party, 1400); // target missing from the world
+      expect(m.current!.tallies.has(1)).toBe(false);
+    });
+
+    it('latches the first opponent as the label instead of flipping per hit', () => {
+      const w = pvpWorld();
+      w.entities.set(4, { id: 4, kind: 'player', name: 'Second', templateId: 'mage' } as never);
+      const party = new Set([1, 2]);
+      const m = new MeterData(0);
+      m.onEvent(dmg(1, 3, 10), w, party, 1000);
+      m.onEvent(dmg(1, 4, 50), w, party, 1100);
+      expect(m.current!.tallies.get(1)!.dmg).toBe(60);
+      expect(m.current!.label).toBe('Rival');
+    });
+  });
+
+  it('tallies damage taken and absorbed per ability and mob', () => {
+    const w = fakeWorld();
+    const party = new Set([1, 2]);
+    const m = new MeterData(0);
+    const biteEvent: SimEvent = {
+      type: 'damage',
+      sourceId: 50,
+      targetId: 1,
+      amount: 150,
+      absorbed: 50,
+      crit: false,
+      school: 'physical',
+      ability: 'Bite',
+      kind: 'hit',
+    };
+    m.onEvent(biteEvent, w, party, 1000);
+    const tank = m.current!.tallies.get(1)!;
+    expect(tank.dmgTaken).toBe(150);
+    expect(tank.absorbed).toBe(50);
+    expect([...tank.dmgTakenByAbility.values()]).toEqual([
+      { ability: 'Bite', petName: null, amount: 150 },
+    ]);
+    expect(tank.dmgTakenByMob.get(50)).toBe(150);
+  });
+
+  it('tallies interrupts when party applies a lockout aura', () => {
+    const w = fakeWorld();
+    const party = new Set([1, 2]);
+    const m = new MeterData(0);
+    const interruptEvent: SimEvent = {
+      type: 'aura',
+      gained: true,
+      auraKind: 'lockout',
+      sourceId: 1,
+      targetId: 50,
+      name: 'Pummel',
+    };
+    m.onEvent(interruptEvent, w, party, 1000);
+    const warrior = m.current!.tallies.get(1)!;
+    expect(warrior.interrupts).toBe(1);
+    expect([...warrior.interruptsByAbility.values()]).toEqual([
+      { ability: 'Pummel', petName: null, amount: 1 },
+    ]);
+  });
+
+  it('tallies deaths when a party member dies', () => {
+    const w = fakeWorld();
+    const party = new Set([1, 2]);
+    const m = new MeterData(0);
+    const deathEvent: SimEvent = {
+      type: 'playerDeath',
+      pid: 2,
+    };
+    m.onEvent(deathEvent, w, party, 1000);
+    const priest = m.current!.tallies.get(2)!;
+    expect(priest.deaths).toBe(1);
+  });
+
+  it('resets current fight and all history/session data', () => {
+    const w = fakeWorld();
+    const party = new Set([1, 2]);
+    const m = new MeterData(0);
+    m.onEvent(dmg(1, 50, 100), w, party, 1000);
+    expect(m.current).not.toBeNull();
+    expect(m.allTime.tallies.get(1)!.dmg).toBe(100);
+
+    m.resetCurrent();
+    expect(m.current).toBeNull();
+    expect(m.allTime.tallies.get(1)!.dmg).toBe(100);
+
+    m.resetAll(2000);
+    expect(m.current).toBeNull();
+    expect(m.history.length).toBe(0);
+    expect(m.allTime.tallies.size).toBe(0);
   });
 });

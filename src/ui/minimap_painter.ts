@@ -52,7 +52,10 @@ import {
   createMinimapMarkers,
   MINIMAP_CLIP_INSET,
   type MinimapMarker,
+  type MinimapModel,
   type MinimapObjectSemantic,
+  minimapWorldObjectiveMarkerAt,
+  minimapWorldQuestMarkerAt,
 } from './minimap_markers';
 import type { PainterHostWriters } from './painter_host';
 
@@ -82,6 +85,11 @@ const MOB_DOT_RADIUS = 2.25;
 const MOB_AGGRO_DIAMOND_RADIUS = 3.5;
 const MOB_LOOT_SIZE = 5;
 const MOB_LOOT_CORE_SIZE = 1.5;
+// Harvest-only corpse: an upright pelt triangle (apex one radius above the
+// point, base one radius wide each side at PELT_BASE_RATIO below it), so it
+// reads apart from the axis-aligned loot square by silhouette, not hue.
+const MOB_HARVEST_RADIUS = 3.5;
+const MOB_HARVEST_BASE_RATIO = 0.7;
 const PIP_RADIUS_RATIO = 0.35; // inner pip radius = max(PIP_MIN, disc radius * ratio)
 const PIP_MIN_RADIUS = 1;
 const PARTY_DEAD_CROSS_RATIO = 0.55;
@@ -114,6 +122,18 @@ const GATHER_FALLBACK_LOCK_SHACKLE_TOP_WIDTH = 1.4;
 // apart from the round gather dots and the axis-aligned loot/mob squares at
 // minimap scale. Half-diagonal in px.
 const STATION_DIAMOND_RADIUS = 3;
+// Farm-patch sprout, a shade larger than the station diamond so its two leaves
+// stay separable at minimap scale. The ratios below place the crown (where the
+// leaves and stem meet) and each leaf's inner heel; map_window_painter.ts
+// repeats them at its own radius so the two surfaces draw one silhouette.
+const FARM_SPROUT_RADIUS = 3.5;
+const FARM_SPROUT_CROWN = 0.2;
+const FARM_SPROUT_HEEL_X = 0.15;
+const FARM_SPROUT_HEEL_Y = 0.25;
+const WORLD_QUEST_MARKER_RADIUS = 5;
+const WORLD_QUEST_MARKER_COMPACT_SCALE = 1.45;
+const WORLD_QUEST_MARKER_LINE_WIDTH = 1.5;
+const WORLD_BOSS_MARKER_RADIUS = 6.5;
 
 // Party / player arrow triangle geometry (canvas-local, drawn under a rotation).
 const PARTY_ARROW_TIP_X = 6;
@@ -167,6 +187,7 @@ interface MinimapPaintGeometry {
   readonly mobAggroDiamondRadius: number;
   readonly mobLootSize: number;
   readonly mobLootCoreSize: number;
+  readonly mobHarvestRadius: number;
   readonly pipMinRadius: number;
   readonly partyDiscScale: number;
   readonly partyDeadCrossWidth: number;
@@ -179,6 +200,7 @@ interface MinimapPaintGeometry {
   readonly playerArrowBaseY: number;
   readonly playerArrowOutlineWidth: number;
   readonly stationDiamondRadius: number;
+  readonly farmSproutRadius: number;
   readonly neutralNpcRadius: number;
   readonly neutralNpcOutlineWidth: number;
   readonly neutralNpcInkWidth: number;
@@ -209,6 +231,7 @@ const MINIMAP_PAINT_GEOMETRY = Object.freeze({
     mobAggroDiamondRadius: MOB_AGGRO_DIAMOND_RADIUS,
     mobLootSize: MOB_LOOT_SIZE,
     mobLootCoreSize: MOB_LOOT_CORE_SIZE,
+    mobHarvestRadius: MOB_HARVEST_RADIUS,
     pipMinRadius: PIP_MIN_RADIUS,
     partyDiscScale: 1,
     partyDeadCrossWidth: PARTY_DEAD_CROSS_WIDTH,
@@ -221,6 +244,7 @@ const MINIMAP_PAINT_GEOMETRY = Object.freeze({
     playerArrowBaseY: PLAYER_ARROW_BASE_Y,
     playerArrowOutlineWidth: PLAYER_ARROW_OUTLINE_WIDTH,
     stationDiamondRadius: STATION_DIAMOND_RADIUS,
+    farmSproutRadius: FARM_SPROUT_RADIUS,
     neutralNpcRadius: QUEST_NEUTRAL_RADIUS,
     neutralNpcOutlineWidth: QUEST_FALLBACK_OUTLINE_WIDTH,
     neutralNpcInkWidth: QUEST_FALLBACK_INK_WIDTH,
@@ -246,6 +270,7 @@ const MINIMAP_PAINT_GEOMETRY = Object.freeze({
     mobAggroDiamondRadius: MOB_AGGRO_DIAMOND_RADIUS * 1.5,
     mobLootSize: MOB_LOOT_SIZE * 1.5,
     mobLootCoreSize: MOB_LOOT_CORE_SIZE * 1.5,
+    mobHarvestRadius: MOB_HARVEST_RADIUS * 1.5,
     pipMinRadius: PIP_MIN_RADIUS * 1.5,
     partyDiscScale: 1.45,
     partyDeadCrossWidth: 1.75,
@@ -258,6 +283,7 @@ const MINIMAP_PAINT_GEOMETRY = Object.freeze({
     playerArrowBaseY: PLAYER_ARROW_BASE_Y * 1.5,
     playerArrowOutlineWidth: 1.5,
     stationDiamondRadius: STATION_DIAMOND_RADIUS * 1.5,
+    farmSproutRadius: FARM_SPROUT_RADIUS * 1.5,
     neutralNpcRadius: QUEST_NEUTRAL_RADIUS * 1.5,
     neutralNpcOutlineWidth: 4,
     neutralNpcInkWidth: 1.75,
@@ -277,6 +303,16 @@ function beginDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, radiu
   ctx.lineTo(x + radius, y);
   ctx.lineTo(x, y + radius);
   ctx.lineTo(x - radius, y);
+  ctx.closePath();
+}
+
+/** Begin the upright pelt triangle for a harvest-only corpse. */
+function beginPelt(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number): void {
+  const baseY = y + radius * MOB_HARVEST_BASE_RATIO;
+  ctx.beginPath();
+  ctx.moveTo(x, y - radius);
+  ctx.lineTo(x + radius, baseY);
+  ctx.lineTo(x - radius, baseY);
   ctx.closePath();
 }
 
@@ -985,6 +1021,9 @@ export const MINIMAP_COLOR_TOKENS = {
   gatherCooldown: '--color-minimap-gather-cooldown',
   gatherLocked: '--color-minimap-node-locked',
   station: '--color-minimap-station',
+  worldQuestAvailable: '--color-minimap-world-quest-available',
+  worldQuestActive: '--color-minimap-world-quest-active',
+  worldBoss: '--color-minimap-world-boss',
 } as const;
 
 /** The resolved minimap marker colors for one redraw. */
@@ -1009,6 +1048,7 @@ export type MinimapZoneBg = {
  */
 export class MinimapPainter {
   private readonly markers = createMinimapMarkers();
+  private lastModel: MinimapModel | null = null;
   // The resolved `--color-minimap-*` tokens, cached after the first successful resolve.
   // They are static `:root` tokens (src/styles/tokens.css) with no runtime mutation (no
   // setProperty, no theme / forced-colors / media-query redefinition), so re-reading them
@@ -1052,6 +1092,24 @@ export class MinimapPainter {
     return colors;
   }
 
+  worldQuestAt(
+    mx: number,
+    my: number,
+    hitRadius: number,
+  ): Extract<MinimapMarker, { kind: 'world-quest' }> | null {
+    if (!this.lastModel) return null;
+    return minimapWorldQuestMarkerAt(this.lastModel.markers, mx, my, hitRadius);
+  }
+
+  worldObjectiveAt(
+    mx: number,
+    my: number,
+    hitRadius: number,
+  ): Extract<MinimapMarker, { kind: 'world-quest' | 'world-boss' }> | null {
+    if (!this.lastModel) return null;
+    return minimapWorldObjectiveMarkerAt(this.lastModel.markers, mx, my, hitRadius);
+  }
+
   /**
    * Overworld minimap render: blit the cached terrain background under the player, then
    * draw the marker union over it, with the '#zone-label' text routed through the
@@ -1073,6 +1131,7 @@ export class MinimapPainter {
     // branches), so branch to the field raster here instead of blitting the
     // far-off overworld terrain cache the band sits outside of.
     if (isBgPos(world.player.pos.x)) {
+      this.lastModel = null;
       this.paintBattleground(ctx, world, zoneLabelEl, zoom, colors);
       return;
     }
@@ -1080,6 +1139,7 @@ export class MinimapPainter {
     const pxPerYard = MINIMAP_BASE_SCALE * zoom;
     const profile = this.markerProfile();
     const model = this.markers.build(world, S, pxPerYard, profile);
+    this.lastModel = model;
     // The one DOM write this Canvas painter routes through the write-elision facet.
     // In a rift, show the generated floor name + rank instead of the overworld zone.
     if (model.rift) {
@@ -1325,6 +1385,48 @@ export class MinimapPainter {
           ctx.fill();
           ctx.stroke();
           break;
+        case 'world-quest': {
+          const radius =
+            WORLD_QUEST_MARKER_RADIUS *
+            (profile === 'compact' ? WORLD_QUEST_MARKER_COMPACT_SCALE : 1);
+          ctx.fillStyle =
+            m.state === 'active' ? colors.worldQuestActive : colors.worldQuestAvailable;
+          ctx.strokeStyle = colors.outline;
+          ctx.lineWidth = WORLD_QUEST_MARKER_LINE_WIDTH;
+          ctx.beginPath();
+          ctx.arc(m.mx, m.my, radius, 0, FULL_CIRCLE);
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle = colors.outline;
+          ctx.lineWidth = Math.max(1.5, radius * 0.28);
+          ctx.beginPath();
+          if (m.state === 'active') {
+            ctx.moveTo(m.mx - radius * 0.5, m.my);
+            ctx.lineTo(m.mx - radius * 0.1, m.my + radius * 0.42);
+            ctx.lineTo(m.mx + radius * 0.58, m.my - radius * 0.45);
+          } else {
+            ctx.moveTo(m.mx, m.my - radius * 0.55);
+            ctx.lineTo(m.mx, m.my + radius * 0.55);
+            ctx.moveTo(m.mx - radius * 0.55, m.my);
+            ctx.lineTo(m.mx + radius * 0.55, m.my);
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'world-boss': {
+          const radius =
+            WORLD_BOSS_MARKER_RADIUS *
+            (profile === 'compact' ? WORLD_QUEST_MARKER_COMPACT_SCALE : 1);
+          ctx.fillStyle = colors.worldBoss;
+          ctx.strokeStyle = colors.outline;
+          ctx.lineWidth = WORLD_QUEST_MARKER_LINE_WIDTH;
+          ctx.beginPath();
+          ctx.arc(m.mx, m.my, radius, 0, FULL_CIRCLE);
+          ctx.fill();
+          ctx.stroke();
+          drawCorpseSkull(ctx, m.mx, m.my, colors.corpse, colors.outline, geometry);
+          break;
+        }
         case 'npc': {
           if (m.marker === 'none') {
             drawNeutralNpcRing(ctx, m.mx, m.my, colors.gatherCooldown, colors.outline, geometry);
@@ -1512,6 +1614,16 @@ export class MinimapPainter {
             geometry.mobLootCoreSize,
           );
           break;
+        case 'mob-harvest':
+          // A body with only its harvest left: the pelt triangle in the same
+          // corpse-loot paint, told apart from the loot square by shape.
+          ctx.fillStyle = colors.mobLoot;
+          ctx.strokeStyle = colors.outline;
+          ctx.lineWidth = geometry.dynamicOutlineWidth;
+          beginPelt(ctx, m.mx, m.my, geometry.mobHarvestRadius);
+          ctx.fill();
+          ctx.stroke();
+          break;
         case 'corpse':
           // The local player's body during a ghost run: a procedural skull.
           drawCorpseSkull(ctx, m.mx, m.my, colors.corpse, colors.outline, geometry);
@@ -1612,6 +1724,42 @@ export class MinimapPainter {
             ctx.fill();
             ctx.stroke();
           }
+          break;
+        }
+        case 'farm-patch': {
+          // A farm patch shares the station painted-size family because it is
+          // a static service site. Keep the procedural sprout as the deliberate
+          // fallback if the committed sprite is unavailable. Tier-identical
+          // (fairness invariant): never preset- or governor-gated.
+          const sizeId = profile === 'compact' ? 'minimapStationCompact' : 'minimapStation';
+          const sprite = this.markerArt.sprite('farm-patch', sizeId);
+          if (sprite) {
+            const size = MAP_MARKER_SIZES[sizeId];
+            ctx.drawImage(sprite, Math.round(m.mx - size / 2), Math.round(m.my - size / 2));
+            break;
+          }
+          const radius = geometry.farmSproutRadius;
+          const crownY = m.my - radius * FARM_SPROUT_CROWN;
+          const heelX = radius * FARM_SPROUT_HEEL_X;
+          const heelY = m.my + radius * FARM_SPROUT_HEEL_Y;
+          ctx.fillStyle = colors.station;
+          ctx.strokeStyle = colors.outline;
+          ctx.lineWidth = geometry.markerOutlineWidth;
+          ctx.beginPath();
+          ctx.moveTo(m.mx, crownY);
+          ctx.lineTo(m.mx - radius, m.my - radius);
+          ctx.lineTo(m.mx - heelX, heelY);
+          ctx.closePath();
+          ctx.moveTo(m.mx, crownY);
+          ctx.lineTo(m.mx + radius, m.my - radius);
+          ctx.lineTo(m.mx + heelX, heelY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(m.mx, crownY);
+          ctx.lineTo(m.mx, m.my + radius);
+          ctx.stroke();
           break;
         }
         case 'gather-node': {

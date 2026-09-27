@@ -9,14 +9,18 @@
 //  - dead or a ghost: they are moved there and raised on the Pale Keeper's hp
 //    terms (a fifth of their pools). This is the escape hatch for a spirit that
 //    cannot reach its corpse or an angel.
-// Either way the price is Unstuck Sickness (all attributes -75%, level-scaled up
-// to 5 minutes), and neither outcome can be reached by an attempt that started on
-// the other side of the life/death line (see cancelReason).
+// Either way the first completion in an hour is free: a genuinely stuck player pays
+// nothing. A completion inside UNSTUCK_SICKNESS_WINDOW_SECONDS of the previous one is
+// a repeat and charges Unstuck Sickness (all attributes -75%, level-scaled up to 5
+// minutes), which is what keeps the command from doubling as free fast travel (the
+// window lives in ./unstuck_cooldown). Neither outcome can be reached by an attempt
+// that started on the other side of the life/death line (see cancelReason).
 
+import { BG_HALF_X, BG_HALF_Z, battlegroundColliders } from './battleground_layout';
 import { moverHeight, resolvePosition } from './colliders';
 import { isRooted, isStunned } from './combat/cc';
 import {
-  bgOriginAt,
+  battlegroundOrigin,
   INSTANCE_X_BASE,
   isArenaPos,
   isBgPos,
@@ -30,11 +34,17 @@ import { PLAYER_BODY_RADIUS } from './pathfind';
 import { riftInstanceAtPos } from './rift/runs';
 import type { PlayerMeta } from './sim';
 import type { SimContext } from './sim_context';
-import { bgCarryingFlag, bgTeamOf, bgUnstuckDestination } from './social/battleground';
+import {
+  type BgMatch,
+  bgCarryingFlag,
+  bgTeamOf,
+  bgUnstuckDestination,
+} from './social/battleground';
 import {
   applyUnstuckSickness,
   moveToGraveyardForUnstuck,
   reviveAtGraveyardForUnstuck,
+  type UnstuckSicknessCharge,
 } from './spirit';
 import { settleTeleportArrival } from './teleport_arrival';
 import {
@@ -42,6 +52,7 @@ import {
   type Entity,
   emptyMoveInput,
   isConsuming,
+  type MoveInput,
   type UnstuckArea,
   type UnstuckBlockedReason,
   type UnstuckCancelReason,
@@ -49,12 +60,17 @@ import {
   type UnstuckPosition,
   type Vec3,
 } from './types';
-import { UNSTUCK_COOLDOWN_ID } from './unstuck_cooldown';
+import { markUnstuckCompleted, UNSTUCK_COOLDOWN_ID, unstuckOwesSickness } from './unstuck_cooldown';
 
 export const UNSTUCK_COUNTDOWN_SECONDS = 10;
 export const UNSTUCK_RETRY_SECONDS = 15;
 export const UNSTUCK_SUCCESS_COOLDOWN_SECONDS = 5 * 60;
-export { UNSTUCK_COOLDOWN_ID } from './unstuck_cooldown';
+export {
+  isUnstuckSystemCooldown,
+  UNSTUCK_COOLDOWN_ID,
+  UNSTUCK_RECENT_ID,
+  UNSTUCK_SICKNESS_WINDOW_SECONDS,
+} from './unstuck_cooldown';
 
 const POSITION_EPS = 1e-4;
 const CANCEL_MOVE_DISTANCE = 0.5;
@@ -97,8 +113,63 @@ function located(area: UnstuckArea, pos: Vec3, origin: { x: number; z: number })
   };
 }
 
+function battlegroundArea(match: BgMatch): UnstuckArea {
+  return {
+    kind: 'battleground',
+    id: 'thornhollow_fields',
+    instanceId: String(match.id),
+    slot: match.slot,
+  };
+}
+
+function battlegroundGeometryHalfExtents(): { x: number; z: number } {
+  let x = BG_HALF_X;
+  let z = BG_HALF_Z;
+  for (const collider of battlegroundColliders()) {
+    if (collider.type === 'circle') {
+      x = Math.max(x, Math.abs(collider.x) + collider.r);
+      z = Math.max(z, Math.abs(collider.z) + collider.r);
+      continue;
+    }
+    const cos = Math.cos(collider.rot);
+    const sin = Math.sin(collider.rot);
+    x = Math.max(
+      x,
+      Math.abs(collider.x) + Math.abs(cos) * collider.hw + Math.abs(sin) * collider.hd,
+    );
+    z = Math.max(
+      z,
+      Math.abs(collider.z) + Math.abs(sin) * collider.hw + Math.abs(cos) * collider.hd,
+    );
+  }
+  return { x, z };
+}
+
+const BG_GEOMETRY_HALF_EXTENTS = battlegroundGeometryHalfExtents();
+
+function battlegroundLocation(
+  match: BgMatch,
+  pos: Vec3,
+): { origin: { x: number; z: number }; point: UnstuckPosition } | null {
+  const origin = battlegroundOrigin(match.slot);
+  const localX = pos.x - origin.x;
+  const localZ = pos.z - origin.z;
+  const maxX = BG_GEOMETRY_HALF_EXTENTS.x + PLAYER_BODY_RADIUS + POSITION_EPS;
+  const maxZ = BG_GEOMETRY_HALF_EXTENTS.z + PLAYER_BODY_RADIUS + POSITION_EPS;
+  if (Math.abs(localX) > maxX || Math.abs(localZ) > maxZ) {
+    return null;
+  }
+  return { origin, point: { ...pos, localX, localZ } };
+}
+
 /** Resolve a position into a stable content identity plus instance-local coords. */
 export function unstuckLocationAt(ctx: SimContext, pid: number, pos: Vec3): LocatedPoint | null {
+  const bgMatch = ctx.bgMatches.get(pid);
+  if (bgMatch) {
+    const location = battlegroundLocation(bgMatch, pos);
+    if (location) return { area: battlegroundArea(bgMatch), point: location.point };
+  }
+
   const rift = riftInstanceAtPos(ctx, pos);
   if (rift) {
     if (!rift.memberIds.has(pid)) return null;
@@ -133,21 +204,7 @@ export function unstuckLocationAt(ctx: SimContext, pid: number, pos: Vec3): Loca
   }
   if (isDelvePos(pos.x)) return null;
 
-  if (isBgPos(pos.x)) {
-    const match = ctx.bgMatches.get(pid);
-    if (!match || match.slot !== bgOriginAt(pos.z).slot) return null;
-    const origin = bgOriginAt(pos.z);
-    return located(
-      {
-        kind: 'battleground',
-        id: 'thornhollow_fields',
-        instanceId: String(match.id),
-        slot: match.slot,
-      },
-      pos,
-      origin,
-    );
-  }
+  if (isBgPos(pos.x)) return null;
 
   const claimId = ctx.instanceClaimIdAt(pos);
   if (claimId !== null) {
@@ -182,17 +239,26 @@ function sameArea(a: UnstuckArea, b: UnstuckArea): boolean {
 }
 
 function hasMoveInput(meta: PlayerMeta): boolean {
-  const input = meta.moveInput;
+  return inputHasMove(meta.moveInput);
+}
+
+function inputHasMove(input: MoveInput): boolean {
   return input.forward || input.back || input.strafeLeft || input.strafeRight || input.jump;
 }
 
-function hasAnyMovementInput(meta: PlayerMeta): boolean {
-  const input = meta.moveInput;
-  return hasMoveInput(meta) || input.turnLeft || input.turnRight || input.dive || input.surface;
+function inputHasAnyMovement(input: MoveInput): boolean {
+  return inputHasMove(input) || input.turnLeft || input.turnRight || input.dive || input.surface;
 }
 
-function moveInputVector(meta: PlayerMeta, p: Entity): { x: number; z: number } | null {
-  const input = meta.moveInput;
+function hasAnyMovementInput(meta: PlayerMeta): boolean {
+  return inputHasAnyMovement(meta.moveInput);
+}
+
+function inputMoveVector(
+  input: MoveInput,
+  p: Entity,
+  facing: number = p.facing,
+): { x: number; z: number } | null {
   let mx = 0;
   let mz = 0;
   if (input.forward) mz += 1;
@@ -203,9 +269,17 @@ function moveInputVector(meta: PlayerMeta, p: Entity): { x: number; z: number } 
   if (len <= POSITION_EPS) return null;
   mx /= len;
   mz /= len;
-  const sin = Math.sin(p.facing);
-  const cos = Math.cos(p.facing);
+  const sin = Math.sin(facing);
+  const cos = Math.cos(facing);
   return { x: mz * sin - mx * cos, z: mz * cos + mx * sin };
+}
+
+function moveInputVector(
+  meta: PlayerMeta,
+  p: Entity,
+  facing: number = p.facing,
+): { x: number; z: number } | null {
+  return inputMoveVector(meta.moveInput, p, facing);
 }
 
 function forcedAction(p: Entity): boolean {
@@ -235,12 +309,39 @@ function isFrozenCorpse(p: Entity): boolean {
   return p.dead && !p.ghost;
 }
 
+function overlapsBattlegroundWall(match: BgMatch, pos: Vec3): boolean {
+  const location = battlegroundLocation(match, pos);
+  if (!location) return false;
+  for (const collider of battlegroundColliders()) {
+    if (collider.standable) continue;
+    if (collider.type === 'circle') {
+      const distance = Math.hypot(
+        location.point.localX - collider.x,
+        location.point.localZ - collider.z,
+      );
+      if (distance < collider.r + PLAYER_BODY_RADIUS - POSITION_EPS) {
+        return true;
+      }
+      continue;
+    }
+    const dx = location.point.localX - collider.x;
+    const dz = location.point.localZ - collider.z;
+    const cos = Math.cos(collider.rot);
+    const sin = Math.sin(collider.rot);
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+    const beyondX = Math.max(Math.abs(localX) - collider.hw, 0);
+    const beyondZ = Math.max(Math.abs(localZ) - collider.hd, 0);
+    if (Math.hypot(beyondX, beyondZ) < PLAYER_BODY_RADIUS - POSITION_EPS) return true;
+  }
+  return false;
+}
+
 function battlegroundWallTrap(ctx: SimContext, p: Entity): boolean {
   if (!ctx.bgMatches.has(p.id) || !isBgPos(p.pos.x)) return false;
   const match = ctx.bgMatches.get(p.id);
   if (!match) return false;
-  const origin = bgOriginAt(p.pos.z);
-  if (match.slot !== origin.slot) return false;
+  if (overlapsBattlegroundWall(match, p.pos)) return true;
   const resolved = resolvePosition(
     ctx.cfg.seed,
     p.pos.x,
@@ -260,10 +361,20 @@ function battlegroundBlockedWallPress(ctx: SimContext, meta: PlayerMeta, p: Enti
   return battlegroundBlockedProbe(ctx, p, wish);
 }
 
+function battlegroundBlockedVelocityPress(ctx: SimContext, meta: PlayerMeta, p: Entity): boolean {
+  if (hasAnyMovementInput(meta)) return false;
+  if (!activeBattlegroundAt(ctx, p)) return false;
+  const speed = Math.hypot(p.vx, p.vz);
+  if (speed <= POSITION_EPS) return false;
+  return battlegroundBlockedProbe(ctx, p, { x: p.vx / speed, z: p.vz / speed });
+}
+
 export function noteBattlegroundWallPressure(
   ctx: SimContext | undefined,
   meta: PlayerMeta,
   p: Entity,
+  input: MoveInput = meta.moveInput,
+  facing: number = p.facing,
 ): void {
   if (!ctx?.bgMatches) return;
   const grace = battlegroundWallPressGrace.get(ctx);
@@ -271,13 +382,14 @@ export function noteBattlegroundWallPressure(
     grace?.delete(p.id);
     return;
   }
-  if (battlegroundBlockedWallPress(ctx, meta, p)) {
+  const wish = inputMoveVector(input, p, facing);
+  if (wish && activeBattlegroundAt(ctx, p) && battlegroundBlockedProbe(ctx, p, wish)) {
     const activeGrace = grace ?? new Map<number, number>();
     if (!grace) battlegroundWallPressGrace.set(ctx, activeGrace);
     activeGrace.set(p.id, ctx.time + BG_WALL_PRESS_ESC_GRACE_SECONDS);
     return;
   }
-  if (hasAnyMovementInput(meta)) grace?.delete(p.id);
+  if (inputHasAnyMovement(input)) grace?.delete(p.id);
 }
 
 function battlegroundBlockedProbe(
@@ -289,8 +401,10 @@ function battlegroundBlockedProbe(
     x: p.pos.x + wish.x * BG_WALL_PRESS_PROBE_DISTANCE,
     z: p.pos.z + wish.z * BG_WALL_PRESS_PROBE_DISTANCE,
   };
-  const origin = bgOriginAt(p.pos.z);
-  if (!isBgPos(probe.x) || bgOriginAt(probe.z).slot !== origin.slot) return false;
+  const match = ctx.bgMatches.get(p.id);
+  if (!match || !battlegroundLocation(match, { x: probe.x, y: p.pos.y, z: probe.z })) {
+    return false;
+  }
   const resolved = resolvePosition(
     ctx.cfg.seed,
     probe.x,
@@ -310,14 +424,15 @@ function battlegroundGeometryTrap(ctx: SimContext, meta: PlayerMeta, p: Entity):
   return (
     battlegroundWallTrap(ctx, p) ||
     battlegroundBlockedWallPress(ctx, meta, p) ||
+    battlegroundBlockedVelocityPress(ctx, meta, p) ||
     (!hasAnyMovementInput(meta) && activeBattlegroundAt(ctx, p) && wallPressUntil >= ctx.time)
   );
 }
 
 function activeBattlegroundAt(ctx: SimContext | undefined, p: Entity): boolean {
   const match = ctx?.bgMatches?.get(p.id);
-  if (!match || !isBgPos(p.pos.x)) return false;
-  return match.slot === bgOriginAt(p.pos.z).slot;
+  if (!match) return false;
+  return battlegroundLocation(match, p.pos) !== null;
 }
 
 function motionBlock(ctx: SimContext, meta: PlayerMeta, p: Entity): UnstuckBlockedReason | null {
@@ -406,15 +521,17 @@ function cancelReason(
   p: Entity,
   pending: PendingUnstuck,
 ): UnstuckCancelReason | null {
+  const bgGeometryTrap = battlegroundGeometryTrap(ctx, meta, p);
+  const movedFromOrigin =
+    Math.hypot(p.pos.x - pending.origin.x, p.pos.z - pending.origin.z) > CANCEL_MOVE_DISTANCE ||
+    Math.abs(p.pos.y - pending.origin.y) > CANCEL_VERTICAL_DISTANCE;
   if (meta.counters.damageTaken > pending.damageTaken) return 'damaged';
   if (p.inCombat || p.combatTimer < 5) return 'combat';
   if (p.castingAbility !== null || isConsuming(p) || p.sitting) return 'busy';
   if (pending.area.kind === 'battleground' && bgCarryingFlag(ctx, p.id)) return 'state_changed';
   if (
-    (hasMoveInput(meta) && !battlegroundGeometryTrap(ctx, meta, p)) ||
-    (pending.area.kind !== 'battleground' &&
-      (Math.hypot(p.pos.x - pending.origin.x, p.pos.z - pending.origin.z) > CANCEL_MOVE_DISTANCE ||
-        Math.abs(p.pos.y - pending.origin.y) > CANCEL_VERTICAL_DISTANCE))
+    (hasMoveInput(meta) && !bgGeometryTrap) ||
+    (movedFromOrigin && (pending.area.kind !== 'battleground' || !bgGeometryTrap))
   )
     return 'moved';
   // Crossing the life/death line either way invalidates the attempt: a living player who
@@ -467,16 +584,24 @@ export function cancelPendingUnstuckForDisconnect(
   return cancelUnstuck(ctx, meta, pending, 'disconnected', emitEvent);
 }
 
+interface BattlegroundUnstuckOutcome {
+  destination: UnstuckPosition;
+  /** Whether Unstuck Sickness actually landed (never for a dead body: it is only moved). */
+  charged: boolean;
+}
+
 function completeBattlegroundUnstuck(
   ctx: SimContext,
   meta: PlayerMeta,
   p: Entity,
-): UnstuckPosition | null {
-  const destination = bgUnstuckDestination(ctx, p.id);
-  if (!destination) return null;
+  sickness: UnstuckSicknessCharge,
+): BattlegroundUnstuckOutcome | null {
   const match = ctx.bgMatches.get(p.id);
-  const team = match ? bgTeamOf(match, p.id) : 0;
-  p.pos = destination;
+  if (!match) return null;
+  const target = bgUnstuckDestination(ctx, p.id);
+  if (!target) return null;
+  const team = bgTeamOf(match, p.id);
+  p.pos = target;
   p.prevPos = { ...p.pos };
   p.facing = team === 0 ? 0 : Math.PI;
   p.prevFacing = p.facing;
@@ -491,9 +616,11 @@ function completeBattlegroundUnstuck(
   delete p.queuedOnSwingCostMultiplier;
   p.queuedCastAbility = null;
   p.queuedCastAim = null;
+  p.queuedCastTargetId = null;
   settleTeleportArrival(p);
-  if (!p.dead && !p.ghost) applyUnstuckSickness(ctx, p);
-  return unstuckLocationAt(ctx, p.id, p.pos)?.point ?? null;
+  const charged = !p.dead && !p.ghost && sickness === 'unstuck' && applyUnstuckSickness(ctx, p);
+  const destination = battlegroundLocation(match, p.pos)?.point;
+  return destination ? { destination, charged } : null;
 }
 
 function completeUnstuck(
@@ -505,16 +632,27 @@ function completeUnstuck(
   meta.pendingUnstuck = null;
   // Both outcomes land on the same graveyard and charge the same Unstuck Sickness; they
   // differ only in whether a revive is needed on arrival. A living player is never killed.
+  // The charge itself is owed only by a repeat inside the window the previous completion
+  // opened (unstuckOwesSickness); the first use in an hour is free. Decided BEFORE the
+  // window is re-opened below, and re-opened on EVERY completion (a dead body merely moved
+  // inside a battleground included) so it slides from the latest use.
   const wasDead = p.dead || p.ghost;
-  const battlegroundDestination =
-    pending.area.kind === 'battleground' ? completeBattlegroundUnstuck(ctx, meta, p) : null;
-  if (!battlegroundDestination) {
-    if (wasDead) reviveAtGraveyardForUnstuck(ctx, p.id);
-    else moveToGraveyardForUnstuck(ctx, p.id);
-  }
+  const sickness: UnstuckSicknessCharge = unstuckOwesSickness(p.cooldowns) ? 'unstuck' : 'none';
+  const battleground =
+    pending.area.kind === 'battleground'
+      ? completeBattlegroundUnstuck(ctx, meta, p, sickness)
+      : null;
+  // What the outcome ACTUALLY applied, not what was owed: a character below the sickness
+  // floor and a dead body moved inside a battleground owe a charge that never lands.
+  const charged = battleground
+    ? battleground.charged
+    : wasDead
+      ? reviveAtGraveyardForUnstuck(ctx, p.id, sickness)
+      : moveToGraveyardForUnstuck(ctx, p.id, sickness);
+  markUnstuckCompleted(p.cooldowns);
   p.cooldowns.set(UNSTUCK_COOLDOWN_ID, UNSTUCK_SUCCESS_COOLDOWN_SECONDS);
 
-  const destination = battlegroundDestination ??
+  const destination = battleground?.destination ??
     unstuckLocationAt(ctx, p.id, p.pos)?.point ?? {
       ...p.pos,
       localX: p.pos.x,
@@ -523,7 +661,8 @@ function completeUnstuck(
   ctx.emit({
     type: 'unstuck',
     phase: 'completed',
-    reason: battlegroundDestination || !wasDead ? 'moved_to_graveyard' : 'revived_at_graveyard',
+    reason: battleground || !wasDead ? 'moved_to_graveyard' : 'revived_at_graveyard',
+    sickness: charged,
     area: pending.area,
     origin: pending.origin,
     destination,

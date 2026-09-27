@@ -10,12 +10,17 @@
 // getComputedStyle and are covered by the no-magic-values source guard instead.
 
 import { describe, expect, it } from 'vitest';
+import { buildingContainsPoint, buildingLocalToWorld } from '../src/sim/building_layout';
+import { FARM_PATCHES } from '../src/sim/content/farm_patches';
+import { GLIDER_NPC_DEF, WORLD_QUEST_GLIDER } from '../src/sim/content/world_quest_glider';
 import {
   BUILTIN_WORLD,
   CAMPS,
   DELVE_LIST,
   DELVE_X_MIN,
+  DUNGEONS,
   GATHER_NODES,
+  instanceOrigin,
   NPCS,
   PORTALS,
   PROPS,
@@ -23,22 +28,29 @@ import {
   STATIONS,
   STRIP_MAX_X,
   STRIP_MIN_X,
+  WORLD_QUESTS,
   ZONES,
+  zoneAt,
 } from '../src/sim/data';
 import { EASTBROOK_LAYOUT } from '../src/sim/eastbrook_layout';
+import { KIT_BUILDINGS } from '../src/sim/kit_buildings';
 import type { QuestObjectiveRef } from '../src/sim/quest_targets';
 import {
   emptyZoneProps,
-  isQuestTurnInNpc,
   type NoticeboardDef,
   type QuestProgress,
+  type WorldQuestProgress,
   type WorldServicesDef,
   type ZonePropsDef,
 } from '../src/sim/types';
 import type { Decoration } from '../src/sim/world';
-import { isNodeToolLockedFor } from '../src/ui/gathering_view';
+import { WORLD_BOSSES, worldBossLockoutId } from '../src/sim/world_boss';
+import { worldQuestCycleForResetDay } from '../src/sim/world_quest_rotation';
+import { activeWorldQuestsForCycle } from '../src/sim/world_quests';
+import { isNodeToolLockedFor } from '../src/ui/hud/professions/gathering_view';
 import { STABLE_MAP_NAVIGATION_LANDMARKS } from '../src/ui/map_navigation_landmarks_core';
 import {
+  buildingFootprintCorners,
   buildOverworldMapModel,
   gatherNodeMarkerAt,
   MAP_GATHER_NODE_HIT_RADIUS,
@@ -49,7 +61,6 @@ import {
   MAP_NAVIGATION_HIT_RADIUS,
   MAP_NPC_GLYPH_HIT_RADIUS,
   MAP_SERVICE_HIT_RADIUS,
-  MAP_STATION_HIT_RADIUS,
   MAP_STATION_NPC_SEPARATION,
   MAP_TOUCH_POINT_HIT_RADIUS_CSS_PX,
   type MapPointMarkerHit,
@@ -62,7 +73,8 @@ import {
   questAreaObjectivesAt,
   questAreaObjectivesAtInto,
   serviceMarkerAt,
-  stationMarkerAt,
+  worldBossMarkerAt,
+  worldQuestMarkerAt,
 } from '../src/ui/map_window_view';
 import type { IWorld } from '../src/world_api';
 
@@ -74,24 +86,10 @@ const ZONE_MAX_X = ZONE.xMax ?? STRIP_MAX_X;
 const FULL_SPAN = Math.max(ZONE_MAX_X - ZONE_MIN_X, ZONE.zMax - ZONE.zMin);
 const ZONE_CX = (ZONE_MIN_X + ZONE_MAX_X) / 2;
 const LABELS_ZOOM = 1;
-// A quest giver with a real giverNpcId, so the npc-marker branch exercises real
-// content rather than an undefined === undefined accident.
-function requireQuestWithGiver() {
-  const quest = Object.values(QUESTS).find((q) => q.giverNpcId);
-  if (!quest) throw new Error('expected a quest with a giverNpcId');
-  return quest;
-}
-const GIVER_QUEST = requireQuestWithGiver();
-// A quest whose giver is also a turn-in npc, so a single npc can carry a 'ready'
-// turn-in (the '?' glyph branch the painter renders, distinct from '!').
-function requireReadyQuest() {
-  const quest = Object.values(QUESTS).find(
-    (q) => q.giverNpcId && isQuestTurnInNpc(q, q.giverNpcId),
-  );
-  if (!quest) throw new Error('expected a quest whose giver is also a turn-in npc');
-  return quest;
-}
-const READY_QUEST = requireReadyQuest();
+// Explicit combat content keeps generic glyph geometry independent of ambient
+// profession-offer visibility and content-table insertion order.
+const GIVER_QUEST = QUESTS.q_wolves;
+const READY_QUEST = QUESTS.q_wolves;
 
 // One scenario as plain data, so we can build two structurally-distinct IWorld
 // stubs (a "Sim-shaped" one carrying extra sim-only fields the core must ignore,
@@ -100,6 +98,9 @@ const READY_QUEST = requireReadyQuest();
 function makeOverworldWorld(
   shape: 'sim' | 'client',
   questLog: Map<string, QuestProgress> = new Map(),
+  level = 1,
+  worldQuestLog: Map<string, WorldQuestProgress> = new Map(),
+  worldQuestCycle = '2026-08-31',
 ): IWorld {
   const simJunk = shape === 'sim' ? { hp: 100, maxHp: 100, castingAbility: null } : {};
   const player = {
@@ -108,6 +109,7 @@ function makeOverworldWorld(
     name: 'Me',
     pos: { x: 0, z: ZONE_CZ },
     facing: 0.5,
+    level,
     ...simJunk,
   };
   const npc = {
@@ -150,6 +152,8 @@ function makeOverworldWorld(
     playerId: 1,
     questState: (q: string) => (q === GIVER_QUEST.id ? 'available' : 'unavailable'),
     questLog,
+    worldQuestCycle,
+    worldQuestLog,
     questsDone: new Set<string>(),
     craftingIdentity,
     // Gather-node marker inputs (mirrors minimap_markers fixture): inventory
@@ -158,8 +162,11 @@ function makeOverworldWorld(
     inventory: [],
     gatheringProficiency: {},
     nodeHarvestableByMe: () => true,
+    raidLockouts: () => [],
+    worldBossActive: () => false,
     stationPlacements: STATIONS,
     civicServicePlacements: [],
+    farmPatches: FARM_PATCHES,
   } as unknown as IWorld;
 }
 
@@ -250,6 +257,16 @@ function noticeboardAt(x: number, z: number): NoticeboardDef {
 }
 
 describe('mapWindowMode (delve vs overworld discriminator)', () => {
+  it('classifies the Last Keep and Dawnhold interiors as castle, never overworld', () => {
+    for (const id of ['the_last_keep', 'dawnhold_castle'] as const) {
+      const origin = instanceOrigin(DUNGEONS[id].index, 0);
+      const world = makeOverworldWorld('client');
+      world.player.pos.x = origin.x;
+      world.player.pos.z = origin.z;
+      expect(mapWindowMode(world)).toBe('castle');
+    }
+  });
+
   it('returns overworld for an overworld position with no run (both shapes)', () => {
     expect(mapWindowMode(makeOverworldWorld('sim'))).toBe('overworld');
     expect(mapWindowMode(makeOverworldWorld('client'))).toBe('overworld');
@@ -275,6 +292,28 @@ describe('buildOverworldMapModel (pure draw model)', () => {
     const fromSim = buildOverworldMapModel(input(sim, 3));
     const fromClient = buildOverworldMapModel(input(client, 3));
     expect(fromSim).toEqual(fromClient);
+  });
+
+  it('draws a rerolled slot as its replacement, never the quest it replaced', () => {
+    const cycle = worldQuestCycleForResetDay('2026-08-31');
+    const replaced = activeWorldQuestsForCycle(cycle).find((quest) => quest.zoneId === ZONE.id);
+    const replacement = WORLD_QUESTS.find(
+      (quest) => quest.zoneId === ZONE.id && quest.id !== replaced?.id,
+    );
+    expect(replaced, 'a board quest in the first zone').toBeDefined();
+    expect(replacement, 'another authored quest in the first zone').toBeDefined();
+    if (!replaced || !replacement) return;
+    const base = makeOverworldWorld('sim', new Map(), 20, new Map(), cycle);
+    const plain = buildOverworldMapModel(input(base, 1));
+    expect(plain.worldQuests.map((marker) => marker.questId)).toContain(replaced.id);
+    const rerolled = {
+      ...base,
+      worldQuestReplacements: { [replaced.id]: replacement.id },
+    } as IWorld;
+    const model = buildOverworldMapModel(input(rerolled, 1));
+    const ids = model.worldQuests.map((marker) => marker.questId);
+    expect(ids).toContain(replacement.id);
+    expect(ids).not.toContain(replaced.id);
   });
 
   it('is deterministic: identical inputs produce a deep-equal model', () => {
@@ -419,10 +458,14 @@ describe('buildOverworldMapModel (pure draw model)', () => {
     ).toEqual([
       ...EASTBROOK_LAYOUT.preservedBuildings.map((building) => building.id),
       ...EASTBROOK_LAYOUT.buildings.map((building) => building.id),
+      // The Weekly Vault hall (PR 4052) is authored as its own layout site and
+      // appended to ZONE1_PROPS.buildings after the town list, so its footprint
+      // draws last.
+      EASTBROOK_LAYOUT.weeklyVault.id,
     ]);
     expect(
       detail.props.filter((marker) => marker.kind === 'well').map((marker) => marker.id),
-    ).toEqual([EASTBROOK_LAYOUT.civic.wellBeacon.id]);
+    ).toEqual([EASTBROOK_LAYOUT.civic.monument.id]);
     const stallMarkerIds = detail.props
       .filter((marker) => marker.kind === 'stall')
       .map((marker) => marker.id);
@@ -566,8 +609,8 @@ describe('buildOverworldMapModel (pure draw model)', () => {
   });
 
   it('classifies the repeat and cooldown variants identically for both world shapes', () => {
-    // Acceptance (a)'s both-worlds arm at the map surface: a real cadenced
-    // work order (giver in this test's zone), driven through a Sim-shaped
+    // Generic cadence classification at the map surface: a synthetic non-profession
+    // combat repeatable (giver in this test's zone), driven through a Sim-shaped
     // and a ClientWorld-mirror-shaped stub. After one completion the offer
     // is the blue repeat glyph; inside the window it is the dimmed cooldown
     // glyph; and a non-repeatable quest stays pixel-identical gold
@@ -575,29 +618,43 @@ describe('buildOverworldMapModel (pure draw model)', () => {
     // CLASSIFIER over each world's data shape; true world-to-world parity
     // of the inputs rests on the online cadence/attunement suites pinning
     // the qdone and cprof mirrors.
-    const workOrder = QUESTS.q_prof_workorder_forge;
-    expect(workOrder.repeatable).toBe(true);
-    for (const shape of ['sim', 'client'] as const) {
-      const world = makeOverworldWorld(shape) as unknown as {
-        questsDone: Set<string>;
-        craftingIdentity: { cadenceBlockedQuests: string[] };
-        questState: (q: string) => string;
-      };
-      world.questsDone = new Set([workOrder.id]);
-      world.questState = (q) => (q === workOrder.id ? 'available' : 'unavailable');
-      const offered = buildOverworldMapModel(input(world as unknown as IWorld, 1));
-      const offeredGlyph = offered.npcs.find((n) =>
-        n.quests.some((q) => q.questId === workOrder.id),
-      );
-      expect(offeredGlyph?.kind, `${shape}: offered again`).toBe('repeat');
+    const giverId = 'test_map_view_repeat_giver';
+    const workOrder = {
+      ...QUESTS.q_wolves,
+      id: 'q_test_map_view_repeat',
+      giverNpcId: giverId,
+      turnInNpcId: giverId,
+      repeatable: true,
+      repeatCadenceTicks: 1200,
+    };
+    QUESTS[workOrder.id] = workOrder;
+    NPCS[giverId] = { ...NPCS.marshal_redbrook, id: giverId, questIds: [workOrder.id] };
+    try {
+      for (const shape of ['sim', 'client'] as const) {
+        const world = makeOverworldWorld(shape) as unknown as {
+          questsDone: Set<string>;
+          craftingIdentity: { cadenceBlockedQuests: string[] };
+          questState: (q: string) => string;
+        };
+        world.questsDone = new Set([workOrder.id]);
+        world.questState = (q) => (q === workOrder.id ? 'available' : 'unavailable');
+        const offered = buildOverworldMapModel(input(world as unknown as IWorld, 1));
+        const offeredGlyph = offered.npcs.find((n) =>
+          n.quests.some((q) => q.questId === workOrder.id),
+        );
+        expect(offeredGlyph?.kind, `${shape}: offered again`).toBe('repeat');
 
-      world.questState = () => 'unavailable';
-      world.craftingIdentity.cadenceBlockedQuests = [workOrder.id];
-      const blocked = buildOverworldMapModel(input(world as unknown as IWorld, 1));
-      const blockedGlyph = blocked.npcs.find((n) =>
-        n.quests.some((q) => q.questId === workOrder.id),
-      );
-      expect(blockedGlyph?.kind, `${shape}: inside the window`).toBe('cooldown');
+        world.questState = () => 'unavailable';
+        world.craftingIdentity.cadenceBlockedQuests = [workOrder.id];
+        const blocked = buildOverworldMapModel(input(world as unknown as IWorld, 1));
+        const blockedGlyph = blocked.npcs.find((n) =>
+          n.quests.some((q) => q.questId === workOrder.id),
+        );
+        expect(blockedGlyph?.kind, `${shape}: inside the window`).toBe('cooldown');
+      }
+    } finally {
+      delete QUESTS[workOrder.id];
+      delete NPCS[giverId];
     }
   });
 
@@ -969,6 +1026,25 @@ describe('active-quest objective areas (the classic POI blobs)', () => {
     for (const a of model.questAreas) expect(a.numbers).toEqual([1]);
   });
 
+  it('drops the badges of an untracked quest and keeps the tracked numbering', () => {
+    // Untracking is presentation state (quest_tracking_core): the quest stays in
+    // the log and keeps its acceptance number, its BADGES just leave the map, the
+    // same way its row leaves the atlas rail and the HUD tracker.
+    const tracked = buildOverworldMapModel(input(makeOverworldWorld('sim', activeLog()), 1));
+    expect(tracked.questAreas.length).toBeGreaterThan(0);
+    const untracked = buildOverworldMapModel({
+      ...input(makeOverworldWorld('sim', activeLog()), 1),
+      untrackedQuestIds: new Set([quest.id]),
+    });
+    expect(untracked.questAreas).toEqual([]);
+    // An unrelated id in the set changes nothing.
+    const other = buildOverworldMapModel({
+      ...input(makeOverworldWorld('sim', activeLog()), 1),
+      untrackedQuestIds: new Set(['q_not_in_the_log']),
+    });
+    expect(other.questAreas).toEqual(tracked.questAreas);
+  });
+
   it('plots one blob per gather-node cluster, and the zone cull keeps them', () => {
     // The gather branch of questObjectiveAreas is the one that groups a flat node
     // table into clusters (quest_targets.ts pushNodeCluster), and it is the one
@@ -1055,6 +1131,165 @@ describe('active-quest objective areas (the classic POI blobs)', () => {
     const retainedCapacity = [...output];
     expect(questAreaObjectivesAtInto(areas, 100, 100, output)).toBe(0);
     expect(output).toEqual(retainedCapacity);
+  });
+});
+
+describe('world-quest zone markers', () => {
+  it.each(['sim', 'client'] as const)(
+    'marks only the glider instructor when selected (%s)',
+    (shape) => {
+      const world = makeOverworldWorld(shape, new Map(), 20);
+      const zone = ZONES.find((entry) => entry.id === 'galecrest')!;
+      const model = buildOverworldMapModel({
+        ...input(world, 1),
+        zone,
+        selectedWorldQuestId: WORLD_QUEST_GLIDER.id,
+      });
+      const marker = model.worldQuests.find((entry) => entry.questId === WORLD_QUEST_GLIDER.id)!;
+      expect(marker).toBeDefined();
+      expect(marker.areaVisible).toBe(false);
+      expect(marker.radius).toBe(0);
+      const { x, z } = GLIDER_NPC_DEF.pos;
+      expect(marker.mx).toBeCloseTo(
+        ((model.region.maxX - x) / (model.region.maxX - model.region.minX)) * CANVAS,
+      );
+      expect(marker.my).toBeCloseTo(
+        ((model.region.maxZ - z) / (model.region.maxZ - model.region.minZ)) * CANVAS,
+      );
+      expect(WORLD_QUEST_GLIDER.area.radius).toBe(330);
+    },
+  );
+  const quest = (() => {
+    const found = WORLD_QUESTS.find((candidate) => candidate.zoneId === ZONE.id);
+    if (!found) throw new Error('expected a world quest in the first zone');
+    return found;
+  })();
+
+  function progress(state: WorldQuestProgress['state']): Map<string, WorldQuestProgress> {
+    return new Map([[quest.id, { questId: quest.id, count: 2, state }]]);
+  }
+
+  it('projects the daily objectives, including both Galecrest challenges', () => {
+    let projected = 0;
+    for (const zone of ZONES) {
+      const world = makeOverworldWorld('sim', new Map(), 20);
+      world.player.pos.x = ((zone.xMin ?? -500) + (zone.xMax ?? 500)) / 2;
+      world.player.pos.z = (zone.zMin + zone.zMax) / 2;
+      const model = buildOverworldMapModel({ ...input(world, 1), zone });
+      expect(model.worldQuests.length, zone.id).toBe(
+        zone.id === 'proving_shore'
+          ? 0
+          : zone.id === 'galecrest' || zone.id === 'evergarden'
+            ? 2
+            : 1,
+      );
+      if (model.worldQuests[0]) {
+        expect(model.worldQuests[0].radius, zone.id).toBeGreaterThan(0);
+        projected++;
+      }
+    }
+    // 14: Proving Shore left the daily rotation.
+    expect(projected).toBe(14);
+  });
+
+  it('appears from its minimum level in both hosts and changes to active state', () => {
+    const below = buildOverworldMapModel(
+      input(makeOverworldWorld('sim', new Map(), quest.minLevel - 1), 1),
+    );
+    expect(below.worldQuests).toEqual([]);
+
+    const sim = buildOverworldMapModel(
+      input(makeOverworldWorld('sim', new Map(), quest.minLevel), 1),
+    );
+    const client = buildOverworldMapModel(
+      input(makeOverworldWorld('client', new Map(), quest.minLevel), 1),
+    );
+    expect(sim.worldQuests).toEqual(client.worldQuests);
+    expect(sim.worldQuests).toEqual([
+      expect.objectContaining({ questId: quest.id, state: 'available' }),
+    ]);
+
+    const active = buildOverworldMapModel(
+      input(makeOverworldWorld('sim', new Map(), quest.minLevel, progress('active')), 1),
+    );
+    expect(active.worldQuests[0]).toMatchObject({ questId: quest.id, state: 'active' });
+  });
+
+  it('stays hidden when a legacy server never advertises a world-quest cycle', () => {
+    const legacy = buildOverworldMapModel(
+      input(makeOverworldWorld('client', new Map(), quest.minLevel, new Map(), ''), 1),
+    );
+    expect(legacy.worldQuests).toEqual([]);
+  });
+
+  it('hides a completed cycle entry and scales/hit-tests the live emblem', () => {
+    const completed = buildOverworldMapModel(
+      input(makeOverworldWorld('sim', new Map(), quest.minLevel, progress('completed')), 1),
+    );
+    expect(completed.worldQuests).toEqual([]);
+
+    const atQuest = (zoom: number) => {
+      const world = makeOverworldWorld('sim', new Map(), quest.minLevel);
+      world.player.pos.x = quest.area.x;
+      world.player.pos.z = quest.area.z;
+      return buildOverworldMapModel(input(world, zoom));
+    };
+    const z1 = atQuest(1);
+    const z2 = atQuest(2);
+    const marker = z1.worldQuests[0];
+    expect(z2.worldQuests[0].radius).toBeCloseTo(marker.radius * 2, 5);
+    expect(worldQuestMarkerAt(z1.worldQuests, marker.mx, marker.my, 14)).toBe(marker);
+    expect(worldQuestMarkerAt(z1.worldQuests, -10_000, -10_000, 14)).toBeNull();
+  });
+
+  it('keeps the objective area hidden until its icon is selected', () => {
+    const hidden = buildOverworldMapModel(
+      input(makeOverworldWorld('sim', new Map(), quest.minLevel), 1),
+    );
+    const revealed = buildOverworldMapModel({
+      ...input(makeOverworldWorld('sim', new Map(), quest.minLevel), 1),
+      selectedWorldQuestId: quest.id,
+    });
+    expect(hidden.worldQuests[0]).toMatchObject({ questId: quest.id, areaVisible: false });
+    expect(revealed.worldQuests[0]).toMatchObject({ questId: quest.id, areaVisible: true });
+  });
+});
+
+describe('world-boss zone markers', () => {
+  const boss = WORLD_BOSSES[0];
+  const bossZone = zoneAt(boss.pos.x, boss.pos.z);
+
+  function bossModel(shape: 'sim' | 'client', completed = false) {
+    const world = makeOverworldWorld(shape) as IWorld & {
+      raidLockouts(): Array<{ id: string; msRemaining: number }>;
+      worldBossActive(bossId: string): boolean;
+    };
+    world.worldBossActive = (bossId) => bossId === boss.templateId;
+    world.raidLockouts = () =>
+      completed ? [{ id: worldBossLockoutId(boss.templateId), msRemaining: 60_000 }] : [];
+    return buildOverworldMapModel({ ...input(world, 1), zone: bossZone });
+  }
+
+  it('projects the fixed boss location identically in both hosts while its lockout is absent', () => {
+    const sim = bossModel('sim');
+    const client = bossModel('client');
+
+    expect(sim.worldBosses).toEqual(client.worldBosses);
+    expect(sim.worldBosses).toEqual([expect.objectContaining({ bossId: boss.templateId })]);
+    const marker = sim.worldBosses[0];
+    expect(worldBossMarkerAt(sim.worldBosses, marker.mx, marker.my, 14)).toBe(marker);
+    expect(marker).not.toHaveProperty('radius');
+    expect(marker).not.toHaveProperty('areaVisible');
+  });
+
+  it('hides the marker after the personal-loot lockout marks the boss completed', () => {
+    expect(bossModel('sim', true).worldBosses).toEqual([]);
+    expect(bossModel('client', true).worldBosses).toEqual([]);
+  });
+
+  it('hides the marker while the scheduled boss is not alive', () => {
+    const world = makeOverworldWorld('sim');
+    expect(buildOverworldMapModel({ ...input(world, 1), zone: bossZone }).worldBosses).toEqual([]);
   });
 });
 
@@ -1154,15 +1389,16 @@ describe('zone-map gather nodes', () => {
     const wields = build([{ itemId: 'iron_mining_pick', count: 1 }], { mining: 40 });
     expect(lockOf(wields, 'ore_mirefen_1')).toBe(false);
     expect(lockOf(wields, 'ore_mirefen_t2')).toBe(false);
-    // ...and is wield-filtered out at 39: no usable tool at all, so even the
-    // tier-1 veins lock (the wield arm, not the tier compare).
+    // ...and degrades at 39: the same owned pick still works as the best
+    // lower tier the counter can wield, so tier-1 veins open while tier-2
+    // veins stay locked (the wield arm, not the tier compare).
     const under = build([{ itemId: 'iron_mining_pick', count: 1 }], { mining: 39 });
-    expect(lockOf(under, 'ore_mirefen_1')).toBe(true);
+    expect(lockOf(under, 'ore_mirefen_1')).toBe(false);
     expect(lockOf(under, 'ore_mirefen_t2')).toBe(true);
     // A client mirror before its first gprof delta has NO proficiency map at
-    // all: the read fails closed (coerced to 0), never open.
+    // all: the read coerces to 0, so an owned higher tool degrades to tier 1.
     const preGprof = build([{ itemId: 'iron_mining_pick', count: 1 }], undefined);
-    expect(lockOf(preGprof, 'ore_mirefen_1')).toBe(true);
+    expect(lockOf(preGprof, 'ore_mirefen_1')).toBe(false);
     expect(lockOf(preGprof, 'ore_mirefen_t2')).toBe(true);
   });
 
@@ -1709,16 +1945,18 @@ describe('zone-map touch point-marker resolution', () => {
     ready: true,
     locked: false,
   };
+  const farm = { mx: 6, my: 0, patchId: 'patch', zoneId: ZONE.id };
 
   it('uses a physical 20px radius and resolves overlapping targets globally by distance', () => {
     expect(MAP_TOUCH_POINT_HIT_RADIUS_CSS_PX).toBe(20);
     expect(
-      mapPointMarkerHits([npc], [navigation], [service], [station], [gather], 0, 0, 20),
+      mapPointMarkerHits([npc], [navigation], [service], [station], [gather], [farm], 0, 0, 20),
     ).toEqual([
       { kind: 'gather', marker: gather, distance2: 0 },
       { kind: 'navigation', marker: navigation, distance2: 4 },
       { kind: 'service', marker: service, distance2: 9 },
       { kind: 'station', marker: station, distance2: 16 },
+      { kind: 'farm', marker: farm, distance2: 36 },
       { kind: 'npc', marker: npc, distance2: 64 },
     ]);
   });
@@ -1730,6 +1968,7 @@ describe('zone-map touch point-marker resolution', () => {
     const tiedStation = { ...station, mx: 5 };
     const tiedService = { ...service, mx: 5 };
     const tiedGather = { ...gather, mx: 5 };
+    const tiedFarm = { ...farm, mx: 5 };
 
     const firstCount = mapPointMarkerHitsInto(
       [tiedNpc],
@@ -1737,18 +1976,20 @@ describe('zone-map touch point-marker resolution', () => {
       [tiedService],
       [tiedStation],
       [tiedGather],
+      [tiedFarm],
       0,
       0,
       5,
       output,
     );
-    expect(firstCount).toBe(5);
+    expect(firstCount).toBe(6);
     expect(output.map((hit) => hit.kind)).toEqual([
       'npc',
       'navigation',
       'station',
       'service',
       'gather',
+      'farm',
     ]);
     const slots = new Set(output);
 
@@ -1758,24 +1999,26 @@ describe('zone-map touch point-marker resolution', () => {
       [{ ...service, mx: 2 }],
       [{ ...station, mx: 1 }],
       [{ ...gather, mx: 0 }],
+      [{ ...farm, mx: 3 }],
       0,
       0,
       5,
       output,
     );
-    expect(secondCount).toBe(5);
+    expect(secondCount).toBe(6);
     expect(new Set(output)).toEqual(slots);
     expect(output.map((hit) => [hit.kind, hit.distance2])).toEqual([
       ['gather', 0],
       ['station', 1],
       ['service', 4],
       ['navigation', 9],
+      ['farm', 9],
       ['npc', 16],
     ]);
 
-    const missCount = mapPointMarkerHitsInto([], [], [], [], [], 0, 0, 5, output);
+    const missCount = mapPointMarkerHitsInto([], [], [], [], [], [], 0, 0, 5, output);
     expect(missCount).toBe(0);
-    expect(output).toHaveLength(5);
+    expect(output).toHaveLength(6);
     expect(new Set(output)).toEqual(slots);
   });
 
@@ -1785,6 +2028,7 @@ describe('zone-map touch point-marker resolution', () => {
     const tiedStation = { ...station, mx: 5 };
     const tiedService = { ...service, mx: 5 };
     const tiedGather = { ...gather, mx: 5 };
+    const tiedFarm = { ...farm, mx: 5 };
     expect(
       mapPointMarkerHits(
         [tiedNpc],
@@ -1792,12 +2036,13 @@ describe('zone-map touch point-marker resolution', () => {
         [tiedService],
         [tiedStation],
         [tiedGather],
+        [tiedFarm],
         0,
         0,
         5,
       ).map((hit) => hit.kind),
-    ).toEqual(['npc', 'navigation', 'station', 'service', 'gather']);
-    expect(mapPointMarkerHits([tiedNpc], [], [], [], [], 0, 0, 4.9)).toEqual([]);
+    ).toEqual(['npc', 'navigation', 'station', 'service', 'gather', 'farm']);
+    expect(mapPointMarkerHits([tiedNpc], [], [], [], [], [], 0, 0, 4.9)).toEqual([]);
   });
 
   it('keeps a forgiving hover target across the full navigation painting', () => {
@@ -1806,6 +2051,7 @@ describe('zone-map touch point-marker resolution', () => {
       mapPointMarkerHits(
         [],
         [navigation],
+        [],
         [],
         [],
         [],
@@ -1869,22 +2115,6 @@ describe('zone-map crafting stations', () => {
     expect(model.stations[0]).toMatchObject({ stationId: 'custom_forge', type: 'forge' });
   });
 
-  it('hit-tests the nearest painted station and misses outside its touch radius', () => {
-    const model = buildOverworldMapModel(input(makeOverworldWorld('sim'), 1));
-    const marker = model.stations[0];
-    expect(marker).toBeDefined();
-    if (!marker) return;
-    expect(stationMarkerAt(model.stations, marker.mx, marker.my)).toBe(marker);
-    // Under the nudge cap the town's stations cluster at their true spots,
-    // so probe from a point past the hit radius of EVERY station: straight
-    // up from the topmost badge, where the vertical gap alone exceeds it.
-    const topMy = Math.min(...model.stations.map((candidate) => candidate.my));
-    expect(
-      stationMarkerAt(model.stations, marker.mx, topMy - MAP_STATION_HIT_RADIUS - 0.5),
-    ).toBeNull();
-    expect(stationMarkerAt([], marker.mx, marker.my)).toBeNull();
-  });
-
   it('pushes a station badge clear of an overlapping quest glyph only within the world-yard cap', () => {
     const world = makeOverworldWorld('sim') as unknown as {
       questState: () => 'available';
@@ -1922,5 +2152,301 @@ describe('zone-map crafting stations', () => {
       );
       expect(nearest).toBeGreaterThanOrEqual(MAP_STATION_NPC_SEPARATION - 1e-6);
     }
+  });
+});
+
+describe('atlas layer filters', () => {
+  it('hides only player-selectable marker layers while retaining navigation and self', () => {
+    const world = makeOverworldWorldWithParty('sim');
+    const baseline = buildOverworldMapModel(input(world, LABELS_ZOOM));
+    const model = buildOverworldMapModel({
+      ...input(world, LABELS_ZOOM),
+      filters: {
+        quests: false,
+        gather: false,
+        dungeons: false,
+        services: false,
+        players: false,
+      },
+    });
+
+    expect(model.questAreas).toEqual([]);
+    expect(model.npcs).toEqual([]);
+    expect(model.gatherNodes).toEqual([]);
+    expect(model.portals).toEqual([]);
+    expect(model.services).toEqual([]);
+    expect(model.stations).toEqual([]);
+    expect(model.allies).toEqual([]);
+    expect(model.party).toEqual([]);
+    expect(model.player).not.toBeNull();
+    expect(model.navigation).toEqual(baseline.navigation);
+  });
+
+  it('projects the selected quest route from the player to the objective', () => {
+    const world = makeOverworldWorld('sim');
+    const route = { questId: 'q_wolves', x: 30, z: ZONE_CZ + 24 };
+    const model = buildOverworldMapModel({ ...input(world, 1), route });
+
+    expect(model.route).not.toBeNull();
+    expect(model.route?.from).toEqual(
+      expect.objectContaining({ mx: expect.any(Number), my: expect.any(Number) }),
+    );
+    expect(model.route?.to).toEqual(
+      expect.objectContaining({ mx: expect.any(Number), my: expect.any(Number) }),
+    );
+    expect(model.route?.to).not.toEqual(model.route?.from);
+  });
+});
+
+describe('zone-map farm patches', () => {
+  const EASTBROOK_PATCH = FARM_PATCHES.find((patch) => patch.id === 'patch_eastbrook');
+
+  it('projects the committed zone patch anchor identically on both hosts', () => {
+    expect(EASTBROOK_PATCH).toBeDefined();
+    if (!EASTBROOK_PATCH) return;
+    const sim = buildOverworldMapModel(input(makeOverworldWorld('sim'), 1));
+    const client = buildOverworldMapModel(input(makeOverworldWorld('client'), 1));
+    expect(sim.farmPatches).toEqual(client.farmPatches);
+    expect(sim.farmPatches).toHaveLength(1);
+    expect(sim.farmPatches[0]).toMatchObject({
+      patchId: 'patch_eastbrook',
+      zoneId: ZONE.id,
+    });
+    expect(Number.isFinite(sim.farmPatches[0].mx)).toBe(true);
+    expect(Number.isFinite(sim.farmPatches[0].my)).toBe(true);
+  });
+
+  it('caps the farm-patch badge inside the world-yard nudge bound like other landmarks', () => {
+    // The release/v0.41.0 merge landed the patch loop WITHOUT the cap the
+    // release had threaded through every other placeLandmarkBadge call, so
+    // the one badge that marks a place a player walks back to every day was
+    // the one badge still free to drift up to MAP_LANDMARK_PLACEMENT_STEPS
+    // pixels (about 30 yards at the full-zone frame). Decisive fixture: a
+    // mailbox badge is placed first, exactly on the patch's projection, so the
+    // farm badge MUST collide. Under the cap (6.2 px here: 4 yd over the 360 yd
+    // span at 560 px, which stepLimit rounds to 6) no candidate inside the cap
+    // clears the 24 px separation, so the badge stays at its
+    // authored projection; without the cap the search walks to the first
+    // clear ring, 24 px out, three times the bound. The real Eastbrook patch
+    // is not displaced at zoom 1, which is why the fixture is synthetic.
+    const world = makeOverworldWorld('sim') as unknown as {
+      questState: () => 'unavailable';
+      stationPlacements: unknown[];
+      farmPatches: Array<{
+        id: string;
+        zoneId: string;
+        tier: number;
+        x: number;
+        z: number;
+        beds: readonly { id: string; x: number; z: number }[];
+      }>;
+    };
+    world.questState = () => 'unavailable';
+    world.stationPlacements = [];
+    const site = { x: 24, z: ZONE_CZ + 24 };
+    world.farmPatches = [
+      { id: 'crowded_patch', zoneId: ZONE.id, tier: 1, x: site.x, z: site.z, beds: [] },
+    ];
+    const services: WorldServicesDef = { mailboxes: [{ x: site.x, z: site.z }] };
+    const model = buildOverworldMapModel(
+      input(world as unknown as IWorld, 1, NO_DECOR, PROPS, services),
+    );
+    expect(model.services).toHaveLength(1);
+    expect(model.farmPatches).toHaveLength(1);
+    const mx = ((ZONE_CX + FULL_SPAN / 2 - site.x) / FULL_SPAN) * CANVAS;
+    const my = ((ZONE_CZ + FULL_SPAN / 2 - site.z) / FULL_SPAN) * CANVAS;
+    // The blocker really sits on the projection (the collision is real).
+    expect(Math.hypot(model.services[0].mx - mx, model.services[0].my - my)).toBeLessThan(1e-6);
+    // The cap itself is a literal pin, not only an input to the arithmetic
+    // below: every other bound in this file derives from the same constant
+    // the production code reads, so widening the cap (4 to 12 keeps 12 yd
+    // under the 24 px separation at this frame) would move both sides
+    // together and leave every arm green (11m QA).
+    expect(MAP_LANDMARK_MAX_NUDGE_YD).toBe(4);
+    const maxNudgePx = MAP_LANDMARK_MAX_NUDGE_YD * (CANVAS / FULL_SPAN) + 1e-6;
+    expect(maxNudgePx).toBeLessThan(MAP_LANDMARK_SEPARATION);
+    const drift = Math.hypot(model.farmPatches[0].mx - mx, model.farmPatches[0].my - my);
+    expect(drift).toBeLessThanOrEqual(maxNudgePx);
+  });
+
+  it('reads the active IWorld patch list and filters foreign-zone sites', () => {
+    const world = makeOverworldWorld('sim') as unknown as {
+      farmPatches: Array<{
+        id: string;
+        zoneId: string;
+        tier: number;
+        x: number;
+        z: number;
+        beds: readonly { id: string; x: number; z: number }[];
+      }>;
+    };
+    world.farmPatches = [
+      { id: 'custom_patch', zoneId: ZONE.id, tier: 1, x: 24, z: ZONE_CZ + 24, beds: [] },
+      { id: 'foreign_patch', zoneId: ZONES[1].id, tier: 2, x: 24, z: ZONE_CZ + 24, beds: [] },
+    ];
+    const model = buildOverworldMapModel(input(world as unknown as IWorld, 1));
+    expect(model.farmPatches).toHaveLength(1);
+    expect(model.farmPatches[0]).toMatchObject({ patchId: 'custom_patch', zoneId: ZONE.id });
+  });
+
+  it('draws nothing in a zone whose content authors no patch', () => {
+    const world = makeOverworldWorld('sim') as unknown as { farmPatches: unknown[] };
+    world.farmPatches = [];
+    expect(buildOverworldMapModel(input(world as unknown as IWorld, 1)).farmPatches).toEqual([]);
+  });
+
+  it('joins the shared landmark layer, so a patch badge clears every quest glyph', () => {
+    const world = makeOverworldWorld('sim') as unknown as {
+      questState: () => 'available';
+      farmPatches: unknown[];
+    };
+    world.questState = () => 'available';
+    // Park the patch anchor exactly on the quest giver so the allocator has to
+    // displace it; the authored Eastbrook site is nowhere near one.
+    world.farmPatches = [
+      { id: 'patch_on_giver', zoneId: ZONE.id, tier: 1, x: 10, z: ZONE_CZ, beds: [] },
+    ];
+    const model = buildOverworldMapModel(input(world as unknown as IWorld, 1));
+    expect(model.farmPatches).toHaveLength(1);
+    expect(model.npcs.length).toBeGreaterThan(0);
+    const patch = model.farmPatches[0];
+    for (const npc of model.npcs) {
+      expect(Math.hypot(patch.mx - npc.mx, patch.my - npc.my)).toBeGreaterThanOrEqual(
+        MAP_STATION_NPC_SEPARATION - 1e-6,
+      );
+    }
+  });
+
+  it('enters the landmark layer itself, so a second patch clears the first', () => {
+    const world = makeOverworldWorld('sim') as unknown as { farmPatches: unknown[] };
+    // Two sites on the SAME world position: the first keeps its projection and
+    // the second must be displaced, which is only possible if an accepted patch
+    // badge joins the shared landmark list. Since the release/v0.41.0 merge the
+    // farm badge takes the world-yard nudge cap like every landmark, so the
+    // de-overlap is asserted where the cap allows it: the zoom-4 town frame,
+    // where the cap converts to more pixels than the separation needs (the
+    // same two-half shape as the station cap arm above). At the full-zone
+    // frame the second badge holds its authored spot inside the cap instead of
+    // walking yards away.
+    const site = { x: 40, z: ZONE_CZ + 40 };
+    world.farmPatches = [
+      { id: 'patch_first', zoneId: ZONE.id, tier: 1, x: site.x, z: site.z, beds: [] },
+      { id: 'patch_second', zoneId: ZONE.id, tier: 2, x: site.x, z: site.z, beds: [] },
+    ];
+    const zoomed = buildOverworldMapModel({
+      ...input(world as unknown as IWorld, 4),
+      center: { x: site.x, z: site.z },
+    });
+    expect(zoomed.farmPatches.map((patch) => patch.patchId)).toEqual([
+      'patch_first',
+      'patch_second',
+    ]);
+    const [first, second] = zoomed.farmPatches;
+    expect(Math.hypot(first.mx - second.mx, first.my - second.my)).toBeGreaterThanOrEqual(
+      MAP_STATION_NPC_SEPARATION - 1e-6,
+    );
+    const fullZone = buildOverworldMapModel(input(world as unknown as IWorld, 1));
+    const maxNudgePx = MAP_LANDMARK_MAX_NUDGE_YD * (CANVAS / FULL_SPAN) + 1e-6;
+    const [firstFull, secondFull] = fullZone.farmPatches;
+    expect(
+      Math.hypot(firstFull.mx - secondFull.mx, firstFull.my - secondFull.my),
+    ).toBeLessThanOrEqual(maxNudgePx);
+  });
+
+  it('clears the stations placed before it on the same landmark layer', () => {
+    const world = makeOverworldWorld('sim') as unknown as { farmPatches: unknown[] };
+    // Same world position as the Eastbrook forge (STATIONS[0]). Asserted at the
+    // zoom-4 town frame for the reason the arm above records: under the
+    // world-yard cap the full-zone frame holds badges at their true spots.
+    const forge = STATIONS.find((station) => station.id === 'station_eastbrook_forge');
+    expect(forge).toBeDefined();
+    if (!forge) return;
+    world.farmPatches = [
+      { id: 'patch_on_forge', zoneId: ZONE.id, tier: 1, x: forge.pos.x, z: forge.pos.z, beds: [] },
+    ];
+    const model = buildOverworldMapModel({
+      ...input(world as unknown as IWorld, 4),
+      center: { x: forge.pos.x, z: forge.pos.z },
+    });
+    const patch = model.farmPatches[0];
+    expect(patch).toBeDefined();
+    expect(model.stations.length).toBeGreaterThan(0);
+    for (const station of model.stations) {
+      expect(Math.hypot(patch.mx - station.mx, patch.my - station.my)).toBeGreaterThanOrEqual(
+        MAP_STATION_NPC_SEPARATION - 1e-6,
+      );
+    }
+  });
+});
+
+describe('placed-kit silhouettes', () => {
+  it('draws the Drakelands rebuild kit buildings from the derived footprints', () => {
+    // The rebuilt Wyrmwatch draws through the env-prop pipeline, never through
+    // props.buildings, so the map takes its silhouettes from the derived kit
+    // footprints (sim/kit_buildings.ts): the tavern reads as the inn, the
+    // stables and halls as houses, and the church as a chapel.
+    const world = makeOverworldWorld('sim') as unknown as {
+      player: { pos: { x: number; z: number } };
+    };
+    const inn = KIT_BUILDINGS.find((b) => b.kind === 'inn');
+    expect(inn).toBeDefined();
+    if (!inn) return;
+    world.player.pos.x = inn.x;
+    world.player.pos.z = inn.z;
+    // the fixture zone is ZONES[0]; the kit stands in the Drakelands
+    const drakelands = ZONES.find((z) => z.pois.some((poi) => poi.id === 'wyrmwatch'));
+    expect(drakelands).toBeDefined();
+    if (!drakelands) return;
+    const detail = buildOverworldMapModel({
+      ...input(world as unknown as IWorld, MAP_MAX_ZOOM),
+      zone: drakelands,
+    }).detail;
+    expect(detail).not.toBeNull();
+    const kit = detail?.buildings.filter((b) => b.id?.startsWith('kit:')) ?? [];
+    expect(kit.map((b) => b.kind)).toContain('inn');
+    expect(kit.map((b) => b.kind)).toContain('house');
+    expect(kit.find((b) => b.kind === 'inn')?.id).toBe(inn.id);
+    for (const b of kit) expect(b.points).toHaveLength(4);
+    const chapel = KIT_BUILDINGS.find((b) => b.kind === 'chapel');
+    expect(chapel).toBeDefined();
+    if (!chapel) return;
+    world.player.pos.x = chapel.x;
+    world.player.pos.z = chapel.z;
+    const keep = buildOverworldMapModel({
+      ...input(world as unknown as IWorld, MAP_MAX_ZOOM),
+      zone: drakelands,
+    }).detail;
+    expect(keep?.buildings.some((b) => b.kind === 'chapel' && b.id === chapel.id)).toBe(true);
+  });
+});
+
+describe('building footprint corners', () => {
+  it('strokes the rectangle that blocks a body: the collider transform, not its mirror', () => {
+    // A rotated kit building (the Wyrmwatch tavern hall at 105 degrees): the
+    // four corners must be buildingLocalToWorld's corners, and every corner
+    // nudged inward must sit inside buildingContainsPoint's rectangle while
+    // nudged outward it must not. A mirrored transform passes neither.
+    const inn = KIT_BUILDINGS.find((b) => b.kind === 'inn');
+    expect(inn).toBeDefined();
+    if (!inn) return;
+    expect(Math.abs(Math.sin(2 * inn.rot))).toBeGreaterThan(0.3); // not axis-aligned
+    const corners = buildingFootprintCorners(inn);
+    const expected = [
+      buildingLocalToWorld(inn, -inn.w / 2, -inn.d / 2),
+      buildingLocalToWorld(inn, inn.w / 2, -inn.d / 2),
+      buildingLocalToWorld(inn, inn.w / 2, inn.d / 2),
+      buildingLocalToWorld(inn, -inn.w / 2, inn.d / 2),
+    ];
+    corners.forEach((corner, i) => {
+      expect(corner.x).toBeCloseTo(expected[i].x, 9);
+      expect(corner.z).toBeCloseTo(expected[i].z, 9);
+      const inward = { x: (corner.x - inn.x) * 0.9 + inn.x, z: (corner.z - inn.z) * 0.9 + inn.z };
+      const outward = {
+        x: (corner.x - inn.x) * 1.15 + inn.x,
+        z: (corner.z - inn.z) * 1.15 + inn.z,
+      };
+      expect(buildingContainsPoint(inn, inward.x, inward.z)).toBe(true);
+      expect(buildingContainsPoint(inn, outward.x, outward.z)).toBe(false);
+    });
   });
 });

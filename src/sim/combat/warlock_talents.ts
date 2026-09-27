@@ -30,7 +30,7 @@ const WARLOCK_DAMAGING_SPELLS = new Set([
 const LEADEN_SLOW_ID = 'wlk_leaden_hex_slow';
 const LEADEN_ROOT_ID = 'wlk_leaden_hex_root';
 const LEADEN_ROOT_LOCK_ID = 'wlk_leaden_hex_root_lock';
-const LEADEN_SLOW_PER_STACK = 0.05;
+const LEADEN_SLOW_PER_STACK = 0.1;
 const LEADEN_MAX_STACKS = 3;
 const LEADEN_DURATION = 5;
 const LEADEN_ROOT_DURATION = 3.5;
@@ -134,6 +134,10 @@ function removeAura(ctx: SimContext, owner: Entity, aura: Aura): void {
   });
 }
 
+// Runs from onCastCompleted, i.e. on cast, not on impact: for a spell that
+// fires a projectile the bolt is still in flight here. Never call
+// ctx.enterCombat from this function (it would aggro an idle mob before the
+// bolt lands); dealDamage already engages combat correctly at impact.
 export function applyLeadenHex(
   ctx: SimContext,
   player: Entity,
@@ -163,14 +167,15 @@ export function applyLeadenHex(
       sourceId: player.id,
       school: 'shadow',
     });
-    ctx.enterCombat(player, target);
     return;
   }
 
+  const slowPerStack =
+    mods.global.warlockLeadenHex > 0 ? mods.global.warlockLeadenHex : LEADEN_SLOW_PER_STACK;
   const stacks = Math.min(LEADEN_MAX_STACKS, (slow?.stacks ?? 0) + 1);
   if (slow) {
     slow.stacks = stacks;
-    slow.value = 1 - stacks * LEADEN_SLOW_PER_STACK;
+    slow.value = 1 - stacks * slowPerStack;
     slow.remaining = LEADEN_DURATION;
     slow.duration = LEADEN_DURATION;
   } else {
@@ -178,7 +183,7 @@ export function applyLeadenHex(
       id: LEADEN_SLOW_ID,
       name: 'Leaden Hex',
       kind: 'slow',
-      value: 1 - LEADEN_SLOW_PER_STACK,
+      value: 1 - slowPerStack,
       stacks: 1,
       remaining: LEADEN_DURATION,
       duration: LEADEN_DURATION,
@@ -186,7 +191,6 @@ export function applyLeadenHex(
       school: 'shadow',
     });
   }
-  ctx.enterCombat(player, target);
 }
 
 export function grantShadowCredit(
@@ -373,5 +377,8 @@ export function tickSacrilegiousMarch(ctx: SimContext, player: Entity, aura: Aur
     ability: aura.name,
     kind: 'hit',
   });
-  if (player.hp / player.maxHp <= floor) aura.remaining = 0;
+  // Compare in health units: floorHp is ceiling-rounded, so on a pool that is
+  // not a multiple of five the clamped value sits a hair ABOVE the fraction and
+  // the march would otherwise linger one more tick draining nothing.
+  if (player.hp <= floorHp) aura.remaining = 0;
 }

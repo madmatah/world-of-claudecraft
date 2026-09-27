@@ -22,15 +22,12 @@ import {
 } from '../data';
 import { layoutColliders } from '../dungeon_layout';
 import { createGroundObject, createMob } from '../entity';
-import {
-  COMBAT_EXIT_MEMORY_SECONDS,
-  type CombatExitThreatEntry,
-  recordCombatExit,
-  takeCombatExit,
-} from '../instance_exit_memory';
 import type { LootTier } from '../lockpick';
 import { RIFT_MECHANIC_SPACING_SEC } from '../mob/mechanic_spacing';
-import { retargetMob } from '../mob/targeting';
+import {
+  awardRiftFirstClearMaterials,
+  grantRiftClearEmbers,
+} from '../professions/masterwrought_materials';
 import { cancelProfessionSessionOnDisplacement } from '../professions/session_teardown';
 import type { SimContext } from '../sim_context';
 import { DT, dist2d, type Entity, type SimEvent, type Vec3 } from '../types';
@@ -153,6 +150,10 @@ function inRiftFloorRegion(pos: { x: number; z: number }, origin: { x: number; z
 
 /** The rift instance whose region contains `pos`, or null. */
 export function riftInstanceAtPos(ctx: SimContext, pos: Vec3): RiftInstance | null {
+  // Every floor region sits inside the rift x band (RIFT_REGION_HALF_X is
+  // aligned to its west edge), so a position outside the band is in no rift
+  // and the per-frame readers (riftFloor, riftBossDeathZones) skip the slots.
+  if (!isRiftPos(pos.x)) return null;
   for (const inst of ctx.riftInstances) {
     if (inst.partyKey === null) continue;
     if (inRiftFloorRegion(pos, riftInstanceOrigin(inst.slot, inst.floorIndex))) return inst;
@@ -505,12 +506,6 @@ function freeRiftFloorEntities(ctx: SimContext, inst: RiftInstance): void {
   inst.orbId = null;
   inst.orbActive = false;
   clearRiftBossDeathZones(ctx, inst);
-  // A floor's mobs are torn down here (descendRift, or a full teardown below):
-  // any remembered mid-combat exit still holding their ids can never resolve
-  // again once IDs are freed, but the map is inert only because `nextId` is
-  // monotonic. Clear it explicitly so a new floor's freshly spawned mobs can
-  // never accidentally collide with a stale entry.
-  inst.combatExitMemory = new Map();
 }
 
 function freeRiftInstance(ctx: SimContext, inst: RiftInstance): void {
@@ -533,7 +528,6 @@ function freeRiftInstance(ctx: SimContext, inst: RiftInstance): void {
   inst.rewarded = false;
   inst.progressed = false;
   inst.bossDeathZones = [];
-  inst.combatExitMemory = new Map();
   if (eventId !== null) {
     const event = ctx.riftEvents.find((candidate) => candidate.eventId === eventId);
     const anotherRun = ctx.riftInstances.some(
@@ -727,27 +721,30 @@ export function enterRift(
         : (ctx.riftEvents.find((candidate) => candidate.eventId === eventId)?.upgrade ?? null);
     inst.seed = seed >>> 0;
     inst.baseLevel = Math.max(1, Math.min(60, Math.round(baseLevel)));
-    // Belt-and-suspenders with freeRiftInstance's clear: a freshly claimed slot
-    // must never carry a stale exit memory from whoever last held it.
-    inst.combatExitMemory = new Map();
     inst.floorIndex = 0;
     inst.floorCount = floorForInstance(inst, 0).floorCount;
     // Return spot: never inside the portal's walk-in radius, or leaving the
     // rift would drop the player onto the portal and bounce them straight back
     // in. Push the entry position away from the portal to a safe distance.
     let ret = returnPos ?? { x: r.e.pos.x, z: r.e.pos.z };
+    // Predefined exit facing: away from the portal, along the same line the
+    // player approached it on, so leaveRift never leaves them staring back at
+    // whatever they were facing deep inside the floor. Computed once, here at
+    // instance creation, alongside returnPos: every member who later leaves
+    // this run shares the one return spot and the one return facing.
+    let returnFacing = 0;
     if (portal) {
       const dx = ret.x - portal.pos.x;
       const dz = ret.z - portal.pos.z;
       const d = Math.hypot(dx, dz);
       const SAFE = PORTAL_TRIGGER_RADIUS + 2.5;
-      if (d < SAFE) {
-        const ux = d > 1e-3 ? dx / d : 0;
-        const uz = d > 1e-3 ? dz / d : 1;
-        ret = { x: portal.pos.x + ux * SAFE, z: portal.pos.z + uz * SAFE };
-      }
+      const ux = d > 1e-3 ? dx / d : 0;
+      const uz = d > 1e-3 ? dz / d : 1;
+      if (d < SAFE) ret = { x: portal.pos.x + ux * SAFE, z: portal.pos.z + uz * SAFE };
+      returnFacing = Math.atan2(ux, uz);
     }
     inst.returnPos = dryPointNear(ret.x, ret.z);
+    inst.returnFacing = returnFacing;
     // Dev portals keep a cosmetic rank on the gate, but only a persisted natural
     // event is reward-ranked. This keeps the reward guard authoritative for the
     // real /dev portal path instead of paying Marks for a visual-only badge.
@@ -760,11 +757,6 @@ export function enterRift(
   }
 
   inst.memberIds.add(r.meta.entityId);
-  // A living return within the memory window resumes whatever mid-combat exit
-  // this player left behind in this exact run (issue #2653); a corpse-running
-  // ghost has nothing to resume (mobs never target the dead, and riftInstanceInCombat
-  // above already bars a ghost from re-entering while any mob is still engaged).
-  if (!deadEntry) resumeRememberedCombat(ctx, inst, r.meta.entityId);
 
   const origin = riftInstanceOrigin(inst.slot, inst.floorIndex);
   const floor = floorForInstance(inst);
@@ -888,15 +880,8 @@ export function leaveRift(ctx: SimContext, pid?: number): void {
   if (!inst) return;
   // Tear down any lock attempt in progress so a half-picked cache doesn't linger.
   if (inst.lockpick) riftLockpickAbort(ctx, inst, r.meta.entityId);
-  // Unlike the dungeon door, nothing here scrubs the leaver's threat directly:
-  // the mob keeps its target and simply chases the player's new (overworld)
-  // position, dragging itself past its own leash within a few seconds and
-  // evading home to a full, unengaged reset (issue #2653: the same net effect
-  // as the dungeon door's explicit scrub, just via the leash break instead of
-  // a direct drop). Snapshot whatever was genuinely being fought before that
-  // plays out, so a prompt return can resume the fight instead of walking into
-  // a fresh, unengaged pack.
-  snapshotCombatExit(ctx, inst, r.meta.entityId);
+  // The engaged pass drops out-of-range threat after this zone-out. With no
+  // remaining attacker, the mob evades home and resets to full health.
   forceExitRiftPlayer(ctx, inst, r.meta.entityId, false);
   ctx.emit({
     type: 'log',
@@ -927,6 +912,10 @@ function forceExitRiftPlayer(
   p.pos = ctx.groundPos(dest.x, dest.z);
   p.prevPos = { ...p.pos };
   ctx.rebucket(p);
+  // Predefined exit facing (away from the portal; see enterRift), not whatever
+  // direction the player happened to be facing deep inside the floor.
+  p.facing = inst.returnFacing ?? 0;
+  p.prevFacing = inst.returnFacing ?? 0;
   p.targetId = null;
   p.autoAttack = false;
   p.riftSliding = false; // never carry a stale slide pose out to the overworld
@@ -1423,6 +1412,10 @@ function completeRiftClear(ctx: SimContext, inst: RiftInstance, boss: Entity | n
   creditRiftClearDeeds(ctx, inst, participants);
   const claim = claimRiftFirstClear(ctx, inst, participants);
   if (!claim.won) {
+    // Masterwrought (phase 04): losing the race forfeits the first-clear
+    // cores, but an A/S clear still counts as the week's eligible endgame
+    // completion for the Maker's Ember keystone. Draw-free.
+    grantRiftClearEmbers(ctx, riftRankForBaseLevel(inst.baseLevel), participants, inst.eventId);
     completeLosingRun(ctx, inst);
     return true;
   }
@@ -1459,6 +1452,13 @@ function completeRiftClear(ctx: SimContext, inst: RiftInstance, boss: Entity | n
         inst.upgrade?.rewards.craftingMaterialBias,
       );
     }
+    // Masterwrought (phase 04): A/S first-clear cores (daily-gated per
+    // character, ruling R9) plus the weekly ember check. Deliberately outside
+    // the boss guard: the grant pays the CLEAR, not the corpse, and it draws
+    // no rng; only the eligible equipment rewards above roll loot quality.
+    // Rank from baseLevel, the creditRiftClearDeeds precedent above, so the
+    // winning and losing ember arms can never disagree on a clear's rank.
+    awardRiftFirstClearMaterials(ctx, riftRankForBaseLevel(inst.baseLevel), participants);
     const portalId = claim.event.portalId ?? inst.portalId;
     // False means the portal's own RIFT_PORTAL_LIFETIME already collapsed it
     // out from under an unusually long clear (the entity is long gone): never
@@ -1504,52 +1504,6 @@ function completeRiftClear(ctx: SimContext, inst: RiftInstance, boss: Entity | n
     // race and complete as losers when their boss falls (completeLosingRun).
   }
   return true;
-}
-
-// Snapshot pid's dropped threat for the run's memory (issue #2653), same
-// eligibility rule as the dungeon-door scrub: only a mob that was genuinely
-// `inCombat` with real threat on the leaver counts, so an out-of-combat beacon
-// walk-out (nothing pulled, or the pack already dead) leaves no memory entry.
-function snapshotCombatExit(ctx: SimContext, inst: RiftInstance, pid: number): void {
-  const mobThreat: CombatExitThreatEntry[] = [];
-  for (const id of inst.mobIds) {
-    const mob = ctx.entities.get(id);
-    if (!mob || mob.dead || !mob.inCombat) continue;
-    const threat = mob.threat.get(pid);
-    if (threat !== undefined && threat > 0) {
-      mobThreat.push([id, threat, mob.evadeEpoch]);
-      // Hold this mob's evade-home reset open until the memory window lapses
-      // (issue #2653), same as the dungeon-door scrub: the leash break that is
-      // about to happen must not heal or clear the hate table out from under a
-      // same-run re-entry. Extends rather than shortens an already-live hold.
-      mob.combatExitHoldUntil = Math.max(
-        mob.combatExitHoldUntil,
-        ctx.time + COMBAT_EXIT_MEMORY_SECONDS,
-      );
-    }
-  }
-  recordCombatExit(inst.combatExitMemory, pid, ctx.time, mobThreat);
-}
-
-// Reapply a still-live mid-combat exit snapshot: if pid left this SAME run while
-// genuinely fighting within the memory window, restore the exact threat scrubbed
-// at the beacon/exit and force any mob that lost its target back into the fight,
-// instead of leaving it idle/evading until manually re-pulled. A lapsed or
-// absent memory entry is a no-op: the run resets exactly as before.
-//
-// Safe to restore unconditionally (no evadeEpoch check needed): resetEvadingMob
-// defers on `combatExitHoldUntil` for exactly this window, so a mob this snapshot
-// covers cannot have evade-reset or been re-pulled by anyone else in the meantime
-// (an 'evade' mob is damage-immune, see combat/damage.ts).
-function resumeRememberedCombat(ctx: SimContext, inst: RiftInstance, pid: number): void {
-  const rec = takeCombatExit(inst.combatExitMemory, pid, ctx.time);
-  if (!rec) return;
-  for (const [mobId, threat] of rec.mobThreat) {
-    const mob = ctx.entities.get(mobId);
-    if (!mob || mob.dead) continue;
-    mob.threat.set(pid, threat);
-    if (mob.aggroTargetId === null) retargetMob(ctx, mob);
-  }
 }
 
 /** True while any living mob of the instance is engaged: the window in which

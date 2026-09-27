@@ -54,6 +54,18 @@ no procedural-rig path here anymore. Reads the world; never mutates the sim.
 - `rig_merge.ts`: merges a KayKit rig's quantized body-part SkinnedMeshes into
   one draw per material (`assets.ts` `assembleModel` calls it). Read its
   header bind-pose proof before touching bone inverses.
+- `morph_union_core.ts`: the union target list a merge pads its parts to, and
+  the one place the merged buffer's morph-texture cost is written down (three
+  builds that DataArrayTexture lazily at the first live draw, outside the
+  compile gate's upload lane; measured, see its header).
+- `rig_shared_skeleton.ts`: the same bind-pose proof applied WITHOUT merging, so
+  a rig ends with ONE Skeleton, one palette flatten and one GPU bone texture
+  however many parts it draws (`SkeletonUtils.clone` mints one per SkinnedMesh,
+  and the modular GLB ships 246 skins over one 23-joint list). Runs after
+  `mergeSkinnedParts` on the cached variant and again on every clone, where it
+  is a pure rebind. The composed HEAD is its canonical part on purpose: the
+  canonical part is the one whose geometry is not rebaked, and the head's buffer
+  is the identity the stubble/makeup decal cuts are cached on.
 - `index.ts`: public exports + `createCharacterVisual(e, formKey?)` factory,
   plus `setModularLookProvider` (the entity-to-composed-look seam).
   `createCharacterVisual` returns null fail-soft on an asset miss, with
@@ -125,7 +137,27 @@ Sibling families (one line each; extraction targets, never re-grow `visual.ts`):
 - Weapons/props: `weapon_grip.ts`, `held_item_grips.ts`, `back_grips.ts`,
   `stow_transition.ts`, `skin_attack.ts`, `weapon_skin_materials.ts`, and
   `weapon_attack_style_core.ts`, a CROSS-SUBSYSTEM seam
-  (`ability_vfx/painter.ts` imports `attackAbilityId` from it).
+  (`ability_vfx/painter.ts` imports `attackAbilityId` from it). Authored
+  surfaces: `manifest.ts` `AUTHORED_HELD_MODELS` (a held GLB that keeps its
+  shipped response instead of `assets.ts` `applyWeaponMaterialPolish`) and
+  `VisualDef.authoredAtlas` (a creature atlas that takes the low-tier
+  readability floor through its map); both opt-in per model. **Every new
+  Tripo or Blender creature, mount, or held item declares one of them** (the
+  asset pipeline's `visualDefSnippet` emits the flag for a creature, and its
+  `registerWeapon` returns the held-model decision as a follow-up action);
+  `tests/authored_surfaces.test.ts` scans the shipped GLBs and fails any
+  authored atlas that is neither flagged nor on its explicit legacy list.
+- Worn NPC gear: an `NPC_MODULAR_PROP_ATTACH` entry need not be a hand prop. The
+  `harbormaster` set parents GLBs to the `head` and `hips` bones with an identity
+  transform, so each is authored in that bone's BIND frame
+  (`scripts/assets/harbormaster_gear/`, fitted with its `extract_reference.mjs`); it rides
+  the authored arm (`AUTHORED_HELD_MODELS`) and, like every prop, is left out of the
+  composed far bake. Pinned by `tests/harbormaster_gear_asset.test.ts`.
+- `stonebound_shell_core.ts`: the Stonebound weapon-shell style. Wireframe on any
+  antialiased frame; a solid translucent sheath when NO AA pass runs (Low, and the
+  memory-constrained WebKit profiles), because a one-pixel GPU wireframe crawls
+  over the dense weapon mesh without AA. Keyed on the `GfxSettings` AA facts
+  (`smaa`/`fxaa`/`msaaSamples`), never on a tier name; cosmetic only.
 - Perf cores: `skeleton_update_cache.ts`/`skeleton_update_core.ts` (skeleton
   palette update elision), `skin_gpu_layout.ts` (bone-texture compaction
   without changing weights, matrices, draws, or shader math),
@@ -157,6 +189,18 @@ Sibling families (one line each; extraction targets, never re-grow `visual.ts`):
   `paladin_templars_verdict_fx.ts` twins): procedural `AnimationClip`s built in
   code and registered per ability; the template future ability-animation work
   follows.
+- Form adornments: `form_adornments.ts`, the per-rig owner `CharacterVisual`
+  holds and drives from the `setMoonkin`/`setShadowform` edges the renderer
+  already sends, over the pure `form_adornment_core.ts` (what a rig wears, the
+  pose math) and two painters, `moonwing_adornment.ts` (antlers, crescent,
+  wings) and `gloamveil_veil.ts` (the face veil), with their canvas art in
+  `form_adornment_textures.ts` and the shared marker and glow recipe in
+  `rig_fx.ts`. Pieces ride the rig's `head`/`chest` bones, carry the
+  `weaponVfxMesh` marker so no overlay swap, prewarm twin or caster sweep
+  touches them, hide under a ghost or stealth body, and their shared kits are
+  prewarmed through `ABILITY_MATERIAL_SOURCES`; a rig's first mount of a set
+  still waits hidden behind the injected compile gate
+  (`tests/form_adornments.test.ts`, `tests/character_form_adornments.test.ts`).
 - Pure selection cores: `modular.ts` (composed bodies, below),
   `player_look_core.ts`, `form_visual_selection_core.ts`,
   `far_lod_reveal_core.ts` (the rig/far-mesh/shadow-proxy handoff rule: the
@@ -174,11 +218,14 @@ humanoid mobs, NPCs, forms). Dispatch precedence in `visualKeyFor`: players to
 `player_<class>` (or `player_mech` for the mech skin catalog); mobs to
 `MOB_KEYS[templateId]`, then `FAMILY_KEYS[MOBS[id].family]` (the family ids
 live in `manifest.ts`), falling back to `mob_bandit`; NPCs to `NPC_KEYS`. Forms
-(`form_sheep`/`form_bear`/`form_cat`/`form_travel`) are passed explicitly by the renderer.
+(`form_sheep`/`form_bear`/`form_cat`/`form_travel`) are passed explicitly by the renderer;
+`characterFormAssetKey` (`form_visual_selection_core.ts`) then splits the shared cat slot at
+construction, so a shaman's `ghost_wolf` aura resolves to `form_ghost_wolf` (the tinted
+`wolf_basic.glb`) while the druid's `form_cat` loads its own `druid_cat_form.glb`.
 
 ## Animation
 - `AnimState` (the renderer-derived input) and `BaseState`
-  (`idle|walk|walkBack|run|cast|spin|swim|sit|jump`) live in `anim_state.ts`, which
+  (`idle|walk|walkBack|run|cast|spin|swim|sit|jump|prowlIdle|prowlWalk|...`) live in `anim_state.ts`, which
   also owns `desiredBaseState()` (pose selection) and `locomotionTimeScale()`
   (foot-speed matching). Clip *names* are per source rig in the `ClipMap`
   factories (`manifest.ts`); names differ per rig (e.g. KayKit `Walking_A`,
@@ -266,8 +313,16 @@ per part.
 - The FACE is morph targets, not geometry variants: eight paired sliders
   (`nose_up`/`nose_dn` ...) resolved by `morphInfluences()` and applied per
   instance in `applyMorphs`. Geometry stays shared, so the face must never enter
-  `modularGeometryKey`, only the signature. `mergeSkinnedParts` leaves
-  morph-carrying parts unmerged by design, which is what makes this work at all.
+  `modularGeometryKey`, only the signature. `mergeSkinnedParts` MERGES
+  morph-carrying parts (the nine skin parts are one draw), padding every part to
+  the union of their target NAMES (`morph_union_core.ts`), so `applyMorphs`
+  keeps driving by name and a slider that reaches only the torso moves only the
+  torso's vertices inside the merged buffer.
+- What a merge is NOT allowed to cross is a node-NAME fact, because the merged
+  mesh has one name of its own: the head, the mouth's lips, the jewellery and
+  the hair band. `modular_name_facts_core.ts` owns those four predicates for
+  BOTH readers (the recolour sweep and the merge's partition key), so they
+  cannot drift; the head is its own partition and never merges at all.
 - The MOUTH is a part (`M_Mouth_<style>` / `F_Mouth_<style>`), not a morph:
   lips stand PROUD of the skin, and open styles are a different MESH (aperture,
   dark cavity, own teeth), not a deformation of a closed one. The head keeps
@@ -323,14 +378,19 @@ per part.
   `setModularLookProvider` claims every player entity and composes peers from
   server truth; a character with no authored look still keeps the fixed
   `player_<class>` rig. Three consequences the code used to assume away:
-  - The unmerged morph parts (head, eyes, ears, lashes, brows, body regions) are
-    now a per-CROWD draw cost, not a one-character one. The far LOD is what
-    bounds it, and the band pulls in as the crowd grows (`crowd_lod.ts`).
+  - The parts a merge cannot fold (head, eyes, lashes, the mouth's own
+    materials, the jewellery) are a per-CROWD draw cost, not a one-character
+    one. The far LOD is what bounds it, and the band pulls in as the crowd grows
+    (`crowd_lod.ts`).
   - `prepareVisual`'s far bake measures `DEFAULT_LOOK`, so it is wrong for a
     composed body. Composed bodies bake their own (`modularFarBake`), keyed by
     part set and minted on the first crossing into the far band; the colours are
     resolved per character from their own materials. Face/body sliders are not
-    in that silhouette, deliberately.
+    in that silhouette, deliberately. The bake merges atlas-mapped kit pieces
+    with colour-only face parts that ship NO uv: `far_bake_uv_pad.ts` gives those
+    an inert zero uv so the merge keeps the kit's real uv (dropping uv from every
+    part instead made the frozen mesh sample one atlas texel, a flat untextured
+    body at distance; `tests/far_bake_uv_pad.test.ts`).
     The bake hands back geometry GROUPS and each character resolves group N
     against its own captured `userData.farMaterials[N]`, so the two walks have to
     be one list: both go through `composedFarMeshes`, which drops held props for

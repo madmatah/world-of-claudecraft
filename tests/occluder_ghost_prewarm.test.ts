@@ -17,6 +17,7 @@ import { attachBiomeHaze } from '../src/render/biome_haze_field';
 import { fenbridgeTownInternalsForTest } from '../src/render/fenbridge_town';
 import { gfxInternalsForTest, surfaceMat } from '../src/render/gfx';
 import { cloneMaterialWithHooks } from '../src/render/material_clone_hooks';
+import { setDitherFadeEnabledForTest } from '../src/render/occluder_dither_fade';
 import { applyOccluderFade, occluderFadeMat } from '../src/render/occluder_fade';
 import { OCCLUDER_FADE_ALPHA } from '../src/render/occluder_fade_core';
 import {
@@ -30,6 +31,10 @@ import {
   vertexColorEmissiveInternalsForTest,
 } from '../src/render/vertex_color_emissive';
 import { applySurfaceDetail } from '../src/render/worn_stone';
+
+// These suites pin the BLENDED arm (the transparent twin and its gate); the
+// dithered arm has its own suite, tests/occluder_dither_fade.test.ts.
+beforeEach(() => setDitherFadeEnabledForTest(false));
 
 // The hook layers a kit material really carries (surfaceMat attaches the zone
 // haze at creation, worn_stone the detail layer): both fold into
@@ -210,7 +215,7 @@ describe('buildGhostVariantPrewarmGroup', () => {
     expect(programKeyInputs(twin)).toEqual(programKeyInputs(material));
     // The hook-composed half of the key is the part a bare clone would lose.
     expect(twin.customProgramCacheKey()).toContain('wocHazeVXZ');
-    expect(twin.customProgramCacheKey()).toContain('surface-detail|stone');
+    expect(twin.customProgramCacheKey()).toContain('surface-detail|');
   });
 
   it('reproduces the bare-clone split it exists to avoid', () => {

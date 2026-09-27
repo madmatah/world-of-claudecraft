@@ -1,3 +1,5 @@
+import { gliderActionsLocked } from '../glider_action_lock';
+import { hasShadowCloak } from '../shadow_action_lock';
 // Mob locomotion (M2), extracted from the Sim monolith.
 //
 // This module owns the mob-AI locomotion core: the updateMob dispatcher (its
@@ -56,6 +58,8 @@ import {
 } from '../encounters/varkhul';
 import { isEscortNpcTemplate } from '../escort';
 import { unlockIgnivarRaidGate } from '../ignivar_raid_progression';
+import { isPinnedInPlace, releasePin } from '../instances/instance_combat_hold';
+import { NYTHRAXIS_BONE_SPIKE_ID, pinNythraxisBoneSpike } from '../nythraxis_bone_spike';
 import { PLAYER_BODY_RADIUS, PLAYER_SWIM_DEPTH } from '../pathfind';
 import { holdPetCorpseForBgWave } from '../pet/pet_corpse_hold';
 import { noteMatchPetUnravelled } from '../pet/pet_match_return';
@@ -103,11 +107,12 @@ import {
   tryStartMobCharge,
   updateMobChargeDash,
 } from './charge';
-import { updateMobCombatProfile } from './combat_profile';
+import { holdPinnedMob, updateMobCombatProfile } from './combat_profile';
 import { applyBroodBurn } from './dragonkin_brood';
 import { resetDungeonMinibossStomp, updateDungeonMinibossStomp } from './dungeon_miniboss_stomp';
 import { idleRng, wanderPause } from './idle_rng';
 import { resetIgnivarTrashAutomaton, updateIgnivarTrashAutomaton } from './ignivar_trash_automata';
+import { immobileEvadeSnapsHome } from './immobile_evade';
 import {
   claimMechanicSpacing,
   mechanicSlotHeld,
@@ -311,7 +316,7 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
     // next. It is never put in combat, so healing it costs the healer no regen.
     if (dummyTemplate.friendlyPracticeTarget) {
       mob.inCombat = false;
-      mob.hp = playerDummyShedHp(mob.hp, mob.maxHp, DT);
+      mob.hp = playerDummyShedHp(mob.hp, mob.maxHp, DT, dummyTemplate.restHpFraction);
       mob.aiState = 'idle';
       mob.aggroTargetId = null;
       mob.forcedTargetId = null;
@@ -344,6 +349,13 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
 
   if (mob.templateId === IGNIVAR_APOCALYPSE_ADD_ID) {
     updateIgnivarApocalypseAdd(mob);
+    return;
+  }
+
+  // A Bone Spike never walks, aggroes, or swings: the encounter frees its
+  // victim when it dies (encounters/nythraxis.ts onBossDeath).
+  if (mob.templateId === NYTHRAXIS_BONE_SPIKE_ID) {
+    pinNythraxisBoneSpike(mob);
     return;
   }
 
@@ -443,13 +455,17 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
     isVarkhul ||
     (isNythraxis && mob.nythraxis && mob.nythraxis.phase !== 'dead')
   ) {
+    // Bone Storm joins the script-locked windows: the encounter driver moves
+    // him itself (encounters/nythraxis.ts updateNythraxisBoneStorm), so the
+    // chase and swing below must not fight it.
     const nythraxisScriptLocked =
       isNythraxis &&
       mob.nythraxis &&
       (mob.nythraxis.phase === 'transition' ||
         mob.nythraxis.deathlessCastRemaining > 0 ||
         mob.nythraxis.deathlessStunRemaining > 0 ||
-        (mob.nythraxis.heroicSummonChannelRemaining ?? 0) > 0);
+        (mob.nythraxis.heroicSummonChannelRemaining ?? 0) > 0 ||
+        (mob.nythraxis.boneStorm ?? null) !== null);
     if (isNythraxis) {
       ctx.updateNythraxisEncounter(mob);
       if (
@@ -458,7 +474,8 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
           (mob.nythraxis.phase === 'transition' ||
             mob.nythraxis.deathlessCastRemaining > 0 ||
             mob.nythraxis.deathlessStunRemaining > 0 ||
-            (mob.nythraxis.heroicSummonChannelRemaining ?? 0) > 0))
+            (mob.nythraxis.heroicSummonChannelRemaining ?? 0) > 0 ||
+            (mob.nythraxis.boneStorm ?? null) !== null))
       )
         return;
     } else if (isIgnivar) {
@@ -530,7 +547,12 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
         // pad. Ruled acceptable: one 50 ms deferral, uniform across hosts.
         ctx.playerGrid.forEachInRadius(mob.pos.x, mob.pos.z, MAX_AGGRO_RADIUS, (e, d2) => {
           counters.aggroScanPlayerVisits++;
-          if (e.dead) return;
+          if (
+            e.dead ||
+            hasShadowCloak(e) ||
+            gliderActionsLocked(ctx.players.get(e.id)?.worldQuestLog)
+          )
+            return;
           const radius = Math.max(
             4,
             Math.min(MAX_AGGRO_RADIUS, template.aggroRadius + (mob.level - e.level) * 1.5),
@@ -551,7 +573,12 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
       const counters = ctx.mobScanCounters;
       ctx.playerGrid.forEachInRadius(mob.pos.x, mob.pos.z, MAX_AGGRO_RADIUS, (e, d2) => {
         counters.aggroScanPlayerVisits++;
-        if (e.dead) return;
+        if (
+          e.dead ||
+          hasShadowCloak(e) ||
+          gliderActionsLocked(ctx.players.get(e.id)?.worldQuestLog)
+        )
+          return;
         if (isTrivialTo(mob, e)) return;
         let radius = Math.max(
           4,
@@ -636,6 +663,13 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
     }
     case 'chase':
     case 'attack': {
+      // A mob holding in place inside an instance (instances/instance_combat_hold.ts)
+      // is immune and does nothing this tick but re-check its hold: no stomp,
+      // no lance, no snare or yell, no swing (holdPinnedMob, combat_profile.ts).
+      if (isPinnedInPlace(mob)) {
+        holdPinnedMob(ctx, mob);
+        break;
+      }
       if (updateDungeonMinibossStomp(ctx, mob)) break;
       if (updateIgnivarTrashAutomaton(ctx, mob)) break;
       // A heroic charge dash in flight owns the mob's movement for the tick
@@ -709,6 +743,13 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
       break;
     }
     case 'evade': {
+      // An immobile mob (moveSpeed 0) cannot walk home and a zero step never
+      // arrives: snap it onto its spawn point instead (mob/immobile_evade.ts)
+      // and run the same reset, so a shoved egg is never immune forever.
+      if (immobileEvadeSnapsHome(mob)) {
+        resetEvadingMob(ctx, mob);
+        break;
+      }
       // moveToward has no pathfinding: a straight line home that crosses a prop
       // (the camp tent/crate/campfire) or deep water makes no progress, so the
       // mob stays evading — and therefore immune — forever. Walk home normally,
@@ -1471,14 +1512,6 @@ function pulseLoudYell(ctx: SimContext, mob: Entity): void {
 // An evading mob has reached its spawn (walking or phasing): drop the pull
 // entirely and return to idle at full health, ready to be pulled again.
 export function resetEvadingMob(ctx: SimContext, mob: Entity): void {
-  // A player just left this exact mob mid-combat (issue #2653): defer the
-  // reset while their instance_exit_memory.ts window is still live, so the
-  // mob stays parked in 'evade' (damage-immune, hate table and HP untouched;
-  // see combat/damage.ts) instead of healing and clearing. That keeps it
-  // unreachable to anyone else and preserves the exact state a same-claim
-  // re-entry restores. Once the window lapses this same call site fires
-  // again next tick (still arrived at spawnPos) and performs the real reset.
-  if (mob.combatExitHoldUntil > ctx.time) return;
   mob.aiState = 'idle';
   mob.hp = mob.maxHp;
   mob.auras = [];
@@ -1490,12 +1523,10 @@ export function resetEvadingMob(ctx: SimContext, mob: Entity): void {
   mob.leashAnchor = null;
   mob.evadeStall = 0;
   mob.chaseStall = 0;
-  // A full evade-home reset ends this pull for good (issue #2653 follow-up):
-  // bump the epoch so a mid-combat exit snapshot stamped against the OLD pull
-  // (instance_exit_memory.ts) is recognized as stale and never reapplied onto
-  // whoever re-pulls this mob fresh inside the same memory window.
+  // A full evade-home reset ends this pull for good; the epoch counts them.
   mob.evadeEpoch++;
   mob.chainPullInbound = false;
+  releasePin(mob);
   mob.fleeTimer = 0;
   mob.fleeReturnTimer = 0;
   mob.hasFled = false;

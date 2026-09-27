@@ -20,6 +20,7 @@ import {
   type AbilityScaling,
   abilityBuffValue,
   abilityDamageBonus,
+  abilityPrimaryHealingTotal,
   abilityTemporalHourglassValues,
   auraBuffDisplayValue,
 } from '../src/ui/ability_damage';
@@ -62,6 +63,64 @@ const PROT_MODS = computeTalentModifiers('warrior', {
 } as never);
 
 describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
+  it('shows the one-stack Choirmend bonus when the online snapshot omits stacks', () => {
+    const res = known('priest', 'prayer_of_healing', { ...emptyModifiers(), spec: 'holy' });
+    const eff = required(res.effects.find((effect) => effect.type === 'aoeHeal'));
+    if (eff.type !== 'aoeHeal') throw new Error('expected group heal');
+    const online = { ...SC, auras: [{ id: 'priest_benison_prayers', remaining: 0 }] };
+    const offline = { ...SC, auras: [{ id: 'priest_benison_prayers', stacks: 1, remaining: 0 }] };
+    const bonus = abilityDamageBonus(res, eff, online);
+    expect(abilityPrimaryHealingTotal(res, eff, online)).toEqual({
+      min: Math.round((eff.min + bonus) * 1.1),
+      max: Math.round((eff.max + bonus) * 1.1),
+    });
+    expect(abilityEffectText(res, online)).toBe(abilityEffectText(res, offline));
+  });
+
+  it.each([0, 200])(
+    'includes Dawnweave in the complete heal preview at %i healing power',
+    (healPower) => {
+      const auras = [
+        { id: 'priest_benison_prayers', stacks: 3, remaining: 0 },
+        { id: 'priest_benison_whisper', remaining: 60 },
+      ];
+      const scaling = { ...SC, healPower, auras };
+      for (const [id, factor] of [
+        ['prayer_of_healing', 1.3],
+        ['lesser_heal', 2],
+      ] as const) {
+        const res = known('priest', id, { ...emptyModifiers(), spec: 'holy' });
+        const eff = required(
+          res.effects.find((effect) => effect.type === 'heal' || effect.type === 'aoeHeal'),
+        );
+        if (eff.type !== 'heal' && eff.type !== 'aoeHeal') throw new Error('expected direct heal');
+        const bonus = abilityDamageBonus(res, eff, scaling);
+        expect(abilityPrimaryHealingTotal(res, eff, scaling)).toEqual({
+          min: Math.round(
+            Math.round((eff.min + bonus) * factor) * (res.outputScaling?.primaryHealing ?? 1),
+          ),
+          max: Math.round(
+            Math.round((eff.max + bonus) * factor) * (res.outputScaling?.primaryHealing ?? 1),
+          ),
+        });
+      }
+      const unempowered = known('priest', 'heal');
+      const eff = required(unempowered.effects.find((effect) => effect.type === 'heal'));
+      expect(abilityPrimaryHealingTotal(unempowered, eff, scaling)).toBeNull();
+      const whisper = known('priest', 'lesser_heal');
+      expect(
+        abilityPrimaryHealingTotal(
+          whisper,
+          required(whisper.effects.find((effect) => effect.type === 'heal')),
+          {
+            ...scaling,
+            auras: [{ id: 'priest_benison_whisper', remaining: 0 }],
+          },
+        ),
+      ).toBeNull();
+    },
+  );
+
   it('shows Hexcraft-resolved Litany of Guilt damage at every rank', () => {
     // Authored 5/9/14 through the 10% Hexcraft mastery plus the 2026-08-23
     // viability floor's affliction spellDmgPct 0.07.
@@ -170,11 +229,10 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
       bloodhook.effects.find((candidate) => candidate.type === 'hunterBloodhook'),
     );
     expect(abilityDamageBonus(bloodhook, effect, { ...SC, rangedPower: 0 })).toBe(0);
-    // 2026-08-09 120s band round: the survival baseline meleeDmgPct stepped
-    // 0.06 to 0.3 (the rest of the raise rides the baseline agiPct), so the 34
-    // base and 200*0.26 rider re-derive at 1.3x.
-    expect(abilityDamageBonus(bloodhook, effect, SC)).toBe(68);
-    expect(abilityEffectText(bloodhook, SC)).toBe('44.2 (+68)');
+    // Fieldcraft: 1 + 0.30 legacy + 0.15 offensive tuning.
+    // Base 34 * 1.45 = 49.3; rider round(200 * 0.26 * 1.45) = 75.
+    expect(abilityDamageBonus(bloodhook, effect, SC)).toBe(75);
+    expect(abilityEffectText(bloodhook, SC)).toBe('49.3 (+75)');
   });
 
   it('a channelled directDamage (Arcane Missiles) uses the per-tick CHANNEL coefficient', () => {
@@ -204,9 +262,9 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
   });
 
   it('a direct heal folds Spell Power at the cast-time coefficient (combat directHealBonus)', () => {
-    const heal = abilitiesKnownAt('priest', MAX_LEVEL).find((k) =>
-      k.effects.some((e) => e.type === 'heal'),
-    )!;
+    const heal = required(
+      abilitiesKnownAt('priest', MAX_LEVEL).find((k) => k.effects.some((e) => e.type === 'heal')),
+    );
     const eff = required(heal.effects.find((e) => e.type === 'heal'));
     expect(abilityDamageBonus(heal, eff, SC)).toBe(directHealBonus(SC.spellPower, heal.castTime));
     expect(abilityDamageBonus(heal, eff, SC)).toBeGreaterThan(0);
@@ -215,13 +273,23 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
   it('Cascading Mend shows the same Spell Power bonus as its first combat heal', () => {
     const chain = known('shaman', 'chain_heal', SPIRITMEND_MODS);
     const effect = required(chain.effects.find((candidate) => candidate.type === 'chainHeal'));
+    if (effect.type !== 'chainHeal') throw new Error('expected chainHeal');
     expect(abilityDamageBonus(chain, effect, { ...SC, spellPower: 0, healPower: 0 })).toBe(0);
     expect(abilityDamageBonus(chain, effect, { ...SC, spellPower: 100, healPower: 100 })).toBe(
       directHealBonus(100, chain.castTime),
     );
-    expect(abilityEffectText(chain, { ...SC, spellPower: 0, healPower: 0 })).toBe('120 to 145');
-    expect(abilityEffectText(chain, { ...SC, spellPower: 100, healPower: 100 })).toMatch(
-      /^120 to 145 \(\+\d+\)$/,
+    // v0.42.0 Spiritmend (docs/design/class-balance-v042.md): +10% primary
+    // healing folds onto the WHOLE completed packet once, so the tooltip
+    // shows the combined range instead of the unscaled base plus a separate
+    // "(+N)" bonus badge (a display change, not just a bigger bonus number).
+    const factor = chain.outputScaling?.primaryHealing ?? 1;
+    expect(factor).not.toBe(1);
+    expect(abilityEffectText(chain, { ...SC, spellPower: 0, healPower: 0 })).toBe(
+      `${Math.round(effect.min * factor)} to ${Math.round(effect.max * factor)}`,
+    );
+    const bonus = abilityDamageBonus(chain, effect, { ...SC, spellPower: 100, healPower: 100 });
+    expect(abilityEffectText(chain, { ...SC, spellPower: 100, healPower: 100 })).toBe(
+      `${Math.round((effect.min + bonus) * factor)} to ${Math.round((effect.max + bonus) * factor)}`,
     );
   });
 
@@ -263,8 +331,14 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
   it('the reworked Rain of Fire ground pulse uses the AoE-penalised direct coefficient', () => {
     const rof = known('warlock', 'rain_of_fire', DESTRUCTION_MODS);
     const eff = required(rof.effects.find((e) => e.type === 'groundAoE'));
+    // v0.42.0 Ruination (docs/design/class-balance-v042.md): the ground pulse's
+    // runtime Spell Power rider now carries the resolved talent/offense-tuning
+    // damage multiplier the same way the base magnitude already did, so this
+    // no longer matches a bare (unmultiplied) directHitBonus.
+    const dmgMult = rof.outputScaling?.damage ?? 1;
+    expect(dmgMult).not.toBe(1);
     expect(abilityDamageBonus(rof, eff, SC)).toBe(
-      directHitBonus(SC.spellPower, rof.def, rof.castTime, true),
+      directHitBonus(SC.spellPower, rof.def, rof.castTime, true, dmgMult),
     );
   });
 });

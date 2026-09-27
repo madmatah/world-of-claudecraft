@@ -142,6 +142,10 @@ export const table: ReliquaryLocaleTable = {
     name: 'Armería de Guerra',
     desc: 'Joyería y armas de Guerra compradas con honor ganado a pulso.',
   },
+  conquerors_vanguard_gallery: {
+    name: 'Galería de Vanguardia',
+    desc: 'Los conjuntos de especialización y las armas de la temporada 2 de Guerra, comprados con honor.',
+  },
   horizons_vault_of_ages: {
     name: 'Cámara de las Eras',
     desc: 'Tesoros retirados de una época pasada. Estas reliquias ya no se pueden conseguir; la cámara honra a los veteranos que las conservan.',
@@ -151,19 +155,31 @@ export const table: ReliquaryLocaleTable = {
     desc: 'Los anillos de Brecha personales, acuñados para cada campeón del grupo que logra la primera conquista de una Brecha clasificada. Cada personaje solo puede tener el suyo.',
   },
   conquerors_ignivar: {
-    name: 'Crucible of the Last Spring',
+    name: 'Crisol de la Última Fuente',
     desc: 'Botines épicos de Ignivar, Heraldo de la Última Llama.',
   },
   conquerors_ignivar_heroic: {
-    name: 'Heroico: Crucible of the Last Spring',
-    desc: 'Armas exclusivas del modo heroico de Ignivar, Heraldo de la Última Llama.',
+    name: 'Heroico: Crisol de la Última Fuente',
+    desc: 'Armas exclusivas del modo heroico y los abalorios de la banda de Ignivar, Heraldo de la Última Llama.',
   },
   conquerors_varkhul: {
-    name: 'The Inner Crucible',
-    desc: 'Botines épicos de Varkhul, Forgefather of the Last Flame.',
+    name: 'El Crisol Interior',
+    desc: 'Botines épicos de Varkhul, Padre de la Forja de la Última Llama.',
   },
   conquerors_varkhul_heroic: {
-    name: 'Heroico: The Inner Crucible',
-    desc: 'Escudos y armas exclusivos del modo heroico de Varkhul, Forgefather of the Last Flame.',
+    name: 'Heroico: El Crisol Interior',
+    desc: 'Escudos y armas exclusivos del modo heroico y los abalorios de la banda de Varkhul, Padre de la Forja de la Última Llama.',
+  },
+  conquerors_set_bramblehide: {
+    name: 'Piel de Zarza de Roots',
+    desc: 'La familia completa de cuero Piel de Zarza de Roots.',
+  },
+  professions_crucible: {
+    name: 'Artesanía del Crisol',
+    desc: 'Once colecciones creadas en incursiones, cada una con piezas de pecho, cintura y pies. Los manuales y las fórmulas son conocimientos, no reliquias.',
+  },
+  professions_forgebreaker: {
+    name: 'Rompeforjas',
+    desc: 'La voz de la Última Fuente, liberada de la forja y llevada en un martillo hecho por tus propias manos.',
   },
 };

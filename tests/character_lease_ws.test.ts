@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 // ws_auth.ts takes ALL of its DB access through the injected deps bag, including
 // the two character-lease functions, so the handshake drives with no live
 // database and no module mock: the lease fns are vi.fn spies on the deps object.
 import { createWsAuth } from '../server/ws_auth';
+import { freshAccountLedger } from '../src/sim/account_ledger';
 import { ONLINE_WORLD_AUTH_TYPE } from '../src/world_api';
 
 const ALREADY_IN_WORLD = 'character already in world';
@@ -77,6 +77,9 @@ function makeDeps(opts: { joinResult?: any; hasSession?: boolean; acquireResult?
       resolve: (moderation: unknown) => moderation,
       release: vi.fn(),
     })),
+    // The fresh-join arm asks the action-bar store for a still-queued document
+    // before its post-lease reload; this file has nothing queued.
+    hotbarLayouts: { pending: () => null },
   };
   const deps: any = {
     game,
@@ -88,6 +91,7 @@ function makeDeps(opts: { joinResult?: any; hasSession?: boolean; acquireResult?
     permissionsForRoles: () => new Set<string>(),
     metaRequestUserData: () => ({}),
     metaEventSourceUrl: () => undefined,
+    loadAccountLedger: async () => freshAccountLedger(),
     loadAccountCosmetics: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
     isConnectionRefused: () => false,
     bufferHandshakeMessages: () => () => {},

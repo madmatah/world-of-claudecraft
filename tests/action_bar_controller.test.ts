@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActionBarLayoutUploader } from '../src/net/action_bar_upload';
 import { ITEMS } from '../src/sim/data';
 import type { PlayerClass } from '../src/sim/types';
 import {
@@ -6,7 +7,7 @@ import {
   ActionBarController,
 } from '../src/ui/hud/action_bar/action_bar_controller';
 import type { HotbarAction } from '../src/ui/hud/action_bar/hotbar';
-import type { ActionBarLayout } from '../src/world_api/action_bar';
+import type { ActionBarLayoutSave } from '../src/world_api/action_bar';
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -332,10 +333,10 @@ describe('ActionBarController form persistence', () => {
     expect(controller.actions).toEqual(bar());
   });
 
-  it('keeps Druid caster, Wolf, and stealthed Wolf pages independently editable', () => {
+  it('keeps Druid caster, Cat, and stealthed Cat pages independently editable', () => {
     const caster = bar('wrath', 'moonfire', 'cat_form');
-    const wolf = bar('claw', 'rip', 'prowl', 'cat_form');
-    const stealthedWolf = bar('pounce', 'rake', 'prowl', 'cat_form');
+    const cat = bar('claw', 'rip', 'prowl', 'cat_form');
+    const stealthedCat = bar('pounce', 'rake', 'prowl', 'cat_form');
     const { controller, state } = makeHarness(
       'druid',
       ['wrath', 'moonfire', 'cat_form', 'claw', 'rip', 'prowl', 'rake', 'pounce'],
@@ -345,33 +346,33 @@ describe('ActionBarController form persistence', () => {
     state.auras = ['form_cat'];
     controller.syncActiveForm();
     expect(controller.activeForm).toBe('cat');
-    controller.replaceActions(wolf);
+    controller.replaceActions(cat);
     controller.saveActions();
 
     state.auras = ['form_cat', 'stealth'];
     controller.syncActiveForm();
     expect(controller.activeForm).toBe('cat_stealth');
     expect(controller.actions).toEqual(bar());
-    controller.replaceActions(stealthedWolf);
+    controller.replaceActions(stealthedCat);
     controller.saveActions();
 
     state.auras = ['form_cat'];
     controller.syncActiveForm();
-    expect(controller.actions).toEqual(wolf);
+    expect(controller.actions).toEqual(cat);
     state.auras = [];
     controller.syncActiveForm();
     expect(controller.actions).toEqual(caster);
     state.auras = ['form_cat', 'stealth'];
     controller.syncActiveForm();
-    expect(controller.actions).toEqual(stealthedWolf);
+    expect(controller.actions).toEqual(stealthedCat);
   });
 
-  it('migrates a legacy Wolf clone to blank', () => {
-    const wolf = bar('claw', 'prowl', 'cat_form');
-    const harness = makeHarness('druid', ['cat_form', 'claw', 'prowl', 'rake'], wolf);
-    harness.storage.setItem('woc_hotbar_druid_ActionbarTester_cat', JSON.stringify(wolf));
+  it('migrates a legacy Cat clone to blank', () => {
+    const cat = bar('claw', 'prowl', 'cat_form');
+    const harness = makeHarness('druid', ['cat_form', 'claw', 'prowl', 'rake'], cat);
+    harness.storage.setItem('woc_hotbar_druid_ActionbarTester_cat', JSON.stringify(cat));
     harness.storage.setItem('woc_hotbar_druid_ActionbarTester_cat_seeded', '1');
-    harness.storage.setItem('woc_hotbar_druid_ActionbarTester_cat_stealth', JSON.stringify(wolf));
+    harness.storage.setItem('woc_hotbar_druid_ActionbarTester_cat_stealth', JSON.stringify(cat));
     harness.state.auras = ['form_cat'];
     harness.controller.syncActiveForm();
     harness.state.auras = ['form_cat', 'stealth'];
@@ -824,28 +825,29 @@ describe('ActionBarController: passives never occupy an action slot', () => {
   });
 });
 
-describe('ActionBarController persistence seam', () => {
-  function persistHarness(): {
-    controller: ActionBarController;
-    storage: MemoryStorage;
-    persisted: ActionBarLayout[];
-  } {
-    const storage = new MemoryStorage();
-    const persisted: ActionBarLayout[] = [];
-    const controller = new ActionBarController({
-      storage,
-      playerClass: 'warrior',
-      playerName: 'ActionbarTester',
-      playerLevel: () => 20,
-      talentSpec: () => null,
-      knownAbilityIds: () => ['heroic_strike', 'sunder_armor'],
-      hasAura: () => false,
-      showAttackButton: () => true,
-      persistLayout: (layout) => persisted.push(layout),
-    });
-    return { controller, storage, persisted };
-  }
+function persistHarness(profile?: 'desktop' | 'touch'): {
+  controller: ActionBarController;
+  storage: MemoryStorage;
+  persisted: ActionBarLayoutSave[];
+} {
+  const storage = new MemoryStorage();
+  const persisted: ActionBarLayoutSave[] = [];
+  const controller = new ActionBarController({
+    storage,
+    playerClass: 'warrior',
+    playerName: 'ActionbarTester',
+    playerLevel: () => 20,
+    talentSpec: () => null,
+    knownAbilityIds: () => ['heroic_strike', 'sunder_armor'],
+    hasAura: () => false,
+    showAttackButton: () => true,
+    profile: profile === undefined ? undefined : () => profile,
+    persistLayout: (profile, layout) => persisted.push({ profile, layout }),
+  });
+  return { controller, storage, persisted };
+}
 
+describe('ActionBarController persistence seam', () => {
   it('does NOT persist while loading during init (only user changes upload)', () => {
     const { controller, persisted } = persistHarness();
     controller.init();
@@ -858,7 +860,12 @@ describe('ActionBarController persistence seam', () => {
     controller.replaceActions(bar('heroic_strike'));
     controller.saveActions();
     expect(persisted).toHaveLength(1);
-    expect(persisted[0].forms.normal?.bar[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    // No profile wired means the legacy desktop keys and the desktop upload.
+    expect(persisted[0].profile).toBe('desktop');
+    expect(persisted[0].layout.forms.normal?.bar[0]).toEqual({
+      type: 'ability',
+      id: 'heroic_strike',
+    });
   });
 
   it('does NOT persist while re-seeding from storage in reload (server-wins restore)', () => {
@@ -892,6 +899,402 @@ describe('ActionBarController persistence seam', () => {
       type: 'ability',
       id: 'heroic_strike',
     });
+  });
+});
+
+describe('ActionBarController per-surface profiles', () => {
+  const DESKTOP_KEY = 'woc_hotbar_warrior_ActionbarTester';
+  const TOUCH_KEY = 'woc_hotbar_warrior_ActionbarTester_touch';
+
+  it('a touch controller reads and writes the touch keys and uploads the touch profile', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    storage.setItem(TOUCH_KEY, JSON.stringify(bar('heroic_strike')));
+    controller.init();
+    expect(controller.profile).toBe('touch');
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+
+    controller.replaceActions(bar('sunder_armor', 'heroic_strike'));
+    controller.saveActions();
+    // The touch keys moved; the desktop keys are byte-identical.
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')[1]).toEqual({
+      type: 'ability',
+      id: 'heroic_strike',
+    });
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(bar('sunder_armor'));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].profile).toBe('touch');
+    expect(persisted[0].layout.forms.normal?.bar[1]).toEqual({
+      type: 'ability',
+      id: 'heroic_strike',
+    });
+  });
+
+  it('restoreLayout applies the server copy of its own profile without re-uploading', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    controller.init();
+    const reloaded = controller.restoreLayout({
+      source: 'server',
+      profiles: {
+        v: 2,
+        profiles: {
+          desktop: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'sunder_armor' }] } } },
+          touch: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'heroic_strike' }] } } },
+        },
+      },
+    });
+    expect(reloaded).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')[0]).toEqual({
+      type: 'ability',
+      id: 'heroic_strike',
+    });
+    // The desktop profile never lands in this device's desktop keys.
+    expect(storage.getItem(DESKTOP_KEY)).toBeNull();
+    expect(persisted).toEqual([]);
+  });
+
+  it('restoreLayout seeds a surface with no copy from the desktop profile, never uploading', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    controller.init();
+    const reloaded = controller.restoreLayout({
+      source: 'server',
+      profiles: {
+        v: 2,
+        profiles: {
+          desktop: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'sunder_armor' }] } } },
+        },
+      },
+    });
+    expect(reloaded).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')[0]).toEqual({
+      type: 'ability',
+      id: 'sunder_armor',
+    });
+    // Following, not forking: the touch profile is uploaded only on a real edit.
+    expect(persisted).toEqual([]);
+    controller.replaceActions(bar('heroic_strike'));
+    controller.saveActions();
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+  });
+
+  it('restoreLayout uploads a non-empty local copy when the server has no document', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    storage.setItem(TOUCH_KEY, JSON.stringify(bar('heroic_strike')));
+    controller.init();
+    const reloaded = controller.restoreLayout({ source: 'seed' });
+    expect(reloaded).toBe(false);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].profile).toBe('touch');
+    expect(persisted[0].layout.forms.normal?.bar[0]).toEqual({
+      type: 'ability',
+      id: 'heroic_strike',
+    });
+  });
+
+  it('restoreLayout inherits the legacy keys and uploads them when the server holds nothing', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    expect(controller.restoreLayout({ source: 'seed' })).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].profile).toBe('touch');
+    expect(persisted[0].layout.forms.normal?.bar[0]).toEqual({
+      type: 'ability',
+      id: 'sunder_armor',
+    });
+  });
+
+  it('restoreLayout inherits the legacy desktop keys offline when the touch keys are empty', () => {
+    const { controller, storage, persisted } = persistHarness('touch');
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    const reloaded = controller.restoreLayout({ source: 'noop' });
+    expect(reloaded).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')[0]).toEqual({
+      type: 'ability',
+      id: 'sunder_armor',
+    });
+    expect(persisted).toEqual([]);
+  });
+
+  it('restoreLayout leaves a desktop controller alone offline (the legacy behavior)', () => {
+    const { controller, storage, persisted } = persistHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    expect(controller.restoreLayout({ source: 'noop' })).toBe(false);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(persisted).toEqual([]);
+  });
+});
+
+describe('ActionBarController mid-session surface flip (Interface Mode)', () => {
+  const DESKTOP_KEY = 'woc_hotbar_warrior_ActionbarTester';
+  const TOUCH_KEY = 'woc_hotbar_warrior_ActionbarTester_touch';
+
+  function flipHarness(startOnTouch = false): {
+    controller: ActionBarController;
+    storage: MemoryStorage;
+    persisted: ActionBarLayoutSave[];
+    setTouch: (touch: boolean) => void;
+  } {
+    // The controller resolves its profile at construction, so a phone-first
+    // character starts on touch here rather than flipping after init().
+    let touch = startOnTouch;
+    const storage = new MemoryStorage();
+    const persisted: ActionBarLayoutSave[] = [];
+    const controller = new ActionBarController({
+      storage,
+      playerClass: 'warrior',
+      playerName: 'ActionbarTester',
+      playerLevel: () => 20,
+      talentSpec: () => null,
+      knownAbilityIds: () => ['heroic_strike', 'sunder_armor'],
+      hasAura: () => false,
+      showAttackButton: () => true,
+      profile: () => (touch ? 'touch' : 'desktop'),
+      persistLayout: (profile, layout) => persisted.push({ profile, layout }),
+    });
+    return {
+      controller,
+      storage,
+      persisted,
+      setTouch: (value) => {
+        touch = value;
+      },
+    };
+  }
+
+  it('does nothing while the surface is unchanged', () => {
+    const { controller, setTouch } = flipHarness();
+    controller.init();
+    expect(controller.syncProfile()).toBe(false);
+    setTouch(true);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.syncProfile()).toBe(false);
+  });
+
+  it('seeds an empty desktop from the touch bar in view when the login plan is none (touch-first, no server document)', () => {
+    // A phone-first character: the touch surface is active at login and the
+    // server holds no document (the seed signal), so no desktop keys exist.
+    const { controller, storage, persisted, setTouch } = flipHarness(true);
+    controller.init();
+    controller.restoreLayout({ source: 'seed' });
+    controller.replaceActions(bar('sunder_armor', 'heroic_strike'));
+    controller.saveActions();
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+    expect(storage.getItem(DESKTOP_KEY)).toBeNull();
+
+    // The flip onto desktop finds no server copy, no local keys and no legacy
+    // seed (the restore plan is none), but the bar in view is still the seed.
+    setTouch(false);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.profile).toBe('desktop');
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(controller.actions[1]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(
+      bar('sunder_armor', 'heroic_strike'),
+    );
+    // A flip is not an edit: the seeded desktop copy never uploads.
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+  });
+
+  it('offline (no restore signal at all) seeds the empty desktop keys from the touch bar the same way', () => {
+    const { controller, storage, persisted, setTouch } = flipHarness(true);
+    controller.init();
+    controller.replaceActions(bar('sunder_armor', 'heroic_strike'));
+    controller.saveActions();
+    setTouch(false);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(
+      bar('sunder_armor', 'heroic_strike'),
+    );
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+  });
+
+  it('never overwrites a destination that already holds its own keys with the bar in view', () => {
+    const { controller, storage, setTouch } = flipHarness(true);
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('heroic_strike')));
+    controller.init();
+    controller.replaceActions(bar('sunder_armor'));
+    controller.saveActions();
+    setTouch(false);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(bar('heroic_strike'));
+  });
+
+  it('follows the flip onto the touch keys, seeding them from the bar in view, never uploading', () => {
+    const { controller, storage, persisted, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    setTouch(true);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.profile).toBe('touch');
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')[0]).toEqual({
+      type: 'ability',
+      id: 'sunder_armor',
+    });
+    // Nothing uploads on the flip itself: every desktop edit already uploaded
+    // when it saved, and the seeded touch copy is not an edit.
+    expect(persisted).toEqual([]);
+    // An edit after the flip lands under touch; the desktop keys never move.
+    controller.replaceActions(bar('heroic_strike'));
+    controller.saveActions();
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(bar('sunder_armor'));
+  });
+
+  it("restores the touch surface's own server copy from the login document on a flip", () => {
+    const { controller, storage, persisted, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    controller.restoreLayout({
+      source: 'server',
+      profiles: {
+        v: 2,
+        profiles: {
+          desktop: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'sunder_armor' }] } } },
+          touch: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'heroic_strike' }] } } },
+        },
+      },
+    });
+    setTouch(true);
+    expect(controller.syncProfile()).toBe(true);
+    // The phone's arrangement, not a copy of the desktop bar.
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    expect(persisted).toEqual([]);
+  });
+
+  it('keeps each surface its own keys when flipping back and forth', () => {
+    const { controller, storage, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    storage.setItem(TOUCH_KEY, JSON.stringify(bar('heroic_strike')));
+    controller.init();
+    setTouch(true);
+    controller.syncProfile();
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    setTouch(false);
+    expect(controller.syncProfile()).toBe(true);
+    expect(controller.profile).toBe('desktop');
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(JSON.parse(storage.getItem(TOUCH_KEY) ?? 'null')).toEqual(bar('heroic_strike'));
+  });
+
+  it("the login document's newer copy beats this device's stale touch keys on first activation", () => {
+    const { controller, storage, persisted, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    // Stale: an older session on this device arranged touch differently.
+    storage.setItem(TOUCH_KEY, JSON.stringify(bar('sunder_armor', 'heroic_strike')));
+    controller.init();
+    controller.restoreLayout({
+      source: 'server',
+      profiles: {
+        v: 2,
+        profiles: {
+          desktop: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'sunder_armor' }] } } },
+          touch: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'heroic_strike' }] } } },
+        },
+      },
+    });
+    setTouch(true);
+    expect(controller.syncProfile()).toBe(true);
+    // The other device's newer arrangement, not the stale local one.
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'heroic_strike' });
+    expect(controller.actions[1]).toBeNull();
+    expect(persisted).toEqual([]);
+    // Edits made here this session then take precedence over the login copy on
+    // every later activation.
+    controller.replaceActions(bar('heroic_strike', 'sunder_armor'));
+    controller.saveActions();
+    setTouch(false);
+    controller.syncProfile();
+    setTouch(true);
+    controller.syncProfile();
+    expect(controller.actions[1]).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(persisted.map((entry) => entry.profile)).toEqual(['touch']);
+  });
+
+  it('an untouched round trip never materializes the fallback as its own server profile', () => {
+    const { controller, storage, persisted, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    controller.restoreLayout({
+      source: 'server',
+      profiles: {
+        v: 2,
+        profiles: {
+          desktop: { v: 1, forms: { normal: { bar: [{ type: 'ability', id: 'sunder_armor' }] } } },
+        },
+      },
+    });
+    setTouch(true);
+    controller.syncProfile();
+    setTouch(false);
+    controller.syncProfile();
+    expect(persisted).toEqual([]);
+    // A desktop edit afterwards uploads under desktop only, so at the next login
+    // the touch surface still follows the desktop bar.
+    controller.replaceActions(bar('heroic_strike'));
+    controller.saveActions();
+    expect(persisted.map((entry) => entry.profile)).toEqual(['desktop']);
+  });
+
+  it('a switch still uploads the outgoing profile when it holds an unsaved in-memory bar', () => {
+    const { controller, storage, persisted, setTouch } = flipHarness();
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    controller.replaceActions(bar('heroic_strike')); // a loadout swap resolved this frame
+    setTouch(true);
+    controller.syncProfile();
+    expect(persisted.map((entry) => entry.profile)).toEqual(['desktop']);
+    expect(JSON.parse(storage.getItem(DESKTOP_KEY) ?? 'null')).toEqual(bar('heroic_strike'));
+  });
+});
+
+describe('ActionBarController + ActionBarLayoutUploader across a surface flip', () => {
+  const DESKTOP_KEY = 'woc_hotbar_warrior_ActionbarTester';
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('uploads both profiles when the flip and the second edit land inside one debounce window', () => {
+    let touch = false;
+    const storage = new MemoryStorage();
+    const sent: { profile: string; slot0: unknown }[] = [];
+    const uploader = new ActionBarLayoutUploader((command) =>
+      sent.push({ profile: command.profile, slot0: command.layout.forms.normal?.bar[0] }),
+    );
+    const controller = new ActionBarController({
+      storage,
+      playerClass: 'warrior',
+      playerName: 'ActionbarTester',
+      playerLevel: () => 20,
+      talentSpec: () => null,
+      knownAbilityIds: () => ['heroic_strike', 'sunder_armor'],
+      hasAura: () => false,
+      showAttackButton: () => true,
+      profile: () => (touch ? 'touch' : 'desktop'),
+      persistLayout: (profile, layout) => uploader.save(profile, layout),
+    });
+    storage.setItem(DESKTOP_KEY, JSON.stringify(bar('sunder_armor')));
+    controller.init();
+    controller.replaceActions(bar('heroic_strike'));
+    controller.saveActions(); // desktop edit, still inside the debounce window
+    touch = true;
+    controller.syncProfile();
+    controller.replaceActions(bar('sunder_armor', 'heroic_strike'));
+    controller.saveActions(); // touch edit, same window
+    expect(sent).toEqual([]);
+    vi.advanceTimersByTime(2000);
+    expect(sent).toEqual([
+      { profile: 'desktop', slot0: { type: 'ability', id: 'heroic_strike' } },
+      { profile: 'touch', slot0: { type: 'ability', id: 'sunder_armor' } },
+    ]);
   });
 });
 
@@ -934,5 +1337,369 @@ describe('isHotbarItemId: reins are placeable now that mounts are items', () => 
     expect(controller.isAssignableAction({ type: 'item', id: 'lesser_healing_potion' })).toBe(true);
     // A non-usable material still must not be assignable.
     expect(controller.isAssignableAction({ type: 'item', id: 'copper_ore' })).toBe(false);
+  });
+});
+
+describe('isHotbarItemId: Field Kit (Intentional Gathering, use.type harvestPreference)', () => {
+  // The Field Kit is a reusable settings tool (use.type 'harvestPreference'),
+  // the same placeable shape as a gathering implement or a potion: it must be
+  // admitted here, routable through the drop target's assignable-action gate,
+  // placeable onto a chosen slot, and survive a stored layout reload rather
+  // than being stripped as a known-but-ineligible id (R34).
+  it('admits the field kit item id', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    expect(controller.isHotbarItemId('field_kit')).toBe(true);
+  });
+
+  it('preserves the recipe/consumable-pattern exclusion: a one-shot recipe pattern stays unplaceable', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    // Guard the guard: the exclusion below must fail on a widened
+    // isHotbarItemId, never pass because the content id quietly stopped
+    // existing or stopped being kind:'recipe'.
+    expect(ITEMS.pattern_spiritweld_girdle?.kind).toBe('recipe');
+    expect(controller.isHotbarItemId('pattern_spiritweld_girdle')).toBe(false);
+  });
+
+  it('routes a field kit drag through the assignable-action path like a gathering tool', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    expect(controller.isAssignableAction({ type: 'item', id: 'field_kit' })).toBe(true);
+  });
+
+  it('can be placed onto a chosen slot via replaceActions', () => {
+    const { controller } = makeHarness('warrior', [], bar());
+    const placed = bar();
+    placed[4] = { type: 'item', id: 'field_kit' };
+
+    controller.replaceActions(placed);
+
+    expect(controller.actions[4]).toEqual({ type: 'item', id: 'field_kit' });
+  });
+
+  it('survives a stored layout reload, unlike a known-but-ineligible item id', () => {
+    const storage = new MemoryStorage();
+    const stored = bar();
+    stored[6] = { type: 'item', id: 'field_kit' };
+    storage.setItem('woc_hotbar_warrior_ActionbarTester', JSON.stringify(stored));
+    const { controller } = makeHarness('warrior', [], bar(), storage);
+
+    controller.init();
+
+    expect(controller.actions[6]).toEqual({ type: 'item', id: 'field_kit' });
+  });
+});
+
+describe('isHotbarItemId: elixirs are placeable like potions', () => {
+  // Elixirs ride the same IWorld.useItem dispatch a potion does
+  // (src/sim/items.ts kind 'elixir' -> applyAura) and the mobile consumables
+  // seat already lists them (consumable_bar_view CONSUMABLE_KIND_ORDER), but
+  // the desktop placement gate only admitted 'potion', so a bag drag never
+  // wrote a hotbar payload and the bar refused every elixir.
+  it('admits every kind:elixir item in the shipped content tables', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    const elixirs = Object.keys(ITEMS).filter((id) => ITEMS[id]?.kind === 'elixir');
+    expect(elixirs.length).toBeGreaterThan(0);
+    for (const id of elixirs) {
+      expect(controller.isHotbarItemId(id), `${id} should be hotbar placeable`).toBe(true);
+    }
+  });
+
+  it('routes an elixir through the assignable-action path and keeps it in a stored layout', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    expect(controller.isAssignableAction({ type: 'item', id: 'elixir_of_the_bear' })).toBe(true);
+    expect(controller.keepsStoredItemId('elixir_of_the_bear')).toBe(true);
+    expect(controller.isAssignableAction({ type: 'item', id: 'copper_ore' })).toBe(false);
+  });
+});
+
+describe('ActionBarController per-spec action bar memory and talent choice swaps', () => {
+  it('switches between specs and remembers action bar layout per spec', () => {
+    const storage = new MemoryStorage();
+    const { controller, state } = makeHarness('mage', ['fireball', 'pyroblast'], bar(), storage);
+    state.spec = 'fire';
+    controller.init();
+
+    // Player arranges Fire Mage action bar
+    const fireBar = bar();
+    fireBar[2] = { type: 'ability', id: 'fireball' };
+    fireBar[5] = { type: 'ability', id: 'pyroblast' };
+    controller.replaceActions(fireBar);
+    controller.saveActions();
+
+    // Verify saved under fire key
+    expect(storage.getItem('woc_hotbar_mage_ActionbarTester_fire')).toBe(JSON.stringify(fireBar));
+
+    // Player switches to Frost Mage
+    state.spec = 'frost';
+    state.known = ['frostbolt', 'ice_barrier'];
+    const switchedToFrost = controller.syncSpec();
+    expect(switchedToFrost).toBe(true);
+
+    // Frost bar should start empty/default
+    expect(controller.actions[2]).toBeNull();
+    expect(controller.actions[5]).toBeNull();
+
+    // Player arranges Frost Mage action bar
+    const frostBar = bar();
+    frostBar[0] = { type: 'ability', id: 'frostbolt' };
+    frostBar[4] = { type: 'ability', id: 'ice_barrier' };
+    controller.replaceActions(frostBar);
+    controller.saveActions();
+
+    // Verify saved under frost key
+    expect(storage.getItem('woc_hotbar_mage_ActionbarTester_frost')).toBe(JSON.stringify(frostBar));
+
+    // Player switches back to Fire Mage
+    state.spec = 'fire';
+    state.known = ['fireball', 'pyroblast'];
+    const switchedToFire = controller.syncSpec();
+    expect(switchedToFire).toBe(true);
+
+    // Fire bar must be completely restored
+    expect(controller.actions[2]).toEqual({ type: 'ability', id: 'fireball' });
+    expect(controller.actions[5]).toEqual({ type: 'ability', id: 'pyroblast' });
+    expect(controller.actions[0]).toBeNull();
+    expect(controller.actions[4]).toBeNull();
+
+    // Switch back to Frost Mage again
+    state.spec = 'frost';
+    state.known = ['frostbolt', 'ice_barrier'];
+    controller.syncSpec();
+
+    // Frost bar must be completely restored
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'frostbolt' });
+    expect(controller.actions[4]).toEqual({ type: 'ability', id: 'ice_barrier' });
+  });
+
+  it('replaces active talent choice ability in-place in syncKnownAbilities', () => {
+    const { controller, state } = makeHarness('mage', ['fireball', 'power_echo'], bar());
+    state.spec = 'arcane';
+    controller.init();
+
+    // Place power_echo on slot 5. Slot 1 is empty.
+    const initial = bar();
+    initial[0] = { type: 'ability', id: 'fireball' };
+    initial[4] = { type: 'ability', id: 'power_echo' };
+    controller.replaceActions(initial);
+    controller.saveActions();
+    controller.syncKnownAbilities();
+
+    // Switch talent from power_echo to overload (both are in Mage row 14)
+    state.known = ['fireball', 'overload'];
+    controller.syncKnownAbilities();
+
+    // overload must land in slot 4 (index 4), not index 1
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'fireball' });
+    expect(controller.actions[1]).toBeNull();
+    expect(controller.actions[4]).toEqual({ type: 'ability', id: 'overload' });
+  });
+
+  it('seeds spec bar from legacy un-suffixed key on first spec load', () => {
+    const storage = new MemoryStorage();
+    const legacyBar = bar();
+    legacyBar[3] = { type: 'ability', id: 'fireball' };
+    storage.setItem('woc_hotbar_mage_ActionbarTester', JSON.stringify(legacyBar));
+
+    const { controller, state } = makeHarness('mage', ['fireball'], bar(), storage);
+    state.spec = 'fire';
+    controller.init();
+
+    // It should load the legacy bar and save it into the fire spec key
+    expect(controller.actions[3]).toEqual({ type: 'ability', id: 'fireball' });
+    expect(storage.getItem('woc_hotbar_mage_ActionbarTester_fire')).toBe(JSON.stringify(legacyBar));
+  });
+
+  it('persists attack slot per spec', () => {
+    const storage = new MemoryStorage();
+    const { controller, state } = makeHarness('mage', ['fireball', 'frostbolt'], bar(), storage);
+    state.showAttackButton = false;
+    state.spec = 'fire';
+    controller.init();
+
+    // Place fireball on attack slot for Fire
+    controller.replaceAttackAction({ type: 'ability', id: 'fireball' });
+    controller.saveAttackAction();
+
+    // Switch to frost
+    state.spec = 'frost';
+    controller.syncSpec();
+    expect(controller.attackAction).toBeNull();
+
+    // Place frostbolt on attack slot for Frost
+    controller.replaceAttackAction({ type: 'ability', id: 'frostbolt' });
+    controller.saveAttackAction();
+
+    // Switch back to fire
+    state.spec = 'fire';
+    controller.syncSpec();
+    expect(controller.attackAction).toEqual({ type: 'ability', id: 'fireball' });
+
+    // Switch back to frost
+    state.spec = 'frost';
+    controller.syncSpec();
+    expect(controller.attackAction).toEqual({ type: 'ability', id: 'frostbolt' });
+  });
+});
+
+describe('isHotbarItemId: usable trinkets are placeable', () => {
+  // A trinket is pressed through the same useItem dispatch a potion rides, which
+  // uses the WORN copy (src/sim/items.ts -> combat/trinkets.ts useWornTrinket), so
+  // every trinket with a use effect must be placeable from the bags and the paperdoll.
+  it('admits every trinket in the shipped catalog and routes it through the drop gate', () => {
+    const { controller } = makeHarness('warrior', [], []);
+    const trinkets = Object.keys(ITEMS).filter((id) => ITEMS[id]?.slot === 'trinket');
+    // Guard the guard: an empty catalog must fail loudly, not pass vacuously.
+    expect(trinkets.length).toBeGreaterThanOrEqual(13);
+    for (const id of trinkets) {
+      expect(controller.isHotbarItemId(id), `${id} should be hotbar placeable`).toBe(true);
+      expect(controller.isAssignableAction({ type: 'item', id })).toBe(true);
+    }
+    // Other worn gear stays off the bar.
+    const helm = Object.keys(ITEMS).find((id) => ITEMS[id]?.slot === 'helmet');
+    expect(helm).toBeDefined();
+    if (helm) expect(controller.isHotbarItemId(helm)).toBe(false);
+  });
+});
+
+describe('ActionBarController while spectating (/spectate, /unspectate)', () => {
+  // A moderator's IWorld deps (spec, level, known abilities) follow the
+  // SPECTATED character for the whole spectate window, so every per-frame sync
+  // sees a foreign kit. The controller must freeze until the view returns.
+  function spectateHarness(): {
+    controller: ActionBarController;
+    storage: MemoryStorage;
+    persisted: ActionBarLayoutSave[];
+    state: { spec: string | null; known: string[]; spectating: string | null };
+  } {
+    const storage = new MemoryStorage();
+    const persisted: ActionBarLayoutSave[] = [];
+    const state = {
+      spec: 'arms' as string | null,
+      known: ['heroic_strike', 'sunder_armor', 'charge'],
+      spectating: null as string | null,
+    };
+    const controller = new ActionBarController({
+      storage,
+      playerClass: 'warrior',
+      playerName: 'ActionbarTester',
+      playerLevel: () => 20,
+      talentSpec: () => state.spec,
+      knownAbilityIds: () => state.known,
+      hasAura: () => false,
+      showAttackButton: () => true,
+      spectating: () => state.spectating !== null,
+      persistLayout: (profile, layout) => persisted.push({ profile, layout }),
+    });
+    return { controller, storage, persisted, state };
+  }
+
+  function frame(controller: ActionBarController): void {
+    controller.syncProfile();
+    controller.syncSpec();
+    controller.syncActiveForm();
+    controller.syncKnownAbilities();
+  }
+
+  it('keeps the moderator bar intact through a spectate of another class and back', () => {
+    const { controller, persisted, state } = spectateHarness();
+    controller.init();
+    frame(controller);
+    const own = bar('charge', 'heroic_strike', 'sunder_armor');
+    controller.replaceActions(own);
+    controller.saveActions();
+    persisted.length = 0;
+
+    // /spectate: the self view becomes a mage's spec and kit.
+    state.spectating = 'Watched';
+    state.spec = 'fire';
+    state.known = ['fireball', 'frostbolt'];
+    for (let i = 0; i < 3; i++) frame(controller);
+
+    expect(controller.actions).toEqual(own);
+    expect(persisted).toEqual([]);
+
+    // /unspectate: the moderator's own kit returns unchanged.
+    state.spectating = null;
+    state.spec = 'arms';
+    state.known = ['heroic_strike', 'sunder_armor', 'charge'];
+    for (let i = 0; i < 3; i++) frame(controller);
+
+    expect(controller.actions).toEqual(own);
+    expect(persisted).toEqual([]);
+  });
+
+  it('still picks up an ability learned after /unspectate', () => {
+    const { controller, state } = spectateHarness();
+    controller.init();
+    frame(controller);
+    controller.replaceActions(bar('charge'));
+    controller.saveActions();
+
+    state.spectating = 'Watched';
+    state.known = ['fireball'];
+    frame(controller);
+    state.spectating = null;
+    state.known = ['heroic_strike', 'sunder_armor', 'charge', 'rend'];
+    frame(controller);
+
+    expect(controller.actions[0]).toEqual({ type: 'ability', id: 'charge' });
+    expect(controller.actions.some((action) => action?.id === 'rend')).toBe(true);
+    expect(controller.actions.some((action) => action?.id === 'fireball')).toBe(false);
+  });
+});
+
+describe('ActionBarController mutators while spectating', () => {
+  function frozenHarness(): {
+    controller: ActionBarController;
+    persisted: ActionBarLayoutSave[];
+    state: { known: string[]; spectating: boolean };
+  } {
+    const persisted: ActionBarLayoutSave[] = [];
+    const state = { known: ['heroic_strike', 'sunder_armor', 'charge'], spectating: false };
+    const controller = new ActionBarController({
+      storage: new MemoryStorage(),
+      playerClass: 'warrior',
+      playerName: 'ActionbarTester',
+      playerLevel: () => 20,
+      talentSpec: () => null,
+      knownAbilityIds: () => state.known,
+      hasAura: () => false,
+      showAttackButton: () => true,
+      spectating: () => state.spectating,
+      persistLayout: (profile, layout) => persisted.push({ profile, layout }),
+    });
+    controller.init();
+    controller.replaceActions(bar('charge', 'heroic_strike'));
+    controller.replaceAttackAction({ type: 'ability', id: 'sunder_armor' });
+    controller.saveActions();
+    controller.saveAttackAction();
+    persisted.length = 0;
+    return { controller, persisted, state };
+  }
+
+  it('refuses every write path (spellbook, drop, reset, loadout, attack slot) under a foreign kit', () => {
+    const { controller, persisted, state } = frozenHarness();
+    const own = controller.actions;
+    state.spectating = true;
+    state.known = ['fireball', 'frostbolt'];
+
+    expect(controller.addAbility('fireball')).toBe(false);
+    expect(controller.removeAbility('charge')).toBe(false);
+    controller.replaceActions(bar('fireball'));
+    controller.replaceActionsForLoadout(bar('frostbolt'), new Set(['frostbolt']));
+    controller.replaceAttackAction({ type: 'ability', id: 'fireball' });
+    controller.resetActiveBar();
+    controller.saveActions();
+    controller.saveAttackAction();
+
+    expect(controller.actions).toEqual(own);
+    expect(controller.attackAction).toEqual({ type: 'ability', id: 'sunder_armor' });
+    expect(persisted).toEqual([]);
+
+    // Back in the own view, the same writes work again.
+    state.spectating = false;
+    state.known = ['heroic_strike', 'sunder_armor', 'charge'];
+    expect(controller.removeAbility('charge')).toBe(true);
+    expect(controller.actions.some((action) => action?.id === 'charge')).toBe(false);
+    expect(persisted.length).toBeGreaterThan(0);
   });
 });

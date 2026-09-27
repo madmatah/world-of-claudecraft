@@ -1,4 +1,4 @@
-// The Options > Performance settings panel (the wide, categorized card layout).
+// The Options > Performance sub-view (the wide, categorized card layout).
 //
 // Lifted out of hud.ts as the pure-presentation consumer of the overlay's config
 // store: it builds the panel DOM, groups the metric toggles by category, and wires
@@ -8,6 +8,8 @@
 // drag-to-move on the live overlay can push the dropped X/Y back into the sliders
 // without a full re-render.
 
+import { hostDiagAvailable } from '../game/desktop_host_diag';
+import { type HostDiagSectionDeps, renderHostDiagSection } from './host_diag_section_controller';
 import { formatNumber, t } from './i18n';
 import type { PerfOverlayConfig, PerfOverlayPatch } from './perf_overlay_config';
 import { FONT_SCALE_MAX, FONT_SCALE_MIN } from './perf_overlay_config';
@@ -55,6 +57,11 @@ export interface PerfSettingsHost {
   closeIconHtml: string;
   /** svgIcon('prev') markup for the title back button (trusted, not user text). */
   backIconHtml: string;
+  /** The game-side readings the System Report section copies into its file. The
+   *  section renders itself only on a desktop shell that can produce one, so
+   *  this is handed over unconditionally and the gate stays in one place
+   *  (src/ui/host_diag_section_controller.ts). */
+  hostDiag: HostDiagSectionDeps;
 }
 
 const PERCENT = (v: number): string =>
@@ -84,14 +91,24 @@ export class PerfOverlaySettingsPanel {
     // The gilded corner ornament (components.css) is a ::before on this same
     // container, so the container itself must stay non-scrolling or the
     // ornament scrolls away with the content instead of staying pinned to the
-    // window frame (issue #2569). Everything that DOES need to scroll (the
-    // card body plus the footer buttons) lives inside this dedicated wrapper.
-    const scroll = div('perf-scroll');
+    // window frame (issue #2569). The cards scroll inside this wrapper, which is
+    // the window shell's one scrolling body (library.css); the footer buttons sit
+    // OUTSIDE it so Reset and Back cannot scroll out of reach.
+    const scroll = div('perf-scroll ui-win-body');
     container.appendChild(scroll);
 
     const panel = div('perf-panel');
     scroll.appendChild(panel);
 
+    // The view is "Performance" now. The overlay controls get their own section
+    // heading ONLY when a second section follows them (the desktop shell's System
+    // Report): a heading over a view's single section is noise, and on a phone in
+    // landscape it would cost close to half of the short strip this scroller gets.
+    // The shared card-title chrome, spanning the panel rather than boxed, so the
+    // overlay cards below stay one level deep.
+    if (hostDiagAvailable()) {
+      subhead(panel, t('hudChrome.perf.overlaySection'), 'perf-card-title');
+    }
     this.buildMaster(panel);
 
     const cols = div('perf-cols');
@@ -104,7 +121,11 @@ export class PerfOverlaySettingsPanel {
     this.buildAppearanceCard(right);
     this.buildPositionCard(right);
 
-    scroll.appendChild(this.buildFooter());
+    // The desktop shell's System Report, under the overlay block: it no-ops on
+    // every other host, so this call is unconditional.
+    renderHostDiagSection(panel, this.host.hostDiag);
+
+    container.appendChild(this.buildFooter());
   }
 
   /** Push a dropped drag position back into the X/Y sliders (no full re-render). */
@@ -212,7 +233,9 @@ export class PerfOverlaySettingsPanel {
       for (const chip of chips) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'btn set-choice-btn';
+        // ui-btn carries the selected fill off aria-pressed, which sync() sets
+        // below; the legacy .set-choice-btn.sel look no longer exists.
+        btn.className = 'btn ui-btn set-choice-btn';
         const label = t(chip.labelKey);
         btn.textContent = label;
         const isOn = (): boolean => perf.get().metrics[chip.key];
@@ -359,7 +382,7 @@ export class PerfOverlaySettingsPanel {
   }
 
   private buildFooter(): HTMLElement {
-    const footer = div('perf-footer');
+    const footer = div('perf-footer ui-win-foot');
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'btn';

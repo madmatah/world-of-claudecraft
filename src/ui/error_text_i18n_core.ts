@@ -5,12 +5,16 @@
 // and the localized countdown formatter) arrive through ErrorTextLockoutDeps.
 // Falls through to the shared localizeServerText / localizeSimText matchers, and
 // finally returns the input unchanged when nothing recognizes it.
-// The two display-name resolvers the instances-busy arm reads came across with
-// the body and stay exported: hud.ts's own remaining call sites import them back
-// rather than keeping a second copy of the same one-line delegation.
+// The two display-name resolvers the instances-busy arm reads live in
+// ./entity_display_core, the display-name family's one home, and are RE-EXPORTED
+// here for this module's own consumers. Both branches of the 2026-08-24 release
+// sync had extracted the same two one-line delegations independently (this
+// module and entity_display_core), so the merge kept ONE authority rather than
+// two identical bodies that can drift apart.
 
 import { DELVES, DUNGEON_LIST } from '../sim/data';
-import { dungeonDisplayName, tEntity } from './entity_i18n';
+import { delveDisplayName, dungeonDisplayNameFromSource } from './entity_display_core';
+import { dungeonDisplayName } from './entity_i18n';
 import { formatDuration, formatNumber, type TranslationKey, t } from './i18n';
 import type { RaidLockout } from './raid_lockout';
 import { localizeServerText } from './server_i18n';
@@ -88,6 +92,7 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
     // translation ask for no player-visible gain.
     "Can't move!": 'hud.combat.cannotMove',
     'You are busy.': 'hud.errors.busy',
+    "You can't cast while moving.": 'hud.errors.cannotCastWhileMoving',
     'That ability is not ready yet.': 'hud.errors.abilityNotReady',
     'You are out of charges.': 'hud.errors.outOfCharges',
     'Not enough rage!': 'hud.errors.notEnoughRage',
@@ -121,10 +126,13 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
     'You mutter to yourself. Nobody hears it.': 'hud.errors.whisperSelf',
     'You are not in a party.': 'hud.errors.notInParty',
     'You must be in a party to start a ready check.': 'hudChrome.readyCheck.notInPartyError',
+    'Recovery: /unstuck starts a stationary countdown, then moves you to the nearest graveyard, reviving you if you had fallen. The first use in an hour is free. Use it again within an hour of the last and it leaves you with Unstuck Sickness for up to 5 minutes.':
+      'hudChrome.unstuck.helpUnstuckWindow',
+    // Pre-window (v0.32.1 to v0.43.x) wording: still arrives from a not-yet-updated
+    // server when an OTA bundle runs ahead of it, so keep it re-localizable.
     'Recovery: /unstuck starts a stationary countdown, then moves you to the nearest graveyard, reviving you if you had fallen. It leaves you with Unstuck Sickness for up to 5 minutes.':
       'hudChrome.unstuck.helpUnstuckSickness',
-    // Pre-0.32.1 wording: still arrives from a not-yet-updated server when an OTA
-    // bundle runs ahead of it, so keep it re-localizable.
+    // Pre-0.32.1 wording: same reason.
     "Recovery: /unstuck starts a stationary countdown, then sends your spirit to the nearest graveyard. Returning through the Pale Keeper requires The Keeper's Toll.":
       'hudChrome.unstuck.helpAtGraveyard',
     'A ready check is already in progress.': 'hudChrome.readyCheck.inProgressError',
@@ -169,6 +177,13 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
     'You cannot afford that.': 'itemUi.errors.cannotAfford',
     'That is not your listing.': 'itemUi.errors.notYourListing',
     'You have nothing to collect.': 'itemUi.errors.nothingToCollect',
+    'No listings of that item are available to sweep.': 'itemUi.errors.sweepNoListings',
+    'Prices changed before your sweep landed. Check the quote and try again.':
+      'itemUi.errors.sweepPriceChanged',
+    'Name how many you want.': 'itemUi.errors.orderCountNeeded',
+    'That order is no longer open.': 'itemUi.errors.orderClosed',
+    'That is your own order - cancel it to withdraw it.': 'itemUi.errors.orderOwn',
+    'That is not your order.': 'itemUi.errors.orderNotYours',
     "You can't assist yourself.": 'hud.errors.assistSelf',
     'Assist whom? Target a player or use /assist <name>.': 'hud.errors.assistWhom',
     'Invite whom? Usage: /invite <name>.': 'hudChrome.party.inviteUsage',
@@ -176,12 +191,22 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
   const key = exact[text];
   if (key) return t(key);
 
-  let match = /^You must be in (Bruin|Wolf) Form\.$/.exec(text);
+  // The three shapes the cast gate's refusal ladder emits (castAbility in
+  // sim/combat/casting_lifecycle.ts): one form, or the Bruin-and-Cat pair that
+  // Savage Mending shares. Keep this vocabulary byte-identical to those
+  // literals.
+  let match = /^You must be in (Bruin or Cat|Bruin|Cat) Form\.$/.exec(text);
   if (match)
     return t('hud.errors.requiresForm', {
-      form: t(match[1] === 'Bruin' ? 'hud.errors.bear' : 'hud.errors.cat'),
+      form: t(
+        match[1] === 'Bruin'
+          ? 'hud.errors.bear'
+          : match[1] === 'Cat'
+            ? 'hud.errors.cat'
+            : 'hud.errors.bearOrCat',
+      ),
     });
-  match = /^You can't do that in (Bruin|Wolf|Fleet) Form\.$/.exec(text);
+  match = /^You can't do that in (Bruin|Cat|Fleet) Form\.$/.exec(text);
   if (match)
     return t('hud.errors.cantInForm', {
       form: t(
@@ -227,6 +252,11 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
     return t('itemUi.errors.tooManyListings', {
       count: formatNumber(Number(match[1]), { maximumFractionDigits: 0 }),
     });
+  match = /^You may keep at most (\d+) orders open at once\.$/.exec(text);
+  if (match)
+    return t('itemUi.errors.tooManyOrders', {
+      count: formatNumber(Number(match[1]), { maximumFractionDigits: 0 }),
+    });
   match = /^That is your own listing (?:\u2014|-) cancel it to reclaim it\.$/.exec(text);
   if (match) return t('itemUi.errors.ownListing');
   match = /^All instances of (.+) are busy\. Try again soon\.$/.exec(text);
@@ -252,11 +282,4 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
   return text;
 }
 
-export function delveDisplayName(delveId: string): string {
-  return tEntity({ kind: 'delve', id: delveId, field: 'name' });
-}
-
-export function dungeonDisplayNameFromSource(name: string): string {
-  const dungeon = DUNGEON_LIST.find((candidate) => candidate.name === name);
-  return dungeon ? dungeonDisplayName(dungeon.id) : name;
-}
+export { delveDisplayName, dungeonDisplayNameFromSource };

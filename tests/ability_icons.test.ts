@@ -125,15 +125,17 @@ describe('ability icons', () => {
   it('pins every ABILITY_RECIPES key and payload by stable content identity', () => {
     const ids = abilityRecipeIds();
     expect(ids).toEqual([...new Set(ids)].sort((left, right) => left.localeCompare(right)));
-    // +3 over the release: the Realm Racers pickup abilities (rally_ground_blast,
+    // 464: 450 plus the fourteen Nythraxis Raid Boss Guide mechanic recipes;
+    // 469: plus the Wildfang kit pass 2 glyphs (lunge, hamstring_bite).
+    // 475: plus the Realm Racers pickup abilities (rally_ground_blast,
     // rally_nitro, rally_oil_slick), each an authored procedural recipe.
-    expect(ids).toHaveLength(453);
+    expect(ids).toHaveLength(475);
     for (const id of ids) expect(hasExplicitAbilityIcon(id), id).toBe(true);
 
     const identity = ids.map((id) => ({ id, recipe: abilityIconRecipe(id) }));
     const hash = createHash('sha256').update(stableSerialize(identity)).digest('hex');
     // Re-baselined on the merged tree for the three appended Realm Racers recipes;
     // no shipped recipe's payload changed on either side of the merge.
-    expect(hash).toBe('8c085ce36d199d6380cd9b988a7482b44f9252ea3e05b475dfd210340a05fc84');
+    expect(hash).toBe('fd7b54fd7bfdfd6cf1b7d75322b5792e71e1414d0b2a1835e93aee6456f272b9');
   });
 });

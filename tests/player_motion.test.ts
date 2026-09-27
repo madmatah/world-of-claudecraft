@@ -1,12 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { isBlocked, moverHeight, resolveMovement } from '../src/sim/colliders';
+import { mountMoveSpeedPct } from '../src/sim/content/mounts';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
-import { BUILTIN_WORLD, DUNGEON_FLOOR_Y } from '../src/sim/data';
+import { BUILTIN_WORLD, DELVES, DUNGEON_FLOOR_Y } from '../src/sim/data';
+import {
+  clampDelveDoorSolids,
+  clampDelveModuleBounds,
+  DELVE_DOOR_AISLE_HALF_DEPTH,
+  delveDoorClampSolidsFromEntities,
+} from '../src/sim/delves/geometry';
 import { PLAYER_BODY_RADIUS, PLAYER_MAX_CLIMB_SLOPE } from '../src/sim/pathfind';
 import { moveSpeedMult, type PlayerMotionDeps, stepPlayerMotion } from '../src/sim/player_motion';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
-import type { Entity, MoveInput, VehicleDrive, WorldContent } from '../src/sim/types';
+import {
+  type Aura,
+  CAT_FORM_MOVE_MULT,
+  type Entity,
+  type MoveInput,
+  type VehicleDrive,
+  type WorldContent,
+} from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import {
   groundHeight,
@@ -249,6 +263,84 @@ describe('player motion kernel parity with the live Sim', () => {
     // Actually reached and was actually held by the wall, not just idle parity.
     expect(sim.player.pos.x - origin.x).toBeGreaterThan(33);
     expect(sim.player.pos.x - origin.x).toBeLessThan(34.5);
+  });
+
+  // Issue #3480 (enable self-motion prediction inside delves): the instanced
+  // kernel branch (stepInstancedRegion, gated by isInstancedRegion on
+  // isDelvePos) chained through a delve-aware resolveMove, the same
+  // clampDelveModuleBounds-then-clampDelveDoorSolids order Sim.resolveMove
+  // runs server-side. The client dep here rebuilds the solids list from
+  // sim.entities the way src/render/client_player_motion.ts does, rather than
+  // reading the server's own run.objectState, so this also exercises the two
+  // derivations end to end (unlike tests/delve_geometry.test.ts's parity pin,
+  // which compares them directly against a fixed solids snapshot).
+  it('resolves a closed delve door identically through the client-shaped kernel deps', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const doorEntryPos = DELVES.collapsed_reliquary.doorPos;
+    teleport(sim, doorEntryPos.x, doorEntryPos.z);
+    sim.enterDelve('collapsed_reliquary', 'normal');
+    const run = sim.delveRunForPlayer(sim.player.id);
+    if (!run) throw new Error('delve run did not spawn');
+    run.modules = ['reliquary_sunken_ossuary'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    // Freeze the room's plates pre-triggered so the door the test approaches
+    // stays closed regardless of where the walked path happens to cross them.
+    for (const id of run.objectIds) {
+      const state = run.objectState[id];
+      if (state?.kind === 'pressure_plate') state.triggered = true;
+    }
+    const doorEntry = run.objectIds
+      .map((id) => ({ id, state: run.objectState[id] }))
+      .find((o) => o.state?.kind === 'locked_door');
+    if (!doorEntry) throw new Error('module spawned no locked_door');
+    const door = sim.entities.get(doorEntry.id);
+    if (!door) throw new Error('door entity missing');
+
+    const p = sim.player;
+    p.pos.x = door.pos.x;
+    p.pos.z = door.pos.z - 15;
+    p.pos.y = door.pos.y;
+    p.prevPos = { ...p.pos };
+    p.vy = 0;
+    p.onGround = true;
+    p.facing = 0; // +z, straight at the door
+
+    const actor = mirrorActor(sim);
+    // Mirrors client_player_motion.ts's delve-aware resolveMove: re-derive
+    // the run and the entity-sourced solids list fresh each call, exactly
+    // like the online predictor does per frame.
+    const deps: PlayerMotionDeps = {
+      ...clientDeps(SEED),
+      resolveMove: (fromX, fromZ, nx, nz, r, e, ignoreFences) => {
+        const currentRun = sim.delveRunForPlayer(sim.player.id);
+        const res = resolveMovement(
+          SEED,
+          fromX,
+          fromZ,
+          nx,
+          nz,
+          r,
+          ignoreFences,
+          currentRun?.modules,
+          moverHeight(e),
+          0,
+        );
+        if (!currentRun) return res;
+        const bounded = clampDelveModuleBounds(currentRun, res.x, res.z, r);
+        const solids = delveDoorClampSolidsFromEntities(sim.entities.values());
+        return clampDelveDoorSolids(solids, bounded.x, bounded.z, r);
+      },
+    };
+    for (let i = 0; i < 20 * 4; i++) {
+      tickBoth(sim, actor, deps, mi({ forward: true }));
+      expectSamePose(sim, actor, `delve door tick ${i}`);
+    }
+    // Actually reached and was actually held by the door, not just idle parity.
+    const stopDepth = door.pos.z - sim.player.pos.z;
+    expect(stopDepth).toBeGreaterThan(DELVE_DOOR_AISLE_HALF_DEPTH);
+    expect(stopDepth).toBeLessThan(DELVE_DOOR_AISLE_HALF_DEPTH + PLAYER_BODY_RADIUS + 0.5);
   });
 
   it('blocks uphill walls and slides off steep footing identically', () => {
@@ -494,5 +586,80 @@ describe('stepPlayerMotion wall-standoff acceptance gate', () => {
     const steepEnd = terrainSteepnessAt(p.pos.x, p.pos.z, GATE_SEED);
     expect(steepEnd).toBeLessThan(steepStart);
     expect(steepEnd).toBeGreaterThan(GATE_SLOPE);
+  });
+});
+
+describe('moveSpeedMult: Cat Form passive speed', () => {
+  function aura(e: Entity, kind: Aura['kind'], value: number): Aura {
+    return {
+      id: kind,
+      name: kind,
+      kind,
+      remaining: 3600,
+      duration: 3600,
+      value,
+      sourceId: e.id,
+      school: 'physical',
+    };
+  }
+  // The shipped form_cat aura carries the THREAT multiplier (0.71) as its
+  // value; the speed comes from the constant, never from a.value.
+  const cat = (e: Entity) => aura(e, 'form_cat', 0.71);
+
+  it('form_cat alone yields the +15% constant, not the aura value', () => {
+    const p = makeSim().player;
+    expect(moveSpeedMult(p, 0)).toBe(1);
+    p.auras.push(cat(p));
+    expect(CAT_FORM_MOVE_MULT).toBe(1.15);
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(1.15);
+  });
+
+  it('multiplies the strongest speed buff: form_cat plus buff_speed 1.5 yields 1.725', () => {
+    // The form passive is its own layer over the strongest temporary buff
+    // (never 1.5 flat, never 1.65 additive). Speed buffs still never stack
+    // with each other: 1.5 and 1.6 together read as 1.6 x 1.15.
+    const p = makeSim().player;
+    p.auras.push(cat(p), aura(p, 'buff_speed', 1.5));
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(1.15 * 1.5);
+    p.auras.push(aura(p, 'buff_speed', 1.6));
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(1.15 * 1.6);
+  });
+
+  it('the layer applies to any speed buff a Cat wears, party-sourced included', () => {
+    // Hunter Pack Rally (buff_speed 1.3) lands on party allies: a Cat runs at
+    // 1.3 x 1.15 under it, the same rule as its own Dash.
+    const p = makeSim().player;
+    p.auras.push(cat(p), { ...aura(p, 'buff_speed', 1.3), id: 'pack_rally', sourceId: 999 });
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(1.15 * 1.3);
+  });
+
+  it('slows still bite multiplicatively: form_cat plus a 0.5 slow yields 0.575', () => {
+    const p = makeSim().player;
+    p.auras.push(cat(p), aura(p, 'slow', 0.5));
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(0.575);
+  });
+
+  it('mount speed stays additive: form_cat plus a +60% mount yields 1.75', () => {
+    const p = makeSim().player;
+    expect(mountMoveSpeedPct('valorsteed')).toBe(0.6);
+    p.auras.push(cat(p));
+    p.mountKey = 'valorsteed';
+    expect(moveSpeedMult(p, 0)).toBeCloseTo(1.75);
+  });
+
+  it('the client dep shape and the live Sim agree on Cat speed', () => {
+    const sim = makeSim();
+    const p = sim.player;
+    p.auras.push(cat(p));
+    const asLive = sim as unknown as { moveSpeedMult(e: Entity): number };
+    const live = asLive.moveSpeedMult(p);
+    expect(clientDeps(SEED).moveSpeedMult(p)).toBe(live);
+    expect(live).toBeCloseTo(1.15);
+    // The stacked case (Cat + Dash) must agree bit for bit too, or a Dashing
+    // Cat would rubber-band against the server's prediction.
+    p.auras.push(aura(p, 'buff_speed', 1.5));
+    const stacked = asLive.moveSpeedMult(p);
+    expect(clientDeps(SEED).moveSpeedMult(p)).toBe(stacked);
+    expect(stacked).toBeCloseTo(1.725);
   });
 });

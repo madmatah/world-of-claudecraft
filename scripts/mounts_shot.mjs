@@ -71,8 +71,9 @@ await page.evaluate(() => {
     'reins_stormfeather_griffin',
     'reins_thunderstrut_gobbler',
     'reins_drakemaw_raptor',
+    'reins_avian_strider',
     'reins_terrorspark_groundshaker',
-    'reins_rickshaw_mount',
+    'reins_lanternback_troll',
   ])
     sim.addItem(id, 1);
 });
@@ -171,5 +172,6 @@ const swapTo = async (key, path) => {
 await swapTo('stormfeather_griffin', 'tmp/mounts_griffin.png');
 await swapTo('thunderstrut_gobbler', 'tmp/mounts_gobbler.png');
 await swapTo('aether_hover_cycle', 'tmp/mounts_hover_cycle.png');
+await swapTo('avian_strider', 'tmp/mounts_avian_strider.png');
 
 await browser.close();

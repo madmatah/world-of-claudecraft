@@ -147,6 +147,248 @@ describe('tinted character materials', () => {
     }
   });
 
+  it('lifts a tinted body in its tinted colour, and an untinted one in white', () => {
+    const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: true });
+    try {
+      // The Bone Spike shape: a white-based authored atlas recoloured by a
+      // strong tint and lifted by selfIllumination so it reads in a dark hall.
+      const map = new THREE.Texture();
+      const src = new THREE.MeshStandardMaterial({ color: 0xffffff, map });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+      const root = new THREE.Group();
+      root.add(mesh);
+      applyMaterials(
+        root,
+        { tint: 0xff7a1a, tintStrength: 1, selfIllumination: 0.35 } as VisualDef,
+        0xffffff,
+      );
+      const lit = mesh.material as THREE.MeshStandardMaterial;
+      expect(lit).not.toBe(src);
+      expect(lit.emissiveMap).toBe(map);
+      expect(lit.emissiveIntensity).toBe(0.35);
+      // The glow is the tinted albedo, not the atlas's own (white) colour:
+      // otherwise the lift would wash the recolour back toward the texture.
+      expect(lit.color.getHex()).toBe(0xff7a1a);
+      expect(lit.emissive.getHex()).toBe(0xff7a1a);
+      // The source stays untouched for other defs sharing the GLB.
+      expect(src.color.getHex()).toBe(0xffffff);
+      expect(src.emissiveMap).toBeNull();
+
+      // An untinted self-illuminated def keeps the white, atlas-scaled lift.
+      const plain = tintedMaterial(
+        src,
+        null,
+        0,
+        null,
+        null,
+        'body',
+        null,
+        'rig',
+        '',
+        0.2,
+      ) as THREE.MeshStandardMaterial;
+      expect(plain.emissiveMap).toBe(map);
+      expect(plain.emissive.getHex()).toBe(0xffffff);
+      expect(plain.emissiveIntensity).toBe(0.2);
+    } finally {
+      restoreGfx();
+    }
+
+    // Low tier: the recolour is the actionable part (a spike must read as
+    // the thing to kill on every preset), so the Lambert rebuild carries the
+    // same ember hue; only the emissive lift is standard-tier polish.
+    const restoreLow = gfxInternalsForTest.overrideSettings({ standardMaterials: false });
+    try {
+      const map = new THREE.Texture();
+      const src = new THREE.MeshStandardMaterial({ color: 0xffffff, map });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+      const root = new THREE.Group();
+      root.add(mesh);
+      applyMaterials(
+        root,
+        { tint: 0xff7a1a, tintStrength: 1, selfIllumination: 0.35 } as VisualDef,
+        0xffffff,
+      );
+      const low = mesh.material as unknown as THREE.MeshLambertMaterial;
+      expect(low.isMeshLambertMaterial).toBe(true);
+      expect(low.map).toBe(map);
+      // Still unmistakably ember after the low-tier readability lift (a
+      // small pull toward white): in sRGB terms red stays saturated, green
+      // stays in the orange band, blue stays near zero.
+      const hex = low.color.getHex();
+      const red = (hex >> 16) & 0xff;
+      const green = (hex >> 8) & 0xff;
+      const blue = hex & 0xff;
+      expect(red).toBe(0xff);
+      expect(green).toBeGreaterThanOrEqual(0x7a);
+      expect(green).toBeLessThanOrEqual(0x9a);
+      expect(blue).toBeLessThanOrEqual(0x60);
+      expect(src.color.getHex()).toBe(0xffffff);
+    } finally {
+      restoreLow();
+    }
+  });
+
+  it('keeps an authored held model as shipped and still polishes every other weapon', () => {
+    const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: true });
+    try {
+      const derive = (authoredSurface: boolean): THREE.MeshStandardMaterial => {
+        // The Varkhul Forgebreaker shape: an authored atlas, matte, no metal.
+        const src = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.9,
+          metalness: 0,
+          map: new THREE.Texture(),
+        });
+        src.name = 'Material.001';
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+        mesh.userData.weaponMesh = true;
+        // the tag attachProp sets for an AUTHORED_HELD_MODELS prop
+        if (authoredSurface) mesh.userData.authoredSurface = true;
+        const root = new THREE.Group();
+        root.add(mesh);
+        applyMaterials(root, {} as VisualDef, 0xffffff);
+        const out = mesh.material as THREE.MeshStandardMaterial;
+        expect(out).not.toBe(src);
+        return out;
+      };
+
+      // Untagged: the whole polish, exactly as before (cream lift, gloss
+      // clamp, metalness floor, emissive floor). Every other held model,
+      // KayKit or not, stays on this arm.
+      const polished = derive(false);
+      expect(polished.roughness).toBeCloseTo(0.55, 5);
+      expect(polished.metalness).toBeCloseTo(0.12, 5);
+      expect(polished.emissive.getHex()).not.toBe(0x000000);
+      expect(polished.color.getHex()).not.toBe(0xffffff);
+
+      // Tagged: the shipped response, untouched. The polish's emissive floor
+      // and gloss are the grey film over a dark baked atlas.
+      const authored = derive(true);
+      expect(authored.roughness).toBeCloseTo(0.9, 5);
+      expect(authored.metalness).toBe(0);
+      expect(authored.emissive.getHex()).toBe(0x000000);
+      expect(authored.color.getHex()).toBe(0xffffff);
+      // and the two never share a cache entry
+      expect(authored).not.toBe(polished);
+    } finally {
+      restoreGfx();
+    }
+  });
+
+  it('scales the low-tier readability floor by the atlas only for an authoredAtlas def', () => {
+    const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: false });
+    try {
+      const derive = (def: VisualDef, tag: 'body' | 'authoredWeapon' | 'weapon') => {
+        const atlas = new THREE.Texture();
+        const src = new THREE.MeshStandardMaterial({ color: 0xffffff, map: atlas });
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+        if (tag !== 'body') mesh.userData.weaponMesh = true;
+        if (tag === 'authoredWeapon') mesh.userData.authoredSurface = true;
+        const root = new THREE.Group();
+        root.add(mesh);
+        applyMaterials(root, def, 0xffffff);
+        const out = mesh.material as unknown as THREE.MeshLambertMaterial;
+        expect(out.isMeshLambertMaterial).toBe(true);
+        expect(out.map).toBe(atlas);
+        return { out, atlas };
+      };
+
+      // An authored creature atlas: the floor rides the map, so a black texel
+      // stays black instead of lifting to the same grey as every other one,
+      // and the lift amount itself is unchanged (lifted colour x body factor).
+      const creature = derive({ authoredAtlas: true } as VisualDef, 'body');
+      expect(creature.out.emissiveMap).toBe(creature.atlas);
+      const expected = creature.out.color.clone().multiplyScalar(0.045);
+      expect(creature.out.emissive.r).toBeCloseTo(expected.r, 6);
+      expect(creature.out.emissive.g).toBeCloseTo(expected.g, 6);
+      expect(creature.out.emissive.b).toBeCloseTo(expected.b, 6);
+
+      // A player body or any other rig: the uniform floor it always had.
+      const player = derive({} as VisualDef, 'body');
+      expect(player.out.emissiveMap).toBeNull();
+      expect(player.out.emissive.getHex()).not.toBe(0x000000);
+
+      // Held props follow their own tag, never the body def.
+      const drop = derive({} as VisualDef, 'authoredWeapon');
+      expect(drop.out.emissiveMap).toBe(drop.atlas);
+      const dropExpected = drop.out.color.clone().multiplyScalar(0.075);
+      expect(drop.out.emissive.r).toBeCloseTo(dropExpected.r, 6);
+      const kitWeapon = derive({ authoredAtlas: true } as VisualDef, 'weapon');
+      expect(kitWeapon.out.emissiveMap).toBeNull();
+    } finally {
+      restoreGfx();
+    }
+  });
+
+  it('drops the low-tier floor from an authored VERTEX-coloured prop, which has no map to scale it', () => {
+    // The harbormaster's gear (scripts/assets/harbormaster_gear/) carries its albedo in its
+    // vertices; three never multiplies emissive by vertex colour, so the uniform floor would
+    // film the dark navy felt grey. Only the authored tag drops it: a kit prop keeps it.
+    const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: false });
+    try {
+      const derive = (authored: boolean) => {
+        const src = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true });
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+        mesh.userData.weaponMesh = true;
+        if (authored) mesh.userData.authoredSurface = true;
+        const root = new THREE.Group();
+        root.add(mesh);
+        applyMaterials(root, {} as VisualDef, 0xffffff);
+        const out = mesh.material as unknown as THREE.MeshLambertMaterial;
+        expect(out.isMeshLambertMaterial).toBe(true);
+        expect(out.vertexColors).toBe(true);
+        return out;
+      };
+      const gear = derive(true);
+      expect(gear.emissive.getHex()).toBe(0x000000);
+      expect(gear.emissiveMap).toBeNull();
+      const kit = derive(false);
+      expect(kit.emissive.getHex()).not.toBe(0x000000);
+      // an authoredAtlas BODY with untextured vertex-coloured parts (the rocket sled mount)
+      // keeps the uniform floor: the drop is for authored held props only
+      const src = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), src);
+      const root = new THREE.Group();
+      root.add(mesh);
+      applyMaterials(root, { authoredAtlas: true } as VisualDef, 0xffffff);
+      const body = mesh.material as unknown as THREE.MeshLambertMaterial;
+      expect(body.isMeshLambertMaterial).toBe(true);
+      expect(body.emissive.getHex()).not.toBe(0x000000);
+    } finally {
+      restoreGfx();
+    }
+  });
+
+  it('partitions the cache so a flagged def never hands its clone to a player form on the same GLB', () => {
+    // mob_wolf (authoredAtlas) and form_ghost_wolf share wolf_basic.glb, so
+    // both reach tintedMaterial with the SAME source material. The flag must
+    // partition the cache key: the flagged clone carries the atlas-scaled
+    // floor, the form keeps the uniform one, and neither borrows the other.
+    const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: false });
+    try {
+      const atlas = new THREE.Texture();
+      const shared = new THREE.MeshStandardMaterial({ color: 0xffffff, map: atlas });
+      const derive = (def: VisualDef) => {
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), shared);
+        const root = new THREE.Group();
+        root.add(mesh);
+        applyMaterials(root, def, 0xffffff);
+        return mesh.material as unknown as THREE.MeshLambertMaterial;
+      };
+      const wolf = derive({ authoredAtlas: true } as VisualDef);
+      const form = derive({} as VisualDef);
+      const wolfAgain = derive({ authoredAtlas: true } as VisualDef);
+      expect(wolf).not.toBe(form);
+      expect(wolfAgain).toBe(wolf); // same inputs still share one clone
+      expect(wolf.emissiveMap).toBe(atlas);
+      expect(form.emissiveMap).toBeNull();
+      expect(form.emissive.getHex()).not.toBe(0x000000);
+    } finally {
+      restoreGfx();
+    }
+  });
+
   it('returns a colorless shader material as-is and continues the material traversal', () => {
     const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials: true });
     try {

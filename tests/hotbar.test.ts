@@ -12,6 +12,7 @@ import {
   clearHotbarSlot,
   dragCarriesAttack,
   encodeStoredHotbarAction,
+  freedAttackSlotDisplayAbility,
   HOTBAR_ACTION_MIME,
   HOTBAR_ATTACK_MIME,
   handleMobileAttackTap,
@@ -280,7 +281,7 @@ describe('hotbar action placement', () => {
     expect(next[targetIndex]).toEqual({ type: 'ability', id: 'ice_barrier' });
     expect(next).not.toContain(displacedAbility);
     expect(occupied).toHaveLength(barSlots);
-    expect(new Set(occupied.map((action) => action!.id)).size).toBe(occupied.length);
+    expect(new Set(occupied.map((action) => action?.id)).size).toBe(occupied.length);
     expect(slots).toEqual(mageAbilities.slice(0, barSlots).map((id) => ({ type: 'ability', id })));
   });
 });
@@ -522,6 +523,76 @@ describe('hotbar slot sync', () => {
     ]);
     expect(synced.changed).toBe(true);
   });
+
+  it('replaces an unlearned talent choice ability in-place with its newly learned sibling', () => {
+    // Player has power_echo in slot 3. Slot 1 is empty (null).
+    const slots = [
+      { type: 'ability' as const, id: 'fireball' },
+      null,
+      { type: 'ability' as const, id: 'frost_armor' },
+      { type: 'ability' as const, id: 'power_echo' },
+      null,
+    ];
+    // Player switches from power_echo to overload (same choice row).
+    const known = ['fireball', 'frost_armor', 'overload'];
+    const autoPlace = new Set(['overload']);
+    const choiceGroups = [['power_echo', 'overload', 'presence_of_mind']];
+
+    const synced = syncHotbarActions(slots, known, autoPlace, () => false, choiceGroups);
+
+    // overload must take slot 3 (where power_echo was), NOT slot 1 (the first null)
+    expect(synced.actions).toEqual([
+      { type: 'ability', id: 'fireball' },
+      null,
+      { type: 'ability', id: 'frost_armor' },
+      { type: 'ability', id: 'overload' },
+      null,
+    ]);
+    expect(synced.changed).toBe(true);
+  });
+
+  it('handles multiple simultaneous talent choice swaps in their respective slots', () => {
+    const slots = [
+      null,
+      { type: 'ability' as const, id: 'power_echo' },
+      null,
+      { type: 'ability' as const, id: 'cold_snap' },
+    ];
+    const known = ['overload', 'mass_barrier'];
+    const autoPlace = new Set(['overload', 'mass_barrier']);
+    const choiceGroups = [
+      ['power_echo', 'overload', 'presence_of_mind'],
+      ['cold_snap', 'mass_barrier'],
+    ];
+
+    const synced = syncHotbarActions(slots, known, autoPlace, () => false, choiceGroups);
+
+    expect(synced.actions).toEqual([
+      null,
+      { type: 'ability', id: 'overload' },
+      null,
+      { type: 'ability', id: 'mass_barrier' },
+    ]);
+  });
+
+  it('falls back to indexOf(null) when a newly learned ability has no vacated sibling slot', () => {
+    const slots = [
+      { type: 'ability' as const, id: 'fireball' },
+      null,
+      { type: 'ability' as const, id: 'frost_armor' },
+    ];
+    const known = ['fireball', 'frost_armor', 'overload'];
+    const autoPlace = new Set(['overload']);
+    const choiceGroups = [['power_echo', 'overload', 'presence_of_mind']];
+
+    const synced = syncHotbarActions(slots, known, autoPlace, () => false, choiceGroups);
+
+    expect(synced.actions).toEqual([
+      { type: 'ability', id: 'fireball' },
+      { type: 'ability', id: 'overload' },
+      { type: 'ability', id: 'frost_armor' },
+    ]);
+  });
 });
 
 describe('applying a saved talent loadout bar', () => {
@@ -715,5 +786,51 @@ describe('desktop attack slot behavior', () => {
     const action = { type: 'ability' as const, id: 'fireball' };
     expect(assignAttackSlotAction(action, 3)).toEqual({ action, clearSourceIndex: 3 });
     expect(assignAttackSlotAction(action, null)).toEqual({ action, clearSourceIndex: null });
+  });
+
+  describe('freedAttackSlotDisplayAbility (reopen of #3548)', () => {
+    // The freed slot's DATA already survives a build switch (ActionBarController,
+    // fixed by #3548); this is the DISPLAY fallback so the bar keeps showing it
+    // instead of painting empty while the granting build is inactive.
+    const defs: Record<string, unknown> = {
+      stormstrike: { id: 'stormstrike', name: 'Stormstrike' },
+      measured_fury: { id: 'measured_fury', name: 'Measured Fury', passive: true },
+      ghost_channel: { id: 'ghost_channel', name: 'Ghost Channel', hiddenFromPlayer: true },
+    };
+    const abilityDef = (id: string) => defs[id] as never;
+
+    it('resolves a real ability id to a display-only stub with known:false', () => {
+      const action = { type: 'ability' as const, id: 'stormstrike' };
+      expect(freedAttackSlotDisplayAbility(action, abilityDef)).toEqual({
+        def: { id: 'stormstrike', name: 'Stormstrike' },
+        cost: 0,
+        known: false,
+      });
+    });
+
+    it('drops a stale id the static ability table no longer resolves', () => {
+      const action = { type: 'ability' as const, id: 'ghost_ability_from_v99' };
+      expect(freedAttackSlotDisplayAbility(action, abilityDef)).toBeNull();
+    });
+
+    it('returns null for an item binding or an empty slot', () => {
+      expect(
+        freedAttackSlotDisplayAbility({ type: 'item', id: 'baked_bread' }, abilityDef),
+      ).toBeNull();
+      expect(freedAttackSlotDisplayAbility(null, abilityDef)).toBeNull();
+    });
+
+    it('drops a passive or hiddenFromPlayer id even though the static table resolves it (defense in depth)', () => {
+      // ActionBarController already filters these out on every write path
+      // (isAttackSlotStoredAbilityEligible / isAbilityPlacementAllowed both apply
+      // isAbilityActionBarEligible), so this re-checks the module's own "passives
+      // are informational only, never occupy an action slot" rule independently.
+      expect(
+        freedAttackSlotDisplayAbility({ type: 'ability', id: 'measured_fury' }, abilityDef),
+      ).toBeNull();
+      expect(
+        freedAttackSlotDisplayAbility({ type: 'ability', id: 'ghost_channel' }, abilityDef),
+      ).toBeNull();
+    });
   });
 });

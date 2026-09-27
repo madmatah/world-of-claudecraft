@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildArmorySections, type WocStoreItemInput } from '../src/ui/woc_store_view';
+import { MOUNT_SKIN_IDS } from '../src/sim/content/mount_skins';
+import {
+  buildArmorySections,
+  buildStoreMountRows,
+  type WocStoreItemInput,
+} from '../src/ui/woc_store_view';
 
 const noCosmetics = { weaponSkinIds: [], weaponSkinLoadout: {} };
 
@@ -13,6 +18,7 @@ describe('buildArmorySections', () => {
       cosmetics: noCosmetics,
       cls: 'warrior',
       mainhandItemId: 'worn_sword',
+      offhandItemId: null,
       skinCatalog: 'class',
     });
     expect(sections.map((s) => s.rarity)).toEqual(['legendary', 'epic', 'rare', 'uncommon']);
@@ -37,6 +43,7 @@ describe('buildArmorySections', () => {
       cosmetics: noCosmetics,
       cls: 'warrior',
       mainhandItemId: 'worn_sword',
+      offhandItemId: null,
       skinCatalog: 'class',
     });
     const ice = sections.flatMap((s) => s.rows).find((r) => r.skin.id === 'ice_fang_sword');
@@ -51,6 +58,7 @@ describe('buildArmorySections', () => {
       cosmetics: noCosmetics,
       cls: 'warrior',
       mainhandItemId: 'worn_sword',
+      offhandItemId: null,
       skinCatalog: 'class',
     });
     const solheim = sections.flatMap((s) => s.rows).find((r) => r.skin.id === 'solheim_sword');
@@ -66,6 +74,7 @@ describe('buildArmorySections', () => {
       },
       cls: 'warrior',
       mainhandItemId: 'worn_sword',
+      offhandItemId: null,
       skinCatalog: 'class',
     });
     const rows = sections.flatMap((s) => s.rows);
@@ -89,6 +98,7 @@ describe('buildArmorySections', () => {
       cosmetics: owned,
       cls: 'warrior',
       mainhandItemId: 'rusty_hatchet',
+      offhandItemId: null,
       skinCatalog: 'class',
     }).flatMap((s) => s.rows);
     expect(asWarrior.find((r) => r.skin.id === 'glaciersplit_axe')?.canApplyNow).toBe(true);
@@ -97,6 +107,7 @@ describe('buildArmorySections', () => {
       cosmetics: owned,
       cls: 'hunter',
       mainhandItemId: 'rusty_hatchet',
+      offhandItemId: null,
       skinCatalog: 'class',
     }).flatMap((s) => s.rows);
     expect(asHunter.find((r) => r.skin.id === 'glaciersplit_axe')?.canApplyNow).toBe(false);
@@ -112,6 +123,7 @@ describe('buildArmorySections', () => {
       cosmetics: owned,
       cls: 'hunter',
       mainhandItemId: 'rusty_hatchet',
+      offhandItemId: null,
       skinCatalog: 'mech',
     }).flatMap((s) => s.rows);
     // The axe becomes applicable (it was not on the class rig, one test above),
@@ -127,6 +139,7 @@ describe('buildArmorySections', () => {
       cosmetics: noCosmetics,
       cls: 'warrior',
       mainhandItemId: 'worn_sword',
+      offhandItemId: null,
       skinCatalog: 'class',
     }).flatMap((s) => s.rows);
     expect(rows.every((r) => r.eligibleClasses.length > 0)).toBe(true);
@@ -144,5 +157,82 @@ describe('buildArmorySections', () => {
     // And a type hunters cannot equip still omits them.
     const wand = rows.find((r) => r.skin.weaponType === 'wand');
     expect(wand?.eligibleClasses).not.toContain('hunter');
+  });
+});
+
+describe('buildStoreMountRows (the store Mounts strip)', () => {
+  const service = (over: Partial<WocStoreItemInput> = {}): WocStoreItemInput => ({
+    itemId: 'mech_bird',
+    name: 'Cluckwork Mech Bird',
+    kind: 'skin',
+    costClaudium: 1200,
+    owned: false,
+    ...over,
+  });
+
+  it('shows every declared store mount even when the service snapshot lacks the SKU', () => {
+    const rows = buildStoreMountRows(5000, [], []);
+    expect(rows.map((r) => r.itemId)).toEqual([...MOUNT_SKIN_IDS]);
+    // The pinned no-invented-price rule: no service row means no price and no Buy.
+    expect(rows[0]).toMatchObject({
+      skinId: 'mech_bird',
+      costClaudium: null,
+      purchasable: false,
+      owned: false,
+      affordable: false,
+    });
+  });
+
+  it('prices from the service and computes affordability against the balance', () => {
+    const [row] = buildStoreMountRows(800, [service()], []);
+    expect(row).toMatchObject({
+      costClaudium: 1200,
+      purchasable: true,
+      affordable: false,
+      shortfall: 400,
+    });
+    const [flush] = buildStoreMountRows(1500, [service()], []);
+    expect(flush).toMatchObject({ affordable: true, shortfall: 0 });
+  });
+
+  it('owned unions the service grant flag with the live mount ownership mirror', () => {
+    const [viaService] = buildStoreMountRows(0, [service({ owned: true })], []);
+    expect(viaService.owned).toBe(true);
+    const [viaBags] = buildStoreMountRows(0, [service()], ['mech_bird']);
+    expect(viaBags.owned).toBe(true);
+    expect(viaBags.affordable).toBe(false); // owned rows never advertise Buy
+  });
+
+  it('ignores service rows of other kinds and unknown item SKUs', () => {
+    const rows = buildStoreMountRows(
+      5000,
+      [
+        service({ itemId: 'guildmark_arming_sword', kind: 'skin' }),
+        service({ itemId: 'not_a_store_mount' }),
+      ],
+      [],
+    );
+    expect(rows[0].costClaudium).toBeNull(); // nothing matched the reins SKU
+  });
+});
+
+describe('buildArmorySections with an offhand-held weapon type', () => {
+  it('lets a rogue with a dagger mainhand and a mace offhand apply an owned mace skin', () => {
+    const owned = { weaponSkinIds: ['starfall_mace', 'astravyr_dagger'], weaponSkinLoadout: {} };
+    const rows = (offhandItemId: string | null) =>
+      buildArmorySections(0, [], {
+        cosmetics: owned,
+        cls: 'rogue',
+        mainhandItemId: 'rusty_dagger',
+        offhandItemId,
+        skinCatalog: 'class',
+      })
+        .flatMap((s) => s.rows)
+        .filter((r) => r.owned);
+    const withMace = rows('forgefathers_warhammer');
+    expect(withMace.find((r) => r.skin.id === 'starfall_mace')?.canApplyNow).toBe(true);
+    expect(withMace.find((r) => r.skin.id === 'astravyr_dagger')?.canApplyNow).toBe(true);
+    // No offhand: the mace skin stays owned but not applicable, exactly as before.
+    expect(rows(null).find((r) => r.skin.id === 'starfall_mace')?.canApplyNow).toBe(false);
   });
 });

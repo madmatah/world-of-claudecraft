@@ -18,7 +18,10 @@ import { DeedsWindow, type DeedsWindowDeps } from '../src/ui/deeds_window';
 
 // jsdom ships no 2D canvas, so the procedural crest compositor cannot run
 // here; the painter only ever uses the returned string as an <img src>.
-vi.mock('../src/ui/icons', () => ({
+vi.mock('../src/ui/icons', async (importOriginal) => ({
+  // Additive, never bare (the reliquary_window_behavior lesson): the real
+  // module passes through and only iconDataUrl stays stubbed.
+  ...(await importOriginal<typeof import('../src/ui/icons')>()),
   iconDataUrl: () => 'data:,',
 }));
 
@@ -70,6 +73,8 @@ function makeWindow(state: WorldState, opts: { peek?: boolean } = {}): Harness {
     world: () =>
       ({
         deedsEarned: state.deedsEarned,
+        // The account ledger half every real world carries (src/sim/account_ledger.ts).
+        accountDeeds: new Map(),
         deedStats: stats,
         renown: 0,
         activeTitle: state.activeTitle,

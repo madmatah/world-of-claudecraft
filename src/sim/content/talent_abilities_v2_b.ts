@@ -4,7 +4,7 @@ import type { AbilityDef } from '../types';
 export const TALENT_ABILITIES_V2_B = {
   spellsteal: {
     id: 'spellsteal',
-    name: 'Spellsteal',
+    name: 'Spellplunder',
     class: 'mage',
     learnLevel: 8,
     cost: 40,
@@ -173,16 +173,24 @@ export const TALENT_ABILITIES_V2_B = {
     learnLevel: 5,
     cost: 65,
     ruinCost: 3,
-    castTime: 2.5,
+    castTime: 2.3,
     cooldown: 0,
     range: 30,
     school: 'fire',
     requiresTarget: true,
     specs: ['destruction'],
     projectileFx: 'heavyBolt',
-    effects: [{ type: 'directDamage', min: 192, max: 235 }],
+    effects: [
+      {
+        type: 'directDamage',
+        min: 192,
+        max: 235,
+        spellPowerCoeff: 2.5 / 3.5,
+        guaranteedCrit: true,
+      },
+    ],
     description:
-      'Spends 3 Wrack to hurl a heavy bolt of chaotic fire for $d Fire damage. Desolation shortens its cast by 30%.',
+      'Spends 3 Wrack to hurl a heavy bolt of chaotic fire for $d Fire damage before critical damage is applied. Always critically strikes when it hits. Desolation shortens its cast by 30%.',
   },
 
   typhoon: {
@@ -236,12 +244,20 @@ export const TALENT_ABILITIES_V2_B = {
     range: 0,
     school: 'nature',
     requiresTarget: false,
-    requiresForm: 'bear',
+    // Both Wildfang forms since the v0.43 feral pass: Cat had no self-heal at
+    // all, which is what made the spec's only recovery button a reason to
+    // leave Cat Form mid-fight. The cost and cooldown are deliberately
+    // untouched: `cost: 10` is billed against whichever pool the live form
+    // runs on, so it is 10 Rage in Bruin (as before) and 10 Energy in Cat,
+    // and the 60 sec cooldown is shared across both.
+    requiresForm: ['bear', 'cat'],
     // 40% of max health (was a flat 180, about 8% of a best-geared bear pool):
     // a percentage keeps the heal meaningful as gear grows and scales through
     // any future bear pool retune. total remains as the no-pct fallback value.
+    // pctOfMax reads the LIVE pool, so Cat's smaller health pool heals for
+    // proportionally less without a second authored number.
     effects: [{ type: 'hot', total: 180, duration: 10, interval: 2, pctOfMax: 0.4 }],
-    description: 'Restores 40% of your maximum health over 10 sec. Bruin Form only.',
+    description: 'Restores 40% of your maximum health over 10 sec. Bruin or Cat Form only.',
   },
   berserk: {
     id: 'berserk',

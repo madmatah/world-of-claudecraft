@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clickMoveButtonLabel,
   normalizeClickMoveButton,
   SETTING_RANGES,
   Settings,
+  UNIT_FRAME_STOCK_WIDTH,
 } from '../src/game/settings';
 
 function installStorage(): void {
@@ -100,6 +102,44 @@ describe('Settings', () => {
     expect(settings.set('gamepadReticleSpeed', 0)).toBe(0.5);
   });
 
+  it('ships both unit frame widths at the whole-frame stock and migrates the legacy stocks', () => {
+    // Both vars now drive the WHOLE frame (hud.css derives the bars panel as the
+    // width minus 46px), so the defaults must be the --unit-frame-w stock: main.ts
+    // stamps every persisted value onto the root, so a stale default ships as-is
+    // and the CSS fallback never gets a chance to correct it.
+    expect(UNIT_FRAME_STOCK_WIDTH).toBe(278);
+    expect(SETTING_RANGES.playerFrameWidth).toEqual({ min: 200, max: 460, def: 278 });
+    expect(SETTING_RANGES.targetFrameWidth).toEqual({ min: 200, max: 460, def: 278 });
+    // The editor must be able to REACH the stock from either edge drag.
+    expect(SETTING_RANGES.playerFrameWidth.min).toBeLessThan(UNIT_FRAME_STOCK_WIDTH);
+    expect(SETTING_RANGES.targetFrameWidth.min).toBeLessThan(UNIT_FRAME_STOCK_WIDTH);
+
+    // The constant's doc comment claims it MIRRORS --unit-frame-w, and the legacy
+    // rescue in settings.ts keys off the exact stock, so the two homes have to
+    // agree: read the sheet rather than trusting the prose.
+    const tokensCss = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
+    expect(tokensCss).toContain(`--unit-frame-w: ${UNIT_FRAME_STOCK_WIDTH}px;`);
+
+    // A player carrying the retired stocks (612 full row / 190 bars panel) is
+    // re-stamped to the new stock rather than keeping a frame they never chose.
+    localStorage.setItem(
+      'woc_settings',
+      JSON.stringify({ playerFrameWidth: 612, targetFrameWidth: 190 }),
+    );
+    const migrated = new Settings();
+    expect(migrated.get('playerFrameWidth')).toBe(278);
+    expect(migrated.get('targetFrameWidth')).toBe(278);
+
+    // A width the player actually dragged is kept, clamped to the new range.
+    localStorage.setItem(
+      'woc_settings',
+      JSON.stringify({ playerFrameWidth: 320, targetFrameWidth: 900 }),
+    );
+    const kept = new Settings();
+    expect(kept.get('playerFrameWidth')).toBe(320);
+    expect(kept.get('targetFrameWidth')).toBe(460);
+  });
+
   it('keeps graphicsDefaultApplied false through an unrelated save and clears it on reset', () => {
     const s = new Settings();
     expect(s.get('graphicsDefaultApplied')).toBe(false);
@@ -143,6 +183,11 @@ describe('Settings', () => {
     expect(s.get('targetFrameScale')).toBe(1);
     // the classic top-right aura corner stays the default; frame-anchoring is opt-in.
     expect(s.get('aurasOnPlayerFrame')).toBe(false);
+    // the anchored buff row sits above the frame by default; below is opt-in.
+    expect(s.get('auraBarBelowFrame')).toBe(false);
+    // the target's aura strip sits above the frame by default (the stock seat is
+    // over the action bar); hanging it below is the player's opt-in.
+    expect(s.get('targetAurasBelowFrame')).toBe(false);
     expect(s.get('joystickDeadzone')).toBe(SETTING_RANGES.joystickDeadzone.def);
     // Interface Mode defaults to Auto (0): detect desktop vs touch from the device.
     expect(s.get('interfaceMode')).toBe(SETTING_RANGES.interfaceMode.def);
@@ -163,8 +208,9 @@ describe('Settings', () => {
   });
 
   it('clamps a stored historical Insane shadow dial (2) down to High on load', () => {
-    // The Shadow Quality ladder is capped at High (the 4096 map): the retired
-    // Insane rung persisted 2, which must come back as High, not survive.
+    // The Shadow Quality ladder is capped at High (the dial's 4096 map, above
+    // the High tier's own 2560 base): the retired Insane rung persisted 2,
+    // which must come back as High, not survive.
     localStorage.setItem('woc_settings', JSON.stringify({ shadowQuality: 2 }));
     const s = new Settings();
     expect(SETTING_RANGES.shadowQuality.max).toBe(1);
@@ -495,6 +541,7 @@ describe('Interface & Comfort settings pack', () => {
     expect(s.get('chatOpacity')).toBe(1);
     expect(s.get('reduceMotion')).toBe(false);
     expect(s.get('highContrastText')).toBe(false);
+    expect(s.get('colorblindMode')).toBe(false);
     expect(s.get('frostedPanels')).toBe(false);
     expect(s.get('compactChat')).toBe(false);
     expect(s.get('showFps')).toBe(false);
@@ -526,6 +573,7 @@ describe('Interface & Comfort settings pack', () => {
     expect(s.set('tooltipScale', 9)).toBe(SETTING_RANGES.tooltipScale.max);
     expect(s.set('fctScale', 0)).toBe(SETTING_RANGES.fctScale.min);
     expect(s.set('chatFontScale', 1.2)).toBe(1.2);
+    expect(s.set('chatFontScale', 9)).toBe(SETTING_RANGES.chatFontScale.max);
     expect(s.set('chatOpacity', 0)).toBe(SETTING_RANGES.chatOpacity.min);
   });
 
@@ -576,5 +624,26 @@ describe('click-to-move mouse button setting', () => {
     expect(normalizeClickMoveButton(2)).toBe(2);
     expect(clickMoveButtonLabel(0)).toBe('Left Click');
     expect(clickMoveButtonLabel(2)).toBe('Right Click');
+  });
+});
+
+// Chat text is 11px at stock, so the old 1.4 ceiling left it unreadable on a 4K
+// display at 100% OS scaling (players dropped to 1080p just to read chat). The
+// slider must reach at least 2x (1080p-equivalent size on 4K) and accept it
+// unclamped; the ceiling itself sits above that for TV / low-vision headroom.
+describe('chat text size reaches 4K-readable sizes', () => {
+  it('lets the slider double the stock chat text', () => {
+    const s = new Settings();
+    expect(SETTING_RANGES.chatFontScale.max).toBeGreaterThanOrEqual(2);
+    expect(s.set('chatFontScale', 2)).toBe(2);
+    const reloaded = new Settings();
+    expect(reloaded.get('chatFontScale')).toBe(2);
+  });
+
+  it('pins the ceiling at 2.5 and clamps above it', () => {
+    const s = new Settings();
+    expect(SETTING_RANGES.chatFontScale.max).toBe(2.5);
+    expect(s.set('chatFontScale', 2.5)).toBe(2.5);
+    expect(s.set('chatFontScale', 3)).toBe(2.5);
   });
 });

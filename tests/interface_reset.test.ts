@@ -23,11 +23,11 @@ const callees = scan.sites.map((s) => s.call);
 describe('Hud.resetUnitFrames restores the stock interface layout', () => {
   it('fans out to every surface that persists layout state of its own', () => {
     // The registered movers (unit frames, action bars + combined group, cast
-    // bar, menu, minimap, pet, stance bar, XP bar, aura group) ...
+    // bar, menu, minimap, pet, stance bar, XP bar, aura group, the trackers
+    // and the class resource bars, doom meter included) ...
     expect(callees).toContain('this.interfaceUnlock.resetAll');
-    // ... plus the four panels that keep their own geometry outside the
+    // ... plus the three panels that keep their own geometry outside the
     // registry. Each is a real persisted box a player can strand somewhere.
-    expect(callees).toContain('this.doomMeter.resetPosition');
     expect(callees).toContain('this.chatGeometry.reset');
     expect(callees).toContain('this.meters.resetFrames');
     expect(callees).toContain('this.targetAurasWindow.resetFrame');
@@ -62,14 +62,18 @@ describe('the Interface panel Reset to Defaults restores the layout too', () => 
     const source = stripComments(readFileSync(OPTIONS_PATH, 'utf8'));
     const start = source.indexOf('private renderInterface(');
     expect(start, 'renderInterface() was renamed or moved; re-point this pin').toBeGreaterThan(-1);
-    const end = source.indexOf('private chatTimestampRows(', start);
+    const end = source.indexOf('private transferRows(', start);
     // Without this guard a moved end anchor silently widens the slice to the
     // rest of the file, and the containment pins below lose their scoping.
-    expect(end, 'chatTimestampRows() was renamed or moved; re-point this pin').toBeGreaterThan(
-      start,
-    );
+    expect(end, 'transferRows() was renamed or moved; re-point this pin').toBeGreaterThan(start);
     const body = source.slice(start, end);
-    expect(body).toContain('this.settingsViewFooter(interfaceControlsForTab(controls, tab)');
-    expect(body).toContain(`if (tab === 'frames') this.deps.resetUnitFrames()`);
+    expect(body).toContain('const shownControls = this.frameOptionsId');
+    expect(body).toContain('frameSettingRelated(this.frameOptionsId!, control.key)');
+    expect(body).toContain(': interfaceControlsForTab(controls, tab)');
+    expect(body).toContain('this.settingsViewFooter(shownControls,');
+    expect(body).toContain('interfaceResetKeys(tab, this.frameOptionsId, keys)');
+    expect(body).toContain(
+      `if (tab === 'frames' && !this.frameOptionsId) this.deps.resetUnitFrames()`,
+    );
   });
 });

@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   GRAPHICS_REBUILD_KEYS,
   normalizeGraphicsSettingsSnapshot,
 } from '../src/game/graphics_rebuild_core';
-import { SETTING_RANGES } from '../src/game/settings';
+import { BOOL_SETTINGS, SETTING_RANGES } from '../src/game/settings';
+import { shaderWarmChoiceAvailable } from '../src/render/shader_warm_client';
+import { AURA_TRACKS } from '../src/ui/hud/aura_tracks';
 import {
+  actionCamShoulderReadout,
   boolToggleNextValue,
   buildAudioControls,
   buildBugReportInfo,
@@ -13,6 +18,7 @@ import {
   buildGraphicsSections,
   buildInterfaceControls,
   buildOptionsMenu,
+  buildOverlaysMenu,
   copyGraphicsDraft,
   flattenGraphicsSections,
   graphicsDraftDirty,
@@ -24,6 +30,7 @@ import {
   type OptionsEnv,
   type OptionsSettingsSource,
   optionsControlKeys,
+  optionsParentView,
   sliderDispatchValue,
   toggleIsOn,
   toggleNextValue,
@@ -87,6 +94,47 @@ describe('options_view: control primitive dispatch (cluster 1)', () => {
     expect(boolToggleNextValue(false)).toBe(true);
   });
 
+  it('Action Cam shows its shoulder slider only while it is on', () => {
+    const env: OptionsEnv = { touch: false, nativeShell: false };
+    const off = buildGraphicsControls(makeSource(), env);
+    expect(find(off, 'actionCam')).toMatchObject({
+      control: 'boolToggle',
+      on: false,
+      rerender: true,
+    });
+    expect(find(off, 'actionCamShoulder')).toBeUndefined();
+
+    const src = makeSource({ actionCamShoulder: -0.4 }, { actionCam: true });
+    const on = keysOf(buildGraphicsControls(src, env));
+    expect(on[on.indexOf('actionCam') + 1]).toBe('actionCamShoulder');
+    // Full left through center to full right, on the shoulder readout.
+    expect(find(buildGraphicsControls(src, env), 'actionCamShoulder')).toMatchObject({
+      control: 'slider',
+      min: -1,
+      max: 1,
+      value: -0.4,
+      fmt: 'shoulder',
+    });
+    expect(SETTING_RANGES.actionCamShoulder).toMatchObject({ min: -1, max: 1, def: 1 });
+    expect(BOOL_SETTINGS.actionCam.def).toBe(false);
+  });
+
+  it('the shoulder readout names the side and its strength, or Center', () => {
+    expect(actionCamShoulderReadout(-1)).toEqual({
+      key: 'hudChrome.options.actionCamShoulderLeft',
+      pct: 1,
+    });
+    expect(actionCamShoulderReadout(0.6)).toEqual({
+      key: 'hudChrome.options.actionCamShoulderRight',
+      pct: 0.6,
+    });
+    expect(actionCamShoulderReadout(0)).toEqual({
+      key: 'hudChrome.options.actionCamShoulderCenter',
+      pct: 0,
+    });
+    expect(actionCamShoulderReadout(0.01).key).toBe('hudChrome.options.actionCamShoulderCenter');
+  });
+
   it('a slider descriptor carries the live value, range, step and format', () => {
     const controls = buildGraphicsControls(makeSource({ cameraSpeed: 0.9, cameraFov: 75 }), {
       touch: false,
@@ -108,7 +156,7 @@ describe('options_view: control primitive dispatch (cluster 1)', () => {
 // native-shell gating preserved; the preset + interfaceMode choices re-render.
 // ---------------------------------------------------------------------------
 describe('options_view: graphics dispatch matrix (cluster 3)', () => {
-  it('stages exactly the twelve renderer-bound settings over the live projection', () => {
+  it('stages exactly the renderer-bound settings over the live projection', () => {
     expect(GRAPHICS_REBUILD_KEYS).toEqual([
       'graphicsPreset',
       'terrainDetail',
@@ -124,6 +172,7 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
       'characterDetail',
       'dynamicLights',
       'particleEffects',
+      'ghostFade',
     ]);
     const live = makeSource({ graphicsPreset: 2, terrainDetail: 0, renderScale: 0.75 });
     const draft = normalizeGraphicsSettingsSnapshot({ graphicsPreset: 5, terrainDetail: 2 });
@@ -175,6 +224,7 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
       'viewDistance',
       'waterQuality',
       'characterDetail',
+      'ghostFade',
       // Lighting & Effects card: the light and post passes.
       'effectsQuality',
       'shadowQuality',
@@ -184,8 +234,10 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
       'dynamicLights',
       'particleEffects',
       'note:hudChrome.options.gfxEffectsNote',
-      // Camera card (column 2 under Lighting).
+      // Camera card (column 2 under Lighting). The Action Cam shoulder picker
+      // only joins while Action Cam is on (off in this source).
       'cameraSpeed',
+      'actionCam',
       // Display card (full width).
       'renderScale',
       'brightness',
@@ -199,8 +251,48 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
       // System card (full width).
       'browserEffects',
       'note:hudChrome.options.browserEffectsNote',
+      'frameRateCap',
+      'note:hudChrome.options.frameRateCapNote',
+      'shaderWarm',
+      'note:hudChrome.options.shaderWarmNote',
       'interfaceMode',
       'note:hudChrome.options.interfaceModeNote',
+    ]);
+  });
+
+  it('states under the frame rate limit what it really does on this display', () => {
+    const capRow = (reading: ReturnType<NonNullable<OptionsEnv['frameRateCapReadingFor']>>) => {
+      const seen: number[] = [];
+      const row = flattenGraphicsSections(
+        buildGraphicsSections(makeSource({ graphicsPreset: 4, frameRateCap: 3 }), {
+          ...WEB_ENV,
+          frameRateCapReadingFor: (value) => {
+            seen.push(value);
+            return reading;
+          },
+        }),
+      ).find((c) => c.control === 'choice' && c.key === 'frameRateCap');
+      expect(seen).toEqual([3]);
+      if (row?.control !== 'choice') throw new Error('no frame rate limit row');
+      return row;
+    };
+    const paced = capRow({ kind: 'paced', fps: 36, refreshHz: 144 });
+    expect(paced.statusKey).toBe('hudChrome.options.frameRateCapStatusPaced');
+    expect(paced.statusNumbers).toEqual({ fps: 36, hz: 144 });
+    expect(paced.rerender).toBe(true);
+    const unpaced = capRow({ kind: 'unpaced', fps: 30 });
+    expect(unpaced.statusKey).toBe('hudChrome.options.frameRateCapStatusUnpaced');
+    expect(unpaced.statusNumbers).toEqual({ fps: 30 });
+    expect(capRow({ kind: 'inert' }).statusKey).toBe('hudChrome.options.frameRateCapStatusInert');
+    expect(capRow({ kind: 'none' }).statusKey).toBeUndefined();
+    // The stored value each label stands for is what the game resolves
+    // (src/game/frame_rate_cap_setting.ts FRAME_RATE_CAP_VALUES): a swap here
+    // would make the 60 button ask for 30.
+    expect(capRow({ kind: 'none' }).options).toEqual([
+      { value: 0, labelKey: 'hudChrome.options.frameRateCapAuto' },
+      { value: 1, labelKey: 'hudChrome.options.frameRateCapDisplay' },
+      { value: 2, labelKey: 'hudChrome.options.frameRateCapSixty' },
+      { value: 3, labelKey: 'hudChrome.options.frameRateCapThirty' },
     ]);
   });
 
@@ -253,8 +345,9 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
         ).toEqual([0, 0.5, 1, 2]);
     }
     // Effects & Lighting stops at High (the full high-tier post stack), and
-    // so does Shadow Quality (High is the 4096 map; the 8192 Insane rung is
-    // retired, so the dial no longer offers it).
+    // so does Shadow Quality (High is the dial's 4096 map, above the High
+    // tier's own 2560 base; the 8192 Insane rung is retired, so the dial no
+    // longer offers it).
     for (const key of ['effectsQuality', 'shadowQuality']) {
       const dial = find(controls, key);
       if (dial?.control === 'choice')
@@ -299,6 +392,230 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
     // no-op instruction.
     expect(keysOf(controls)).toContain('note:hudChrome.options.gfxCustomNote');
     expect(keysOf(stored)).not.toContain('note:hudChrome.options.gfxCustomNote');
+  });
+
+  it('puts the graphics backend row + note in the System card, under the shader worker, ONLY with its capability', () => {
+    // The capability is the bridge methods AND the shell's platform answer,
+    // folded into one env flag by the options window; the GPU preference
+    // flag never stands in for it (Windows and macOS shells have the first
+    // and not the second).
+    const system = (env: OptionsEnv) =>
+      buildGraphicsSections(makeSource({ graphicsPreset: 4 }), env).find(
+        (section) => section.titleKey === 'hudChrome.options.gfxSectionSystem',
+      );
+    const withBackend = system({ ...WEB_ENV, desktopGpuBackend: true });
+    expect(withBackend).toBeTruthy();
+    const keys = keysOf(withBackend?.controls ?? []);
+    expect(keys.slice(keys.indexOf('shaderWarm'), keys.indexOf('shaderWarm') + 5)).toEqual([
+      'shaderWarm',
+      'note:hudChrome.options.shaderWarmNote',
+      'gpuBackend',
+      'note:hudChrome.options.gpuBackendNote',
+      'interfaceMode',
+    ]);
+    expect(find(withBackend?.controls ?? [], 'gpuBackend')?.control).toBe('choice');
+    // Its keys are not rebuild keys: the row writes live, never through Apply.
+    expect(GRAPHICS_REBUILD_KEYS).not.toContain('gpuBackend');
+    for (const env of [WEB_ENV, DESKTOP_ENV, { touch: true, nativeShell: true }]) {
+      expect(find(system(env)?.controls ?? [], 'gpuBackend')).toBeUndefined();
+    }
+  });
+
+  it('shows the rung the launch is really on, under the buttons, once the shell has judged', () => {
+    // The point of the row on a machine where the choice did not take: a player
+    // who picked Vulkan must not read "Vulkan" while playing on OpenGL.
+    const system = (env: OptionsEnv) =>
+      buildGraphicsSections(makeSource({ graphicsPreset: 4 }), env).find(
+        (section) => section.titleKey === 'hudChrome.options.gfxSectionSystem',
+      );
+    const backendRow = (active: OptionsEnv['desktopGpuBackendActive']) =>
+      find(
+        system({ ...WEB_ENV, desktopGpuBackend: true, desktopGpuBackendActive: active })
+          ?.controls ?? [],
+        'gpuBackend',
+      );
+
+    // The reading rides INSIDE the row, never as a note beside it: the wide
+    // graphics cards flow their children two-up (control, note, control, note),
+    // so a third child for one control shifts every row after it by a cell.
+    // That is a real layout break, not a nicety.
+    const running = system({
+      ...WEB_ENV,
+      desktopGpuBackend: true,
+      desktopGpuBackendActive: { active: 'vulkan-parallel-compile', requestedUnavailable: false },
+    });
+    const keys = keysOf(running?.controls ?? []);
+    expect(keys.slice(keys.indexOf('gpuBackend'), keys.indexOf('gpuBackend') + 2)).toEqual([
+      'gpuBackend',
+      'note:hudChrome.options.gpuBackendNote',
+    ]);
+    const row = find(running?.controls ?? [], 'gpuBackend');
+    expect(row?.control === 'choice' && row.statusKey).toBe('hudChrome.options.gpuBackendActive');
+    // The name is a placeholder KEY the painter resolves, never a concatenation
+    // and never a raw rung: both Vulkan rungs read as the one name the picker
+    // offered.
+    expect(row?.control === 'choice' && row.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameVulkan',
+    });
+
+    const plain = backendRow({ active: 'vulkan-plain', requestedUnavailable: false });
+    expect(plain?.control === 'choice' && plain.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameVulkan',
+    });
+
+    // Fell short of the setting: its own sentence, and the OpenGL name.
+    const fallen = backendRow({ active: 'opengl', requestedUnavailable: true });
+    expect(fallen?.control === 'choice' && fallen.statusKey).toBe(
+      'hudChrome.options.gpuBackendActiveUnavailable',
+    );
+    expect(fallen?.control === 'choice' && fallen.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameOpenGL',
+    });
+
+    // Only the verdict that says the choice did not take is an alert: the row
+    // is a live region either way, but a plain reading is information, not a
+    // failure a player has to act on.
+    expect(fallen?.control === 'choice' && fallen.statusAlert).toBe(true);
+    expect(row?.control === 'choice' && row.statusAlert).toBeUndefined();
+
+    // Auto held at OpenGL by the shell's GPU policy: its own sentence (why the
+    // player is not on Vulkan, and that it is theirs to pick), the OpenGL name.
+    const capped = backendRow({ active: 'opengl', requestedUnavailable: false, autoCapped: true });
+    expect(capped?.control === 'choice' && capped.statusKey).toBe(
+      'hudChrome.options.gpuBackendActiveAutoCapped',
+    );
+    expect(capped?.control === 'choice' && capped.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameOpenGL',
+    });
+    // A choice that fell short wins over the cap (the two never both hold; the
+    // order is pinned so a future shell cannot make the row say the wrong thing).
+    const both = backendRow({ active: 'opengl', requestedUnavailable: true, autoCapped: true });
+    expect(both?.control === 'choice' && both.statusKey).toBe(
+      'hudChrome.options.gpuBackendActiveUnavailable',
+    );
+
+    // Nothing to say yet: no reading at all rather than a guessed one, and the
+    // row keeps its description and its single note.
+    for (const active of [null, undefined]) {
+      const quiet = backendRow(active);
+      expect(quiet?.control === 'choice' && quiet.statusKey).toBeUndefined();
+      expect(quiet?.control === 'choice' && quiet.statusValueKeys).toBeUndefined();
+      const quietKeys = keysOf(
+        system({ ...WEB_ENV, desktopGpuBackend: true, desktopGpuBackendActive: active })
+          ?.controls ?? [],
+      );
+      expect(quietKeys).toContain('note:hudChrome.options.gpuBackendNote');
+    }
+  });
+
+  it('says the write did not save, over the rung this launch is on', () => {
+    // The shell refused the write, so the STORED choice never moved and the
+    // next start keeps it. A row that went on reporting the running rung would
+    // let a player leave believing their pick took.
+    const system = (env: OptionsEnv, gpuBackend: number) =>
+      buildGraphicsSections(makeSource({ graphicsPreset: 4, gpuBackend }), env).find(
+        (section) => section.titleKey === 'hudChrome.options.gfxSectionSystem',
+      );
+    const backendRow = (env: OptionsEnv, gpuBackend: number) =>
+      find(system(env, gpuBackend)?.controls ?? [], 'gpuBackend');
+
+    const failedEnv: OptionsEnv = {
+      ...WEB_ENV,
+      desktopGpuBackend: true,
+      desktopGpuBackendWriteFailed: true,
+      // The launch is running Vulkan and says so; the refusal outranks it.
+      desktopGpuBackendActive: { active: 'vulkan-parallel-compile', requestedUnavailable: false },
+    };
+    const failed = backendRow(failedEnv, 2);
+    expect(failed?.control === 'choice' && failed.statusKey).toBe(
+      'hudChrome.options.gpuBackendSaveFailed',
+    );
+    // The name is the STORED choice's (the apply arm has already put the local
+    // value back on it), and the active-reading name, never the picker's
+    // "OpenGL (slow)".
+    expect(failed?.control === 'choice' && failed.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameOpenGL',
+    });
+    // A verdict a player must act on: an assertive live region, not a polite one.
+    expect(failed?.control === 'choice' && failed.statusAlert).toBe(true);
+
+    const vulkanStored = backendRow(failedEnv, 1);
+    expect(vulkanStored?.control === 'choice' && vulkanStored.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendActiveNameVulkan',
+    });
+    // Auto is a stored choice too, and keeps the picker's own Auto label.
+    const autoStored = backendRow(failedEnv, 0);
+    expect(autoStored?.control === 'choice' && autoStored.statusValueKeys).toEqual({
+      backend: 'hudChrome.options.gpuBackendAuto',
+    });
+
+    // Flag down: the active reading again, unchanged.
+    const settled = backendRow({ ...failedEnv, desktopGpuBackendWriteFailed: false }, 2);
+    expect(settled?.control === 'choice' && settled.statusKey).toBe(
+      'hudChrome.options.gpuBackendActive',
+    );
+    expect(settled?.control === 'choice' && settled.statusAlert).toBeUndefined();
+  });
+
+  it('asks the worker client whether the row is offered, at the one place the window builds it', () => {
+    // The view shows the row when the flag is absent, so the window's call
+    // site is what withdraws it: a dropped or hard-coded prop would bring the
+    // row back with every other suite green.
+    const source = readFileSync(join(__dirname, '../src/ui/options_window.ts'), 'utf8');
+    expect(source.match(/shaderWarmChoice:/g)).toHaveLength(1);
+    expect(source).toContain('shaderWarmChoice: shaderWarmChoiceAvailable(),');
+    expect(shaderWarmChoiceAvailable()).toBe(false);
+  });
+
+  it('drops the shader warm-up worker row and its note where the worker is forced off', () => {
+    // iOS resolves the worker to off whatever the setting says
+    // (shaderWarmModeFor), so the row would change nothing under a note
+    // promising On is forced everywhere.
+    const system = (env: OptionsEnv) =>
+      buildGraphicsSections(makeSource({ graphicsPreset: 4 }), env).find(
+        (section) => section.titleKey === 'hudChrome.options.gfxSectionSystem',
+      );
+    const withoutChoice = keysOf(system({ ...WEB_ENV, shaderWarmChoice: false })?.controls ?? []);
+    expect(withoutChoice.length).toBeGreaterThan(0);
+    expect(withoutChoice).not.toContain('shaderWarm');
+    expect(withoutChoice).not.toContain('note:hudChrome.options.shaderWarmNote');
+    // The card keeps everything else it had, in order (the pair leaves together).
+    expect(withoutChoice).toEqual(
+      keysOf(system(WEB_ENV)?.controls ?? []).filter(
+        (key) => key !== 'shaderWarm' && key !== 'note:hudChrome.options.shaderWarmNote',
+      ),
+    );
+    // Absent means yes, and so does true: every non-iOS caller keeps the pair.
+    for (const env of [WEB_ENV, { ...WEB_ENV, shaderWarmChoice: true }]) {
+      const keys = keysOf(system(env)?.controls ?? []);
+      expect(keys.slice(keys.indexOf('shaderWarm'), keys.indexOf('shaderWarm') + 2)).toEqual([
+        'shaderWarm',
+        'note:hudChrome.options.shaderWarmNote',
+      ]);
+    }
+  });
+
+  it('keeps every wide-card control paired with exactly one note', () => {
+    // The wide graphics cards lay their children out two-up, control then note,
+    // so the whole card depends on that alternation: one extra note for one row
+    // pushes every row after it into the wrong cell (seen in the System card
+    // when the backend reading was first added as a note of its own).
+    const env = { ...WEB_ENV, desktopGpuBackend: true, desktopDisplayMode: true };
+    for (const section of buildGraphicsSections(makeSource({ graphicsPreset: 4 }), env)) {
+      if (section.column !== 'full') continue;
+      let noteRun = 0;
+      for (const control of section.controls) {
+        if (control.control === 'note') {
+          noteRun += 1;
+          expect(
+            noteRun,
+            `${section.titleKey} has two notes in a row, which shifts the card's grid`,
+          ).toBeLessThan(2);
+        } else {
+          noteRun = 0;
+        }
+      }
+    }
   });
 
   it('groups the panel into titled two-column cards whose flatten IS the control list', () => {
@@ -541,10 +858,14 @@ describe('options_view: optionsControlKeys (issue 2341 scoped reset)', () => {
 // interfaceControlsForTab(all, tab) must return exactly these, in order; the
 // concatenation (in INTERFACE_TAB_ORDER) is the whole deduped list.
 const GENERAL_KEYS = [
+  'playerFrameHealthText',
+  'targetFrameHealthText',
+  'uiScale',
   'hudOpacity',
   'tooltipScale',
   'frostedPanels',
   'highContrastText',
+  'colorblindMode',
   'reduceMotion',
   'invertLookY',
   'landingHighContrast',
@@ -559,9 +880,13 @@ const GENERAL_KEYS = [
   'showPlayerNameplates',
   'confirmVendorSell',
   'note:hudChrome.options.confirmVendorSellNote',
+  'confirmVendorSellMinQuality',
+  'note:hudChrome.options.confirmVendorSellMinQualityNote',
 ];
 const FRAMES_KEYS = [
+  'mouseoverCast',
   'partyFrameStyle',
+  'showPetFrame',
   // partyFrameWidth/Height have no rows (Edit Frames drags them directly);
   // partyFrameColumns and partyFrameSpacing moved into the in-editor Frames
   // Settings dropdown.
@@ -573,19 +898,36 @@ const FRAMES_KEYS = [
   'partyFrameShowPets',
   'partyFrameShowSelf',
   'aurasOnPlayerFrame',
+  'auraBarBelowFrame',
+  'targetAurasBelowFrame',
   'alwaysShowAllBuffs',
+  'showAuraCaster',
   'showTargetOfTarget',
   'showTargetSwingTimer',
-  'showPetFrame',
 ];
-const CHAT_KEYS = ['chatFontScale', 'chatOpacity', 'compactChat'];
+const CHAT_KEYS = ['chatFontScale', 'chatOpacity', 'compactChat', 'filterProfanity'];
 const COMBAT_KEYS = [
+  'eastbrookGuidance',
   'startAttackOnAbilityUse',
   'stopAutoAttackOnTargetSwitch',
   'showAttackButton',
   'walkByAutoloot',
   'groundReticle',
   'stickyTarget',
+  // The two dot-tracking surfaces, with the nameplate row's size slider pinned
+  // directly under the toggle it sizes.
+  'showNameplateDots',
+  'nameplateDotScale',
+  'showTargetDots',
+  // The six aura tracks, in the order the descriptor table declares them, plus
+  // the mode sub-option that rides with the utility track.
+  'showDefensivesTrack',
+  'showSelfBuffTrack',
+  'showOffensiveTrack',
+  'showUtilityTrack',
+  'showUtilityModes',
+  'showFriendlyTrack',
+  'showShieldTrack',
   'fctScale',
 ];
 const INTERFACE_KEYS_BY_TAB: Record<InterfaceTab, string[]> = {
@@ -624,14 +966,7 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
     ]);
     // the redundant partyFrames.section note is gone now that Frames is its own tab
     expect(keysOf(controls)).not.toContain('note:hudChrome.partyFrames.section');
-    expect(find(controls, 'partyFrameStyle')).toMatchObject({
-      control: 'choice',
-      options: [
-        { value: 0, labelKey: 'hudChrome.partyFrames.styleAutomatic' },
-        { value: 1, labelKey: 'hudChrome.partyFrames.styleClassic' },
-        { value: 2, labelKey: 'hudChrome.partyFrames.styleRaid' },
-      ],
-    });
+    expect(keysOf(controls)).toContain('partyFrameStyle');
     expect(find(controls, 'reduceMotion')).toMatchObject({ control: 'boolToggle' });
     // The sticky-target opt-in renders in the Combat tab with its label key, so
     // the toggle cannot silently drop out of the options window.
@@ -640,6 +975,51 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
       category: 'combat',
       labelKey: 'hudChrome.options.stickyTarget',
     });
+  });
+
+  it('renders one Combat toggle per aura track, each labelled by its own key', () => {
+    // Six frames need six independent opt-ins: a single "show aura tracks"
+    // switch would put roughly twenty rows on a healer at once, which is the
+    // thing the per-track defaults exist to prevent. Pinned by KEY rather than
+    // by count so a track that loses its row fails here, and pinned against the
+    // descriptor table so the two can never drift.
+    const controls = buildInterfaceControls(makeSource());
+    for (const track of AURA_TRACKS) {
+      expect(find(controls, track.settingKey)).toMatchObject({
+        control: 'boolToggle',
+        category: 'combat',
+        labelKey: `hudChrome.options.${track.settingKey}`,
+      });
+    }
+    // Every track is OFF until asked for, and the mode sub-option rides on.
+    for (const track of AURA_TRACKS) {
+      expect(BOOL_SETTINGS[track.settingKey as keyof typeof BOOL_SETTINGS]).toEqual({
+        def: false,
+      });
+    }
+    expect(BOOL_SETTINGS.showUtilityModes).toEqual({ def: true });
+  });
+
+  it('shows the live mouseover-cast switch in Interface > Frames', () => {
+    const controls = buildInterfaceControls(makeSource({}, { mouseoverCast: true }));
+    const frames = interfaceControlsForTab(controls, 'frames');
+    expect(find(frames, 'mouseoverCast')).toMatchObject({
+      control: 'boolToggle',
+      category: 'frames',
+      labelKey: 'hudChrome.options.mouseoverCast',
+      on: true,
+    });
+    expect(optionsControlKeys(frames)).toContain('mouseoverCast');
+    expect(
+      find(
+        interfaceControlsForTab(
+          buildInterfaceControls(makeSource({}, { mouseoverCast: false })),
+          'frames',
+        ),
+        'mouseoverCast',
+      ),
+    ).toMatchObject({ control: 'boolToggle', on: false });
+    expect(find(interfaceControlsForTab(controls, 'combat'), 'mouseoverCast')).toBeUndefined();
   });
 
   it('renders NO menu rows for the optional action bars (the on-bar toggle owns them)', () => {
@@ -668,6 +1048,11 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
     });
     expect(desktop.filter((c) => c.control === 'note')).toEqual([
       { control: 'note', textKey: 'hudChrome.options.confirmVendorSellNote', category: 'general' },
+      {
+        control: 'note',
+        textKey: 'hudChrome.options.confirmVendorSellMinQualityNote',
+        category: 'general',
+      },
       { control: 'note', textKey: 'hudChrome.options.forceHighPerfGpuNote', category: 'general' },
     ]);
 
@@ -701,6 +1086,32 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
         'forceHighPerfGpu',
       ),
     ).toBeUndefined();
+  });
+
+  it('keeps the graphics backend row OUT of the Interface panel (it lives under Graphics)', () => {
+    // A player looks for the backend next to the shader warm-up worker, in
+    // the Graphics panel's System card; the Interface tail keeps only the GPU
+    // preference and Discord, even when the shell has the backend capability.
+    const allKeys = keysOf(
+      buildInterfaceControls(makeSource(), {
+        ...WEB_ENV,
+        desktopGpuPref: true,
+        desktopGpuBackend: true,
+        desktopDiscordPresence: true,
+      }),
+    );
+    expect(allKeys).not.toContain('gpuBackend');
+    expect(allKeys).not.toContain('note:hudChrome.options.gpuBackendNote');
+    const tail = allKeys.slice(
+      allKeys.indexOf('forceHighPerfGpu'),
+      allKeys.indexOf('forceHighPerfGpu') + 4,
+    );
+    expect(tail).toEqual([
+      'forceHighPerfGpu',
+      'note:hudChrome.options.forceHighPerfGpuNote',
+      'discordPresence',
+      'note:hudChrome.options.discordPresenceNote',
+    ]);
   });
 
   it('appends the Discord presence row + note ONLY with its own bridge capability', () => {
@@ -793,12 +1204,62 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
     expect(find(off, 'forceHighPerfGpu')).toMatchObject({ control: 'boolToggle', on: false });
   });
 
-  it('renders NO uiScale row (owner request); the comfort sliders stay live', () => {
+  // Regression pin for the buff-placement bug (issue: buffs on the player
+  // frame flip above/below unpredictably): the above/below choice is now the
+  // player's OWN setting (auraBarBelowFrame), gated on aurasOnPlayerFrame the
+  // same way a dependent BoolToggleControl always gates on its parent
+  // (disabled until the parent is on, rebuilt immediately via rerender: true
+  // so the disabled state never goes stale).
+  it('enables the below-frame buff placement toggle only while buffs anchor to the player frame', () => {
+    const hidden = buildInterfaceControls(makeSource());
+    expect(find(hidden, 'aurasOnPlayerFrame')).toMatchObject({
+      control: 'boolToggle',
+      rerender: true,
+    });
+    expect(find(hidden, 'auraBarBelowFrame')).toMatchObject({
+      control: 'boolToggle',
+      disabled: true,
+    });
+
+    const visible = buildInterfaceControls(makeSource({}, { aurasOnPlayerFrame: true }));
+    expect(find(visible, 'auraBarBelowFrame')).toMatchObject({ disabled: false });
+  });
+
+  it('reads the stored buff-placement choice straight through, independent of aurasOnPlayerFrame', () => {
+    const on = buildInterfaceControls(
+      makeSource({}, { aurasOnPlayerFrame: true, auraBarBelowFrame: true }),
+    );
+    expect(find(on, 'auraBarBelowFrame')).toMatchObject({ control: 'boolToggle', on: true });
+
+    const off = buildInterfaceControls(
+      makeSource({}, { aurasOnPlayerFrame: true, auraBarBelowFrame: false }),
+    );
+    expect(find(off, 'auraBarBelowFrame')).toMatchObject({ control: 'boolToggle', on: false });
+  });
+
+  // The target strip's side is the player's own choice, ungated (the strip is
+  // always anchored to the target frame, unlike the player buff row).
+  it('offers the target-auras-below toggle ungated and reads the stored choice through', () => {
+    expect(find(buildInterfaceControls(makeSource()), 'targetAurasBelowFrame')).toMatchObject({
+      control: 'boolToggle',
+      on: false,
+    });
+    expect(find(buildInterfaceControls(makeSource()), 'targetAurasBelowFrame')).not.toHaveProperty(
+      'disabled',
+      true,
+    );
+    const on = buildInterfaceControls(makeSource({}, { targetAurasBelowFrame: true }));
+    expect(find(on, 'targetAurasBelowFrame')).toMatchObject({ control: 'boolToggle', on: true });
+  });
+
+  it('offers global scale from 75 to 200 percent, committing on release', () => {
     const controls = buildInterfaceControls(makeSource());
-    // The UI Scale slider is retired from the menu: the stored setting still
-    // applies at boot and the General tab's Reset to Defaults still clears it
-    // (renderInterface's off-menu key list).
-    expect(find(controls, 'uiScale')).toBeUndefined();
+    expect(find(controls, 'uiScale')).toMatchObject({
+      control: 'slider',
+      min: 0.75,
+      max: 2,
+      commitOnChange: true,
+    });
     // Sibling sliders keep their live preview (no commitOnChange flag).
     expect(find(controls, 'chatFontScale')).not.toHaveProperty('commitOnChange');
     expect(find(controls, 'tooltipScale')).not.toHaveProperty('commitOnChange');
@@ -894,8 +1355,8 @@ describe('options_view: interface tab taxonomy', () => {
   });
 
   it('renders NO menu rows for the settings the Frames Settings dropdown owns', () => {
-    // combineActionBars / hideUnusedActionSlots / mouseoverCast /
-    // lockActionBars moved into the edit mode's Frames Settings dropdown
+    // combineActionBars / hideUnusedActionSlots / lockActionBars
+    // live in the edit mode's Frames Settings dropdown
     // (interface_unlock.ts settingToggles); a duplicate row here would drift
     // out of sync with it. The frame-scale sliders are likewise gone: Edit
     // Frames resizes each frame directly. The settings keys all remain.
@@ -903,7 +1364,6 @@ describe('options_view: interface tab taxonomy', () => {
     for (const key of [
       'combineActionBars',
       'hideUnusedActionSlots',
-      'mouseoverCast',
       'lockActionBars',
       'playerFrameScale',
       'targetFrameScale',
@@ -917,17 +1377,27 @@ describe('options_view: interface tab taxonomy', () => {
 // ---------------------------------------------------------------------------
 // Main menu routing (cluster 5)
 // ---------------------------------------------------------------------------
+// The desktop menu with the frames locked: what the painter asks for on a
+// mouse-and-keyboard HUD with nothing loose (the touch HUD flips
+// interfaceUnlockAvailable off, see the touch case below).
+const DESKTOP_MENU = {
+  bugReportAvailable: false,
+  interfaceUnlockAvailable: true,
+  interfaceUnlocked: false,
+};
+
 describe('options_view: main menu routing', () => {
   it('routes each row to its sub-view, with unstuck before logout + close, omitting bug report offline', () => {
-    const offline = buildOptionsMenu({ bugReportAvailable: false });
+    const offline = buildOptionsMenu(DESKTOP_MENU);
     expect(offline.map((e) => e.labelKey)).toEqual([
+      'hudChrome.interfaceUnlock.unlock',
       'hud.options.keyBindings',
       'hudChrome.controller.title',
       'hud.options.graphics',
       'hud.options.interface',
-      'hudChrome.auraOverlay.title',
+      'hudChrome.options.overlays',
       'hud.options.audio',
-      'hudChrome.perf.title',
+      'hudChrome.fullTransfer.menu',
       'nav.wiki',
       'hudChrome.unstuck.menuButton',
       'hud.options.logout',
@@ -940,19 +1410,98 @@ describe('options_view: main menu routing', () => {
     const interfaceRows = offline.filter((e) => e.labelKey === 'hud.options.interface');
     expect(interfaceRows).toHaveLength(1);
     expect(interfaceRows[0].action).toEqual({ kind: 'goto', view: 'interface' });
-    expect(offline.find((e) => e.labelKey === 'hudChrome.auraOverlay.title')?.action).toEqual({
+    // The three on-screen overlay panels sit one level down, behind one row.
+    expect(offline.find((e) => e.labelKey === 'hudChrome.options.overlays')?.action).toEqual({
       kind: 'goto',
-      view: 'auras',
+      view: 'overlays',
     });
+    for (const view of ['auras', 'cooldowns', 'performance']) {
+      expect(offline.some((e) => e.action.kind === 'goto' && e.action.view === view)).toBe(false);
+    }
     // The Wiki row is unconditional (offline play has a wiki too) and routes to
     // the confirm-first external hop, never a sub-view.
     const wikiRows = offline.filter((e) => e.labelKey === 'nav.wiki');
     expect(wikiRows).toHaveLength(1);
     expect(wikiRows[0].action).toEqual({ kind: 'wiki' });
+    // The full-settings Import / Export row routes to its own sub-view.
+    expect(offline.find((e) => e.labelKey === 'hudChrome.fullTransfer.menu')?.action).toEqual({
+      kind: 'goto',
+      view: 'transfer',
+    });
+  });
+
+  it('the Overlays list routes to Auras, Cooldown Manager and Performance, in that order', () => {
+    expect(buildOverlaysMenu()).toEqual([
+      { labelKey: 'hudChrome.auraOverlay.title', action: { kind: 'goto', view: 'auras' } },
+      { labelKey: 'hudChrome.cooldownManager.title', action: { kind: 'goto', view: 'cooldowns' } },
+      { labelKey: 'hudChrome.perf.title', action: { kind: 'goto', view: 'performance' } },
+    ]);
+  });
+
+  it('Back from an overlay panel lands on Overlays; from anything else, the Game Menu', () => {
+    for (const view of ['auras', 'cooldowns', 'performance'] as const) {
+      expect(optionsParentView(view)).toBe('overlays');
+    }
+    for (const view of ['overlays', 'interface', 'graphics', 'keybinds', 'transfer'] as const) {
+      expect(optionsParentView(view)).toBe('main');
+    }
+    expect(optionsParentView('main')).toBe('main');
+  });
+
+  it('leads with Unlock Interface, relabelled Lock Interface while the frames are loose', () => {
+    // Owner request for the frame lock-down: arranging frames is one press
+    // from Esc, not three levels into Interface > Frames. The row is the
+    // same action the Frames tab's row fires, so its label follows the same
+    // rule (interfaceUnlockLabelKey), and only the label changes with state.
+    const locked = buildOptionsMenu(DESKTOP_MENU);
+    expect(locked[0]).toEqual({
+      labelKey: 'hudChrome.interfaceUnlock.unlock',
+      action: { kind: 'interfaceUnlock', unlocked: false },
+    });
+    expect(locked.filter((e) => e.action.kind === 'interfaceUnlock')).toHaveLength(1);
+    const unlocked = buildOptionsMenu({ ...DESKTOP_MENU, interfaceUnlocked: true });
+    expect(unlocked[0]).toEqual({
+      labelKey: 'hudChrome.interfaceUnlock.lock',
+      action: { kind: 'interfaceUnlock', unlocked: true },
+    });
+    expect(unlocked.slice(1)).toEqual(locked.slice(1));
+  });
+
+  it('omits the Unlock Interface row on the touch HUD, where Key Bindings leads again', () => {
+    // Frame editing is desktop-only (every gesture refuses touch layouts), the
+    // same gate the Frames tab's row sits behind. Unavailable wins even if the
+    // state somehow reads unlocked: the row must never appear on touch.
+    const locked = buildOptionsMenu(DESKTOP_MENU);
+    for (const interfaceUnlocked of [false, true]) {
+      const touch = buildOptionsMenu({
+        ...DESKTOP_MENU,
+        interfaceUnlockAvailable: false,
+        interfaceUnlocked,
+      });
+      expect(touch.some((e) => e.action.kind === 'interfaceUnlock')).toBe(false);
+      expect(touch[0]?.labelKey).toBe('hud.options.keyBindings');
+      expect(touch).toEqual(locked.slice(1));
+    }
+  });
+
+  it('carries NO System Report row: it is a section inside the Performance view', () => {
+    // The owner's decision: the feature was a whole menu row and a whole
+    // sub-panel, which was more room than it deserves. Performance now sits
+    // under Overlays, as that list's last row, with nothing after it; and the
+    // Game Menu root carries no System Report row either.
+    const rows = buildOptionsMenu({ ...DESKTOP_MENU, bugReportAvailable: true });
+    const overlays = buildOverlaysMenu();
+    for (const list of [rows, overlays]) {
+      expect(list.some((e) => e.labelKey === 'hudChrome.hostDiag.title')).toBe(false);
+    }
+    expect(overlays.at(-1)).toEqual({
+      labelKey: 'hudChrome.perf.title',
+      action: { kind: 'goto', view: 'performance' },
+    });
   });
 
   it('adds the online-only Report a Bug row when bug reporting is available', () => {
-    const online = buildOptionsMenu({ bugReportAvailable: true });
+    const online = buildOptionsMenu({ ...DESKTOP_MENU, bugReportAvailable: true });
     const bug = online.find((e) => e.labelKey === 'hudChrome.bugReport.menuButton');
     expect(bug?.action).toEqual({ kind: 'goto', view: 'bugreport' });
     // The Wiki row keeps its place above the report row in both modes.
@@ -1041,9 +1590,8 @@ describe('options_view: determinism', () => {
       buildInterfaceControls(src, DESKTOP_ENV),
     );
     expect(buildControllerControls(src)).toEqual(buildControllerControls(src));
-    expect(buildOptionsMenu({ bugReportAvailable: true })).toEqual(
-      buildOptionsMenu({ bugReportAvailable: true }),
-    );
+    const menuOpts = { ...DESKTOP_MENU, bugReportAvailable: true };
+    expect(buildOptionsMenu(menuOpts)).toEqual(buildOptionsMenu(menuOpts));
   });
 });
 

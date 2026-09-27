@@ -131,14 +131,21 @@ describe('Realm Racers participant visibility', () => {
     expect(renderer).toMatch(
       /createRequiredViews\([\s\S]*isRealmRacersCoPilot\([\s\S]*createRequiredView/,
     );
-    // The RETAIN gate is no longer a predicate of ours. The release merge gave
-    // every view one shared drop policy (`entityViewShouldDrop`), and a co-pilot
-    // now rides it with an INFINITE destroy range, which exempts them from the
-    // distance arm and from nothing else. Pinned as that wiring rather than as a
-    // call count, because the guarantee is that match membership beats distance,
-    // not that any particular helper is the one saying so.
+    // The RETAIN gate is no longer a predicate of ours. The release gave every
+    // view one shared drop scan (`collectDoomedViewsInto`), and a co-pilot rides
+    // it as a range-exempt id with an INFINITE destroy range, which exempts them
+    // from the distance arm and from nothing else (the core's own test drives
+    // that). Pinned as that wiring, because the guarantee is that match
+    // membership beats distance, not that any particular helper says so.
     expect(renderer).toMatch(
-      /isRealmRacersCoPilot\(participantIds, p\.id, id\)\s*\?\s*Number\.POSITIVE_INFINITY/,
+      /collectDoomedViewsInto\(this\.doomedIds,[^;]*rangeExemptIds: participantIds,/,
+    );
+    const scan = readFileSync(
+      new URL('../src/render/view_candidate_scan_core.ts', import.meta.url),
+      'utf8',
+    );
+    expect(scan).toMatch(
+      /input\.rangeExemptIds\?\.includes\(id\)\s*\?\s*Number\.POSITIVE_INFINITY/,
     );
     expect(renderer.match(/isOutsideRealmRacersDrawRange\(/g)).toHaveLength(1);
   });

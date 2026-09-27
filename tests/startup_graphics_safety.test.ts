@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { safeStartupGraphicsPreset } from '../src/game/startup_graphics_safety';
+import { PROFILE_TOKENS } from './helpers/profile_tokens';
 
 const ULTRA = 4;
 const HIGH = 3;
@@ -46,17 +47,16 @@ describe('safeStartupGraphicsPreset', () => {
 describe('constrained renderer integration', () => {
   it('uses the resolved dynamic-shadow policy for both the WebGL map and sun pass', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    const prewarmMethod = source.indexOf(
-      'private async compileShadowPrograms(root: THREE.Object3D)',
-    );
-    const prewarmGuard = source.indexOf(
-      'if (!GFX.dynamicShadows || !this.asyncCompileSupported) return;',
-      prewarmMethod,
-    );
-    const prewarmTraversal = source.indexOf('root.traverse((obj) => {', prewarmMethod);
+    // The shadow arm lives in src/render/compile_arms.ts; the renderer binds
+    // its gate to the same static preset knob the WebGL map and the sun read.
+    const arms = readFileSync(new URL('../src/render/compile_arms.ts', import.meta.url), 'utf8');
+    const prewarmMethod = arms.indexOf('export function runShadowArm<T>(');
+    const prewarmGuard = arms.indexOf('if (!host.shadowArm()) return null;', prewarmMethod);
+    const prewarmTraversal = arms.indexOf('root.traverse((obj) => {', prewarmMethod);
 
     expect(source).toContain('this.webgl.shadowMap.enabled = GFX.dynamicShadows;');
     expect(source).toContain('sun.castShadow = GFX.dynamicShadows;');
+    expect(source).toContain('shadowArm: () => GFX.dynamicShadows && this.asyncCompileSupported,');
     expect(prewarmMethod).toBeGreaterThanOrEqual(0);
     expect(prewarmGuard).toBeGreaterThan(prewarmMethod);
     expect(prewarmGuard).toBeLessThan(prewarmTraversal);
@@ -95,11 +95,22 @@ describe('constrained renderer integration', () => {
     }
     // sun.castShadow is assigned GFX.dynamicShadows and never reassigned, so the
     // prewarm gate above pins the same policy through the static preset knob.
-    expect(source).toContain('if (!GFX.dynamicShadows || !this.asyncCompileSupported) return;');
+    expect(source).toContain('shadowArm: () => GFX.dynamicShadows && this.asyncCompileSupported,');
     expect(source).toContain('if (this.lowGfx && !this.sun.castShadow) return;');
-    expect(
-      source.match(/if \(this\.sun\.castShadow\) \{\n\s+this\.shadowLightDirection\.subVectors/g),
-    ).toHaveLength(2);
+    // The gather-node view runs its shadow shed off sun.castShadow itself (it
+    // reads the flag inside update, never the governor), at both frame sites.
+    const stripped = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(stripped.match(/this\.gatherNodes\.update\(this\.camera, this\.sun,/g)).toHaveLength(2);
+    const gatherNodes = readFileSync(
+      new URL('../src/render/gather_nodes.ts', import.meta.url),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(gatherNodes).toContain('sun.castShadow');
+    for (const token of PROFILE_TOKENS) {
+      expect(gatherNodes.includes(token), `gather_nodes.ts must not read ${token}`).toBe(false);
+    }
   });
 
   it('keys fixed LOW daylight by biome and invalidates it for developer overrides', () => {

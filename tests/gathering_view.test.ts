@@ -23,7 +23,8 @@ import {
   gatherToolNoNodeKey,
   isNodeToolLockedFor,
   viewerUsableToolTier,
-} from '../src/ui/gathering_view';
+} from '../src/ui/hud/professions/gathering_view';
+import { setLanguage, t } from '../src/ui/i18n';
 import type { IWorld } from '../src/world_api';
 
 const NODE = GATHER_NODES[0];
@@ -169,9 +170,10 @@ describe('tool-tier lock dimension', () => {
     const world = makeWorld({ inventory: PICK, proficiency: MINING_40 });
     expect(viewerUsableToolTier(world, 'mining')).toBe(2);
     expect(viewerUsableToolTier(world, 'logging')).toBe(0);
-    // The R22 arm: the same pick with the counter short is unusable, so the
-    // scan reports nothing rather than the owned tier.
-    expect(viewerUsableToolTier(makeWorld({ inventory: PICK }), 'mining')).toBe(0);
+    // The R22 arm under the degrade rule: the same pick with the counter
+    // short works as the entry tier, so the scan reports 1, never the owned
+    // tier 2 and never nothing (a tool is never a brick).
+    expect(viewerUsableToolTier(makeWorld({ inventory: PICK }), 'mining')).toBe(1);
     // The tier-1 entry tool never carries a requirement.
     expect(viewerUsableToolTier(makeWorld({ inventory: T1_PICK }), 'mining')).toBe(1);
   });
@@ -183,9 +185,9 @@ describe('tool-tier lock dimension', () => {
     // byte. The pairing contract (same world, same synchronous pass) lives
     // at the signature; this pins the mechanics either side of it.
     const world = makeWorld({ inventory: PICK, proficiency: {} });
-    expect(viewerUsableToolTier(world, 'mining')).toBe(0); // read-through: counter short
+    expect(viewerUsableToolTier(world, 'mining')).toBe(1); // read-through: counter short, degraded
     expect(viewerUsableToolTier(world, 'mining', MINING_40)).toBe(2); // explicit map wins
-    expect(viewerUsableToolTier(world, 'mining', undefined)).toBe(0); // explicit undefined = default
+    expect(viewerUsableToolTier(world, 'mining', undefined)).toBe(1); // explicit undefined = default
   });
 
   it('isNodeToolLockedFor: tier-2 locks toolless AND unwieldable viewers, unlocks with the earned pick', () => {
@@ -227,7 +229,10 @@ describe('tool-tier lock dimension', () => {
     };
     expect('gatheringProficiency' in partial).toBe(false);
     const world = partial as unknown as IWorld;
-    expect(viewerUsableToolTier(world, 'mining')).toBe(0);
+    // The absent map reads 0, which degrades the tier-2 pick to the entry
+    // tier (1): the tier-2 vein stays LOCKED, which is the fail-closed half
+    // that matters.
+    expect(viewerUsableToolTier(world, 'mining')).toBe(1);
     expect(isNodeToolLockedFor(world, { type: 'ore', tier: 2 })).toBe(true);
     expect(buildNearbyGatherNodes(world, 5).find((n) => n.id === T2.id)).toMatchObject({
       tier: 2,
@@ -326,9 +331,11 @@ describe('tool-tier lock dimension', () => {
     expect(
       buildGatherNodeTooltip(makeWorld({ inventory: PICK, proficiency: MINING_40 }), NODE.id),
     ).toMatchObject({ locked: false, fineUpgrade: true });
-    // Owned-but-unwieldable mints no fine grade, so it previews none either.
+    // Owned-but-unwieldable degrades to tier 1: the tier-1 vein is open to
+    // it, but a tool AT the material tier mints no fine grade, so no preview.
     expect(buildGatherNodeTooltip(makeWorld({ inventory: PICK }), NODE.id)).toMatchObject({
-      locked: true,
+      locked: false,
+      fineUpgrade: false,
     });
     // Locked: absent, the red requirement line owns that state.
     expect('fineUpgrade' in (buildGatherNodeTooltip(makeWorld({}), NODE.id) ?? {})).toBe(false);
@@ -589,6 +596,31 @@ describe('tool-tier lock dimension', () => {
     expect(gatherDeniedLineKey('corpse', undefined, 2)).toBe(
       'hudChrome.gathering.toolTierUnmetCorpse',
     );
+    // Farming joined the node arm with its crop beds, so all THREE sub-arms
+    // must resolve farming-specific keys. Pinned per sub-arm rather than once:
+    // an id left off the node-profession check falls through silently, and the
+    // player is told about a corpse tool while standing at a crop bed.
+    expect(gatherDeniedLineKey('node', 'farming', 2)).toBe(
+      'hudChrome.gathering.toolTierUnmet.farming',
+    );
+    expect(gatherDeniedLineKey('node', 'farming', 1)).toBe(
+      'hudChrome.gathering.toolRequired.farming',
+    );
+    expect(gatherDeniedLineKey('node', 'farming', 1, 40)).toBe(
+      'hudChrome.gathering.wieldUnmet.farming',
+    );
+    // The fallthrough this guards against, named: none of the three may land on
+    // the profession-neutral corpse pair, which is where an unlisted id goes.
+    for (const key of [
+      gatherDeniedLineKey('node', 'farming', 2),
+      gatherDeniedLineKey('node', 'farming', 1),
+      gatherDeniedLineKey('node', 'farming', 1, 40),
+    ]) {
+      expect(
+        ['hudChrome.gathering.toolTierUnmetCorpse', 'hudChrome.gathering.wieldUnmetCorpse'],
+        'farming must never fall through to a corpse line',
+      ).not.toContain(key);
+    }
     // Unexpected shapes never reach t() with an untracked key: a node surface
     // with fishing (no fishing world nodes) or a missing professionId falls
     // back to the profession-neutral corpse line.
@@ -603,22 +635,44 @@ describe('tool-tier lock dimension', () => {
     expect(gatherToolNoNodeKey('mining')).toBe('hudChrome.gathering.noNodeNearby.mining');
     expect(gatherToolNoNodeKey('logging')).toBe('hudChrome.gathering.noNodeNearby.logging');
     expect(gatherToolNoNodeKey('herbalism')).toBe('hudChrome.gathering.noNodeNearby.herbalism');
+    // Farming has its own arm: a hoe used away from a bed must say so. Without
+    // the arm it inherits the mining fallback and reports a missing ore vein,
+    // which is why the mining key is called out as the wrong answer here.
+    expect(gatherToolNoNodeKey('farming')).toBe('hudChrome.gathering.noNodeNearby.farming');
+    expect(gatherToolNoNodeKey('farming')).not.toBe('hudChrome.gathering.noNodeNearby.mining');
     // Fishing never emits gatherToolNoNode (rods route to startFishing), so
-    // anything but the three node professions takes the safe mining fallback.
+    // anything but the four node professions takes the safe mining fallback.
     expect(gatherToolNoNodeKey('fishing')).toBe('hudChrome.gathering.noNodeNearby.mining');
   });
 
-  it('gatherDowngradeLineKey maps each lost arm to its exact key', () => {
-    expect(gatherDowngradeLineKey('mark')).toBe('hudChrome.gathering.downgradeMark');
-    expect(gatherDowngradeLineKey('find')).toBe('hudChrome.gathering.downgradeFind');
+  it('gatherDowngradeLineKey maps each lost+surface pair to its exact key', () => {
+    // The crop surface gets its own MARK line (Phase 14: "the find" is
+    // prospecting vocabulary and reads wrong for a harvest you grew); node
+    // and corpse keep the shared lines, and the find arm is surface-blind
+    // (a crop can only ever lose the mark, so no crop find line exists).
+    expect(gatherDowngradeLineKey('mark', 'node')).toBe('hudChrome.gathering.downgradeMark');
+    expect(gatherDowngradeLineKey('mark', 'corpse')).toBe('hudChrome.gathering.downgradeMark');
+    expect(gatherDowngradeLineKey('mark', 'crop')).toBe('hudChrome.gathering.downgradeMarkCrop');
+    expect(gatherDowngradeLineKey('find', 'node')).toBe('hudChrome.gathering.downgradeFind');
+    expect(gatherDowngradeLineKey('find', 'corpse')).toBe('hudChrome.gathering.downgradeFind');
+    expect(gatherDowngradeLineKey('find', 'crop')).toBe('hudChrome.gathering.downgradeFind');
   });
+
+  // The farmDeniedLineKey block moved to tests/farming_view.test.ts with the
+  // selector itself: the knobs phase extracted src/ui/hud/professions/farming_view.ts.
 });
 
 describe('buildGatheringProficiencyRows', () => {
   it('returns one row per gathering profession, in the fixed order', () => {
     const world = makeWorld({ proficiency: { mining: 3, logging: 0, herbalism: 7 } });
     const rows = buildGatheringProficiencyRows(world);
-    expect(rows.map((r) => r.professionId)).toEqual(['mining', 'logging', 'herbalism', 'fishing']);
+    expect(rows.map((r) => r.professionId)).toEqual([
+      'mining',
+      'logging',
+      'herbalism',
+      'fishing',
+      'farming',
+    ]);
   });
 
   it('matches the input values exactly', () => {
@@ -629,13 +683,14 @@ describe('buildGatheringProficiencyRows', () => {
       { professionId: 'logging', value: 4, displayValue: 4, maxSkill: 100 },
       { professionId: 'herbalism', value: 0, displayValue: 0, maxSkill: 100 },
       { professionId: 'fishing', value: 0, displayValue: 0, maxSkill: 200 },
+      { professionId: 'farming', value: 0, displayValue: 0, maxSkill: 100 },
     ]);
   });
 
   it('carries the per-profession content cap so a readout can render a denominator', () => {
     // A bare integer that moves +1 per harvest is what reads as a character
     // level. Every row carries its own cap, and fishing's 200 is NOT the 100
-    // the other three share, so a readout can never print one profession's bar
+    // the other four share, so a readout can never print one profession's bar
     // against another's ceiling.
     const rows = buildGatheringProficiencyRows(makeWorld({ proficiency: { mining: 12 } }));
     expect(rows.map((r) => [r.professionId, r.maxSkill])).toEqual([
@@ -643,6 +698,7 @@ describe('buildGatheringProficiencyRows', () => {
       ['logging', 100],
       ['herbalism', 100],
       ['fishing', 200],
+      ['farming', 100],
     ]);
   });
 
@@ -650,8 +706,8 @@ describe('buildGatheringProficiencyRows', () => {
     // The cap comes from GATHERING_PROFESSIONS, not the per-row wire value,
     // precisely so a missing or garbage skills row degrades to "0 / 100"
     // rather than a nonsense "0 / 0" or "0 / undefined". mining carries a
-    // deliberately wrong wire cap and logging a zero one; herbalism and
-    // fishing carry no wire row at all.
+    // deliberately wrong wire cap and logging a zero one; herbalism, fishing,
+    // and farming carry no wire row at all.
     const world = {
       player: { pos: { x: 0, z: 0 } },
       inventory: [],
@@ -669,6 +725,7 @@ describe('buildGatheringProficiencyRows', () => {
       ['logging', 100],
       ['herbalism', 100],
       ['fishing', 200],
+      ['farming', 100],
     ]);
     // The values themselves still come off the wire, so the cap swap did not
     // quietly detach the readout from the player's real proficiency.

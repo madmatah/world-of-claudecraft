@@ -118,6 +118,18 @@ function fakeEl(tag: string): FakeEl {
 const fakeDoc = { createElement: (tag: string) => fakeEl(tag) } as unknown as Document;
 
 type Call = { m: keyof PainterHostWriters; el: unknown; args: unknown[] };
+/**
+ * A RECORDING STUB, and stating its blind spot plainly because it cost real frames.
+ * It records every call and elides NOTHING: it has no cache, so it cannot tell an
+ * elided write from a performed one, and no amount of thoroughness here could have
+ * caught the single-slot collision this painter shipped (setDisplay + setText on the
+ * stacks badge, one cache entry per element, so both writes bypassed elision on
+ * EVERY frame for EVERY stacking aura). What this file proves is WHICH writer is
+ * called with what. What actually elides is proved over the REAL makeWriterFacet:
+ * the mechanism in tests/painter_host.test.ts, this painter across steady frames in
+ * tests/painter_slot_collision.test.ts, and the tree-wide shape in
+ * tests/painter_single_slot_collision_guard.test.ts.
+ */
 function recordingFacet() {
   const calls: Call[] = [];
   const writers: PainterHostWriters = {
@@ -200,7 +212,9 @@ describe('AurasPainter: keyed pool over the elided writers', () => {
     expect(nodes()).toHaveLength(2);
     // each pooled node has the two children (dur, stacks) appended once.
     expect(nodes()[0].childNodes).toHaveLength(2);
-    expect(nodes()[0].className).toBe('buff');
+    expect(nodes()[0].className).toBe('buff ui-aura');
+    expect(nodes()[0].childNodes[0].className).toBe('dur ui-aura-time');
+    expect(nodes()[0].childNodes[1].className).toBe('stacks ui-badge ui-badge--corner');
   });
 
   it('attaches the tooltip ONCE per pooled node across frames (no duplicate listeners)', () => {
@@ -340,6 +354,13 @@ describe('AurasPainter: keyed pool over the elided writers', () => {
     ).toBe(true);
     // debuff via toggleClass (a structural class, not a color).
     expect(has('toggleClass', (c) => c.args[0] === 'debuff' && c.args[1] === true)).toBe(true);
+    expect(has('toggleClass', (c) => c.args[0] === 'ui-aura--debuff' && c.args[1] === true)).toBe(
+      true,
+    );
+    expect(
+      has('toggleClass', (c) => c.args[0] === 'ui-aura-time--debuff' && c.args[1] === true),
+    ).toBe(true);
+    expect(has('toggleClass', (c) => c.args[0] === 'ui-aura--own')).toBe(true);
     // the expiring blink via toggleClass too (the stylesheet owns the animation).
     expect(has('toggleClass', (c) => c.args[0] === 'expiring' && c.args[1] === true)).toBe(true);
     // the school border tint via setAttr(data-school), a structural attribute the
@@ -348,8 +369,16 @@ describe('AurasPainter: keyed pool over the elided writers', () => {
     // duration + stacks via setText.
     expect(has('setText', (c) => c.args[0] === '5s')).toBe(true);
     expect(has('setText', (c) => c.args[0] === '3')).toBe(true);
-    // stacks badge shown via setDisplay('').
-    expect(has('setDisplay', (c) => c.args[0] === '')).toBe(true);
+    // The stacks badge is shown via setStyleProp('display', ''), NOT setDisplay:
+    // it is the one node here carrying its text AND its visibility, and the four
+    // single-slot writers share one cache entry per element, so routing both
+    // through them would defeat elision on every frame for every stacking aura.
+    // The DOM write is identical; only the cache slot differs. The mechanism is
+    // pinned in tests/painter_host.test.ts, the elision in
+    // tests/painter_slot_collision.test.ts over the REAL facet (this recording
+    // stub has no cache, so it cannot see the difference), and the whole tree in
+    // tests/painter_single_slot_collision_guard.test.ts.
+    expect(has('setStyleProp', (c) => c.args[0] === 'display' && c.args[1] === '')).toBe(true);
   });
 
   it('clears the expiring blink through the elided writer when an aura is refreshed', () => {
@@ -361,9 +390,14 @@ describe('AurasPainter: keyed pool over the elided writers', () => {
     ).toBe(true);
   });
 
-  it('hides the stacks badge (setDisplay none) when the aura does not stack', () => {
+  it('hides the stacks badge (setStyleProp display:none) when the aura does not stack', () => {
     painter.paint(state([slot({ key: 'a', stacksText: '' })]));
-    expect(calls.some((c) => c.m === 'setDisplay' && c.args[0] === 'none')).toBe(true);
+    expect(
+      calls.some((c) => c.m === 'setStyleProp' && c.args[0] === 'display' && c.args[1] === 'none'),
+    ).toBe(true);
+    // And never through setDisplay, which would share the badge's cache entry
+    // with its text and defeat elision on both.
+    expect(calls.some((c) => c.m === 'setDisplay')).toBe(false);
   });
 });
 
@@ -465,6 +499,26 @@ describe('AurasPainter: static-preset visible-count cap', () => {
     slots.push(slot({ key: 'moontide' }), slot({ key: 'old_blood' }), slot({ key: 'verdance' }));
     tierPainter('low').paint(state(slots));
     expect(nodes()).toHaveLength(AURA_VISIBLE_CAP_LOW + 3);
+  });
+
+  it('low keeps the Vespers priest Gloomtithe bank visible beyond the ordinary buff cap', () => {
+    // priest_gloomtithe (auras_view/priest/vespers.ts GLOOMTITHE_AURA_ID) tracks the
+    // Vespers signature's 1-5 stack bank gating Call Tithefiend, the same "actionable
+    // resource cue" shape as the Shaman/Druid engine banks above. A raid buff wall (blessings,
+    // Mark of the Wild, Arcane Intellect, Battle Shout, ...) applied ahead of it must never
+    // push it past the low-tier cap and out of the player's own read of their resource.
+    const slots = Array.from({ length: AURA_VISIBLE_CAP_LOW + 2 }, (_, i) =>
+      slot({ key: `buff${i}` }),
+    );
+    slots.push(slot({ key: 'priest_gloomtithe', name: 'Gloomtithe', stacksText: '5' }));
+    tierPainter('low').paint(state(slots));
+    expect(nodes()).toHaveLength(AURA_VISIBLE_CAP_LOW + 1);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        m: 'setStyleProp',
+        args: ['background-image', 'url(priest_gloomtithe)'],
+      }),
+    );
   });
 
   it('FAIRNESS: low NEVER culls a debuff -- a debuff past the buff cap still renders', () => {
@@ -598,10 +652,22 @@ describe('AurasPainter: static-preset visible-count cap', () => {
 
 // ---------------------------------------------------------------------------
 // The overflow badge: makes the low-tier buff cap's shed count HONEST instead of silent.
-// A painter built with an `overflowEl` reveals it (setDisplay('')) and writes the shed
-// count's label/tooltip through deps ONLY when this frame actually sheds a buff; a
-// painter built without one (the debuff bar, the target strip) never touches an element
-// at all, so nothing here can regress their existing coverage above.
+// A painter built with an `overflowEl` reveals it (setStyleProp('display', 'flex'): the
+// badge's stylesheet default is display:none, so revealing it needs a real value, unlike
+// the stacks badge's revert-to-'') and writes the shed count's label/tooltip through deps
+// ONLY when this frame actually sheds a buff; a painter built without one (the debuff bar,
+// the target strip) never touches an element at all, so nothing here can regress their
+// existing coverage above.
+//
+// WHY setStyleProp AND NOT setDisplay. The badge carries its text AND its visibility on
+// ONE node, and the four single-slot writers (setText / setDisplay / setTransform /
+// setWidth) share one (kind, value) cache entry per element, so routing both through them
+// makes BOTH writes bypass elision on every frame the buff bar paints. Visibility
+// therefore takes its own multi-slot entry, keyed (element, 'display'); the DOM write is
+// byte-identical, only the cache slot differs. Same fix, same reason, as the stacks badge
+// above. The rule is stated in painter_host.ts and scanned tree-wide by
+// tests/painter_single_slot_collision_guard.test.ts, which is why the pins below name the
+// WRITER and not only the value.
 // ---------------------------------------------------------------------------
 
 describe('AurasPainter: the low-tier overflow badge', () => {
@@ -668,7 +734,7 @@ describe('AurasPainter: the low-tier overflow badge', () => {
     const under = tierPainterWithOverflow('low');
     under.paint(manyBuffs(AURA_VISIBLE_CAP_LOW - 2));
     const el = overflowEl();
-    expect(calls).toContainEqual({ m: 'setDisplay', el, args: ['none'] });
+    expect(calls).toContainEqual({ m: 'setStyleProp', el, args: ['display', 'none'] });
     expect(calls).toContainEqual({ m: 'setText', el, args: [''] });
     expect(calls).toContainEqual({ m: 'setAttr', el, args: ['title', ''] });
     expect(labelCalls).toEqual([]);
@@ -677,7 +743,11 @@ describe('AurasPainter: the low-tier overflow badge', () => {
     container = fakeEl('div'); // fresh container: a 2nd painter would else mint a 2nd badge
     const ultra = tierPainterWithOverflow('ultra');
     ultra.paint(manyBuffs(AURA_VISIBLE_CAP_LOW + 20));
-    expect(calls).toContainEqual({ m: 'setDisplay', el: overflowEl(), args: ['none'] });
+    expect(calls).toContainEqual({
+      m: 'setStyleProp',
+      el: overflowEl(),
+      args: ['display', 'none'],
+    });
     expect(labelCalls).toEqual([]);
   });
 
@@ -687,11 +757,29 @@ describe('AurasPainter: the low-tier overflow badge', () => {
     painter.paint(manyBuffs(over));
     const shed = over - AURA_VISIBLE_CAP_LOW;
     const el = overflowEl();
-    expect(calls).toContainEqual({ m: 'setDisplay', el, args: ['flex'] });
+    expect(calls).toContainEqual({ m: 'setStyleProp', el, args: ['display', 'flex'] });
     expect(calls).toContainEqual({ m: 'setText', el, args: [`+${shed}`] });
     expect(calls).toContainEqual({ m: 'setAttr', el, args: ['title', `${shed} hidden`] });
     expect(labelCalls).toEqual([shed]);
     expect(tooltipCalls).toEqual([shed]);
+  });
+
+  it('gives the badge visibility its OWN cache slot, never a second single-slot writer', () => {
+    // Stronger than "the badge said flex": the badge's TEXT and its VISIBILITY live on one
+    // node, and the four single-slot writers share a single (kind, value) entry per
+    // element, so a visibility write through any of them would defeat elision on the text
+    // too, every frame the buff bar paints (the collision the stacks badge shipped with;
+    // painter_host.ts, tests/painter_single_slot_collision_guard.test.ts). setText is
+    // therefore the only single-slot kind allowed to name this element, shown and hidden.
+    const painter = tierPainterWithOverflow('low');
+    painter.paint(manyBuffs(AURA_VISIBLE_CAP_LOW + 5)); // shown
+    painter.paint(manyBuffs(AURA_VISIBLE_CAP_LOW - 1)); // and hidden again
+    const el = overflowEl();
+    const singleSlot: Call['m'][] = ['setText', 'setDisplay', 'setTransform', 'setWidth'];
+    expect(calls.filter((c) => c.el === el && singleSlot.includes(c.m)).map((c) => c.m)).toEqual([
+      'setText',
+      'setText',
+    ]);
   });
 
   it('FAIRNESS: shed counts only the dropped BUFFS, never a debuff that rendered past the cap', () => {
@@ -714,13 +802,13 @@ describe('AurasPainter: the low-tier overflow badge', () => {
     calls.length = 0;
     painter.paint(manyBuffs(AURA_VISIBLE_CAP_LOW - 1));
     const el = overflowEl();
-    expect(calls).toContainEqual({ m: 'setDisplay', el, args: ['none'] });
+    expect(calls).toContainEqual({ m: 'setStyleProp', el, args: ['display', 'none'] });
     expect(calls).toContainEqual({ m: 'setText', el, args: [''] });
   });
 
   it('a repeat identical frame re-derives the SAME value (the real elision lives in the injected writer facet, not here)', () => {
     // AurasPainter always calls the writer facet every frame (exactly like every other
-    // write in this painter: setText/setDisplay/setAttr elision is the FACET's job,
+    // write in this painter: setText/setStyleProp/setAttr elision is the FACET's job,
     // proven separately in tests/painter_host.test.ts). What this painter owns is
     // recomputing the SAME output for the SAME state, so a real elided facet would see
     // no-op writes on a steady state.
@@ -806,7 +894,7 @@ describe('AurasPainter: a wire-faithful buff_* stat-sap survives the low cap (vi
 
 // ---------------------------------------------------------------------------
 // MODE auras print no seconds-remaining line in the tooltip either. The sim backs
-// a form / stance / stealth / Ghost Wolf / the carried flag with a long finite
+// a form / stance / stealth / Shadewolf / the carried flag with a long finite
 // duration (3600s, or a whole match) purely so nothing can expire it; surfacing
 // that number is the same lie the suppressed countdown label already avoids, and
 // on the carried flag it reads as "the flag leaves me in 12 minutes".
@@ -842,7 +930,7 @@ describe('AurasPainter: a toggle aura suppresses the tooltip countdown', () => {
           remaining: 720,
           toggle: true,
         }),
-        slot({ key: 'ghost_wolf', name: 'Ghost Wolf', remaining: 3600, toggle: true }),
+        slot({ key: 'ghost_wolf', name: 'Shadewolf', remaining: 3600, toggle: true }),
         slot({ key: 'bg_sprint_rune', name: 'Sprint', remaining: 15, toggle: false }),
       ]),
     );
@@ -851,7 +939,7 @@ describe('AurasPainter: a toggle aura suppresses the tooltip countdown', () => {
     expect(html[0]).toBe('Carrying the Flag');
     expect(html[0]).not.toMatch(/remaining/);
     expect(html[0]).not.toMatch(/720/);
-    expect(html[1]).toBe('Ghost Wolf');
+    expect(html[1]).toBe('Shadewolf');
     expect(html[1]).not.toMatch(/3600/);
     // ...while a genuinely timed buff still shows its countdown.
     expect(html[2]).toBe('Sprint|15s remaining');
@@ -870,15 +958,92 @@ describe('AurasPainter: a toggle aura suppresses the tooltip countdown', () => {
   });
 
   it('the HOST builds the seconds line ONLY on the non-toggle arm', () => {
-    // The painter threads the flag through (above); this pins that hud.ts actually
-    // branches on it, so the two halves cannot drift into a tooltip that renders
-    // "720 seconds remaining" under an aura whose label deliberately shows nothing.
-    const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
-    const start = hud.indexOf('renderTooltip: (name, remaining, effectHtml, toggle) =>');
+    // The painter threads the flag through (above) into aura_tooltip.ts's
+    // auraTooltipFooterHtml (hud.ts wires it in via aurasPainterDeps.renderTooltip);
+    // this pins that the footer composer actually branches on it, so the two
+    // halves cannot drift into a tooltip that renders "720 seconds remaining"
+    // under an aura whose label deliberately shows nothing.
+    const src = readFileSync(new URL('../src/ui/aura_tooltip.ts', import.meta.url), 'utf8');
+    const start = src.indexOf('export function auraTooltipFooterHtml');
     expect(start).toBeGreaterThan(-1);
-    const dep = hud.slice(start, hud.indexOf('attachTooltip:', start));
-    expect(dep).toContain('toggle');
-    expect(dep).toContain("? ''");
-    expect(dep).toContain("tPlural('hudChrome.plurals.secondsRemaining'");
+    const body = src.slice(start, src.indexOf('\n}', start));
+    expect(body).toContain('toggle');
+    expect(body).toContain("? ''");
+    expect(body).toContain('secondsRemainingText(remaining)');
+    // hud.ts supplies the localized text (esc + tPlural) through that dep, never
+    // hardcoding its own copy of the countdown line.
+    const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
+    expect(hud).toContain("tPlural('hudChrome.plurals.secondsRemaining'");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature: "See who buffs" (player thread) - the aura's caster id threads into
+// the tooltip so a raid can tell apart several casters of the same buff (two
+// paladins' Blessings, two druids' Briarguards) without opening the separate
+// detailed target-aura panel.
+// ---------------------------------------------------------------------------
+describe('AurasPainter: the aura sourceId threads into renderTooltip', () => {
+  it('passes the LIVE sourceId to renderTooltip, and re-reads it on recycle', () => {
+    const container = fakeEl('div');
+    const facet = recordingFacet();
+    const tooltips = recordingTooltips();
+    const seen: Array<{ name: string; sourceId: number | undefined }> = [];
+    const deps: AurasPainterDeps = {
+      resolveIconUrl: (key) => `url(${key})`,
+      renderTooltip: (name, _remaining, _effectHtml, _toggle, sourceId) => {
+        seen.push({ name, sourceId });
+        return sourceId === undefined ? name : `${name}|src:${sourceId}`;
+      },
+      attachTooltip: tooltips.attachTooltip,
+      attachCancel: () => {},
+    };
+    const painter = new AurasPainter(
+      facet.writers,
+      container as unknown as HTMLElement,
+      deps,
+      fakeDoc,
+    );
+
+    painter.paint(
+      state([
+        slot({ key: 'blessing_of_might', name: 'Blessing of Might', remaining: 30, sourceId: 7 }),
+        slot({ key: 'thorns', name: 'Thorns', remaining: 60 }), // no caster carried
+      ]),
+    );
+    const html = tooltips.attached.map((a) => a.html());
+    expect(html[0]).toBe('Blessing of Might|src:7');
+    expect(html[1]).toBe('Thorns');
+    expect(seen.map((s) => s.sourceId)).toEqual([7, undefined]);
+
+    // The pooled node is recycled to an aura from a DIFFERENT caster: the closure
+    // must re-read the live record, never keep the previous aura's caster (the
+    // same stale-capture hazard the toggle flag guards against above).
+    painter.paint(state([]));
+    painter.paint(
+      state([slot({ key: 'briarguard', name: 'Briarguard', remaining: 45, sourceId: 9 })]),
+    );
+    expect(tooltips.attached.map((a) => a.html())).toContain('Briarguard|src:9');
+  });
+
+  it('the HOST resolves the caster line ONLY when the player opted in, via the shared target-aura resolver', () => {
+    // Pins that hud.ts's auraTooltipFooterDeps actually gates the "Cast by" line
+    // on the showAuraCaster setting and reuses targetAuraSourceName (the same
+    // resolver the detailed target-aura window uses), so the two surfaces can
+    // never disagree on how a caster is named or blanked.
+    const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
+    const start = hud.indexOf('auraTooltipFooterDeps: AuraTooltipFooterDeps');
+    expect(start).toBeGreaterThan(-1);
+    const body = hud.slice(start, hud.indexOf('\n  };', start));
+    expect(body).toContain("this.boolSetting('showAuraCaster')");
+    expect(body).toContain('targetAuraSourceName(');
+    expect(body).toContain("t('hudChrome.auraTooltip.caster'");
+    // aura_tooltip.ts is what actually withholds the line: the resolved caster
+    // name is falsy ('') unless showCaster() says so.
+    const src = readFileSync(new URL('../src/ui/aura_tooltip.ts', import.meta.url), 'utf8');
+    const fnStart = src.indexOf('export function auraTooltipFooterHtml');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnBody = src.slice(fnStart, src.indexOf('\n}', fnStart));
+    expect(fnBody).toContain('deps.showCaster()');
   });
 });

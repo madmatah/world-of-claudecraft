@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientWorld } from '../src/net/online';
 import { INPUT_SEND_BACKPRESSURE_LIMIT_BYTES } from '../src/net/send_backpressure';
 import type { PlayerClass } from '../src/sim/types';
+import { ONLINE_WORLD_AUTH_TYPE } from '../src/world_api';
 
 const PROBE_CLASS: PlayerClass = 'warrior';
 
@@ -138,6 +139,53 @@ function withDomStubs<T>(fn: (doc: FakeDocument, harness: TimerHarness) => T): T
 }
 
 describe('ClientWorld visibilitychange reconnect (mobile background/foreground)', () => {
+  it('keeps action bars read-only through spectate exit and reconnect until the owner snapshot', () => {
+    withDomStubs((_doc, harness) => {
+      const world = new ClientWorld('t', 1, PROBE_CLASS, 'http://localhost');
+      const wire = world as unknown as {
+        onMessage(raw: string): void;
+        applySnapshot(value: unknown): void;
+      };
+      const message = (value: unknown) => wire.onMessage(JSON.stringify(value));
+      const self = {
+        id: 1,
+        k: 'player',
+        tid: 'warrior',
+        nm: 'Owner',
+        lv: 20,
+        x: 0,
+        y: 0,
+        z: 0,
+        f: 0,
+        hp: 100,
+        mhp: 100,
+        res: 0,
+        mres: 100,
+        rtype: 'rage',
+      };
+      const ownerSnapshot = () => wire.applySnapshot({ t: 'snap', tick: 1, ents: [], self });
+      message({ t: 'hello', pid: 1, seed: 42 });
+      ownerSnapshot();
+      expect(world.actionBarReadOnly).toBe(false);
+      message({ t: 'spectate', name: 'Watched' });
+      expect(world.actionBarReadOnly).toBe(true);
+      message({ t: 'spectate', name: null });
+      expect(world.actionBarReadOnly).toBe(true);
+      ownerSnapshot();
+      expect(world.actionBarReadOnly).toBe(false);
+      message({ t: 'spectate', name: 'Watched' });
+      const socket = StubWebSocket.instances[0];
+      socket.readyState = StubWebSocket.CLOSED;
+      socket.onclose?.();
+      harness.fire(harness.timers[0].id);
+      message({ t: 'hello', pid: 1, seed: 42 });
+      expect(world.spectating).toBeNull();
+      expect(world.actionBarReadOnly).toBe(true);
+      ownerSnapshot();
+      expect(world.actionBarReadOnly).toBe(false);
+      world.close();
+    });
+  });
   afterEach(() => {
     StubWebSocket.instances = [];
     vi.restoreAllMocks();
@@ -181,6 +229,32 @@ describe('ClientWorld visibilitychange reconnect (mobile background/foreground)'
         mi?: { j?: number; tl?: number; tr?: number };
       };
       expect(input.mi).toMatchObject({ j: 0, tl: 0, tr: 0 });
+      world.close();
+    });
+  });
+
+  it('clears optional world-quest mirrors before a reconnected realm resends them', () => {
+    withDomStubs((_doc, harness) => {
+      const world = new ClientWorld('t', 1, PROBE_CLASS, 'http://localhost');
+      const wire = world as unknown as { onMessage(raw: string): void };
+      const first = StubWebSocket.instances[0];
+      wire.onMessage(JSON.stringify({ t: 'hello', pid: 1, seed: 42 }));
+      world.worldQuestCycle = 'wq3_9';
+      world.worldQuestExpiresAtMs = 123;
+      world.worldQuestLog = new Map([
+        ['wq_galecrest_wisps', { questId: 'wq_galecrest_wisps', count: 1, state: 'active' }],
+      ]);
+      world.applyWorldBossWire(['morthen']);
+
+      first.readyState = StubWebSocket.CLOSED;
+      first.onclose?.();
+      harness.fire(harness.timers[0].id);
+      wire.onMessage(JSON.stringify({ t: 'hello', pid: 1, seed: 42 }));
+
+      expect(world.worldQuestCycle).toBe('');
+      expect(world.worldQuestExpiresAtMs).toBe(0);
+      expect(world.worldQuestLog.size).toBe(0);
+      expect(world.worldBossActive('morthen')).toBe(false);
       world.close();
     });
   });
@@ -600,7 +674,7 @@ describe('ClientWorld reconnect error-frame tolerance (auth timeout)', () => {
     });
   });
 
-  it('fails closed when an auth-world-26 client reaches an auth-world-25 server', () => {
+  it('fails closed when a current-epoch client reaches an auth-world-11 server', () => {
     withDomStubs((_doc, harness) => {
       const world = new ClientWorld('t', 1, PROBE_CLASS, 'http://localhost');
       const w = world as unknown as WorldProbe;
@@ -614,7 +688,7 @@ describe('ClientWorld reconnect error-frame tolerance (auth timeout)', () => {
       expect(socket.sent).toHaveLength(1);
       expect(JSON.parse(socket.sent[0])).toEqual(
         expect.objectContaining({
-          t: 'auth-world-26',
+          t: ONLINE_WORLD_AUTH_TYPE,
           token: 't',
           character: 1,
         }),

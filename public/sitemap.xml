@@ -151,7 +151,17 @@
     <priority>0.55</priority>
   </url>
   <url>
+    <loc>https://worldofclaudecraft.com/wiki/professions/inscription</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.55</priority>
+  </url>
+  <url>
     <loc>https://worldofclaudecraft.com/wiki/professions/enchanting</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.55</priority>
+  </url>
+  <url>
+    <loc>https://worldofclaudecraft.com/wiki/professions/jewelcrafting</loc>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
   </url>
@@ -186,6 +196,11 @@
     <priority>0.55</priority>
   </url>
   <url>
+    <loc>https://worldofclaudecraft.com/wiki/professions/farming</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.55</priority>
+  </url>
+  <url>
     <loc>https://worldofclaudecraft.com/wiki/professions/economy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
@@ -196,12 +211,22 @@
     <priority>0.55</priority>
   </url>
   <url>
+    <loc>https://worldofclaudecraft.com/wiki/professions/provisioning</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.55</priority>
+  </url>
+  <url>
     <loc>https://worldofclaudecraft.com/wiki/economy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://worldofclaudecraft.com/wiki/quests</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://worldofclaudecraft.com/wiki/factions</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -232,6 +257,11 @@
   </url>
   <url>
     <loc>https://worldofclaudecraft.com/wiki/thornhollow-fields</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://worldofclaudecraft.com/wiki/world-pvp</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

@@ -9,11 +9,11 @@ import { WebSocketServer } from 'ws';
 import { bankGrantStorageSlots } from '../src/sim/bank';
 import { DEEDS } from '../src/sim/content/deeds';
 import { PROVING_SHORE_ARRIVAL } from '../src/sim/content/proving_shore';
+import { GUILD_BOARD_CATEGORY_PARAM } from '../src/sim/guild_board_category';
 import {
   LEADERBOARD_MAX,
   LEADERBOARD_PAGE_SIZE,
   paginateDevLeaderboard,
-  paginateGuildLeaderboard,
   paginateLeaderboard,
 } from '../src/sim/leaderboard_page';
 import { Sim } from '../src/sim/sim';
@@ -48,6 +48,9 @@ import {
   handleEmailUnsubscribe,
   verifyLoginTwoFactor,
 } from './account';
+import { loadAccountLedger } from './account_ledger_db';
+import { accountLedgerKeysFor } from './account_ledger_keys_cache';
+import { relicRecordsIdle } from './account_ledger_records';
 import {
   configureTopWealthHolders,
   startAccountWealthSweep,
@@ -61,6 +64,7 @@ import {
   withAccountWealthSweepLock,
 } from './account_wealth_db';
 import {
+  adminAnalyticsMemoStats,
   configureAdminGuildBoardCacheBust,
   configureAdminPlayersCap,
   configureAdminRuntime,
@@ -75,6 +79,11 @@ import {
   pruneSitePresenceSessionsBatch,
   recordSitePresenceSample,
 } from './admin_db';
+import {
+  buildAdminMarketMetrics,
+  configureAdminMarketMetrics,
+  configureAdminMarketSoldVolume,
+} from './admin_market_metrics';
 import { permissionsForRoles } from './admin_permissions';
 import { loadAntibotConfig } from './antibot_config_db';
 import {
@@ -92,8 +101,11 @@ import {
   normalizeCharName,
   normalizeEmail,
   offensiveName,
+  usernameBanlistBootLine,
+  usernameBanlistFileLoaded,
   validUsernameShape,
   verifyPassword,
+  warmUsernameBanlist,
 } from './auth';
 import { configureAuthRuntime } from './auth_routes';
 import { createBackgroundDbGate } from './background_db_gate';
@@ -108,6 +120,11 @@ import {
   pruneBugReportsBatch,
 } from './bug_report_db';
 import { createCachedRead } from './cached_read';
+import {
+  characterBlobBytesHighWater,
+  characterBlobBytesP99,
+  flushQueuedCharacterBlobWarnings,
+} from './character_blob_size';
 import {
   characterDeleteGateStats,
   configureCharacterDeleteBackgroundGate,
@@ -137,6 +154,8 @@ import {
 } from './claudium';
 import { claudiumSpendDetailed } from './claudium_proxy';
 import { configureCommunityTestAccounts } from './community_test_accounts';
+import { craftRollEventsIdle } from './craft_roll_events';
+import { pruneCraftRollEventsBatch } from './craft_roll_events_db';
 import {
   bustDailyRewardBoardCache,
   bustDailyRewardWinnersCache,
@@ -195,6 +214,7 @@ import {
   renameCharacter,
   revokeCompanionToken,
   runConcurrentIndexMigrations,
+  runWithStatementTimeout,
   saveToken,
   saveWorldState,
   scopeAllowsMutation,
@@ -203,7 +223,6 @@ import {
   type TokenScope,
   topArenaRatings,
   topBgRatings,
-  topGuilds,
   topLifetimeXp,
   touchLogin,
   walletForAccount,
@@ -257,6 +276,8 @@ import {
 import { configureGithubContributorsRuntime, topContributors } from './github_contributors';
 import { pruneGitHubOAuthStates } from './github_db';
 import { guildBankLogCacheStats } from './guild_bank_log';
+import { topGuilds } from './guild_board_db';
+import { guildBoardPresence } from './guild_board_presence';
 import { configurePaidGuildCreateBackgroundGate } from './guild_create_db';
 import { createAccessLogSink } from './http/access_log';
 import { setAttackSignalSink } from './http/attack_signals';
@@ -308,8 +329,10 @@ import { isConnectionRefused } from './ip_block';
 import { pruneExpiredBlockedIps } from './ip_block_db';
 import {
   buildDeedsBoard,
+  buildGuildBoardResponse,
   configureLeaderboardRuntime,
   decodedRouteName,
+  decodeGuildBoardCategory,
   type ReleaseEntry,
   readArenaLeaderboard,
   readProjectStats,
@@ -327,6 +350,18 @@ import {
   mapsListMineCore,
   mapsPublicListCore,
 } from './maps_routes';
+import {
+  configureMarketSoldVolume,
+  MARKET_SOLD_VOLUME_SHUTDOWN_DRAIN_MS,
+  soldVolumeTailStats,
+  soldVolumeWriterIdle,
+} from './market_sold_volume';
+import {
+  MARKET_SOLD_VOLUME_WINDOW_DAYS,
+  marketSoldVolumeRetentionTable,
+  readMarketSoldVolumeSince,
+  recordMarketSoldVolumeRowBounded,
+} from './market_sold_volume_db';
 import { metaEventSourceUrl, metaRequestUserData, trackAccountCreated } from './meta_capi';
 import {
   cleanReportReason,
@@ -376,6 +411,7 @@ import {
 } from './ratelimit';
 import { createPgRateLimitStore } from './ratelimit_db';
 import { isPublicCorsPath, publicOriginFromRequest, REALM, REALM_DIRECTORY } from './realm';
+import { publishRealmBuilderRoll } from './realm_builder';
 import { configureReliquaryRuntime } from './reliquary';
 import { reliquaryRarityCounts } from './reliquary_rarity_db';
 import { resolveReportTarget } from './report_target';
@@ -469,6 +505,8 @@ import { registerWocMarketReadCacheForBusts, WocMarketReadCache } from './woc_ma
 import { configureWocMarketRuntime, wocMarketConfig } from './woc_market_routes';
 import { createWocMarketSweep } from './woc_market_sweep';
 import { createWocMarketSweepWatchdog } from './woc_market_sweep_watchdog';
+import { bustWorldQuestLeaderboardCaches, worldQuestScoresIdle } from './world_quest_leaderboard';
+import { pruneWorldQuestScoresBatch } from './world_quest_scores_db';
 import { createWsAuth } from './ws_auth';
 import { bufferHandshakeMessages } from './ws_buffer';
 
@@ -592,7 +630,15 @@ function initialCharacterState(
   name: string,
   skin: number,
 ): import('../src/sim/sim').CharacterState {
-  const sim = new Sim({ seed: WORLD_SEED, playerClass: cls, playerName: name });
+  // Wall-clock injection is load-bearing for persistence: every blob that
+  // reaches Postgres must be written on the epoch base (farm_persist.ts
+  // clock-base doctrine), never the sim-clock default that starts at zero.
+  const sim = new Sim({
+    seed: WORLD_SEED,
+    playerClass: cls,
+    playerName: name,
+    lockoutNowMs: () => Date.now(),
+  });
   sim.setPlayerSkin(sim.playerId, skin);
   const character = sim.serializeCharacter(sim.playerId);
   if (!character) throw new Error('failed to serialize initial character');
@@ -651,7 +697,7 @@ async function refreshLeaderboard(scope: 'realm' | 'global'): Promise<Leaderboar
     virtualLevel: virtualLevel(r.lifetimeXp),
     lifetimeXp: r.lifetimeXp,
     prestigeRank: r.prestigeRank,
-    // a deed id (never display text); the client localizes via deed_i18n
+    // a title id (deed or 'dev:<rung>', never display text); localized via deed_i18n
     title: r.activeTitle,
     // The guild tag shown beside the name. Omitted (not null) for an unguilded
     // character, the `realm` treatment below, so an unguilded row is byte-unchanged
@@ -720,6 +766,7 @@ async function refreshGuildLeaderboard(
     pledgesOpen: r.pledgesEnabled,
     ...(r.pledgeMinLevel > 1 ? { pledgeMinLevel: r.pledgeMinLevel } : {}),
     ...(r.pledgeNote ? { pledgeNote: r.pledgeNote } : {}),
+    ...(r.newPlayerFriendly ? { newPlayerFriendly: true } : {}),
     ...(scope === 'global' ? { realm: r.realm } : {}),
   }));
   // Skip the install if a moderation bust landed mid-refresh (see boardEpoch).
@@ -959,7 +1006,11 @@ function bustBoardCaches(): void {
   arenaLeaderboardCache['2v2'] = null;
   bgLeaderboardCache = null;
   deedsBoardCache = null;
+  // The guild board's officer roster (guild_board_presence.ts): a moderated
+  // officer's name must leave the presence tooltip as fast as the boards.
+  guildBoardPresence.bust();
   bustDailyRewardBoardCache();
+  bustWorldQuestLeaderboardCaches();
   // Not a board, but the same delisting-must-be-immediate reasoning: the
   // per-character lifetime-XP rank cache (server/character_rank_cache.ts).
   // A ban/unban changes every OTHER eligible character's ahead/total counts
@@ -1930,10 +1981,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
       const row = await getCharacterById(target.characterId);
       if (!row)
         return json(res, 404, { error: 'character not found', code: 'character.not_found' });
-      const [guild, rank, deedsRecent] = await Promise.all([
+      const [guild, rank, deedsRecent, accountLedger] = await Promise.all([
         guildNameForCharacter(row.id),
         lifetimeXpRankForCharacter(row.id),
         recentDeedsForCharacter(row.id, SHEET_RECENT_DEEDS),
+        accountLedgerKeysFor(row.account_id).catch(() => undefined),
       ]);
       return json(
         res,
@@ -1946,6 +1998,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
           guild,
           rank: toSheetRank(rank),
           deedsRecent,
+          accountLedger,
         }),
       );
     }
@@ -1956,10 +2009,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
       const row = await getCharacter(accountId, Number(ownerSheetMatch[1]));
       if (!row)
         return json(res, 404, { error: 'character not found', code: 'character.not_found' });
-      const [guild, rank, deedsRecent] = await Promise.all([
+      const [guild, rank, deedsRecent, accountLedger] = await Promise.all([
         guildNameForCharacter(row.id),
         lifetimeXpRankForCharacter(row.id),
         recentDeedsForCharacter(row.id, SHEET_RECENT_DEEDS),
+        accountLedgerKeysFor(row.account_id).catch(() => undefined),
       ]);
       return json(
         res,
@@ -1972,6 +2026,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
           guild,
           rank: toSheetRank(rank),
           deedsRecent,
+          accountLedger,
         }),
       );
     }
@@ -2315,14 +2370,25 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
         const guildEntries = await getGuildLeaderboard(scope);
         const guildPageSize = Number(params.get('pageSize')) || LEADERBOARD_PAGE_SIZE;
         const guildPage = Number(params.get('page')) || 0;
-        const guildSlice = paginateGuildLeaderboard(guildEntries, guildPage, guildPageSize);
-        return json(res, 200, {
-          realm: REALM,
-          scope,
-          board: 'guilds',
-          metric: 'guildLifetimeXp',
-          ...guildSlice,
-        });
+        // The category filter and the live officer presence ride the shared
+        // served-body builder, so this arm and the RouteDef stay byte-identical.
+        const guildCategory = decodeGuildBoardCategory(
+          params.get(GUILD_BOARD_CATEGORY_PARAM) ?? undefined,
+        );
+        return json(
+          res,
+          200,
+          await buildGuildBoardResponse(
+            REALM,
+            scope,
+            guildEntries,
+            guildPage,
+            guildPageSize,
+            guildCategory,
+            (id) => liveGame().hasSessionForCharacter(id),
+            req,
+          ),
+        );
       }
       // ?board=devs ranks open-source CONTRIBUTORS by merged pull requests, sourced
       // from the cached public GitHub PR stats. The same data for every realm,
@@ -2879,6 +2945,7 @@ configureLeaderboardRuntime({
   perfProfile: () => liveGame().perfProfile(),
   getLeaderboard,
   getGuildLeaderboard,
+  isCharacterOnline: (id) => liveGame().hasSessionForCharacter(id),
   getDevLeaderboard: () => topContributors(),
   getDeedsLeaderboard,
   deedsSelfRank,
@@ -3091,6 +3158,11 @@ configureInternalWocMarketStuckRead(async () => ({
   // surface): eviction thrash or a bust storm is a DB-load incident in the
   // making, and this readout is where an operator already looks.
   readCaches: wocMarketReadCache.stats(),
+  // The admin analytics serialize-once memos (activity, market metrics): the
+  // serve/stringify pair per route. Stringifies tracking serves means the memo
+  // stopped hitting (a cache turning over per request, or an unstable key),
+  // the regression nothing else in the process would surface.
+  adminAnalyticsMemo: adminAnalyticsMemoStats(),
   // The auth-guard cache readout: both arms (token rows, moderation rows)
   // plus the soft-bounded internals (account index, recent-bust ledger) and
   // the join-veto refetch counter; a bust storm or eviction thrash here is
@@ -3103,7 +3175,9 @@ configureInternalWocMarketStuckRead(async () => ({
   storageRecovery: storagePurchaseRecoveryMetrics(),
   // The price cache's memo ages (null on the dev economy, which has no
   // cache): a stale-served or blanked price during a brownout is a NUMBER
-  // here, not an invisible state the module never logs.
+  // here, not an invisible state the module never logs. failureAgeMs also
+  // counts a reachable service answering unhealthy (a deliberate operator
+  // pause), so it is an outage-OR-pause number, never a brownout alarm alone.
   priceCache: wocMarketEconomy.priceCacheAges?.() ?? null,
   // Guard transactions the idle bound killed (25P03), each destroying its
   // pooled client: the retrofit's false-fire rate as a counter.
@@ -3287,6 +3361,7 @@ configureStoragePurchaseRuntime(storagePurchaseHost);
 configureClaudiumRuntime({
   grantWeaponSkins: (accountId, skinIds) =>
     liveGame().grantWeaponSkinsToAccount(accountId, skinIds),
+  grantMountSkins: (accountId, skinIds) => liveGame().grantMountSkinsToAccount(accountId, skinIds),
   storagePurchase: (input) => executeStoragePurchase(storagePurchaseHost(), input),
 });
 
@@ -3604,6 +3679,18 @@ export async function startServer(): Promise<http.Server> {
   // (unlike AdminRuntime), so it rides its own seam, fed the SAME canonical source
   // /api/status uses, keeping the cap byte-identical across the status and overview reads.
   configureAdminPlayersCap(canonicalPlayersCap);
+  // The market metrics dashboard reads the live listing book through the pure
+  // builder; the module-side cache is TTL-only by design (see its header).
+  configureAdminMarketMetrics(() => buildAdminMarketMetrics(game.sim.marketListings, REALM));
+  // The sold-volume half of the market dashboard (qr-19-sold-volume-four-seam-wiring):
+  // the observer's durable write is a bounded single-row upsert, and the admin
+  // read is this realm's trailing window. Both realm-scoped like everything else.
+  configureMarketSoldVolume((entry) =>
+    recordMarketSoldVolumeRowBounded(runWithStatementTimeout, REALM, entry),
+  );
+  configureAdminMarketSoldVolume(() =>
+    readMarketSoldVolumeSince(pool, REALM, MARKET_SOLD_VOLUME_WINDOW_DAYS),
+  );
   configureAdminGuildBoardCacheBust(bustBoardCaches);
   configureInternalRuntime(game);
   // Bot detector: replay this realm's saved config overrides onto the fresh
@@ -3616,6 +3703,19 @@ export async function startServer(): Promise<http.Server> {
       : {};
   for (const error of game.applyAntibotConfig(antibotOverrides).errors) {
     console.warn(`bot-detector config override skipped: ${error}`);
+  }
+  // The Realm Builder of the Month roll: hand this realm's records to the sim
+  // before any player can inspect the monument, so the plaque never spends the
+  // first minutes of a boot naming the shipped placeholder. Every admin write
+  // re-publishes through the same call (server/realm_builder.ts).
+  //
+  // NON-FATAL on purpose. This is one cosmetic name on one statue; a transient
+  // read failure here must not cost the realm its boot. The sim keeps the
+  // shipped placeholder, and the first admin save republishes.
+  try {
+    await publishRealmBuilderRoll();
+  } catch (err) {
+    console.warn('realm builder roll not published at boot:', err);
   }
   const orphans = await closeOrphanSessions();
   if (orphans > 0) console.log(`closed ${orphans} orphaned play session(s) from a previous run`);
@@ -3678,6 +3778,10 @@ export async function startServer(): Promise<http.Server> {
     void refreshGuildLeaderboardShared
       .global()
       .catch((err) => console.error('guild leaderboard refresh failed (global):', err));
+    // The guild board's officer roster (guild_board_presence.ts) rides the
+    // same cadence, so the first viewer after a refresh or a bust never pays
+    // the roster read inline on the request path; warm() never rejects.
+    void guildBoardPresence.warm();
     // Demand-gated: the Renown board is a full-table roll-up, so keep it warm
     // only while it is actually being viewed (a request within
     // DEEDS_BOARD_DEMAND_TTL_MS). An idle board pays nothing here; a cold or stale
@@ -3728,6 +3832,7 @@ export async function startServer(): Promise<http.Server> {
     metaRequestUserData,
     metaEventSourceUrl,
     loadAccountCosmetics,
+    loadAccountLedger,
     isConnectionRefused,
     bufferHandshakeMessages,
     requestMetadata,
@@ -3735,14 +3840,7 @@ export async function startServer(): Promise<http.Server> {
     maxPlayersPerRealm: config.maxPlayersPerRealm,
     acquireCharacterLease,
     releaseCharacterLease,
-    bankBonusForAccount: async (id) => {
-      // One round trip serves both fresh-join account facts: the entitlement
-      // inputs and the tutorial greeting's character count (PR #3467 review:
-      // a separate characterCountForAccount await lengthened every handshake
-      // for a fact only newborn characters use).
-      const facts = await bankBonusFactsForAccount(id);
-      return { ...computeBankBonus(facts), characterCount: facts.characterCount };
-    },
+    bankBonusForAccount: async (id) => computeBankBonus(await bankBonusFactsForAccount(id)),
   });
   wsAuth.attachUpgrade(server, wss);
 
@@ -3752,6 +3850,9 @@ export async function startServer(): Promise<http.Server> {
   // gauges read live state at scrape time; ws_connections is the raw open-socket
   // count (joined or not), distinct from players_online (joined sessions).
   const gameStateSource: GameStateSource = {
+    usernameBanlistLoaded: usernameBanlistFileLoaded,
+    characterBlobBytesHighWater,
+    characterBlobBytesP99,
     playersOnline: () => game.clients.size,
     accountsOnline: () => game.liveAccountIds().size,
     wsConnections: () => wss.clients.size,
@@ -3777,6 +3878,7 @@ export async function startServer(): Promise<http.Server> {
     }),
     dbBackendCancels: () => getBackendCancelCounts(),
     bankLedgerTail: () => bankLedgerTailStats(),
+    soldVolumeTail: () => soldVolumeTailStats(),
     generalChatQuotaInFlight: () => game.generalChatQuotaInFlight(),
     generalChatQuotaCachedAccounts: () => game.generalChatQuotaCachedAccounts(),
     generalChatQuotaDbPool: () => generalChatQuotaDbPoolState(),
@@ -3814,9 +3916,17 @@ export async function startServer(): Promise<http.Server> {
   const businessMetrics = registerBusinessMetrics(httpMetrics.registry);
   businessMetrics.start();
 
+  // The banlist warm runs BEFORE the loop starts, so a mount already hung at
+  // boot stalls the boot rather than a ticking realm. The residual is stated
+  // at USERNAME_BANLIST_STAT_HOLD_MS (server/auth.ts): the steady-state stat
+  // and read stay synchronous on this loop, held to one stat per second, so a
+  // mount that hangs LATER still blocks a name screen for the mount's timeout;
+  // DEPLOY.md tells the operator to keep the file on local disk.
+  const banlist = warmUsernameBanlist();
   game.start();
   server.listen(config.port, () => {
     console.log(`World of ClaudeCraft server listening on http://localhost:${config.port}`);
+    if (banlist.file) console.log(usernameBanlistBootLine(banlist));
     console.log(`  REST: /api/register /api/login /api/characters /api/status`);
     console.log(`  WS:   /ws, then first message {t:"${ONLINE_WORLD_AUTH_TYPE}",token,character}`);
   });
@@ -3893,6 +4003,7 @@ export async function startServer(): Promise<http.Server> {
     // reads this table hot.
     tables: [
       { name: 'chat_logs', pruneBatch: (n) => pruneChatLogsBatch(config.chatLogRetentionDays, n) },
+      marketSoldVolumeRetentionTable(pool),
       {
         name: 'client_perf_reports',
         pruneBatch: (n) => pruneClientPerfReportsBatch(config.perfReportRetentionDays, n),
@@ -3983,6 +4094,20 @@ export async function startServer(): Promise<http.Server> {
         // FTUE window (server/progress_events_db.ts FTUE_MAX_LEVEL).
         name: 'ftue_events',
         pruneBatch: (n) => pruneFtueEventsBatch(pool, config.ftueEventsRetentionDays, n),
+      },
+      {
+        // World-quest scoreboard rows nobody has improved in a year: the
+        // ladder should never show a character last seen that long ago.
+        name: 'world_quest_scores',
+        pruneBatch: (n) =>
+          pruneWorldQuestScoresBatch(pool, config.worldQuestScoresRetentionDays, n),
+      },
+      {
+        // The chance-based crafting outcome audit (one row per masterwork
+        // proc draw or Perfecting attempt); append-only, observer-written
+        // (server/craft_roll_events.ts).
+        name: 'craft_roll_events',
+        pruneBatch: (n) => pruneCraftRollEventsBatch(pool, config.craftRollEventsRetentionDays, n),
       },
       {
         // The buy-now abandon ledger (claim-cooldown evidence): dead once
@@ -4168,10 +4293,28 @@ export async function startServer(): Promise<http.Server> {
     // go missing until that character's next login (the join reconcile is the
     // only heal). Rejections log inside the writer, so the drain never throws.
     await deedRecordsIdle();
+    // The account ledger's relic FIFO (account_relic_finds) drains on the same
+    // reasoning: a queued insert rejected by pool.end() would wait for the
+    // finder's next login reconcile while its alts miss the find.
+    await relicRecordsIdle();
     // Drain the progress-events FIFO (level_up_events / ftue_events) as well:
     // unlike deeds these rows have no reconcile heal path, so a row dropped by
     // pool.end() is gone. Rejections log inside the writer; never throws.
     await progressEventsIdle();
+    // The craft_roll_events FIFO drains on the same reasoning: an audit row
+    // has no reconcile heal path, so a row rejected by pool.end() is gone.
+    await craftRollEventsIdle();
+    // Drain the market sold-volume FIFO too (qr-19-sold-volume-four-seam-wiring):
+    // each queued accumulator entry stands for many coalesced sales, and an entry
+    // still on the tail would be rejected by pool.end() with a burst of failure
+    // lines. BOUNDED, unlike the shape progressEventsIdle uses: this drain sits
+    // ahead of the lease sweep, so a wedged database must not hold it long enough
+    // to skip that sweep. A dropped observation on a hard shutdown is acceptable.
+    const soldVolumeDrained = await soldVolumeWriterIdle(MARKET_SOLD_VOLUME_SHUTDOWN_DRAIN_MS);
+    if (!soldVolumeDrained) console.warn('market sold-volume drain deadline reached');
+    // Same for the world-quest scoreboard FIFO: a best-row upsert cut by
+    // pool.end() is re-earned only by a better attempt.
+    await worldQuestScoresIdle();
     // Stop accepted /unstuck report intake and drain only to a finite deadline.
     // Per-query timeouts bound an active write; deadline expiry aborts retry
     // delays and drops queued telemetry before the shared pool closes.
@@ -4200,6 +4343,12 @@ export async function startServer(): Promise<http.Server> {
     await closeGeneralChatQuotaPool();
     await closeBackendCancelPool();
     await pool.end();
+    // The last drain, and a synchronous one: a save-size warn line queued by
+    // any shutdown-path save above (saveAll, the leave flushes) waits on a
+    // setImmediate that process.exit would discard. No deadline needed, it is
+    // a console write; the deferral exists only to keep the line off a lock
+    // hold, which no longer matters here.
+    flushQueuedCharacterBlobWarnings();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

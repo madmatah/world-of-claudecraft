@@ -60,6 +60,22 @@ describe('createVariantPrewarmSlot', () => {
     expect(twin.parent).toBe(h.scene);
   });
 
+  it('names the staged group as the link unit root, read when the unit runs', async () => {
+    // The resume lane warms a unit's roots through the worker before its
+    // link; the group exists only after the stage unit, so the root is a
+    // live read, empty before it and the group after.
+    const h = host();
+    const twin = new THREE.Group();
+    const slot = createVariantPrewarmSlot(h.api, 'landmarks.impact-site', () => twin);
+    const units = slot.resumeUnits();
+    expect(units[0].roots).toBeUndefined();
+    expect(units[1].roots).toEqual([]);
+    await units[0].run();
+    expect(units[1].roots).toEqual([twin]);
+    slot.cleanup();
+    expect(units[1].roots).toEqual([]);
+  });
+
   it('hides at entry and removes without disposing at cleanup', () => {
     const h = host();
     const twin = new THREE.Group();
@@ -126,6 +142,49 @@ describe('createPrewarmGroupSlot', () => {
     // No group: nothing was attached to the scene, and none is reported.
     expect(slot.group).toBeNull();
     expect(slot.artifact).toBe(textures);
+    expect(h.scene.children).toEqual([]);
+  });
+
+  it('links a named live root between the stage and the pieces, the weather resume', async () => {
+    // A dropped weather entry resumed as stage + uploads only, so nothing
+    // linked the hidden precipitation draw and the first rain linked it live.
+    const h = host();
+    const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+    const events: string[] = [];
+    const api = {
+      scene: h.scene,
+      compileColorPrograms: async (root: THREE.Object3D) => {
+        events.push(root === points ? 'link:points' : 'link:other');
+      },
+    };
+    const slot = createPrewarmGroupSlot(api, 'weather.materials', {
+      stage: () => {
+        events.push('stage');
+        return ['flake', 'streak'];
+      },
+      hide: () => void events.push('hide'),
+      units: (maps) => maps.map((map) => ({ id: map, run: () => void events.push(map) })),
+      linkRoot: () => points,
+    });
+    const units = slot.resumeUnits();
+    expect(units.map((unit) => unit.id)).toEqual([
+      'weather.materials:stage',
+      'weather.materials:compile',
+      'weather.materials:units',
+    ]);
+    expect(units[1].roots).toEqual([]);
+    await expect(units[1].run()).rejects.toThrow('weather.materials');
+    await units[0].run();
+    expect(units[1].roots).toEqual([points]);
+    expect(units[1].roots?.[0]).toBe(points);
+    await units[1].run();
+    await units[2].run();
+    expect(events).toEqual(['stage', 'hide', 'link:points', 'flake', 'streak']);
+    // The manifest entry itself is unchanged: its link stays the compile
+    // pass's scene recollect, so run() stages and uploads only.
+    events.length = 0;
+    await slot.run();
+    expect(events).toEqual(['stage', 'flake', 'streak']);
     expect(h.scene.children).toEqual([]);
   });
 

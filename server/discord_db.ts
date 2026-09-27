@@ -16,6 +16,7 @@ import type { Pool } from 'pg';
 import { discordStatusIndexForPoints } from '../src/sim/discord_tier';
 import { enqueueLinkChange } from './discord_link_changes';
 import { discordAvatarUrl } from './discord_oauth';
+import { bustQueuePingCache } from './discord_queue_ping_cache';
 import { bustDiscordStatus } from './discord_status_cache';
 import { isUniqueViolation } from './http_util';
 
@@ -239,7 +240,9 @@ export async function accountForDiscord(pool: Pool, discordUserId: string): Prom
 /**
  * Link a Discord identity to an account. One Discord per account (account_id PK)
  * and one account per Discord (discord_user_id UNIQUE). Returns false when the
- * Discord id is already owned by a DIFFERENT account so the caller can 409.
+ * Discord id is already owned by a DIFFERENT account, or when repoints are
+ * disallowed and the account already carries another Discord id, so the caller
+ * can 409.
  */
 export async function linkDiscordToAccount(
   pool: Pool,
@@ -251,11 +254,16 @@ export async function linkDiscordToAccount(
     email: string | null;
     guildMember: boolean;
   },
+  opts: { allowRepoint?: boolean } = {},
 ): Promise<boolean> {
   const owner = await accountForDiscord(pool, info.discordUserId);
   if (owner !== null && owner !== accountId) return false;
+  const repointGuard =
+    opts.allowRepoint === false
+      ? 'WHERE discord_links.discord_user_id = EXCLUDED.discord_user_id'
+      : '';
   try {
-    await pool.query(
+    const res = await pool.query(
       // Repointing the link at a DIFFERENT Discord identity invalidates the old
       // identity's bot-pushed guild meta (join date + special-role key), so both
       // reset to NULL on an id change; a same-id relink keeps them (the bot
@@ -272,9 +280,11 @@ export async function linkDiscordToAccount(
                                   THEN discord_links.discord_joined_at ELSE NULL END,
          discord_role = CASE WHEN discord_links.discord_user_id = EXCLUDED.discord_user_id
                              THEN discord_links.discord_role ELSE NULL END,
-         linked_at = now()`,
+         linked_at = now()
+       ${repointGuard}`,
       [accountId, info.discordUserId, info.username, info.avatar, info.email, info.guildMember],
     );
+    if ((res.rowCount ?? 0) === 0) return false;
   } catch (err) {
     // TOCTOU: another account claimed this discord_user_id between the check and
     // the upsert. discord_user_id is UNIQUE (not the ON CONFLICT target), so the
@@ -286,6 +296,7 @@ export async function linkDiscordToAccount(
   // the cached /api/discord core is stale. The refusal arms above write nothing
   // and must not evict a healthy snapshot.
   bustDiscordStatus(accountId);
+  bustQueuePingCache(accountId);
   return true;
 }
 
@@ -295,7 +306,10 @@ export async function unlinkDiscord(pool: Pool, accountId: number): Promise<void
   // no-op and must not evict a healthy /api/discord snapshot (busts ride real
   // writes only). A user who unlinks and immediately reloads must see
   // linked:false, which this bust guarantees within this process.
-  if ((res.rowCount ?? 0) > 0) bustDiscordStatus(accountId);
+  if ((res.rowCount ?? 0) > 0) {
+    bustDiscordStatus(accountId);
+    bustQueuePingCache(accountId);
+  }
 }
 
 // Update just the captured Discord email on an existing link, e.g. when a

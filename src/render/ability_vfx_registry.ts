@@ -20,6 +20,14 @@ import {
   RUINOUS_BRAND_VFX_SPEC,
 } from './destruction_vfx_specs';
 import {
+  HAMSTRING_BITE_VFX_FULL_SPEC,
+  HAMSTRING_BITE_VFX_SPEC,
+  LUNGE_VFX_FULL_SPEC,
+  LUNGE_VFX_SPEC,
+  PIN_VFX_FULL_SPEC,
+  PIN_VFX_SPEC,
+} from './druid_vfx_specs';
+import {
   ARMY_OF_THE_DEAD_VFX_FULL_SPEC,
   ARMY_OF_THE_DEAD_VFX_SPEC,
   BONE_MAGE_SHADOW_BOLT_VFX_FULL_SPEC,
@@ -39,6 +47,7 @@ import {
   SOUL_LANCE_VFX_FULL_SPEC,
   SOUL_LANCE_VFX_SPEC,
 } from './necromancy_vfx_specs';
+import { TRINKET_VFX_FULL_SPECS, TRINKET_VFX_SPECS } from './trinket_vfx_specs';
 import {
   EMBERKIN_FELBOLT_VFX_FULL_SPEC,
   EMBERKIN_FELBOLT_VFX_SPEC,
@@ -46,10 +55,13 @@ import {
   GLOOMSHADE_ABYSSAL_CHAIN_VFX_SPEC,
 } from './warlock_pet_vfx_specs';
 import { ABYSSAL_RIFT_VFX_FULL_SPEC, ABYSSAL_RIFT_VFX_SPEC } from './warlock_vfx_specs';
+import { WARRIOR_VFX_FULL_SPECS, WARRIOR_VFX_SPECS } from './warrior_vfx_specs';
 
 // Generated gallery projections remain untouched. Class-owned bespoke
 // identities resolve through this narrow runtime seam instead.
 export function abilityVfxSpec(abilityId: string): AbilityVfxSpec | undefined {
+  if (Object.hasOwn(WARRIOR_VFX_SPECS, abilityId)) return WARRIOR_VFX_SPECS[abilityId];
+  if (Object.hasOwn(TRINKET_VFX_SPECS, abilityId)) return TRINKET_VFX_SPECS[abilityId];
   if (abilityId === 'emberkin_felbolt') return EMBERKIN_FELBOLT_VFX_SPEC;
   if (abilityId === 'gloomshade_abyssal_chain') return GLOOMSHADE_ABYSSAL_CHAIN_VFX_SPEC;
   if (abilityId === 'bone_mage_shadow_bolt') return BONE_MAGE_SHADOW_BOLT_VFX_SPEC;
@@ -70,10 +82,15 @@ export function abilityVfxSpec(abilityId: string): AbilityVfxSpec | undefined {
   if (abilityId === 'reaping_command') return REAPING_COMMAND_VFX_SPEC;
   if (abilityId === 'army_of_the_dead') return ARMY_OF_THE_DEAD_VFX_SPEC;
   if (abilityId === 'abyssal_rift') return ABYSSAL_RIFT_VFX_SPEC;
+  if (abilityId === 'pin') return PIN_VFX_SPEC;
+  if (abilityId === 'lunge') return LUNGE_VFX_SPEC;
+  if (abilityId === 'hamstring_bite') return HAMSTRING_BITE_VFX_SPEC;
   return ABILITY_VFX_SPECS[abilityId];
 }
 
 export function abilityVfxFullSpec(abilityId: string): AbilityVfxFullSpec | undefined {
+  if (Object.hasOwn(WARRIOR_VFX_FULL_SPECS, abilityId)) return WARRIOR_VFX_FULL_SPECS[abilityId];
+  if (Object.hasOwn(TRINKET_VFX_FULL_SPECS, abilityId)) return TRINKET_VFX_FULL_SPECS[abilityId];
   if (abilityId === 'emberkin_felbolt') return EMBERKIN_FELBOLT_VFX_FULL_SPEC;
   if (abilityId === 'gloomshade_abyssal_chain') return GLOOMSHADE_ABYSSAL_CHAIN_VFX_FULL_SPEC;
   if (abilityId === 'bone_mage_shadow_bolt') return BONE_MAGE_SHADOW_BOLT_VFX_FULL_SPEC;
@@ -94,6 +111,9 @@ export function abilityVfxFullSpec(abilityId: string): AbilityVfxFullSpec | unde
   if (abilityId === 'reaping_command') return REAPING_COMMAND_VFX_FULL_SPEC;
   if (abilityId === 'army_of_the_dead') return ARMY_OF_THE_DEAD_VFX_FULL_SPEC;
   if (abilityId === 'abyssal_rift') return ABYSSAL_RIFT_VFX_FULL_SPEC;
+  if (abilityId === 'pin') return PIN_VFX_FULL_SPEC;
+  if (abilityId === 'lunge') return LUNGE_VFX_FULL_SPEC;
+  if (abilityId === 'hamstring_bite') return HAMSTRING_BITE_VFX_FULL_SPEC;
   return ABILITY_VFX_FULL_SPECS[abilityId];
 }
 

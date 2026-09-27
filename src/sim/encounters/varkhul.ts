@@ -184,7 +184,9 @@ import {
   varkhulWorldfireDamageMaxHp,
   varkhulWorldfireStage,
 } from '../varkhul_worldfire';
+import { attemptLost } from './attempt_wipe';
 import { resolveEncounterWipe } from './encounter_wipe';
+import { resolveLivingTarget } from './living_target';
 import { walkEncounterActorTo } from './scripted_walk';
 import { VARKHUL_DIALOGUE } from './varkhul_dialogue';
 
@@ -493,16 +495,6 @@ function initVarkhulEncounter(boss: Entity): VarkhulEncounterState {
     };
   }
   return boss.varkhul;
-}
-
-function resolveLivingTarget(boss: Entity, players: readonly Entity[]): Entity | null {
-  const current =
-    boss.aggroTargetId === null
-      ? null
-      : (players.find((player) => player.id === boss.aggroTargetId && !player.dead) ?? null);
-  const target = current ?? players.find((player) => !player.dead) ?? null;
-  boss.aggroTargetId = target?.id ?? null;
-  return target;
 }
 
 function clearBossCast(boss: Entity): void {
@@ -2765,7 +2757,14 @@ function updateMajorAbility(
 export function updateVarkhulEncounter(ctx: SimContext, boss: Entity, pursueTarget = false): void {
   if (boss.templateId !== VARKHUL_BOSS_TEMPLATE_ID || boss.dead) return;
   let players = playersInEncounter(ctx, boss);
-  if (players.length === 0) {
+  // An engaged attempt is lost once no participant of it is left alive, even
+  // when a raider zoned in through the gate as the last one died: the boss
+  // resets like any wipe instead of latching onto the entrant at his current
+  // health (encounters/attempt_wipe.ts). The pre-pull room is never "lost".
+  if (
+    players.length === 0 ||
+    (boss.inCombat && attemptLost(boss.varkhul?.attemptParticipantIds, players))
+  ) {
     if (
       !boss.inCombat &&
       (!boss.varkhul || boss.varkhul.engage.phase === 'forging') &&
@@ -2782,7 +2781,6 @@ export function updateVarkhulEncounter(ctx: SimContext, boss: Entity, pursueTarg
       return;
     }
     boss.aiState = 'evade';
-    if (boss.combatExitHoldUntil > ctx.time) return;
     for (const playerId of boss.varkhul?.attemptParticipantIds ?? []) {
       const player = ctx.entities.get(playerId);
       const meta = ctx.players.get(playerId);

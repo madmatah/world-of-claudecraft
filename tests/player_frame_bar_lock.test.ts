@@ -46,13 +46,23 @@ describe('lockPlayerFrameToActionBar wiring', () => {
   });
 
   it('every combined-group position apply re-evaluates the ride', () => {
-    // The group's onPositioned wraps the detacher with the lock re-check, so
-    // a drag move, a re-dock, and a resolution re-anchor all carry the frame.
-    const start = hudTs.indexOf("spec.id === 'actionBarGroup'\n          ? (active: boolean) =>");
+    // The shared onPositioned wraps the detacher with the lock re-check, so
+    // a drag move, a re-dock, and a resolution re-anchor all carry the frame
+    // (the registration loop hands the same closure to every row; the group
+    // arm is the one that re-evaluates the ride).
+    const registry = stripComments(
+      readFileSync(new URL('../src/ui/hud_frame_registry.ts', import.meta.url), 'utf8'),
+    );
+    const start = registry.indexOf('onPositioned: (active) =>');
     expect(start).toBeGreaterThan(-1);
-    const wrap = hudTs.slice(start, start + 300);
+    const wrap = registry.slice(start, start + 220);
     expect(wrap).toContain('detach(active);');
-    expect(wrap).toContain('this.applyPlayerFrameBarLock();');
+    expect(wrap).toContain('deps.onPositioned(spec.id, active);');
+    const callbackStart = hudTs.indexOf('onPositioned: (id, active) =>');
+    expect(callbackStart).toBeGreaterThan(-1);
+    const callback = hudTs.slice(callbackStart, callbackStart + 250);
+    expect(callback).toContain("if (id === 'actionBarGroup') this.applyPlayerFrameBarLock();");
+    expect(callback).toContain("if (id === 'damageMeter') this.meters.mainFramed(active);");
   });
 
   it('turning the lock on drops the applied spot (save kept); off restores it', () => {

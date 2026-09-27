@@ -28,6 +28,7 @@ function core() {
     rift: (name, rank) => `${name} (${rank ?? '?'})`,
     npc: (id) => `NPC ${id}`,
     mob: (id) => `Mob ${id}`,
+    worldQuest: (id) => `World quest ${id}`,
   });
 }
 
@@ -88,6 +89,7 @@ function crowdedOverworldModel(): MapPaintResult {
       { mx: 340, my: 320, kind: 'mailbox' },
       { mx: 350, my: 320, kind: 'noticeboard' },
     ],
+    farmPatches: [{ mx: 360, my: 320, patchId: 'patch_eastbrook', zoneId: 'eastbrook_vale' }],
     navigation: [
       {
         mx: 280,
@@ -129,6 +131,31 @@ afterEach(() => {
 });
 
 describe('map semantic accessibility core', () => {
+  it('announces available and active world quests as distinct semantic states', () => {
+    const model = {
+      ...crowdedOverworldModel(),
+      questAreas: [],
+      npcs: [],
+      gatherNodes: [],
+      stations: [],
+      services: [],
+      allies: [],
+      party: [],
+      navigation: [],
+      portals: [],
+      pois: [],
+      worldQuests: [
+        { questId: 'available', mx: 260, my: 280, radius: 30, state: 'available' as const },
+        { questId: 'active', mx: 300, my: 280, radius: 30, state: 'active' as const },
+      ],
+      worldBosses: [{ bossId: 'thunzharr_waking_peak', mx: 340, my: 280 }],
+    };
+    const description = core().updateOverworld(model, 'Eastbrook Vale', 560);
+    expect(description).toContain('Available world quest: World quest available');
+    expect(description).toContain('Active world quest: World quest active');
+    expect(description).toContain('World boss: Mob thunzharr_waking_peak');
+  });
+
   it('quantizes eight-way direction and coarse distance without exposing raw coordinates', () => {
     expect(quantizeMapMarkerLocation(280, 280, 280, 280, 560)).toEqual({
       direction: 'center',
@@ -343,6 +370,7 @@ describe('map semantic accessibility core', () => {
       rift: (name) => name,
       npc: (id) => id,
       mob: (id) => id,
+      worldQuest: (id) => id,
     });
     const model = {
       view: {},
@@ -352,6 +380,7 @@ describe('map semantic accessibility core', () => {
       gatherNodes: [],
       stations: [{ mx: 100, my: 100, stationId: 'forge', type: 'forge' }],
       services: [],
+      farmPatches: [],
       navigation: [],
       player: { mx: 280, my: 280, angle: 0 },
       allies: [],
@@ -411,6 +440,7 @@ describe('map semantic accessibility core', () => {
       rift: (name) => name,
       npc: (id) => id,
       mob: (id) => id,
+      worldQuest: (id) => id,
     });
     const model = crowdedOverworldModel();
 
@@ -428,7 +458,8 @@ describe('map semantic accessibility core', () => {
     }
     expect(first).toContain('Service: Mailbox');
     expect(first).toContain('Service: Notice Board');
-    expect(first).toContain('Additional markers: 12.');
+    expect(first).toContain('Garden beds');
+    expect(first).toContain('Additional markers: 13.');
 
     const stationCalls = stationName.mock.calls.length;
     const zoneCalls = zoneName.mock.calls.length;
@@ -451,6 +482,7 @@ describe('map semantic accessibility core', () => {
         ],
         stations: [],
         services: [],
+        farmPatches: [],
         navigation: [],
         player: null,
         allies: [],
@@ -464,6 +496,35 @@ describe('map semantic accessibility core', () => {
       );
     },
   );
+
+  it('names a farm patch with the argument-free garden-bed label, or nothing at all', () => {
+    const withPatch = {
+      view: {},
+      cursor: 'default',
+      questAreas: [],
+      npcs: [],
+      gatherNodes: [],
+      stations: [],
+      services: [],
+      farmPatches: [{ mx: 280, my: 200, patchId: 'patch_eastbrook', zoneId: 'eastbrook_vale' }],
+      navigation: [],
+      player: { mx: 280, my: 280, angle: 0 },
+      allies: [],
+      party: [],
+      portals: [],
+      pois: [],
+    } as unknown as MapPaintResult;
+
+    // No {name} argument: the label stands alone, and the summary's own
+    // direction plus distance band identify which site is meant.
+    expect(core().updateOverworld(withPatch, 'Eastbrook Vale', 560)).toContain(
+      'Garden beds: north, near.',
+    );
+
+    // Negative arm: a zone with no authored patch says nothing about beds.
+    const withoutPatch = { ...withPatch, farmPatches: [] } as unknown as MapPaintResult;
+    expect(core().updateOverworld(withoutPatch, 'Eastbrook Vale', 560)).not.toContain('Garden');
+  });
 
   it('rebuilds cached prose when only the loaded language changes', () => {
     const view = core();

@@ -1,12 +1,27 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GraphicsSettingsSnapshot } from '../src/game/graphics_rebuild_core';
 import { installFinalColorNanGuard } from '../src/render/final_color_nan_guard';
 import { activateGfxProfile, type GfxCapabilities, resolveGfxProfile } from '../src/render/gfx';
+import { finiteGuardStatement } from '../src/render/post_finite_guard_glsl';
+import { expectScansOnlyThroughSharedWalkers } from './helpers/scan_guard_self_audit';
+import { sourceFilesUnder } from './helpers/source_files_under';
+import { stripComments } from './helpers/strip_comments';
 
 const originalOpaqueFragment = THREE.ShaderChunk.opaque_fragment;
 const originalFogFragment = THREE.ShaderChunk.fog_fragment;
+const OPAQUE_WRITE = 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );';
+
+// three's resolveIncludes, reading the live THREE.ShaderChunk the same way.
+function resolveIncludes(source: string): string {
+  return source.replace(/^[ \t]*#include +<([\w\d./]+)>/gm, (_line, name: string) => {
+    const chunk = (THREE.ShaderChunk as Record<string, string | undefined>)[name];
+    if (chunk === undefined) throw new Error(`unknown shader chunk ${name}`);
+    return resolveIncludes(chunk);
+  });
+}
 
 const desktopCapabilities: GfxCapabilities = Object.freeze({
   deviceMemory: 8,
@@ -36,6 +51,7 @@ const basePreferences: GraphicsSettingsSnapshot = {
   characterDetail: 1,
   dynamicLights: 1,
   particleEffects: 1,
+  ghostFade: 1,
 };
 
 afterEach(() => {
@@ -111,13 +127,23 @@ describe('installFinalColorNanGuard call sites', () => {
   });
 
   it('the world renderer reaches gfx.ts (and so the guard) before it can compile or render', () => {
-    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    const rendererCreated = renderer.indexOf('this.webgl = new THREE.WebGLRenderer');
+    // Comments stripped, so a commented-out call cannot satisfy an anchor (and
+    // prose naming one cannot reorder them), as the sibling ordering pins do.
+    const renderer = stripComments(
+      readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
+    );
+    // Anchored on the assignment, not on `new THREE.WebGLRenderer`: the
+    // construction itself lives in webgl_context_fallback.ts. Every offset is
+    // asserted found, so a later move reds this pin instead of comparing -1.
+    const rendererCreated = renderer.indexOf('this.webgl = created.webgl');
+    expect(rendererCreated).toBeGreaterThanOrEqual(0);
     const rendererInit = renderer.indexOf('initGfxTier(this.webgl)', rendererCreated);
     const firstCompile = renderer.indexOf('this.webgl.compile', rendererCreated);
     const firstRender = renderer.indexOf('this.webgl.render', rendererCreated);
+    expect(rendererInit).toBeGreaterThanOrEqual(0);
+    expect(firstCompile).toBeGreaterThanOrEqual(0);
+    expect(firstRender).toBeGreaterThanOrEqual(0);
 
-    expect(rendererCreated).toBeGreaterThanOrEqual(0);
     expect(rendererInit).toBeGreaterThan(rendererCreated);
     expect(firstCompile).toBeGreaterThan(rendererInit);
     expect(firstRender).toBeGreaterThan(rendererInit);
@@ -136,8 +162,68 @@ describe('patchOpaqueFragmentNanGuard coverage in stock shaders', () => {
       if (hasOpaque) withOpaque.push(name);
     }
     expect(withOpaque.length).toBeGreaterThan(0);
-    expect(THREE.ShaderChunk.opaque_fragment).toContain('outgoingLight.x = ( outgoingLight.x');
+    expect(THREE.ShaderChunk.opaque_fragment).toContain(
+      'outgoingLight.x = ( ( floatBitsToUint( outgoingLight.x )',
+    );
     expect(THREE.ShaderChunk.opaque_fragment).not.toContain('#ifndef USE_FOG');
+  });
+
+  it('guards the opaque write in every ShaderLib family that includes <opaque_fragment>', () => {
+    // The three patch leaves this chunk stock, so the runtime guard is the
+    // only NaN/Inf scrub on the write. The family set is literal so a three
+    // bump that adds or drops a family reds here and gets reviewed.
+    const families = Object.entries(THREE.ShaderLib)
+      .filter(([, shader]) => shader.fragmentShader.includes('#include <opaque_fragment>'))
+      .map(([name]) => name)
+      .sort();
+    expect(families).toEqual([
+      'basic',
+      'dashed',
+      'lambert',
+      'matcap',
+      'phong',
+      'physical',
+      'points',
+      'sprite',
+      'standard',
+      'toon',
+    ]);
+    const guardedWrite =
+      '// WOC_OPAQUE_NAN_GUARD\n' +
+      finiteGuardStatement('diffuseColor.a') +
+      finiteGuardStatement('outgoingLight.x') +
+      finiteGuardStatement('outgoingLight.y') +
+      finiteGuardStatement('outgoingLight.z') +
+      OPAQUE_WRITE;
+    for (const name of families) {
+      const resolved = resolveIncludes(THREE.ShaderLib[name].fragmentShader);
+      expect(resolved.split(OPAQUE_WRITE).length - 1, name).toBe(1);
+      expect(resolved.includes(guardedWrite), name).toBe(true);
+      expect(resolved.includes('outgoingLight.x < 0.0 || outgoingLight.x >= 0.0'), name).toBe(
+        false,
+      );
+    }
+  });
+
+  it('leaves no src/ module able to bypass the chunk guard', () => {
+    // The guard lives in THREE.ShaderChunk.opaque_fragment, so a material that
+    // replaced '#include <opaque_fragment>' (onBeforeCompile or a copied
+    // ShaderLib string) or inlined the stock write would skip it. Only the two
+    // guard modules may name the chunk or spell its write.
+    expectScansOnlyThroughSharedWalkers(import.meta.url, ['source_files_under']);
+    const srcRoot = fileURLToPath(new URL('../src/', import.meta.url));
+    const files = sourceFilesUnder(srcRoot);
+    expect(files.length).toBeGreaterThan(3000);
+    const naming = files
+      .filter(({ full }) => {
+        const text = readFileSync(full, 'utf8');
+        return /opaque_fragment|outgoingLight, diffuseColor(?:\\)?\.a/.test(text);
+      })
+      .map(({ file }) => file);
+    expect(naming).toEqual([
+      'render/final_color_nan_guard.ts',
+      'render/final_color_nan_guard_core.ts',
+    ]);
   });
 
   it('keeps global chunks patched across profile activation', () => {

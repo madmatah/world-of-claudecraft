@@ -70,12 +70,14 @@ const OWNED_CLASS_SPEC_DEFAULTS: Readonly<
   shaman: {
     elemental: [
       'lightning_bolt',
+      'lava_burst',
       'chain_lightning',
       'earth_shock',
       'flame_shock',
       'earthquake',
       'frost_shock',
       'elemental_mastery',
+      'thunderstorm',
       'unleash_weapon',
       'lightning_shield',
       'healing_wave',
@@ -128,6 +130,7 @@ const OWNED_CLASS_SPEC_DEFAULTS: Readonly<
       'lesser_heal',
       'mind_flay',
       'power_word_fortitude',
+      'prayer_of_returning',
     ],
     holy: [
       'seraphic_vigil',
@@ -145,6 +148,7 @@ const OWNED_CLASS_SPEC_DEFAULTS: Readonly<
       'shadow_word_pain',
       'mind_flay',
       'power_word_fortitude',
+      'prayer_of_returning',
     ],
     shadow: [
       'shadow_word_pain',
@@ -196,6 +200,7 @@ const OWNED_CLASS_SPEC_DEFAULTS: Readonly<
       'regrowth',
       'healing_touch',
       'swiftmend',
+      'wildwake',
       'barkskin',
       'entangling_roots',
       'moonfire',
@@ -203,6 +208,7 @@ const OWNED_CLASS_SPEC_DEFAULTS: Readonly<
       'mark_of_the_wild',
       'thorns',
       'travel_form',
+      'grove_awakening',
     ],
   },
 };

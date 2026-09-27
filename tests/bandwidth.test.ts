@@ -48,7 +48,7 @@ interface RefSent {
   settled: boolean;
 }
 
-// interestLimitSq re-typed verbatim from server/game.ts.
+// interestLimitSq re-typed verbatim from server/interest_policy.ts.
 function refInterestLimitSq(e: Entity, known: boolean): number {
   if (e.kind === 'npc') {
     return known ? NPC_DROP_RADIUS * NPC_DROP_RADIUS : NPC_INTEREST_RADIUS * NPC_INTEREST_RADIUS;
@@ -873,6 +873,9 @@ describe('Realm Racers match-scoped interest', () => {
     expect(ents).toHaveLength(3);
     expect(keep).toEqual([]);
     expect([...present]).toEqual(pinnedIds);
-    expect(Buffer.byteLength(`[${ents.join(',')}]`)).toBe(1176);
+    // Re-measured at the release/v0.44.0 merge (1176 before): the release's
+    // larger world shifts the joined pids, so the one rival that was pid 999
+    // now carries a four-digit `id` and aura `src`; the record keys are unchanged.
+    expect(Buffer.byteLength(`[${ents.join(',')}]`)).toBe(1178);
   });
 });

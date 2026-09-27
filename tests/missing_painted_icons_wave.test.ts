@@ -308,15 +308,18 @@ describe('missing painted icon accepted-art manifest', () => {
     // bespoke Elemental Trance replacing its interim duplicate: 206/190/86
     // become 220/204/100. The Sowfield demolition retires the 10 sport_*
     // Vale Cup abilities with their art: 220/204/100 become 210/194/90.
+    // The Nythraxis gap-fill one-handers add three generated heroic resolvers at
+    // the current head (heroic_courtiers_bonefang, heroic_gravecourt_hewer,
+    // heroic_thornpeak_wardblade): 210/16/12 become 213/19/15.
     expect(accepted.scope).toEqual({
-      targetRows: 210,
+      targetRows: 213,
       rasterPaintings: 194,
       abilities: 90,
       items: 101,
       deeds: 3,
-      heroicWeaponResolvers: 16,
+      heroicWeaponResolvers: 19,
       originalInventoryRows: 197,
-      supplementalCurrentHeadRows: 12,
+      supplementalCurrentHeadRows: 15,
     });
     expect(accepted.assets).toHaveLength(194);
     expect(accepted.assets.filter((asset) => asset.kind === 'ability')).toHaveLength(90);
@@ -333,7 +336,7 @@ describe('missing painted icon accepted-art manifest', () => {
         accepted.assets.filter((asset) => asset.kind === kind).map((asset) => asset.id),
       ).toEqual(ids);
     }
-    expect(accepted.targetSets.heroicWeaponResolvers).toHaveLength(16);
+    expect(accepted.targetSets.heroicWeaponResolvers).toHaveLength(19);
     expect(accepted.targetSets.heroicWeaponResolvers.map(({ id }) => id)).toEqual(
       sorted(new Set(accepted.targetSets.heroicWeaponResolvers.map(({ id }) => id))),
     );
@@ -475,17 +478,22 @@ describe('missing painted ability integration', () => {
   it('makes every live ability image-backed while preserving non-ABILITY image ids', () => {
     const accepted = manifest();
     expect(accepted.targetSets.abilities).toHaveLength(90);
-    // Read from ABILITY_ART_PENDING, the one enumeration of the painted-ability
-    // debt (src/ui/icons.ts), so unenumerated debt still reddens this line. The
-    // release painted every ability that existed when the wave landed; the only
-    // artless ids are the three Realm Racers pickup abilities appended after it.
-    expect(Object.keys(ABILITIES).filter((id) => !ABILITY_IMAGE_IDS.has(id))).toEqual([
-      ...ABILITY_ART_PENDING,
-    ]);
+    // Every live ability is painted, except the explicitly parked glyph-only
+    // ids (ABILITY_ART_PENDING), which a later art pass paints; a parked id
+    // that ships art anyway is a stale entry and reds below.
+    expect(
+      Object.keys(ABILITIES).filter(
+        (id) => !ABILITY_IMAGE_IDS.has(id) && !ABILITY_ART_PENDING.has(id),
+      ),
+    ).toEqual([]);
+    expect([...ABILITY_ART_PENDING].filter((id) => !Object.hasOwn(ABILITIES, id))).toEqual([]);
+    expect([...ABILITY_ART_PENDING].filter((id) => ABILITY_IMAGE_IDS.has(id))).toEqual([]);
     // The debt list itself, pinned to literals: the derivation above keeps the
     // set honest against the registry, but on its own it lets the debt GROW
     // silently (a new unpainted ability plus a new pending row still agree).
     expect([...ABILITY_ART_PENDING].sort()).toEqual([
+      'hamstring_bite',
+      'lunge',
       'rally_ground_blast',
       'rally_nitro',
       'rally_oil_slick',
@@ -648,18 +656,50 @@ describe('missing painted deed and Heroic weapon integration', () => {
       'pvp_card_duel_first_win',
     ]);
     // Later releases appended more deeds after this historical wave. The
-    // release art audit painted those additions, so the wave's own claim is
-    // unchanged: every deed that existed when it landed is painted. The only
-    // artless ids are the post-audit appends (the walk-in castle visit pair,
-    // the bank socket ladder pair, the Proving Shore graduation, the Crucible
-    // raid block, and the seven Realm Racers placing deeds), riding the
-    // category-crest fallback the Icons authoring rule in
-    // docs/design/deeds.md sanctions until their 512px sources are
-    // commissioned (flagged in docs/achievements/icon-brief.md). Read from
-    // DEED_ART_PENDING, the one enumeration of that debt (src/ui/icons.ts),
-    // so this file cannot end up naming a different pending set than the
-    // other two art suites. Exhaustive: another artless deed still reds here.
-    expect(DEED_ORDER).toHaveLength(288);
+    // release art audit painted those additions, and the six Masterwrought
+    // jewelcrafting and inscription milestone deeds (phases 05 and 06) each
+    // shipped their crest in the change that added them. The only artless ids
+    // are the release's walk-in castle visit pair, its bank socket pair (Bank
+    // Storage phase 06), and the six farming
+    // celebration deeds appended after the audit, riding the category-crest
+    // fallback the Icons authoring rule in docs/design/deeds.md sanctions
+    // until their 512px sources are commissioned (flagged in
+    // docs/achievements/icon-brief.md). Read from DEED_ART_PENDING, the one
+    // enumeration of that debt (src/ui/icons.ts), so this file cannot end up
+    // naming a different pending set than the other two art suites.
+    // Exhaustive: an unenumerated artless deed still reds here.
+    // 286 at the farming absorb (Phase 11d): the base 273 plus the six
+    // Masterwrought milestone deeds plus farming's seven (six pending
+    // celebration deeds and the painted prog_farming_100 crest). 287 at Phase
+    // 11e, whose roster deed joins the PENDING side: that phase ships no crest
+    // under the packet's declared art park for 11e to 11k. 288 at Phase 11i,
+    // whose one deed (col_deepest_cast) joins the same pending side for the
+    // same reason, and 289 at Phase 11k, whose prog_field_to_feast does too.
+    // 290 at the release/v0.41.0 sync: the release's Proving Shore graduation
+    // deed (prog_ready_for_an_adventure, 273 to 274 on its own arm) joins the
+    // same pending side, riding the deed_cat_progression crest until its
+    // commissioned art lands. 291 at masterwrought Phase 13, whose promotion
+    // capstone (prog_legendmaker) joins the same pending side on the same
+    // crest: no title, so the Reliquary title-shelf rule does not force a
+    // committed crest. 293 at the v0.41.0 release-batch sync: the release's
+    // bank socket pair (Bank Storage phase 06, 274 to 276 on its own arm)
+    // joins the same pending side.
+    // 298 at the release/v0.41.0 merge (2026-08-30): the release's five
+    // Crucible raid deeds (276 to 281 on its own arm) join the same pending
+    // side on the deed_cat_dungeon crest.
+    // The personal hammer quest uses the explicitly pending hidden-category crest.
+    // 300 at THIS release/v0.42.0 merge: the Roots' Bramblehide set collection
+    // (col_set_bramblehide, 281 to 282 on the release's own arm) joins the
+    // same pending side.
+    // 308 at the release/v0.43.0 merge: plus the eight world-quest deeds.
+    // 315 with the seven faction standing deeds, 317 with the two Clue Scroll
+    // casket deeds; all nine sit on the pending side on category crests.
+    // 318 with the release's ferry round trip (exp_harbor_to_harbor), also on
+    // the pending side on the exploration crest.
+    // 325 with the seven Realm Racers placing deeds, appended after the ferry
+    // round trip and pending on the deed_cat_pvp crest.
+    expect(DEED_ORDER).toHaveLength(325);
+    expect(DEED_ART_PENDING.has('hid_forgebreaker')).toBe(true);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');
     const provenance = readFileSync(

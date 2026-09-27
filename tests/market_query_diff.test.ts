@@ -46,6 +46,11 @@ function echoOf(overrides: Partial<MarketInfo> = {}): MarketInfo {
     myListingCount: 0,
     sellPriceItemId: null,
     sellLowestPrice: null,
+    sweepQuote: null,
+    orders: [],
+    myOrderCount: 0,
+    maxOrders: 6,
+    unlistedMaterials: [],
     ...overrides,
   };
 }

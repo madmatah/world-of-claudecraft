@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import type { ActiveVarkhulAssembly } from '../sim/varkhul_assembly';
 import { formatNumber, getI18nRevision, t } from '../ui/i18n';
+import { floorVfxRenderOrder } from './floor_vfx_layer';
+import { attachSceneGroupGated } from './gated_scene_attach';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const BEAM_HEIGHT = 4.8;
@@ -119,19 +121,19 @@ function buildLane(index: number): BeamLaneVisual {
     basicMaterial(0xfff1a6, 0.96, true),
   );
   core.name = `varkhul-forge-beam-core-${index}`;
-  core.renderOrder = 14;
+  core.renderOrder = floorVfxRenderOrder('encounter', 13);
   const sheath = new THREE.Mesh(
     new THREE.CylinderGeometry(0.48, 0.62, 1, 10, 1, true),
     basicMaterial(0xff4b0b, 0.36, true),
   );
   sheath.name = `varkhul-forge-beam-sheath-${index}`;
-  sheath.renderOrder = 13;
+  sheath.renderOrder = floorVfxRenderOrder('encounter', 12);
   const impact = new THREE.Mesh(
     new THREE.SphereGeometry(0.82, 10, 6),
     basicMaterial(0xff7a19, 0.78, true),
   );
   impact.name = `varkhul-forge-impact-${index}`;
-  impact.renderOrder = 15;
+  impact.renderOrder = floorVfxRenderOrder('encounter', 14);
   return {
     column,
     columnGlowMaterials,
@@ -170,7 +172,7 @@ function buildHeatLabel(): {
   sprite.name = 'varkhul-forge-heat-percent';
   sprite.scale.set(5.4, 2.05, 1);
   sprite.position.y = 1.3;
-  sprite.renderOrder = 18;
+  sprite.renderOrder = floorVfxRenderOrder('encounter', 17);
   sprite.userData.actionable = true;
   return { sprite, canvas, texture };
 }
@@ -200,7 +202,7 @@ function buildWaveLabel(): {
   sprite.name = 'varkhul-forge-wave-status';
   sprite.scale.set(8.4, 1.58, 1);
   sprite.position.y = -0.55;
-  sprite.renderOrder = 18;
+  sprite.renderOrder = floorVfxRenderOrder('encounter', 17);
   sprite.userData.actionable = true;
   return { sprite, canvas, texture };
 }
@@ -324,7 +326,7 @@ function createVisual(bossId: number): ForgeBeamVisual {
     HEAT_SEGMENTS,
   );
   heatSegments.name = 'varkhul-forge-heat-segments';
-  heatSegments.renderOrder = 16;
+  heatSegments.renderOrder = floorVfxRenderOrder('encounter', 15);
   const segmentMatrix = new THREE.Matrix4();
   const emptyHeatColor = new THREE.Color(0x3a1712);
   for (let index = 0; index < HEAT_SEGMENTS; index++) {
@@ -347,7 +349,7 @@ function createVisual(bossId: number): ForgeBeamVisual {
     basicMaterial(0xff2e08, 0.48, true),
   );
   meltdownPlume.name = 'varkhul-forge-meltdown-plume';
-  meltdownPlume.renderOrder = 12;
+  meltdownPlume.renderOrder = floorVfxRenderOrder('encounter', 11);
   root.add(meltdownPlume);
 
   return {
@@ -418,6 +420,12 @@ export class VarkhulForgeBeamVisuals {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly groundY: (x: number, z: number) => number,
+    // The renderer's live compile gate: Varkhul is already active when the
+    // player steps through the Crucible gate, so the forge meter's first
+    // sync lands before the interior's encounter prewarm has run; a gated
+    // attach links its programs hidden instead of on the arrival frame
+    // (2026-09-12 hunt: the heat segments, twice in two sessions).
+    private readonly compileGate?: (target: THREE.Object3D) => Promise<unknown>,
   ) {}
 
   sync(assemblies: readonly ActiveVarkhulAssembly[]): void {
@@ -428,7 +436,13 @@ export class VarkhulForgeBeamVisuals {
       if (!visual) {
         visual = createVisual(state.bossId);
         this.visuals.set(state.bossId, visual);
-        this.scene.add(visual.root);
+        const attached = visual;
+        void attachSceneGroupGated(
+          this.scene,
+          visual.root,
+          this.compileGate,
+          () => this.visuals.get(state.bossId) !== attached,
+        ).catch(() => undefined);
       }
       visual.root.userData.overheat = state.forgeOverheat;
       visual.root.userData.warmupRemaining = state.forgeBeamWarmupRemaining;

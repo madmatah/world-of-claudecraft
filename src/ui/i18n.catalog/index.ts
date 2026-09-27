@@ -7,6 +7,7 @@ import { ITEM_SETS } from '../../sim/data';
 import { worldEntityText as worldNames } from '../world_entity_i18n';
 import { abilityStrings, classAbilityNames } from './abilities';
 import { apiErrorStrings } from './api_error';
+import { clueStrings } from './clues';
 import { editorStrings } from './editor';
 import { gameStrings } from './game';
 import { guideStrings } from './guide';
@@ -19,6 +20,7 @@ import { shellStrings } from './shell';
 
 export { abilityStrings, classAbilityNames } from './abilities';
 export { apiErrorStrings } from './api_error';
+export { clueStrings } from './clues';
 export { editorStrings } from './editor';
 export {
   gameStrings,
@@ -125,12 +127,16 @@ export const en = {
       x: 'X',
       z: 'Z',
       dungeon: 'Dungeon',
+      town: 'Town',
       difficulty: 'Difficulty',
       name: 'Name',
       spec: 'Spec',
       rallyCircuit: 'Circuit',
       rallyTier: 'Rival tier',
       rallyKitCharges: 'Weapon charges',
+      // Blank means every planted bed, which is what the farmgrow command
+      // itself does without an argument; the action description says so.
+      bed: 'Bed id (optional)',
     },
     difficulty: { normal: 'Normal', heroic: 'Heroic' },
     actions: {
@@ -191,7 +197,13 @@ export const en = {
         label: 'Grant gathering skill',
         description: 'Increase a gathering profession.',
       },
+      farmgrow: {
+        label: 'Ripen crops',
+        description:
+          'Bring your planted crop beds to their ready time, or one bed by id. Nothing else changes: the outcome was rolled when you planted.',
+      },
       teleport: { label: 'Teleport', description: 'Move to exact world coordinates.' },
+      town: { label: 'Town hub', description: 'Teleport to a town hub by name.' },
       dungeon: {
         label: 'Enter dungeon',
         description: 'Enter a dungeon with dev gate bypass.',
@@ -222,6 +234,16 @@ export const en = {
         label: 'Seed listing board',
         description: 'Create a premade listing scenario.',
       },
+      hillwarn: {
+        label: 'Hill countdown',
+        description: 'Announce a hill now; it rises after the full warning.',
+      },
+      hillnow: { label: 'Raise hill now', description: 'Raise a hill at once and stand on it.' },
+      hillrise: {
+        label: 'Skip hill countdown',
+        description: 'Raise the announced hill right away.',
+      },
+      hillend: { label: 'End hill', description: 'Make the current hill fall now.' },
     },
   },
   game: gameStrings,
@@ -233,8 +255,11 @@ export const en = {
     pristineVein: '{finder} struck a pristine vein!',
     ancientHeartwood: '{finder} felled an ancient heartwood!',
     moonlitBloom: '{finder} discovered a moonlit bloom!',
+    goldenHarvest: '{finder} reaped a golden harvest!',
   },
   apiError: apiErrorStrings,
+  // Clue Scroll hunt titles and per-step riddles (src/ui/i18n.catalog/clues.ts).
+  clues: clueStrings,
   guide: guideStrings,
   editor: editorStrings,
   // Cosmetic skin-select event overlay. Rarity names reuse itemUi.quality.*.
@@ -327,8 +352,8 @@ export const en = {
     viewAll: 'View all updates on GitHub',
   },
   download: {
-    title: 'Download Desktop Launcher',
-    desc: 'Get the standalone launcher for optimized performance and full-screen play.',
+    title: 'Download the desktop app',
+    desc: 'Play on Windows, macOS, or Linux with the same account and characters.',
     macCta: 'Download for macOS',
     windowsCta: 'Download for Windows',
     linuxCta: 'Download for Linux',
@@ -349,8 +374,7 @@ export const en = {
       'Instant single-player world in your browser. Nothing is saved: perfect for a quick brawl or testing.',
     offlineAria: 'Play Offline: start an instant local single-player session',
     tipTitle: 'TIP:',
-    tipText:
-      'For the smoothest experience, turn off ad blocker extensions on this site. Community reports found some blockers can cause lag.',
+    tipText: 'Game running slowly? Try disabling your ad blocker for this site.',
     serverOnline: 'Online',
     serverOffline: 'Offline',
     play: 'Play',
@@ -358,10 +382,6 @@ export const en = {
     serverLabel: 'Choose your world',
     serverAria: 'Select world: Online or Offline',
     serverOfflineSub: 'Instant local world',
-    caLabel: '$WOC Contract Address',
-    caCopyAria: 'Copy contract address',
-    caNote:
-      'WOC is our community token. It is not needed to play. Join Discord to discuss the WOC utility and flywheel.',
   },
   auth: {
     enterRealm: 'Enter the World',
@@ -927,6 +947,7 @@ export const en = {
       forgeUpgraded: 'Rift upgrade completed for {name}.',
       forgeEnchanted: 'Rift enchant completed for {name}.',
       forgeSocketed: 'Rift gem socketed for {name}.',
+      forgeGemReplaced: 'Rift gem replaced for {name}: {gem} destroyed.',
       // Boss lethal death-zone detonation log lines (src/sim/mob/locomotion.ts).
       // Each fires at the moment a telegraphed zone expires. Emitted in English
       // by the sim; re-localized via the sim.rift.detonate* rules in sim_i18n.ts.
@@ -946,10 +967,6 @@ export const en = {
       detonateStormcallersWrath: "Stormcaller's Wrath erupts!",
       detonateAbyssalMaw: 'Abyssal Maw closes!',
       detonateCrushingDepth: 'Crushing Depth crushes!',
-      detonatePactSeal: 'Pact Seal detonates!',
-      detonateBloodRite: 'Blood Rite falls!',
-      detonatePitSentence: 'Pit Sentence detonates!',
-      detonateHellfireBrand: 'Hellfire Brand detonates!',
     },
     delve: {
       cannotEnterNow: 'You cannot enter a delve right now.',
@@ -1349,24 +1366,24 @@ export const en = {
     boss: {
       varric: {
         bell: {
-          emote: 'Deacon Varric grips the buried bell with both hands!',
-          log: 'Deacon Varric begins to toll the burial bell.',
-          warning: 'Move away from Deacon Varric!',
+          emote: 'Deacon Vandric grips the buried bell with both hands!',
+          log: 'Deacon Vandric begins to toll the burial bell.',
+          warning: 'Move away from Deacon Vandric!',
           impact: "The bell's toll cracks the chamber floor!",
           lesson: 'Bell Toll: a ground slam every twelve seconds. Move out before it lands.',
         },
         raise: {
-          emote: 'Deacon Varric calls names from the broken graves!',
-          log: 'Deacon Varric begins Raise Dead.',
+          emote: 'Deacon Vandric calls names from the broken graves!',
+          log: 'Deacon Vandric begins Raise Dead.',
           warning: 'Stop the grave rite!',
           object: 'The cracked grave shudders with stolen breath.',
           interrupt_ok: 'The grave rite falters.',
-          interrupt_fail: "The dead answer Deacon Varric's call!",
+          interrupt_fail: "The dead answer Deacon Vandric's call!",
           lesson: 'Interrupt the cracked grave within five seconds or the dead rise to his call.',
         },
         pull: 'You step on hallowed dust with unclean purpose. Kneel, and be counted.',
         intro: 'No soul is lost. Only misplaced.',
-        mid60: 'Deacon Varric reads names from the ledger with shaking triumph.',
+        mid60: 'Deacon Vandric reads names from the ledger with shaking triumph.',
         mid30: 'The burial bell answers every name he speaks.',
         defeat: 'No... I had the names... I had them all...',
       },
@@ -1603,7 +1620,7 @@ export const en = {
       reliquary_shoulder: { name: 'Crumbled Spaulders' },
       reliquary_gloves_rog: { name: 'Bonewarden Grips' },
       deacon_reliquary_helm: { name: "Deacon's Reliquary Helm" },
-      varric_shadow_cowl: { name: "Varric's Shadow Cowl" },
+      varric_shadow_cowl: { name: "Vandric's Shadow Cowl" },
       siltguard_helm: { name: 'Siltguard Helm' },
       bulwark_rusted_pauldrons: { name: 'Bulwark-Rusted Pauldrons' },
       nhalias_bell_maul: { name: "Nhalia's Bell-Maul" },
@@ -1638,7 +1655,14 @@ export const en = {
       crypt_ritual_circle: { name: 'Ritual Circle' },
       kings_signet: { name: "King's Signet" },
       event_skin_token: { name: 'Mysterious Cosmetic Cache' },
+      emissary_cache: { name: "Emissary's Cache" },
+      // Clue Scrolls (world quests, Stage 3): the scroll and the casket it buries.
+      clue_scroll: { name: 'Clue Scroll' },
+      treasure_casket: { name: 'Treasure Casket' },
       heroic_mark: { name: 'Heroic Mark' },
+      wyrmfall_core: { name: 'Wyrmfall Core' },
+      sundered_essence: { name: 'Sundered Essence' },
+      makers_ember: { name: "Maker's Ember" },
       eastbrook_buckler: { name: 'Eastbrook Buckler' },
       eastbrook_greatsword: { name: 'Eastbrook Greatsword' },
       highwatch_greatsword: { name: 'Highwatch Greatsword' },
@@ -1662,7 +1686,7 @@ export const en = {
       cryptplate_helm: { name: 'Cryptplate Helm' },
       shadowpulse_slippers: { name: 'Shadowpulse Slippers' },
       bonechill_cord: { name: 'Bonechill Cord' },
-      mistforged_pauldrons: { name: 'Mistforged Pauldrons' },
+      mistforged_pauldrons: { name: 'Fogforged Pauldrons' },
       tideguard_faceguard: { name: 'Tideguard Faceguard' },
       sunken_court_mantle: { name: 'Sunken Court Mantle' },
       lunar_choir_leggings: { name: 'Lunar Choir Leggings' },
@@ -1747,6 +1771,61 @@ export const en = {
       // until the raid loot pass wires them.
       varkhul_forgebreaker: { name: 'Forgebreaker, Engine of Varkhul' },
       varkhul_emberward: { name: 'Emberward, Bulwark of Varkhul' },
+      // The trinket slot's items (src/sim/content/trinkets.ts TRINKET_ITEMS).
+      bastion_sigil: { name: 'Bastion Sigil' },
+      mooring_stone: { name: 'Mooring Stone' },
+      menders_hourglass: { name: "Mender's Hourglass" },
+      wellspring_seed: { name: 'Wellspring Seed' },
+      paired_talons: { name: 'Paired Talons' },
+      hunters_tally: { name: "Hunter's Tally" },
+      stormjar: { name: 'Stormjar' },
+      echoing_lens: { name: 'Echoing Lens' },
+      gamblers_die: { name: "Gambler's Die" },
+      sundered_prism: { name: 'Sundered Prism' },
+      wayfarers_lodestone: { name: "Wayfarer's Lodestone" },
+      medallion_of_defiance: { name: 'Medallion of Defiance' },
+      duelists_brand: { name: "Duelist's Brand" },
+      // The Crucible of the Last Spring raid trinkets (Ignivar and Varkhul).
+      forgefathers_temper: { name: "Forgefather's Temper" },
+      kindling_orb: { name: 'Kindling Orb' },
+      molten_fletching: { name: 'Molten Fletching' },
+      last_flame_lantern: { name: 'Last Flame Lantern' },
+      heart_of_the_crucible: { name: 'Heart of the Crucible' },
+      // Faction Quartermaster vendor items
+      rift_watchers_band: { name: "Rift Watcher's Band" },
+      rift_surveyors_satchel: { name: "Rift Surveyor's Satchel" },
+      riftwalkers_tunic: { name: "Riftwalker's Tunic" },
+      riftwarden_voidblade: { name: "Riftwarden's Voidblade" },
+      champion_rift_band: { name: "Champion's Rift Band" },
+      order_prayer_beads: { name: 'Order Prayer Beads' },
+      vestments_of_the_acolyte: { name: 'Vestments of the Acolyte' },
+      templar_dawn_shield: { name: "Templar's Dawn Shield" },
+      dawnkeeper_consecrated_mace: { name: "Dawnkeeper's Consecrated Mace" },
+      champion_dawn_medallion: { name: "Champion's Dawn Medallion" },
+      automaton_cog_ring: { name: 'Automaton Cog Ring' },
+      clockwork_tinkers_pack: { name: "Clockwork Tinker's Pack" },
+      artificers_welding_cowl: { name: "Artificer's Welding Cowl" },
+      forgemaster_crag_cleaver: { name: "Forgemaster's Crag Cleaver" },
+      champion_forged_loop: { name: "Champion's Forged Loop" },
+      // Faction ladder rework (world-quest reputation): the periphery rows
+      // and the four learned formulas, docs/design/factions.md.
+      tidewatchers_locket: { name: "Tidewatcher's Locket" },
+      riftwalkers_cord: { name: "Riftwalker's Cord" },
+      riftwalkers_treads: { name: "Riftwalker's Treads" },
+      formula_riftwalkers_grace: { name: "Formula: Riftwalker's Grace" },
+      riftwardens_pendant: { name: "Riftwarden's Pendant" },
+      acolytes_signet: { name: "Acolyte's Signet" },
+      cord_of_the_dawn: { name: 'Cord of the Dawn' },
+      dawnlit_slippers: { name: 'Dawnlit Slippers' },
+      formula_dawnfire_etching: { name: 'Formula: Dawnfire Etching' },
+      formula_dawns_benediction: { name: "Formula: Dawn's Benediction" },
+      champions_dawn_loop: { name: "Champion's Dawn Loop" },
+      dawnkeepers_circle: { name: "Dawnkeeper's Circle" },
+      cogwork_choker: { name: 'Cogwork Choker' },
+      forgemasters_girdle: { name: "Forgemaster's Girdle" },
+      forgemasters_sabatons: { name: "Forgemaster's Sabatons" },
+      formula_piston_drive: { name: 'Formula: Piston Drive' },
+      forgewall_gorget: { name: 'Forgewall Gorget' },
     },
     itemSets: itemSetEntityText,
     mobs: {

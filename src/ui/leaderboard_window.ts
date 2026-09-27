@@ -26,6 +26,7 @@ import type {
   GuildLeaderboardPage,
   IWorld,
   LeaderboardPage,
+  WorldQuestLeaderboardPage,
 } from '../world_api';
 import { deedTitleText } from './deed_i18n';
 import {
@@ -42,6 +43,20 @@ import { buildGuildLeaderboardView, type GuildLeaderboardRow } from './guild_lea
 import { guildTagHtml } from './guild_tag';
 import { formatNumber, t } from './i18n';
 import {
+  dailyPodiumSlot,
+  deedsPodiumSlot,
+  devPodiumSlot,
+  guildPodiumSlot,
+  playersPodiumSlot,
+} from './leaderboard_board_html';
+import { type PodiumSlotHtml, podiumHtml } from './leaderboard_podium_html';
+import {
+  guildStandingRow,
+  playersStandingBar,
+  podiumSplit,
+  viewerRowOnPage,
+} from './leaderboard_podium_view';
+import {
   buildLeaderboardView,
   type LeaderboardPager,
   type LeaderboardRow,
@@ -49,10 +64,22 @@ import {
 } from './leaderboard_view';
 import { rovingTarget } from './roving_index';
 import { svgIcon } from './ui_icons';
+import {
+  DEFAULT_WORLD_QUEST_BOARD,
+  resolveWorldQuestBoard,
+  type WorldQuestLeaderboardRowView,
+  worldQuestBoardChips,
+  worldQuestLeaderboardRow,
+  worldQuestMetricHeader,
+} from './world_quest_leaderboard_view';
+import {
+  WORLD_QUEST_RANKINGS_ROOT_ID,
+  WorldQuestLeaderboardWindow,
+} from './world_quest_leaderboard_window';
 import { formatXp } from './xp_bar';
 
 /** Which high-score board the window is showing. */
-type LeaderboardBoard = 'players' | 'guilds' | 'deeds' | 'devs' | 'daily';
+type LeaderboardBoard = 'players' | 'guilds' | 'deeds' | 'devs' | 'daily' | 'worldQuests';
 
 /**
  * Hud-supplied glue. The leaderboard window renders entirely from IWorld + these
@@ -68,6 +95,12 @@ export interface LeaderboardWindowDeps {
   onVisibilityChange?(): void;
   /** The viewer's developer-badge display preference; also hides the Developers tab. */
   showDevBadges(): boolean;
+  /** Builds the focus bridge for a sibling window root. When wired (and the
+   *  rankings root exists in the page), the World Quests tab launches the World
+   *  Quest rankings window this one owns instead of rendering its chip board. */
+  windowFocusFor?(
+    rootSelector: string,
+  ): Pick<LeaderboardWindowDeps, 'captureFocus' | 'restoreFocus'>;
 }
 
 /** Where focus should land after a (re)render: into the window on open, back onto
@@ -85,6 +118,10 @@ export class LeaderboardWindow {
   private deedsPage = 0;
   private devPage = 0;
   private dailyPage = 0;
+  private worldQuestPage = 0;
+  // Which world-quest scoreboard the World Quests tab shows (a chip strip
+  // inside the tab, not a top-level tab per board).
+  private worldQuestBoard: string = DEFAULT_WORLD_QUEST_BOARD;
   // Render epoch (the DailyRewardsWindow renderSeq pattern). The five boards
   // share one .lb-body, so every board arm re-checks this after its await: a
   // slow response for an older tab or page must neither repaint the shared
@@ -92,13 +129,38 @@ export class LeaderboardWindow {
   // pager state (this.page dispatches on the CURRENT this.board).
   private renderSeq = 0;
   private openerFocus: HTMLElement | null = null;
+  // The World Quest rankings window the World Quests tab launches, built on
+  // first use; null when the page has no rankings root or no focus bridge.
+  private rankings: WorldQuestLeaderboardWindow | null = null;
   constructor(private readonly deps: LeaderboardWindowDeps) {}
+
+  openGliderRankings(): void {
+    this.worldQuestRankings()?.open('glider_downs_v2_daily');
+  }
+
+  private worldQuestRankings(): WorldQuestLeaderboardWindow | null {
+    if (this.rankings) return this.rankings;
+    const focusFor = this.deps.windowFocusFor;
+    const root = this.deps.root().ownerDocument.getElementById(WORLD_QUEST_RANKINGS_ROOT_ID);
+    if (!focusFor || !root) return null;
+    this.rankings = new WorldQuestLeaderboardWindow({
+      root: () => root,
+      world: () => this.deps.world(),
+      // The deps method, not a call written here: toggle() owns the one
+      // captureFocus-then-closeOthers order the source pin checks.
+      closeOthers: this.deps.closeOthers.bind(this.deps),
+      ...focusFor(`#${WORLD_QUEST_RANKINGS_ROOT_ID}`),
+      onVisibilityChange: () => this.deps.onVisibilityChange?.(),
+    });
+    return this.rankings;
+  }
 
   private get page(): number {
     if (this.board === 'guilds') return this.guildPage;
     if (this.board === 'deeds') return this.deedsPage;
     if (this.board === 'devs') return this.devPage;
     if (this.board === 'daily') return this.dailyPage;
+    if (this.board === 'worldQuests') return this.worldQuestPage;
     return this.playerPage;
   }
 
@@ -107,6 +169,7 @@ export class LeaderboardWindow {
     else if (this.board === 'deeds') this.deedsPage = value;
     else if (this.board === 'devs') this.devPage = value;
     else if (this.board === 'daily') this.dailyPage = value;
+    else if (this.board === 'worldQuests') this.worldQuestPage = value;
     else this.playerPage = value;
   }
 
@@ -122,6 +185,11 @@ export class LeaderboardWindow {
 
   /** Open if closed, close if open (the minimap / menu leaderboard button). */
   toggle(): void {
+    // The rankings window stands in for this one: the same toggle closes it.
+    if (this.rankings?.isOpen) {
+      this.rankings.close();
+      return;
+    }
     if (this.isOpen) {
       this.close();
       return;
@@ -136,12 +204,14 @@ export class LeaderboardWindow {
     this.deedsPage = 0;
     this.devPage = 0;
     this.dailyPage = 0;
+    this.worldQuestPage = 0;
     this.deps.root().style.display = 'flex';
     this.deps.onVisibilityChange?.();
     void this.render('open');
   }
 
   close(): void {
+    this.rankings?.close();
     const el = this.deps.root();
     if (el.style.display !== 'flex') {
       this.openerFocus = null;
@@ -194,6 +264,10 @@ export class LeaderboardWindow {
       await this.renderDailyBoard(el, world, focus, seq);
       return;
     }
+    if (this.board === 'worldQuests') {
+      await this.renderWorldQuestBoard(el, world, focus, seq);
+      return;
+    }
 
     let result: LeaderboardPage | null = null;
     try {
@@ -239,10 +313,12 @@ export class LeaderboardWindow {
     if (view.kind !== 'ranked') return;
     // Mirror the server's clamped page back into the pager state.
     this.page = view.page;
+    const split = podiumSplit(view.page, view.rows, (row) => row.rank);
     body.innerHTML =
+      this.podiumHtml(split.podium.map((slot) => playersPodiumSlot(slot, deedTitleText))) +
       this.headerHtml() +
-      view.rows.map((r) => this.rowHtml(r)).join('') +
-      this.stickyHtml(view.standing) +
+      split.listed.map((r) => this.rowHtml(r)).join('') +
+      this.stickyHtml(playersStandingBar(view.rows, view.standing)) +
       this.pagerHtml(view.pager);
     this.wirePager(body as HTMLElement, focus);
   }
@@ -286,9 +362,13 @@ export class LeaderboardWindow {
     }
     if (view.kind !== 'ranked') return;
     this.page = view.page;
+    const split = podiumSplit(view.page, view.rows, (row) => row.rank);
+    const ownGuild = guildStandingRow(view.rows, world.player.guild);
     body.innerHTML =
+      this.podiumHtml(split.podium.map((slot) => guildPodiumSlot(slot, world.player.guild))) +
       this.guildHeaderHtml() +
-      view.rows.map((r) => this.guildRowHtml(r)).join('') +
+      split.listed.map((r) => this.guildRowHtml(r)).join('') +
+      this.standingHtml(ownGuild ? this.guildRowHtml(ownGuild) : '') +
       this.pagerHtml(view.pager);
     this.wirePager(body as HTMLElement, focus);
   }
@@ -337,10 +417,12 @@ export class LeaderboardWindow {
     }
     if (view.kind !== 'ranked') return;
     this.page = view.page;
+    const split = podiumSplit(view.page, view.rows, (row) => row.rank);
     body.innerHTML =
       this.deedsScopeNoteHtml() +
+      this.podiumHtml(split.podium.map((slot) => deedsPodiumSlot(slot, deedTitleText))) +
       this.deedsHeaderHtml() +
-      view.rows.map((r) => this.deedsRowHtml(r)).join('') +
+      split.listed.map((r) => this.deedsRowHtml(r)).join('') +
       this.deedsSelfHtml(view.self) +
       this.pagerHtml(view.pager);
     this.wirePager(body as HTMLElement, focus);
@@ -385,9 +467,13 @@ export class LeaderboardWindow {
     }
     if (view.kind !== 'ranked') return;
     this.page = view.page;
+    const split = podiumSplit(view.page, view.rows, (row) => row.rank);
+    const ownDev = viewerRowOnPage(view.rows);
     body.innerHTML =
+      this.podiumHtml(split.podium.map(devPodiumSlot)) +
       this.devHeaderHtml() +
-      view.rows.map((r) => this.devRowHtml(r)).join('') +
+      split.listed.map((r) => this.devRowHtml(r)).join('') +
+      this.standingHtml(ownDev ? this.devRowHtml(ownDev) : '') +
       this.pagerHtml(view.pager);
     this.wirePager(body as HTMLElement, focus);
   }
@@ -420,10 +506,14 @@ export class LeaderboardWindow {
       return;
     }
     this.page = result.page;
+    const split = podiumSplit(result.page, result.leaders, (row) => row.rank);
+    const ownDaily = viewerRowOnPage(result.leaders);
     body.innerHTML =
       this.dailyTotalHtml(result.total) +
+      this.podiumHtml(split.podium.map(dailyPodiumSlot)) +
       this.dailyHeaderHtml() +
-      result.leaders.map((r) => this.dailyRowHtml(r)).join('') +
+      split.listed.map((r) => this.dailyRowHtml(r)).join('') +
+      this.standingHtml(ownDaily ? this.dailyRowHtml(ownDaily) : '') +
       this.pagerHtml(
         result.pageCount > 1
           ? {
@@ -437,14 +527,114 @@ export class LeaderboardWindow {
     this.wirePager(body as HTMLElement, focus);
   }
 
+  // The World Quests tab: the medal world quests' public ladders. One chip
+  // per scoreboard above the rows (selection is window state, like the page),
+  // the same async + epoch + pager shape as the daily board.
+  private async renderWorldQuestBoard(
+    el: HTMLElement,
+    world: IWorld,
+    focus: FocusTarget,
+    seq: number,
+  ): Promise<void> {
+    const board = resolveWorldQuestBoard(this.worldQuestBoard);
+    let result: WorldQuestLeaderboardPage | null = null;
+    try {
+      result = await world.worldQuestLeaderboard(board.id, this.page, LEADERBOARD_PAGE_SIZE);
+    } catch {
+      result = null;
+    }
+    if (seq !== this.renderSeq || el.style.display !== 'flex') return;
+    const body = el.querySelector('.lb-body');
+    if (!body) return;
+    const chips = this.worldQuestChipsHtml();
+    if (result === null) {
+      body.innerHTML =
+        chips +
+        `<div class="lb-empty lb-error" role="alert">${esc(t('game.leaderboard.retry'))}</div>`;
+      this.wireWorldQuestChips(body as HTMLElement);
+      this.focusCloseAfterPage(focus);
+      return;
+    }
+    if (result.leaders.length === 0) {
+      body.innerHTML =
+        chips + `<div class="lb-empty">${esc(t('hudChrome.leaderboard.wqEmpty'))}</div>`;
+      this.wireWorldQuestChips(body as HTMLElement);
+      this.focusCloseAfterPage(focus);
+      return;
+    }
+    this.page = result.page;
+    const viewer = world.player.name;
+    body.innerHTML =
+      chips +
+      this.worldQuestHeaderHtml(worldQuestMetricHeader(board)) +
+      result.leaders
+        .map((entry) => this.worldQuestRowHtml(worldQuestLeaderboardRow(board, entry, viewer)))
+        .join('') +
+      this.pagerHtml(
+        result.pageCount > 1
+          ? {
+              page: result.page,
+              pageCount: result.pageCount,
+              prevDisabled: result.page <= 0,
+              nextDisabled: result.page >= result.pageCount - 1,
+            }
+          : null,
+      );
+    this.wireWorldQuestChips(body as HTMLElement);
+    this.wirePager(body as HTMLElement, focus);
+  }
+
+  private worldQuestChipsHtml(): string {
+    const chips = worldQuestBoardChips(resolveWorldQuestBoard(this.worldQuestBoard).id)
+      .map(
+        (chip) =>
+          `<button type="button" class="lb-wq-chip${chip.active ? ' lb-wq-chip-active' : ''}" ` +
+          `data-leaderboard-wq-board="${esc(chip.id)}" aria-pressed="${chip.active ? 'true' : 'false'}">${esc(chip.label)}</button>`,
+      )
+      .join('');
+    return `<div class="lb-wq-chips" role="group" aria-label="${esc(t('hudChrome.leaderboard.wqBoardsLabel'))}">${chips}</div>`;
+  }
+
+  private wireWorldQuestChips(body: HTMLElement): void {
+    body.querySelectorAll<HTMLButtonElement>('[data-leaderboard-wq-board]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const next = button.dataset.leaderboardWqBoard ?? '';
+        if (next === this.worldQuestBoard) return;
+        this.worldQuestBoard = next;
+        this.worldQuestPage = 0;
+        void this.render('action');
+      });
+    });
+  }
+
+  private worldQuestHeaderHtml(metric: string): string {
+    return (
+      `<div class="lb-row lb-wq lb-head"><span class="lb-rank">${esc(t('game.leaderboard.rank'))}</span>` +
+      `<span class="lb-name">${esc(t('game.leaderboard.name'))}</span>` +
+      `<span class="lb-medal">${esc(t('hudChrome.leaderboard.wqMedal'))}</span>` +
+      `<span class="lb-xp">${esc(metric)}</span></div>`
+    );
+  }
+
+  private worldQuestRowHtml(r: WorldQuestLeaderboardRowView): string {
+    const you = r.me ? ` <span class="lb-you">(${esc(t('game.leaderboard.you'))})</span>` : '';
+    const medalClass = r.medal ? ` lb-medal-${r.medal}` : '';
+    return (
+      `<div class="lb-row lb-wq${r.me ? ' lb-mine' : ''}"><span class="lb-rank">${esc(r.rank)}</span>` +
+      `<span class="lb-name">${esc(r.name)}${you}</span>` +
+      `<span class="lb-medal${medalClass}">${esc(r.medalText)}</span>` +
+      `<span class="lb-xp">${esc(r.metricText)}</span></div>`
+    );
+  }
+
   // ---- HTML builders (the localized DOM the pure view-model drives) ----------
 
   private titleHtml(realm: string): string {
     const realmTag = realm ? ` &middot; ${esc(realm)}` : '';
     return (
-      `<div class="panel-title"><span id="leaderboard-title">${esc(t('game.leaderboard.title'))} ` +
-      `<span class="lb-subtitle">${esc(t('game.leaderboard.subtitle'))}${realmTag}</span></span>` +
-      `<button type="button" class="x-btn" data-close aria-label="${esc(t('hudChrome.leaderboard.close'))}">${svgIcon('close')}</button></div>`
+      `<div class="panel-title ui-win-head"><span id="leaderboard-title" class="ui-win-title">${esc(t('game.leaderboard.title'))} ` +
+      `<span class="lb-subtitle ui-win-sub">${esc(t('game.leaderboard.subtitle'))}${realmTag}</span></span>` +
+      `<button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hudChrome.leaderboard.close'))}">${svgIcon('close')}</button></div>`
     );
   }
 
@@ -456,7 +646,7 @@ export class LeaderboardWindow {
   // src/styles/components.css). It is emitted here, not stamped once at open,
   // because every render() rebuilds the window's innerHTML from scratch.
   private loadingBodyHtml(): string {
-    return `<div class="lb-body window-fill" id="lb-body-panel" role="tabpanel"><div class="lb-loading" role="status" aria-busy="true">${esc(t('game.leaderboard.loading'))}</div></div>`;
+    return `<div class="lb-body window-fill ui-card" id="lb-body-panel" role="tabpanel"><div class="lb-loading" role="status" aria-busy="true">${esc(t('game.leaderboard.loading'))}</div></div>`;
   }
 
   // The Players / Guilds / Daily tab bar. A WAI-ARIA role=tablist with roving
@@ -467,18 +657,19 @@ export class LeaderboardWindow {
     const tab = (board: LeaderboardBoard, label: string): string => {
       const active = this.board === board;
       return (
-        `<button type="button" role="tab" class="lb-tab${active ? ' lb-tab-active' : ''}" ` +
+        `<button type="button" role="tab" class="lb-tab ui-tab${active ? ' lb-tab-active' : ''}" ` +
         `data-leaderboard-tab="${board}" aria-selected="${active ? 'true' : 'false'}" ` +
         `tabindex="${active ? '0' : '-1'}" aria-controls="lb-body-panel">${esc(label)}</button>`
       );
     };
     return (
-      `<div class="lb-tabs" role="tablist" aria-label="${esc(t('hudChrome.leaderboard.tabsLabel'))}">` +
+      `<div class="lb-tabs ui-tabs" role="tablist" aria-label="${esc(t('hudChrome.leaderboard.tabsLabel'))}">` +
       tab('players', t('hudChrome.leaderboard.tabPlayers')) +
       tab('guilds', t('hudChrome.leaderboard.tabGuilds')) +
       tab('deeds', t('hudChrome.deeds.lbTab')) +
       (this.deps.showDevBadges() ? tab('devs', t('hudChrome.leaderboard.tabDevs')) : '') +
       tab('daily', t('hudChrome.dailyRewards.leaderboard')) +
+      tab('worldQuests', t('hudChrome.leaderboard.tabWorldQuests')) +
       `</div>`
     );
   }
@@ -488,7 +679,17 @@ export class LeaderboardWindow {
     // Switch the board and re-render with focus:'tab' so the rebuilt strip puts
     // focus back on the now-active tab (selection-follows-focus) instead of letting
     // the innerHTML swap drop it to <body>. A no-op when the board is unchanged.
+    // The World Quests tab launches its own rankings window when Hud wires it:
+    // activation opens it, while arrowing onto it only moves focus (opening a
+    // window from roving focus would yank the keyboard user out of the strip).
+    const opensRankings = (next: LeaderboardBoard): boolean =>
+      next === 'worldQuests' && this.worldQuestRankings() !== null;
     const switchBoard = (next: LeaderboardBoard): void => {
+      if (opensRankings(next)) {
+        this.close();
+        this.worldQuestRankings()?.open();
+        return;
+      }
       if (next === this.board) return;
       this.board = next;
       void this.render('tab');
@@ -502,7 +703,10 @@ export class LeaderboardWindow {
         if (next !== null) {
           ke.preventDefault();
           const target = tabs[next];
-          if (target) switchBoard(target.dataset.leaderboardTab as LeaderboardBoard);
+          if (!target) return;
+          const nextBoard = target.dataset.leaderboardTab as LeaderboardBoard;
+          if (opensRankings(nextBoard)) target.focus();
+          else switchBoard(nextBoard);
           return;
         }
         // Enter / Space activate the focused tab. preventDefault suppresses the
@@ -637,7 +841,7 @@ export class LeaderboardWindow {
             renown: formatNumber(self.renown, { maximumFractionDigits: 0 }),
           })
         : t('hudChrome.deeds.lbSelfRank', { rank, percent });
-    return `<div class="lb-self">${esc(line)}</div>`;
+    return `<div class="lb-self lb-standing">${esc(line)}</div>`;
   }
 
   private dailyHeaderHtml(): string {
@@ -667,7 +871,7 @@ export class LeaderboardWindow {
     // &starf; renders the prestige star without a literal symbol glyph in source.
     const star =
       r.prestigeRank > 0
-        ? `<span class="lb-prestige" title="${esc(`${t('game.prestige.rank')} ${formatNumber(r.prestigeRank, { maximumFractionDigits: 0 })}`)}">&starf;${formatNumber(r.prestigeRank, { maximumFractionDigits: 0 })}</span> `
+        ? `<span class="lb-prestige" title="${esc(t('hudChrome.leaderboard.prestigeTitle', { rank: formatNumber(r.prestigeRank, { maximumFractionDigits: 0 }) }))}">&starf;${formatNumber(r.prestigeRank, { maximumFractionDigits: 0 })}</span> `
         : '';
     const title = r.knownClass ? ` title="${esc(classDisplayName(r.cls))}"` : '';
     const you = r.me ? ` <span class="lb-you">(${esc(t('game.leaderboard.you'))})</span>` : '';
@@ -683,21 +887,47 @@ export class LeaderboardWindow {
     );
   }
 
-  // The sticky "your standing" row, shown when the viewer is off the visible page.
+  // The sticky "your standing" pill: the viewer's ranked row when it is on this
+  // page, else their off-page standing with the placeholder rank. The compact
+  // pill hides the level, virtual level and title cells; they stay in the
+  // markup so the row keeps the players grid variant the source pins read.
   // &mdash; is the unranked-rank placeholder, kept as an entity so the source
   // carries no literal em dash (project style rule).
-  private stickyHtml(standing: LeaderboardStanding | null): string {
+  private stickyHtml(standing: (LeaderboardStanding & { rank: number | null }) | null): string {
     if (!standing) return '';
+    const rankCell =
+      standing.rank === null
+        ? '&mdash;'
+        : formatNumber(standing.rank, { maximumFractionDigits: 0 });
     // The Renown-tab title-cell treatment, mirroring rowHtml: a deed id in the
     // view-model, localized here; '' (untitled/stale) renders an empty cell.
     const deedTitle = standing.title ? deedTitleText(standing.title) : '';
     return (
-      `<div class="lb-sticky"><div class="lb-row lb-row-players lb-mine"><span class="lb-rank">&mdash;</span>` +
+      `<div class="lb-sticky lb-standing">${this.standingLabelHtml()}<div class="lb-row lb-row-players lb-mine"><span class="lb-rank">${rankCell}</span>` +
       `<span class="lb-name">${esc(standing.name)}${guildTagHtml(standing.guild, 'lb-guild')} <span class="lb-you">(${esc(t('game.leaderboard.you'))})</span></span>` +
       `<span class="lb-lvl">${formatNumber(standing.level, { maximumFractionDigits: 0 })}</span><span class="lb-vlvl">${formatNumber(standing.virtualLevel, { maximumFractionDigits: 0 })}</span>` +
       `<span class="lb-xp">${formatXp(standing.lifetimeXp)}</span>` +
       `<span class="lb-deed-title">${esc(deedTitle)}</span></div></div>`
     );
+  }
+
+  // The shared top-three podium (leaderboard_podium_html.ts), first page only.
+  private podiumHtml(slots: PodiumSlotHtml[]): string {
+    return podiumHtml(slots, t('hudChrome.leaderboard.podiumLabel'));
+  }
+
+  // The viewer's own row pinned under the list, in the sticky standing bar the
+  // players tab uses; '' when the viewer is not on this page.
+  private standingHtml(rowHtml: string): string {
+    return rowHtml
+      ? `<div class="lb-sticky lb-standing">${this.standingLabelHtml()}${rowHtml}</div>`
+      : '';
+  }
+
+  // The compact bar's lead-in ("Your Standing"), so the pinned row reads as the
+  // viewer's own summary and not as a repeated ladder row.
+  private standingLabelHtml(): string {
+    return `<span class="lb-standing-label">${esc(t('game.leaderboard.yourRank'))}</span>`;
   }
 
   // Prev/Next pager, mirroring the World Market browse pager (it reuses the same
@@ -709,9 +939,9 @@ export class LeaderboardWindow {
     const status = t('itemUi.market.pageStatus', { current, total });
     return (
       `<div class="lb-pager">` +
-      `<button type="button" class="lb-page-btn" data-leaderboard-page="prev"${pager.prevDisabled ? ' disabled' : ''}>${esc(t('itemUi.market.pagePrev'))}</button>` +
+      `<button type="button" class="lb-page-btn ui-btn" data-leaderboard-page="prev"${pager.prevDisabled ? ' disabled' : ''}>${esc(t('itemUi.market.pagePrev'))}</button>` +
       `<span class="lb-page-status">${esc(status)}</span>` +
-      `<button type="button" class="lb-page-btn" data-leaderboard-page="next"${pager.nextDisabled ? ' disabled' : ''}>${esc(t('itemUi.market.pageNext'))}</button>` +
+      `<button type="button" class="lb-page-btn ui-btn" data-leaderboard-page="next"${pager.nextDisabled ? ' disabled' : ''}>${esc(t('itemUi.market.pageNext'))}</button>` +
       `</div>`
     );
   }

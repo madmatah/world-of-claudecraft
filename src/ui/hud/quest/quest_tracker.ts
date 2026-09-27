@@ -14,6 +14,8 @@ export interface TrackedObjective {
   label: string;
   current: number;
   total: number;
+  /** A movement lesson instruction, shown in full without a numeric suffix. */
+  instruction?: boolean;
 }
 
 export interface TrackedQuest {
@@ -29,6 +31,7 @@ export interface TrackedQuest {
 
 export interface QuestTrackerObjectiveRow extends TrackedObjective {
   done: boolean;
+  counted: boolean;
 }
 
 export interface QuestTrackerQuestRow {
@@ -43,7 +46,7 @@ export interface QuestTrackerView {
   /** Whether to render anything at all (false when no quests are tracked). */
   visible: boolean;
   collapsed: boolean;
-  /** Number of tracked quests; shown beside the header while collapsed. */
+  /** Number of tracked quests; shown beside the header in both states. */
   count: number;
   /** The quest rows to render; empty when collapsed (header only). */
   quests: QuestTrackerQuestRow[];
@@ -64,7 +67,11 @@ export function questTrackerView(
     number: q.number,
     title: q.title,
     complete: q.complete,
-    objectives: q.objectives.map((o) => ({ ...o, done: o.current >= o.total })),
+    objectives: q.objectives.map((o) => ({
+      ...o,
+      done: o.current >= o.total,
+      counted: o.total > 1,
+    })),
   }));
   return { visible: true, collapsed: false, count, quests: questRows };
 }

@@ -6,11 +6,10 @@
 // scene's light census (numDirLights, numHemiLights, numSpotLights,
 // numRectAreaLights, numPointLights), so adding, removing, or hiding one of
 // them relinks every lit material in view, measured at 100 to 200 ms per
-// relink. Point lights already answer to a budget that keeps their count
-// pinned (pointLightPadCount pads the census back up, see
-// tests/point_light_budget.test.ts), so THEY have a scheduler; these four have
-// no pad, and the only safe number of them is the number the renderer's
-// constructor built.
+// relink. Point lights already reach three through a fixed set of carriers
+// that keeps their count pinned (see tests/point_light_carriers.test.ts), so
+// THEY have a scheduler; these four have none, and the only safe number of
+// them is the number the renderer's constructor built.
 //
 // The pin is a source scan because there is no unit seam a light producer must
 // pass through: a builder can write `new THREE.DirectionalLight(...)` anywhere
@@ -98,10 +97,10 @@ const ALLOWED: Readonly<Record<string, CensusEntry>> = {
     reason:
       "the armory store preview's own secondary GL context: key/fill/rim in its own scene, built once at mount and only re-aimed per preset",
   },
-  'wildheart_props.ts': {
-    kinds: ['HemisphereLight', 'DirectionalLight'],
+  'mount_preview.ts': {
+    kinds: ['DirectionalLight'],
     reason:
-      'THE NAMED EXCEPTION: the Wildheart caldera interior rig adds a hemisphere and a directional light to the world scene when the interior builds, which is why its buildInterior arm is a deliberate ungated scene.add (pinned in tests/renderer_compile_gate.test.ts); pre-linking a scene-wide light census is backlog, not a precedent',
+      "the mount skin store preview's own secondary GL context: key/fill/rim in its own scene, built once at mount and only re-aimed per preset",
   },
 };
 
@@ -187,8 +186,8 @@ describe('the src/render light census', () => {
       'characters/portrait.ts',
       'characters/preview.ts',
       'foliage_impostor.ts',
+      'mount_preview.ts',
       'renderer.ts',
-      'wildheart_props.ts',
     ]);
   });
 
@@ -235,15 +234,21 @@ describe('the src/render light census', () => {
     }
   });
 
-  it('names the world rig, the secondary contexts, and the one exception', () => {
+  it('names the world rig and the secondary contexts, and nothing else', () => {
     // The shape of the list is itself the rule: a light belongs to the boot
-    // constructor, to a context that is not the world, or to the one arm that
-    // is already documented as a defect with a backlog item.
+    // constructor or to a context that is not the world. The Wildheart caldera
+    // rig was the one named exception (a fill pair added to the world scene at
+    // interior build, never removed, relinking every material drawn after a
+    // Palm Reach visit); its grade moved into interior_light_rig.ts.
     expect(ALLOWED['renderer.ts'].reason).toContain('constructor');
-    for (const context of ['characters/preview.ts', 'characters/portrait.ts', 'armory_preview.ts'])
+    for (const context of [
+      'characters/preview.ts',
+      'characters/portrait.ts',
+      'armory_preview.ts',
+      'mount_preview.ts',
+    ])
       expect(ALLOWED[context].reason).toContain('secondary GL context');
-    expect(ALLOWED['wildheart_props.ts'].reason).toContain('NAMED EXCEPTION');
-    expect(ALLOWED['wildheart_props.ts'].reason).toContain('backlog');
+    expect(ALLOWED['wildheart_props.ts']).toBeUndefined();
   });
 
   it('constructs a census-keyed light outside src/render only where allowlisted', () => {
@@ -299,7 +304,7 @@ describe('the src/render light census', () => {
       'RectAreaLight',
       'SpotLight',
     ]);
-    // A point light is out of scope here: it has a pad budget of its own.
+    // A point light is out of scope here: the carriers pin its count.
     expect(censusHits('const p = new THREE.PointLight(0xffffff, 5, 10, 2);')).toEqual([]);
     // A CLONE is a producer too, whatever the receiver is called.
     expect(censusHits('const extra = sunLight.clone();')).toEqual(['clone']);

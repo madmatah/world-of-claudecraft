@@ -10,16 +10,22 @@
 
 import { IGNIVAR_ART_PENDING_ITEM_IDS } from '../sim/content/ignivar_loot';
 import { isRawCookingCatch } from '../sim/content/items';
+import { SEASON2_SETS } from '../sim/content/pvp_honor_season2';
+import {
+  BRAMBLEHIDE_ART_PENDING_ITEM_IDS,
+  NYTHRAXIS_GAP_ART_PENDING_ITEM_IDS,
+} from '../sim/content/zone3';
 import { ABILITIES, ITEMS } from '../sim/data';
 import { crestIconUrl } from './crest_icon_art';
 import { currencyImageUrl } from './currency_art';
 import { DEED_IMAGE_IDS } from './deed_image_ids';
+import { professionImageUrl } from './hud/professions/profession_art';
 import { MOB_AURA_IMAGE_IDS } from './mob_aura_icon_art';
 import { PET_ACTION_IMAGE_IDS } from './pet_action_icons';
-import { professionImageUrl } from './profession_art';
+import { TRINKET_AURA_IMAGE_URLS } from './trinket_aura_art';
 import { ITEM_WEAPON_VARIANTS } from './weapon_variants';
 
-export { PROFESSION_IMAGE_IDS, professionImageUrl } from './profession_art';
+export { PROFESSION_IMAGE_IDS, professionImageUrl } from './hud/professions/profession_art';
 
 export type IconKind = 'ability' | 'item' | 'aura' | 'crest';
 
@@ -2591,6 +2597,73 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
   raid_varkhul_forge_legion: r('steel', 'ember', ['helm', { p: 'mace', ...BR }]),
   raid_varkhul_masterpiece_unbound: r('fury', 'blood', ['mace', 'flame'], ['glow']),
   raid_varkhul_worldfire: r('fire', 'blood', ['sunburst', 'flame'], ['glow', 'drips']),
+  // Nythraxis encounter-journal icons (same UI-owned convention): bone and shadow
+  // on a crypt palette, each mechanic keyed by its own primitive so the journal
+  // rows read apart at a glance.
+  raid_nythraxis_gravebreaker: r('shadow', 'bone', ['mace', { p: 'skull', ...BR }], ['motion']),
+  raid_nythraxis_dread_curse: r(
+    'shadow',
+    'shadowPurple',
+    ['skull', { p: 'sigil_rune', ...BR }],
+    ['glow'],
+  ),
+  raid_nythraxis_bone_spike: r(
+    'blood',
+    'bone',
+    ['bone', { p: 'droplet', ...BR, pal: 'blood' }],
+    ['crack'],
+  ),
+  raid_nythraxis_grave_eruption: r(
+    'earth',
+    'shadowPurple',
+    ['hand', { p: 'flame', ...BR }],
+    ['crack'],
+  ),
+  raid_nythraxis_binding_sigil: r(
+    'shadow',
+    'silverWhite',
+    ['sigil_rune', { p: 'tendrils', ...BR }],
+    ['arcs'],
+  ),
+  raid_nythraxis_raise_fallen: r('shadow', 'bone', ['helm', { p: 'skull', ...BR }], ['arcs']),
+  raid_nythraxis_soul_rend: r(
+    'shadow',
+    'shadowPurple',
+    ['heart', { p: 'claw_slash', ...BR }],
+    ['drips'],
+  ),
+  raid_nythraxis_soulfire: r('blood', 'shadowPurple', ['flame', { p: 'heart', ...BR }], ['drips']),
+  raid_nythraxis_gravefire: r(
+    'shadow',
+    'shadowPurple',
+    ['flame', { p: 'claw_slash', ...BR }],
+    ['motion'],
+  ),
+  raid_nythraxis_deathless_rage: r('shadow', 'blood', ['roar', { p: 'skull', ...BR }], ['glow']),
+  raid_nythraxis_deathless_court: r(
+    'shadow',
+    'silverWhite',
+    ['ascension_seal', { p: 'skull', ...BR }],
+    ['arcs'],
+  ),
+  raid_nythraxis_kings_wrath: r(
+    'fury',
+    'shadowPurple',
+    ['roar', { p: 'helm', ...BR, pal: 'gold' }],
+    ['glow'],
+  ),
+  raid_nythraxis_bone_storm: r(
+    'storm',
+    'bone',
+    ['bone', { p: 'sunburst', ...BIG }],
+    ['motion', 'arcs'],
+  ),
+  raid_nythraxis_crown_endures: r(
+    'shadow',
+    'gold',
+    ['helm', { p: 'shield', ...BR }],
+    ['glow', 'arcs'],
+  ),
   // pet action bar (dedicated, never a class ability id: see pet_action_icons.ts).
   pet_attack: r('blood', 'blood', ['fang'], ['motion']),
   pet_growl: r('fury', 'gold', ['roar'], ['arcs']),
@@ -2880,6 +2953,10 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
   tidecall: r('nature', 'sky', ['sunburst', { p: 'droplet', ...BR }], ['arcs']),
   stoneward: r('earth', 'earthBrown', ['shield', { p: 'gem', ...TR }], ['crack', 'glow']),
   primal_exaltation: r('storm', 'gold', ['sunburst', { p: 'lightning', ...BR }], ['glow', 'arcs']),
+  // v0.44 Thundercall rework kit.
+  lava_burst: r('fire', 'ember', ['flame', { p: 'sunburst', ...BR }], ['glow']),
+  lightning_overload: r('storm', 'sky', ['lightning', { p: 'lightning', ...BR }], ['arcs']),
+  thunderstorm: r('storm', 'sky', ['sunburst', { p: 'lightning', ...BR }], ['arcs', 'glow']),
   // warlock
   shadow_bolt: r('shadow', 'shadowPurple', ['bolt'], ['glow']),
   demon_skin: r('shadow', 'venom', [{ p: 'chestplate', pal: 'venom' }]),
@@ -3015,6 +3092,8 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
   hibernate: r('arcane', 'silverWhite', [{ p: 'moon', pal: 'silverWhite' }], ['sparkle']),
   dash: r('nature', 'leafGreen', ['paw', { p: 'claw_slash', ...TR }], ['motion']),
   pounce: r('nature', 'leafGreen', ['fang', { p: 'claw_slash', ...BR }], ['motion']),
+  lunge: r('nature', 'leafGreen', ['paw', { p: 'fang', ...TR }], ['motion', 'glow']),
+  hamstring_bite: r('blood', 'blood', ['fang', { p: 'boot', ...BR }], ['crack']),
   insect_swarm: r('nature', 'leafGreen', ['tendrils'], ['sparkle']),
   tigers_fury: r('fire', 'ember', ['fang'], ['glow']),
   rip: r('blood', 'blood', ['claw_slash'], ['drips']),
@@ -3207,6 +3286,19 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
   moonkin_form: r('nature', 'sky', ['moon'], ['sparkle']),
   feral_charge: r('nature', 'earthBrown', ['paw'], ['motion']),
   swiftmend: r('nature', 'leafGreen', ['droplet'], ['glow']),
+  // Groveheart resurrections: the in-combat single rez (a heart bursting back
+  // to life) and the out-of-combat group rez (the ancestor_return shape in the
+  // druid's leaf, not the shaman's rune).
+  wildwake: r('nature', 'leafGreen', ['heart', { p: 'sunburst', ...TR }], ['glow']),
+  grove_awakening: r(
+    'nature',
+    'leafGreen',
+    [
+      { p: 'cross', s: 0.9 },
+      { p: 'leaf', ...TR },
+    ],
+    ['sparkle', 'glow'],
+  ),
   // Talents V2 and the winning Warrior overlay. These explicit recipes remain
   // the deterministic fallback contract even when authored painted art wins at
   // render time, and every recipe is deliberately distinct.
@@ -3301,6 +3393,17 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
     'arcanePink',
     ['cross', { p: 'wing', ...BR }],
     ['sparkle', 'arcs'],
+  ),
+  // Benison/Doctrine out-of-combat group rez: the holy cross with a lifted
+  // wing, distinct from prayer_of_healing's sunburst and the mass-rez twins.
+  prayer_of_returning: r(
+    'holy',
+    'holyGold',
+    [
+      { p: 'cross', s: 0.9 },
+      { p: 'wing', ...TR },
+    ],
+    ['sparkle', 'glow'],
   ),
   // shaman
   healing_stream: r('nature', 'sky', ['droplet', { p: 'heart', ...BR }], ['sparkle']),
@@ -3625,10 +3728,24 @@ const AURA_RECIPES: Record<string, IconRecipe> = {
   aura_buff_ap_pct: r('fury', 'gold', ['fist', { p: 'sunburst', ...TR }], ['glow']),
   aura_buff_armor: r('steel', 'steel', ['shield']),
   aura_buff_int: r('arcane', 'arcanePink', ['eye']),
+  // The FLASK family: the three FlaskAuraKind stats, each the VESSEL primitive
+  // carrying the same stat motif its shared buff glyph uses, so a flask reads
+  // as "that buff, from the bottle" rather than as an unrelated icon. Keyed off
+  // the aura's flask marker (src/ui/aura_icon_view.ts flaskAuraIconId), which
+  // is why these ids are `flask_<kind>` and not `aura_<something>`: a flask, an
+  // elixir and a scroll of one stat share an aura id, and only the marker tells
+  // them apart. The added glow is what separates them at buff-bar size without
+  // relying on colour alone. Adding a fourth FlaskAuraKind means adding its
+  // recipe here, or the resolver falls back to the shared glyph, which is the
+  // safe direction.
+  flask_buff_sta: r('blood', 'blood', ['potion', { p: 'heart', ...BR }], ['glow']),
+  flask_buff_ap: r('fury', 'gold', ['potion', { p: 'fist', ...BR }], ['glow']),
+  flask_buff_int: r('arcane', 'arcanePink', ['potion', { p: 'eye', ...BR }], ['glow']),
   aura_buff_dodge: r('storm', 'sky', ['shield'], ['motion']),
   aura_buff_speed: r('earth', 'leather', ['boot'], ['motion']),
   aura_buff_haste: r('storm', 'sky', ['lightning']),
   aura_absorb: r('holy', 'silverWhite', ['shield'], ['glow']),
+  temporal_aegis: r('arcane', 'arcanePink', ['shield', { p: 'moon', ...TR }], ['sparkle']),
   aura_imbue: r('holy', 'holyGold', ['sword', { p: 'sunburst', ...TL }]),
   aura_buff_allstats: r('arcane', 'arcanePink', ['gem']),
   aura_thorns: r('nature', 'leafGreen', ['leaf', { p: 'claw_slash', ...BR }]),
@@ -3691,6 +3808,15 @@ const AURA_RECIPES: Record<string, IconRecipe> = {
   // red_banner ability's staff-plus-sunburst language) on the objective gold, so
   // it reads as the flag itself and not as another rune.
   bg_carried_flag: r('fury', 'gold', ['staff', { p: 'sunburst', ...TR, pal: 'gold' }], ['motion']),
+  // Well Fed (the Masterwrought phase 10 role foods and, since 11c, every farm
+  // buff dish too, aura id 'well_fed'). Keyed
+  // by AURA id like the Thornhollow runes above, and it has to be: the buff
+  // carries an ordinary stat kind (buff_sta / buff_ap / buff_int, one per role
+  // food), so without a recipe of its own the resolver falls through to
+  // aura_buff_<kind> and Well Fed wears the same glyph as the elixir or flask of
+  // that stat. Three buffs, one picture, on a bar where the player is choosing
+  // between them. A cooked haunch on the food palette says which one it is.
+  well_fed: r('food', 'ember', ['meat'], ['glow']),
   // The operator-applied Cheater mark (src/sim/moderation/), keyed by AURA id like
   // the rune buffs above. Without a row here the resolver fell through to the
   // generic utility fallback, so a SANCTION wore a parchment/gold buff icon in the
@@ -3698,6 +3824,40 @@ const AURA_RECIPES: Record<string, IconRecipe> = {
   // and composed synchronously on the frame path the first time anyone saw it.
   // A blood brand-sigil watched by a bone eye: branded, and seen.
   cheater_mark: r('shadow', 'blood', ['sigil_rune', { p: 'eye', ...BR, pal: 'bone' }], ['glow']),
+  // Nythraxis's Impaled (src/sim/nythraxis_bone_spike.ts): an encounter-owned
+  // stun with no ability record and no painted art, so without this row the
+  // resolver collapsed it to the aura_stun sunburst and the pinned raider could
+  // not tell the spike from an ordinary daze. A bloodied bone, the spike itself.
+  nythraxis_impaled: r('blood', 'bone', ['bone', { p: 'droplet', ...BR, pal: 'blood' }], ['crack']),
+  nythraxis_ascension: r(
+    'shadow',
+    'silverWhite',
+    ['ascension_seal', { p: 'sunburst', ...BR }],
+    ['glow'],
+  ),
+  nythraxis_ascension_haste: r(
+    'storm',
+    'silverWhite',
+    ['ascension_seal', { p: 'lightning', ...BR }],
+    ['motion'],
+  ),
+  nythraxis_bound: r('earth', 'silverWhite', ['sigil_rune', { p: 'skull', ...BR }], ['arcs']),
+  nythraxis_bound_stun: r('shadow', 'bone', ['sigil_rune', { p: 'skull', ...BR }], ['crack']),
+  nythraxis_unbound: r('fury', 'shadowPurple', ['skull', { p: 'claw_slash', ...BR }], ['glow']),
+  nythraxis_kings_wrath: r(
+    'fury',
+    'shadowPurple',
+    ['helm', { p: 'roar', ...BR, pal: 'blood' }],
+    ['glow'],
+  ),
+  nythraxis_bone_storm: r('storm', 'bone', ['sunburst', { p: 'bone', ...BR }], ['motion', 'arcs']),
+  nythraxis_crown_endures: r('shadow', 'gold', ['helm', { p: 'skull', ...BR }], ['glow']),
+  nythraxis_crown_endures_haste: r(
+    'storm',
+    'gold',
+    ['helm', { p: 'lightning', ...BR }],
+    ['motion', 'arcs'],
+  ),
   // Painted talent/modifier identities are not ABILITIES records, but their
   // runtime timers still need a meaningful synchronous layer while the WebP
   // decodes (and if it ever fails to load).
@@ -4072,16 +4232,19 @@ function itemFallback(id: string): IconRecipe | null {
       ? r('drink', 'sky', [{ p: 'potion', pal: 'sky' }])
       : r('drink', 'sky', ['waterskin']);
   }
-  if (it.kind === 'potion' || it.kind === 'elixir') {
+  if (it.kind === 'potion' || it.kind === 'elixir' || it.kind === 'flask') {
     // Crafted consumables without curated art (the trained-ladder draughts and
-    // elixirs) render the flask, tinted by function, instead of falling
-    // through to the trinket arm below.
+    // elixirs, plus the phase 10 apex flasks) render the flask, tinted by
+    // function, instead of falling through to the trinket arm below. The
+    // sparkle marks the timed-buff half of the family, so a flask carries it
+    // for the same reason an elixir does.
     const pal: PaletteName = has(name, ['healing'])
       ? 'ember'
       : has(name, ['mana'])
         ? 'sky'
         : 'venom';
-    return r('arcane', pal, [{ p: 'potion', pal }], it.kind === 'elixir' ? ['sparkle'] : fx);
+    const timedBuff = it.kind === 'elixir' || it.kind === 'flask';
+    return r('arcane', pal, [{ p: 'potion', pal }], timedBuff ? ['sparkle'] : fx);
   }
   if (it.kind === 'tool') {
     const prim: PrimitiveName = has(name, ['pole', 'rod', 'staff']) ? 'staff' : 'mace';
@@ -4091,6 +4254,20 @@ function itemFallback(id: string): IconRecipe | null {
     const isCloth = has(name, ['linen', 'silk', 'woven', 'cloth', 'wool']);
     return r(isCloth ? 'cloth' : 'leather', isCloth ? 'cloth' : 'leather', ['sack'], fx);
   }
+  // Recipe patterns (kind 'recipe') are a written page, so they take the same
+  // 'parchment' ground quest items do rather than falling through to the junk
+  // trinket below, which would ink every unlearned pattern the color of vendor
+  // trash. It sits ahead of BOTH arms below: the fall-through keys on 'quest'
+  // alone, and the fish arm matches on the NAME with no kind gate, so a pattern
+  // named "Pattern: Steel Longsword" would draw a fish off the 'eel' substring.
+  // Every arm above is kind-gated and cannot match a 'recipe'.
+  if (it.kind === 'recipe') return r('parchment', 'leather', ['scroll'], fx);
+  // Buff scrolls (kind 'scroll', phase 06) take the same parchment fallback
+  // explicitly: no kind-gated arm above matches them (the flask arm gates on
+  // potion|elixir), so without this row an artless scroll would fall through
+  // to the name-matched trinket cascade. Inert while every shipped scroll
+  // carries committed WebP; this is the artless-id backstop.
+  if (it.kind === 'scroll') return r('parchment', 'leather', ['scroll'], fx);
   // Raw fishing catches left kind food for cooking reagents; keep a fish-like
   // procedural recipe so they never fall through to generic junk trinkets when
   // static WebP is missing. Name tokens cover cooked fish siblings and rares.
@@ -4379,6 +4556,7 @@ export const ABILITY_IMAGE_IDS = new Set<string>([
   'summon_tithefiend',
   'martyrs_aegis',
   'choir_of_deliverance',
+  'prayer_of_returning',
   // warlock (CraftPix premium "RPG Warlock skill icons" pack + "RPG Demon skill icons"
   // pack for the summons/life_tap/searing_pain that the warlock pack couldn't cover).
   'shadow_bolt',
@@ -4668,6 +4846,10 @@ export const ABILITY_IMAGE_IDS = new Set<string>([
   'stoneward',
   'primal_exaltation',
   'ancestor_return',
+  // v0.44 Thundercall rework (project-generated, style-referenced).
+  'lava_burst',
+  'lightning_overload',
+  'thunderstorm',
   // cross-class fills from the two generic CraftPix "100 RPG/skill icon" packs — abilities
   // their own class pack couldn't cover but a generic icon fit. (warrior taunt completes warrior.)
   'aspect_of_the_hawk',
@@ -4715,6 +4897,8 @@ export const ABILITY_IMAGE_IDS = new Set<string>([
   'swiftmend',
   'tranquility',
   'typhoon',
+  'wildwake',
+  'grove_awakening',
   // hunter
   'aspect_of_the_wild',
   'bestial_wrath',
@@ -4791,8 +4975,26 @@ export const ABILITY_IMAGE_IDS = new Set<string>([
   'sudden_death',
 ]);
 
+// Ability ids that ship their procedural ABILITY_RECIPES glyph while their
+// painted art is owned by a later art pass (the ITEM_ART_PENDING shape for
+// abilities). The painted-census guards (tests/missing_painted_icons_wave,
+// tests/release_v039_icon_art) treat these as parked, never as painted, and
+// reject a stale entry once art lands.
+export const ABILITY_ART_PENDING = new Set<string>([
+  // Wildfang kit pass 2: the VFX and art retune owns the final paintings.
+  'lunge',
+  'hamstring_bite',
+  // Realm Racers: the three pickup-driven rally abilities. Each ships with an authored
+  // procedural recipe (rally_ground_blast / rally_nitro / rally_oil_slick in ABILITY_RECIPES);
+  // commissioned in docs/achievements/icon-brief.md.
+  'rally_ground_blast',
+  'rally_nitro',
+  'rally_oil_slick',
+]);
+
 /** Static URL of an ability's image icon, or null if it uses a recipe. */
 export function abilityImageUrl(id: string): string | null {
+  if (ABILITY_ART_PENDING.has(id)) return null;
   if (!ABILITY_IMAGE_IDS.has(id)) return null;
   if (PET_ACTION_IMAGE_IDS.has(id)) return `${SKILL_ICON_DIR}/pet/${id}.webp`;
   const cls =
@@ -4914,6 +5116,7 @@ export const AURA_FILE_IMAGE_IDS: ReadonlySet<string> = new Set([
   'voidsong_echo',
   'water_jet',
   'water_jet_slow',
+  'well_fed',
   'winters_chill',
   'wlk_forbidden_reflection',
   'wlk_forbidden_reflection_lock',
@@ -4929,6 +5132,8 @@ const EXTERNAL_AURA_IMAGE_URLS: ReadonlyMap<string, string> = new Map([
   ['pow_colossus', '/ui/fiesta/powerups/pow_colossus.webp'],
   ['pow_moon_boots', '/ui/fiesta/powerups/pow_moon_boots.webp'],
   ['pow_speed_demon', '/ui/fiesta/powerups/pow_speed_demon.webp'],
+  // Every trinket aura paints its trinket's item icon (trinket_aura_art.ts).
+  ...TRINKET_AURA_IMAGE_URLS,
 ]);
 
 /** All exact aura-art identities, including assets shared from another UI family. */
@@ -5067,6 +5272,10 @@ export const ITEM_IMAGE_IDS = new Set<string>([
   'crimson_amber_armor_plate',
   'cyan_magenta_armor_plate',
   'event_skin_token',
+  'emissary_cache',
+  // Clue Scrolls (world quests, Stage 3): the scroll and the casket.
+  'clue_scroll',
+  'treasure_casket',
   'forest_pink_armor_plate',
   'imperial_crimson_armor_plate',
   'imperial_gold_armor_plate',
@@ -5300,7 +5509,28 @@ export const ITEM_IMAGE_IDS = new Set<string>([
   'reins_stormfeather_griffin',
   'reins_thunderstrut_gobbler',
   'reins_terrorspark_groundshaker',
-  'reins_rickshaw_mount',
+  'reins_lanternback_troll',
+  // trinkets (src/sim/content/trinkets.ts; opaque woc-item-icon-v1 paintings from the
+  // trinket-slot-icons-2026-09-23 batch in mapping.json)
+  'bastion_sigil',
+  'mooring_stone',
+  'menders_hourglass',
+  'wellspring_seed',
+  'paired_talons',
+  'hunters_tally',
+  'stormjar',
+  'echoing_lens',
+  'gamblers_die',
+  'sundered_prism',
+  'wayfarers_lodestone',
+  'medallion_of_defiance',
+  'duelists_brand',
+  // raid trinkets (Crucible of the Last Spring), same batch
+  'forgefathers_temper',
+  'kindling_orb',
+  'molten_fletching',
+  'last_flame_lantern',
+  'heart_of_the_crucible',
 ]);
 
 // The grouped literals above preserve the curated catalog's provenance history. Derive the
@@ -5317,31 +5547,19 @@ for (const item of Object.values(ITEMS)) {
 // real, non-weapon item; both sets are served by itemImageUrl and gated on committed art.
 export const UI_ITEM_IMAGE_IDS = new Set<string>(['backpack']);
 
-// Items whose painted art has not been commissioned yet. The derivation above deliberately
-// enters EVERY non-weapon item into ITEM_IMAGE_IDS, which is what keeps the filesystem and
-// provenance gates honest, but an id listed here has no committed .webp behind it yet, so
-// itemImageUrl declines it and iconDataUrl composes the procedural recipe instead of pointing
-// an <img> at a file that 404s. Same shape as the i18n `pending` model: the debt is
-// enumerated rather than silent, and it shrinks as art lands.
-//
-// Empty after the accepted 2026-08-01 painted-art wave, and empty again after the three
-// quest-collect items this branch's dedupe pass added were painted. Keep the mechanism: a
-// future development-only item may still use it temporarily. tests/item_icons.test.ts holds
-// the line from both sides: it rejects stale entries after art lands and unenumerated art
-// debt. Do not add to this list merely to silence that failure; commission the art.
-// Empty again after the hunter quiver art landed in the same branch that enumerated it,
-// and still empty with the Proving Shore pair: the island's castaway crate and ferry
-// bell icons are rendered from their own world models
-// (scripts/render_island_item_icons.mjs), so they ship with committed art like
-// every other item.
-//
-// The Ignivar raid loot table (content/ignivar_loot.ts) currently carries the
-// whole debt: 192 non-weapon items behind the development-only Crucible raid,
-// enumerated here until their painted wave lands (the raid itself ships with a
-// dev-only entrance, so no player-facing surface shows a procedural icon yet).
-// The 10 raid weapons are excluded: weapons never enter this set (guard A2);
-// they ship painted art through WEAPON_IMAGE_IDS like every other weapon.
-export const ITEM_ART_PENDING = new Set<string>(IGNIVAR_ART_PENDING_ITEM_IDS);
+// Explicit development-only item-art debt ledger. The Masterwrought completion wave
+// cleared the Ignivar raid's 81 feature entries (content/ignivar_loot.ts), so that spread
+// is currently empty; it stays in the union below as the canonical seam for future parked
+// raid art. Tests reject both unenumerated debt and stale entries after art lands.
+export const ITEM_ART_PENDING = new Set<string>([
+  ...IGNIVAR_ART_PENDING_ITEM_IDS,
+  ...BRAMBLEHIDE_ART_PENDING_ITEM_IDS,
+  ...NYTHRAXIS_GAP_ART_PENDING_ITEM_IDS,
+  // Warfare Season 2 armor: painted icons owned by a follow-up art pass; the
+  // procedural icon stands in until then. The season weapons never park here:
+  // an unpainted weapon already draws its procedural icon.
+  ...SEASON2_SETS.flatMap((set) => set.itemIds),
+]);
 
 /** Static URL of an item's (or a UI pseudo-item's) image icon, or null if it uses a recipe. */
 export function itemImageUrl(id: string): string | null {
@@ -5358,37 +5576,48 @@ export function itemImageUrl(id: string): string | null {
 const DEED_ICON_DIR = '/ui/deeds';
 const DEED_CREST_PREFIX = 'deed_';
 
-// Exhaustive live-deed art debt ledger, following the ITEM_ART_PENDING model one screen up. The
-// Icons authoring rule in docs/design/deeds.md permits a procedural category fallback while art
-// trails a deed. Every deed of the release base is painted today; this set is the one
-// authoritative ledger of the debt that remains, and a new entry must be commissioned and filed
-// in docs/achievements/icon-brief.md rather than hidden by an unreviewed fallback.
-// tests/deed_icons.test.ts holds the line from both sides: a stale entry once art lands, and
-// unenumerated debt.
+// Exhaustive live-deed art debt ledger. The Masterwrought completion wave clears its
+// eleven crests (including the commissioned Harvestmaster replacement). Inherited release
+// rows and the hidden hammer celebration retain their deliberate procedural category fallback.
+// Insertion order mirrors DEED_ORDER because the deed-art gate derives its exact debt in order.
 export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
-  // The walk-in castle visit pair: both are 'exploration', so both fall back to
-  // the deed_cat_exploration crest until their commissioned art lands
-  // (docs/achievements/icon-brief.md).
   'exp_the_last_keep',
   'exp_dawnhold_castle',
-  // The bank socket ladder pair (Bank Storage phase 06): both are 'social', so
-  // both fall back to the deed_cat_social crest until their commissioned art
-  // lands (docs/achievements/icon-brief.md). Neither carries a reward, so the
-  // title-shelf rule that forbids a title deed from riding this ledger does
-  // not apply.
   'soc_strongbox_outfitter',
   'soc_four_bags_deep',
-  // The Proving Shore graduation deed rides the deed_cat_progression crest
-  // until its commissioned art lands (docs/achievements/icon-brief.md).
   'prog_ready_for_an_adventure',
-  // The Crucible of the Last Spring raid deeds: all five are 'dungeon', so
-  // each rides the deed_cat_dungeon crest until its commissioned art lands
-  // (docs/achievements/icon-brief.md).
   'dgn_ignivar',
   'dgn_ignivar_heroic',
   'dgn_varkhul',
   'dgn_varkhul_heroic',
   'dgn_varkhul_flawless',
+  // Hidden self-craft celebration; 512px RGBA commission brief in docs/achievements/icon-brief.md.
+  'hid_forgebreaker',
+  // Arcane Calligraphy's completion and Gold-rating deeds are both
+  // 'exploration'. They use the category crest until their commissioned
+  // paintings land (docs/achievements/icon-brief.md).
+  'exp_arcane_calligraphy',
+  'exp_arcane_calligraphy_gold',
+  // World-quest completion deeds use the exploration category crest pending art.
+  'exp_forge_helper',
+  'exp_last_barricade',
+  'exp_borrowed_face',
+  'exp_windrider_slalom',
+  'exp_duskweave_dispatches',
+  'exp_wisp_maze',
+  // Faction standing deeds use the progression category crest pending art.
+  'prog_rift_watch_trusted',
+  'prog_church_order_trusted',
+  'prog_automatons_trusted',
+  'prog_rift_watch_champion',
+  'prog_church_order_champion',
+  'prog_automatons_champion',
+  'prog_faction_champion_all',
+  // Clue Scroll casket deeds use the exploration category crest pending art.
+  'exp_clue_first_casket',
+  'exp_clue_ten_caskets',
+  // The ferry round trip (exp_harbor_to_harbor): procedural exploration crest until commissioned.
+  'exp_harbor_to_harbor',
   // Realm Racers: the seven placing-based deeds are 'pvp', so they fall back to the
   // deed_cat_pvp crest. Commissioned in docs/achievements/icon-brief.md, not yet committed.
   'pvp_rr_first_race',
@@ -5398,21 +5627,6 @@ export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
   'pvp_rr_fast_lap',
   'pvp_rr_clean_race',
   'pvp_rr_comeback',
-]);
-
-// Abilities whose PAINTED art is commissioned but not yet committed, the DEED_ART_PENDING model
-// above applied to the ability sheet. Behavior is unchanged either way: an ability absent from
-// ABILITY_IMAGE_IDS already draws its procedural ABILITY_RECIPES icon, which is a real icon and
-// not a placeholder. The list exists so the painted-art debt is ENUMERATED rather than silent,
-// and so the art tests share one name instead of repeating the literal.
-// Same rule as the deed list: do not add an id here merely to silence a failure; commission the
-// art and file it in docs/achievements/icon-brief.md.
-export const ABILITY_ART_PENDING: ReadonlySet<string> = new Set([
-  // Realm Racers: the three pickup-driven rally abilities. Each ships with an authored
-  // procedural recipe (rally_ground_blast / rally_nitro / rally_oil_slick in ABILITY_RECIPES).
-  'rally_ground_blast',
-  'rally_nitro',
-  'rally_oil_slick',
 ]);
 /** Static URL of a deed crest's painted art, or null when the crest id has no committed image. */
 export function deedImageUrl(crestId: string): string | null {
@@ -5459,7 +5673,7 @@ function resolveRecipe(kind: IconKind, id: string): IconRecipe {
   if (!recipe) {
     if (import.meta.env?.DEV && !warnedIds.has(id)) {
       warnedIds.add(id);
-      console.warn(`[icons] no recipe or def for ${kind} id "${id}" — using fallback icon`);
+      console.warn(`[icons] no recipe or def for ${kind} id "${id}": using fallback icon`);
     }
     return UNKNOWN_RECIPE;
   }
@@ -5691,6 +5905,15 @@ const PROFESSION_RECIPES: Record<string, IconRecipe> = {
     ['sparkle'],
   ),
   gather_fishing: r('drink', 'sky', [{ p: 'fish' }], ['glow']),
+  // Farming, the fifth gathering skill: a seed sack faded into tilled-earth
+  // ground behind a crisp sprout, the tailoring/enchanting backdrop idiom. Read
+  // deliberately apart from herbalism, whose twin wild leaves sit on a nature
+  // ground: farming is the CULTIVATED skill, so the soil and the sack carry the
+  // silhouette and the foliage is only the payoff on top.
+  gather_farming: r('earth', 'leafGreen', [
+    { p: 'sack', ...BIG, pal: 'earthBrown' },
+    { p: 'leaf' },
+  ]),
 };
 
 /** True when `id` has an explicit profession recipe, as opposed to falling

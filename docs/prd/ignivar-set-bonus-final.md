@@ -164,20 +164,17 @@ rider "Damage taken no longer delays your spellcasting."; marked [rider].
   every 15 sec." [shieldConsumed trigger at damage.ts:574-577; icd is
   NEW LOGIC there (castNth-shaped machinery does not cover it), scoped
   small.]
-- Benison 2pc [rider]: "Seraphic Vigil's rescue heals for 270, up from
-  180." [buffPct 0.5 reaches buffTarget value; heal_echo is in neither
-  the integral nor scalable kind sets, so 270 exact and flat.
-  Same-change: the printed "180" in the ability description + catalog +
-  locales (R3 catch).]
-- Benison 4pc (final-round CONFIRMED): "When Seraphic Vigil triggers, its ally is
-  also mended for 15 percent of their maximum health over 10 sec."
-  [Bespoke HoT at the vigil-trigger site in damage.ts (the
-  priestOnVigilTriggered hook is talent-gated for Incarnate Spirit; the
-  set arm hooks the same trigger point, not that function). Replaces
-  the cooldown-reset idea (round 3: Twin Covenant's charge model
-  deletes the cooldowns entry, making cooldownRefund a hard no-op).
-  Verify: the trigger point, HoT application shape, no row overlap,
-  Twin Covenant coexistence.]
+- Benison 2pc [rider]: Restoring health with Whispered Prayer, Solemn Prayer,
+  or Urgent Prayer builds one stack per cast, up to three. Each stack adds
+  10% to the next Choirmend's whole heal, including its Healing Power contribution.
+  Choirmend consumes all stacks on completion; interrupted casts retain them.
+- Benison 4pc: Finishing Choirmend with three stacks grants an instant
+  Whispered Prayer with 100% increased healing. It must be used within 60 sec.
+  Re-earning the benefit refreshes the window without banking another use.
+  Both effects clear on death or talent changes; losing the required piece
+  threshold clears that tier's benefit. The normal spell mana cost still applies.
+  Implemented by `combat/priest/benison_dawnweave.ts`, replacing the Vigil
+  rescue increase and follow-up mend. The common cast-pushback rider remains.
 - Vesperash 2pc [rider]: "Call Tithefiend's cooldown is reduced by 6
   sec." [Sink acceleration; the bank still saturates ~13s of every 24
   (honest); +25 percent full-strength fiend windows.]
@@ -188,14 +185,18 @@ rider "Damage taken no longer delays your spellcasting."; marked [rider].
 
 ## Shaman
 
-- Stormkindled 2pc [rider]: "Unleash Weapon on Pyrebrand grants 3
-  Thunder." [Constant bend; probe never presses Unleash (probe gap,
-  gains a press); 3+ banked overcap partial waste disclosed.
-  Same-change: "gain 2 Thunder" copy + locales.]
+- Stormkindled 2pc [rider] (reworked with the v0.44.0 Thundercall rework):
+  "Arc Overload triggers 30 percent of the time." [Threshold bend at the one
+  roll site, 0.2 to 0.3; same single draw for everyone. Replaced "Unleash
+  Weapon on Pyrebrand grants 3 Thunder", which measured at zero on the bench
+  and was pressed at a fraction of its availability live.]
 - Stormkindled 4pc: "Earthen Jolt's bonus per Thunder rises to 30
-  percent." [Full vent 2.25x to 2.5x; multiplies with Primal Mastery
-  (3.125x in-window, disclosed). Same-change: two "125 percent" totals
-  + locales.]
+  percent, and Magma Burst deals 20 percent more damage." [Full vent 2.25x
+  to 2.5x; multiplies with Primal Mastery (3.125x in-window, disclosed).
+  The Magma Burst row (v0.44.0) is 20 percent delivered (0.24 against the
+  1.2 elemental baseline). Measured in Ignivar best in slot on the 120 sec
+  level-20 boss: the reworked set is worth about +23 DPS (about 10 percent),
+  up from +6.4, beside Moonscorch's +17.7.]
 - Warspirit 2pc: "Ancestral Strike advances your cadence 3 steps."
   [Round-2 CONFIRMED; steps widened + call-site; Exaltation clamp and
   Deep Reservoir currency-sharing disclosed. Same-change: two stale
@@ -235,18 +236,19 @@ rider "Damage taken no longer delays your spellcasting."; marked [rider].
 
 ## Mage
 
-- Chronoweave 2pc [rider]: "Temporal Echo converts 50 percent of your
-  single-target Arcane damage into healing." [Bake at placeTemporalEcho
+- Chronoweave 2pc [rider]: "Temporal Echo converts 50 percent of your other
+  single-target Arcane damage into healing. Aether Surge and Aether Darts instead
+  convert 200 percent of their damage." [Bake at placeTemporalEcho
   writing value + echoConvertRate + the echoRateFor fallback (three
   readers); classifier boundary safe at 0.5; echoHps<80 band re-signs.
   Same-change: dev playtest literal + comment.]
 - Chronoweave 4pc (final-round CONFIRMED; set renamed Aetherweave
   Vestments, the old name collided with the arcane mastery): "Temporal Cascade's cooldown is reduced
-  by 5 sec." [cd 17 to 12: more group-mark windows; touches no rate
-  constants, no classifier, no wire (replaces both killed shapes: the
-  Aether proc raise re-tuned a derived cost; the group-rate raise
-  needed a wire change). Verify: cascade cd literal site, any printed
-  cd, row overlap, probe reality.]
+  by 5 sec and its mana cost is reduced by 30 percent." [cd 17 to 12 and
+  cost 170 to 119: the faster group-mark cadence remains neutral in mana
+  per second (10.0 base versus 9.9 with 4pc). Touches no rate constants,
+  classifier, or wire. Verify both resolved fields, authored copy, row
+  overlap, and the raid probe.]
 - Pyroclast 2pc [rider]: "Scald always critically strikes targets at or
   below 50 percent health." [Sole functional reader; the reference
   rotation never presses Scald AND both fire harnesses fight a 1e9-HP

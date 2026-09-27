@@ -21,6 +21,26 @@
 
 import { FOCUSABLE_SELECTOR } from './focus_manager';
 
+/**
+ * Wall-clock life of a #prompt-stack prompt that nobody answers (party invite,
+ * trade request, duel challenge, ready check), after which it auto-dismisses.
+ * The countdown bar in src/styles/hud.css drains over --prompt-timeout-dur,
+ * which tests/prompt_timeout_duration.test.ts pins equal to this value.
+ */
+export const PROMPT_TIMEOUT_MS = 28_000;
+
+/**
+ * The prompt's countdown bar: a .ui-bar whose fill drains over
+ * --prompt-timeout-dur, hidden outright under reduced motion (a frozen fill
+ * would read as time remaining right up to the silent auto-dismiss).
+ */
+export function createPromptTimeoutBar(): HTMLElement {
+  const bar = document.createElement('div');
+  bar.className = 'prompt-timeout ui-bar';
+  bar.innerHTML = '<span class="ui-bar-fill"></span>';
+  return bar;
+}
+
 // Monotonic id source for the prompts' aria-labelledby target, so the id never
 // couples to class ordering. Shared across every consumer; ids only need to be
 // unique, not sequential per window.
@@ -34,6 +54,23 @@ export interface PromptDialogHandle {
   dismissAndReturn: () => void;
 }
 
+// Every installed prompt's handle, keyed by its element, so a family teardown
+// that only knows the prompt ELEMENT (a selector sweep over #prompt-stack) can
+// still route through dismiss() and clear the root it made inert. A prompt
+// from one window torn down by another window's sweep (the trade window's
+// adjust prompt under a bags sweep, or the reverse) would otherwise leave its
+// own root inert with nothing left to clear it.
+const HANDLES = new WeakMap<HTMLElement, PromptDialogHandle>();
+
+/** Tear down an installed prompt through its own dismiss() (inert cleared,
+ *  the caller's close run); a prompt this recipe never installed is simply
+ *  removed. */
+export function dismissInstalledPrompt(prompt: Element): void {
+  const handle = prompt instanceof HTMLElement ? HANDLES.get(prompt) : undefined;
+  if (handle) handle.dismiss();
+  else prompt.remove();
+}
+
 export function installPromptDialog(
   prompt: HTMLElement,
   opener: HTMLElement | null,
@@ -45,6 +82,22 @@ export function installPromptDialog(
     idPrefix: string;
   },
 ): PromptDialogHandle {
+  prompt.classList.add('ui-panel-strong');
+  prompt.querySelectorAll<HTMLElement>('.prompt-number').forEach((input) => {
+    input.classList.add('ui-input');
+  });
+  prompt.querySelectorAll<HTMLElement>('button').forEach((button) => {
+    button.classList.add(
+      button.matches('.woc-store-prompt-close, .x-btn, [data-close]') ? 'ui-x-btn' : 'ui-btn',
+    );
+  });
+  const accept =
+    prompt.querySelector<HTMLElement>('[data-store-prompt-confirm]') ??
+    prompt.querySelector<HTMLElement>(
+      '.btn:not([data-store-prompt-cancel]):not([class*="cancel"])',
+    ) ??
+    prompt.querySelector<HTMLElement>('button');
+  accept?.classList.add('ui-btn--red');
   prompt.setAttribute('role', 'dialog');
   prompt.setAttribute('aria-modal', 'true');
   const { inertRoot } = opts;
@@ -70,10 +123,17 @@ export function installPromptDialog(
     inertRoot.inert = false;
     close();
   };
+  // Deliberately no detached-opener fallback here: a window with its own
+  // landing ladder (the vendor buy prompt re-lands by row key AFTER this
+  // return, treating focus already inside the window as settled) would be
+  // pre-empted by a recipe-level landing on Close, which its ladder ranks
+  // last on purpose. A window whose rows can be repainted under an open
+  // prompt owns its own landing.
   const dismissAndReturn = (): void => {
     dismiss();
     opener?.focus();
   };
+  HANDLES.set(prompt, { dismiss, dismissAndReturn });
   prompt.addEventListener('keydown', (e) => {
     const ke = e as KeyboardEvent;
     // Escape: stopPropagation, not just preventDefault. The input layer's

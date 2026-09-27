@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { HUD_FRAME_SPECS } from '../src/ui/interface_unlock_core';
 import type { PainterHostWriters } from '../src/ui/painter_host';
 import { PaladinDevotionPainter } from '../src/ui/paladin_devotion_painter';
 import type { PaladinDevotionState } from '../src/ui/paladin_devotion_view';
@@ -28,7 +29,10 @@ function recordingWriters(): { calls: Call[]; writers: PainterHostWriters } {
 }
 
 const ROOT = { id: 'root' } as unknown as HTMLElement;
-const FRAME = { id: 'frame' } as unknown as HTMLElement;
+// The painter stamps the last-charge state on the frame's document body too (the
+// action bar's empowered buttons read it there), so the fake frame owns a body.
+const BODY = { id: 'body' } as unknown as HTMLElement;
+const FRAME = { id: 'frame', ownerDocument: { body: BODY } } as unknown as HTMLElement;
 const FILL = { id: 'fill' } as unknown as HTMLElement;
 const LABEL = { id: 'label' } as unknown as HTMLElement;
 const STATUS = { id: 'status' } as unknown as HTMLElement;
@@ -69,7 +73,8 @@ describe('PaladinDevotionPainter', () => {
       { method: 'toggleClass', args: [ROOT, 'ascended', false] },
       { method: 'toggleClass', args: [ROOT, 'last-charge', false] },
     ]);
-    expect(calls.slice(9)).toEqual(
+    // The seven charge pips follow the nine header writes; the host stamp comes after.
+    expect(calls.slice(9, 16)).toEqual(
       CHARGES_ARRAY.map((charge) => ({
         method: 'toggleClass',
         args: [charge, 'on', false],
@@ -96,7 +101,7 @@ describe('PaladinDevotionPainter', () => {
       args: [FILL, '--devotion-scale', '0.300'],
     });
     expect(calls).toContainEqual({ method: 'toggleClass', args: [ROOT, 'ascended', true] });
-    expect(calls.slice(9).map((call) => call.args[2])).toEqual([
+    expect(calls.slice(9, 16).map((call) => call.args[2])).toEqual([
       true,
       true,
       true,
@@ -121,7 +126,7 @@ describe('PaladinDevotionPainter', () => {
       announcement: '',
     });
 
-    expect(calls.slice(9).map((call) => call.args[2])).toEqual([
+    expect(calls.slice(9, 16).map((call) => call.args[2])).toEqual([
       true,
       true,
       true,
@@ -150,6 +155,67 @@ describe('PaladinDevotionPainter', () => {
       method: 'toggleClass',
       args: [ROOT, 'last-charge', true],
     });
+  });
+
+  it('mirrors the last-charge state onto body for the action bar, both ways', () => {
+    // body.devotion-last-charge replaced `body:has(.paladin-devotion.last-charge)`
+    // (src/ui/root_state_classes.ts): the empowered action buttons read it off body,
+    // so the stamp must follow the medallion's own class exactly, on and off.
+    const state = {
+      visible: true,
+      value: 2,
+      fillFrac: 0.1,
+      ready: false,
+      ascended: true,
+      charges: 1,
+      lastCharge: true,
+      label: '2 / 20',
+      ariaValueText: 'Devotion 2 of 20. Ascension final charge.',
+      announcement: 'Ascension final charge',
+    };
+    const bodyStamps = (calls: Call[]) =>
+      calls.filter((c) => c.method === 'toggleClass' && c.args[0] === BODY).map((c) => c.args);
+    expect(bodyStamps(paint(state))).toEqual([[BODY, 'devotion-last-charge', true]]);
+    expect(bodyStamps(paint({ ...state, charges: 2, lastCharge: false }))).toEqual([
+      [BODY, 'devotion-last-charge', false],
+    ]);
+    // Hidden medallion: the class still tracks the state, exactly as the :has()
+    // rule matched the medallion's class regardless of the frame's display.
+    expect(bodyStamps(paint({ ...state, visible: false }))).toEqual([
+      [BODY, 'devotion-last-charge', true],
+    ]);
+  });
+
+  it('stamps devotion-live on the HUD host while the medallion is shown', () => {
+    const host = { id: 'host' } as unknown as HTMLElement;
+    const frame = {
+      id: 'frame',
+      parentElement: host,
+      ownerDocument: { body: BODY },
+    } as unknown as HTMLElement;
+    const { calls, writers } = recordingWriters();
+    const painter = new PaladinDevotionPainter(writers, frame, ROOT, FILL, LABEL, CHARGES, STATUS);
+    const state = {
+      visible: true,
+      value: 8,
+      fillFrac: 0.4,
+      ready: false,
+      ascended: false,
+      charges: 0,
+      lastCharge: false,
+      label: '8 / 20',
+      ariaValueText: 'Devotion 8 of 20',
+      announcement: '',
+    };
+    painter.paint(state);
+    painter.paint({ ...state, visible: false });
+    const stamps = calls
+      .filter((c) => c.method === 'toggleClass' && c.args[0] === host)
+      .map((c) => c.args.slice(1));
+    expect(stamps).toEqual([
+      ['devotion-live', true],
+      ['devotion-live', false],
+    ]);
   });
 
   it('routes all DOM changes through PainterHost writers', () => {
@@ -192,12 +258,30 @@ describe('PaladinDevotionPainter', () => {
     for (const entry of [html, playHtml]) {
       expect(entry.match(/id="paladin-devotion-frame"/g)).toHaveLength(1);
       expect(entry.match(/id="paladin-devotion"/g)).toHaveLength(1);
-      expect(entry).toMatch(/id="paladin-devotion-frame"[^>]*tabindex="0"/);
+      // No tabindex: the frame is not its own drag surface any more, so a
+      // focusable-but-inert group would be a dead tab stop. The registry
+      // mover's corner button carries the keyboard path.
+      expect(entry).not.toMatch(/id="paladin-devotion-frame"[^>]*tabindex/);
     }
-    expect(hud).toContain("attachOverlayDrag(this.paladinDevotionFrameEl, 'paladinDevotionAnchor'");
-    expect(hud).not.toContain('devotionFrameMover');
-    expect(css).toMatch(/\.paladin-devotion-frame\s*\{[\s\S]*cursor:\s*grab/);
-    expect(css).toMatch(/\.paladin-devotion-frame\.dragging\s*\{[\s\S]*cursor:\s*grabbing/);
+    // Movement is the "Unlock interface" registry's (HUD_FRAME_SPECS row
+    // 'paladinDevotion'), not the old always-on overlay grab-drag: locked, the
+    // medallion is click-through; its centering translate drops while a custom
+    // position applies so the saved top-left lands where it was dropped.
+    expect(hud).not.toContain('attachOverlayDrag(this.paladinDevotionFrameEl');
+    const devotionSpec = HUD_FRAME_SPECS.find((s) => s.id === 'paladinDevotion');
+    expect(devotionSpec?.elementId).toBe('paladin-devotion-frame');
+    // Extract the frame's own rule body (the same-file necromancy idiom), so
+    // the negative below is scoped to THIS rule rather than a 400-char window
+    // that could cross into a neighbor; the positive pointer-events pin
+    // doubles as proof the extraction found the rule at all.
+    const devotionRule = css.match(/\.paladin-devotion-frame\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(devotionRule).toContain('pointer-events: none');
+    expect(devotionRule).not.toContain('cursor: grab');
+    // The detached rule is a selector GROUP (the proc overlay shares its
+    // translate reset), so allow list members between selector and brace.
+    expect(css).toMatch(
+      /\.paladin-devotion-frame\.hud-frame-detached[^{}]*\{[^}]*translate:\s*none/,
+    );
   });
 
   it('renders 7 charge pips so Extended Dawn (5 base + 2) can fully light up', () => {

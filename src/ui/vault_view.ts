@@ -17,9 +17,12 @@
 // not prices.
 
 import { bagPools, countFit } from '../sim/bags';
+import { cloneMaterialData } from '../sim/material_payload_identity';
+import type { MaterialComposition } from '../sim/material_sources';
 import { isVaultDepositableSlot, VAULT_BASE_CAP, VAULT_UPGRADE_STEP } from '../sim/materials_vault';
 import { baseMaterialFor } from '../sim/professions/material_grades';
 import { cloneItemInstancePayload, type InvSlot, type ItemInstancePayload } from '../sim/types';
+import { vaultRowMovesWhole } from '../sim/vault_slot_ops';
 import type { VaultInfo, VaultSpecialRef } from '../world_api';
 import { bagFineMark } from './bag_fine_mark_view';
 import { bagQualityKey } from './bags_view';
@@ -43,11 +46,14 @@ interface VaultRowBase {
   /** Total for this material across pooled and special storage. Capacity is
    *  shared, so fill/over-cap decisions always key off this value. */
   storedTotal: number;
-  /** Whether the row exposes the explicit partial-withdraw action. The model
-   *  owns this eligibility so every painter presents pooled counts alike. */
+  /** Whether the row exposes the explicit chosen-quantity action: every
+   *  stocked row except one whose payload moves whole (the sim's
+   *  vaultRowMovesWhole), a one-unit row included, so the action reads the
+   *  same on every material. The model owns this eligibility so every painter
+   *  presents the rows alike. */
   canChooseQuantity: boolean;
-  /** The click-time ceiling shown by the quantity prompt, null when splitting
-   *  a one-count row would have no meaning. Submit still clamps to live stock. */
+  /** The click-time ceiling shown by the quantity prompt, null only when the
+   *  row offers no chosen-quantity action. Submit still clamps to live stock. */
   partialMax: number | null;
   /** The uniform per-material ceiling (wire perMaterialCap), repeated per row
    *  for the painter's count/cap readout. */
@@ -62,6 +68,17 @@ interface VaultRowBase {
    *  icon, keeping the stock visibly recoverable. */
   known: boolean;
   qualityKey: string; // item quality ?? 'common' (bagQualityKey semantics)
+  /** Whether the painter prints this row's OWN count (the x{count} chip,
+   *  the guild pane's showCount concept under the vault's rule). Every row
+   *  already carries the MATERIAL total in its count/cap readout and in its
+   *  hidden aria copy, so the own count is worth printing only when the
+   *  material is split across more than one stocked row (a pooled stack
+   *  beside a signed one, two differently signed stacks): a row that IS the
+   *  whole stock would print the same number twice (x200 beside 200/200).
+   *  Decided on the actual row set, never by comparing count to total, so a
+   *  tolerated degenerate zero-count sibling can neither hide a real row's
+   *  count nor earn an x0 of its own. */
+  showCount: boolean;
   /** This id is a fine grade (bag_fine_mark_view): the painter composes the
    *  fine seal and rim exactly like the bags/bank/guild-bank cells, the
    *  release's all-surfaces mark-family rule. */
@@ -75,11 +92,14 @@ export interface VaultPooledRowModel extends VaultRowBase {
 
 /** One identity/provenance-preserving row. The payload is cloned off the wire
  *  snapshot and the exact selector carries its original snapshot index plus
- *  every present identity field. Instance rows are whole/all-or-nothing;
- *  recipe-only rows remain safely splittable. */
+ *  every present identity field. A charge-bearing or locked payload row is
+ *  whole/all-or-nothing (the sim's vaultRowMovesWhole); every other row,
+ *  a signed or bind-on-trade payload included, is splittable. */
 export interface VaultSpecialRowModel extends VaultRowBase {
   kind: 'special';
   specialRef: VaultSpecialRef;
+  /** Snapshot of the full composition shown by the source details action. */
+  materialSources?: MaterialComposition;
   instance?: ItemInstancePayload;
   craftedRecipeId?: string;
 }
@@ -136,7 +156,7 @@ export function vaultSpecialRef(index: number, slot: InvSlot): VaultSpecialRef {
 export function vaultSpecialContentKey(special: readonly InvSlot[]): readonly string[] {
   return special.map(
     (slot) =>
-      `${slot.itemId}\u0000${slot.count}\u0000${canonicalJson(slot.instance)}\u0000${slot.craftedRecipeId ?? ''}`,
+      `${slot.itemId}\u0000${slot.count}\u0000${canonicalJson(slot.instance)}\u0000${canonicalJson(slot.materialSources)}\u0000${slot.craftedRecipeId ?? ''}`,
   );
 }
 
@@ -150,18 +170,18 @@ export function buildVaultView(info: VaultInfo | null, lookup: BankItemLookup): 
   }
   const cap = info.perMaterialCap;
   const storedTotals = new Map<string, number>();
-  for (const [itemId, count] of Object.entries(info.stock)) {
-    storedTotals.set(itemId, saneStoredCount(count));
-  }
-  for (const slot of info.special) {
+  // Stocked (positive-count) rows per material: the showCount rule's input.
+  const stockedRows = new Map<string, number>();
+  const tally = (itemId: string, count: number): void => {
+    const sane = saneStoredCount(count);
     storedTotals.set(
-      slot.itemId,
-      Math.min(
-        Number.MAX_SAFE_INTEGER,
-        (storedTotals.get(slot.itemId) ?? 0) + saneStoredCount(slot.count),
-      ),
+      itemId,
+      Math.min(Number.MAX_SAFE_INTEGER, (storedTotals.get(itemId) ?? 0) + sane),
     );
-  }
+    if (sane > 0) stockedRows.set(itemId, (stockedRows.get(itemId) ?? 0) + 1);
+  };
+  for (const [itemId, count] of Object.entries(info.stock)) tally(itemId, count);
+  for (const slot of info.special) tally(slot.itemId, slot.count);
   // Base-grade-adjacent order (see VaultRowModel): group key is the base id
   // (a fine grade sorts under its base), base leads inside a group, groups
   // and every other tie in plain itemId order.
@@ -173,13 +193,14 @@ export function buildVaultView(info: VaultInfo | null, lookup: BankItemLookup): 
       itemId,
       count,
       storedTotal,
-      canChooseQuantity: count > 1,
-      partialMax: count > 1 ? count : null,
+      canChooseQuantity: count > 0,
+      partialMax: count > 0 ? count : null,
       cap,
       atCap: storedTotal >= cap,
       overCap: storedTotal > cap,
       known: item !== undefined,
       qualityKey: bagQualityKey(item ?? {}),
+      showCount: saneStoredCount(count) > 0 && (stockedRows.get(itemId) ?? 0) > 1,
       fine: bagFineMark(itemId),
     };
   };
@@ -190,15 +211,20 @@ export function buildVaultView(info: VaultInfo | null, lookup: BankItemLookup): 
     })),
     ...info.special.map((slot, index) => {
       const instance = slot.instance ? cloneItemInstancePayload(slot.instance) : undefined;
+      const materialSources =
+        slot.materialSources === undefined ? undefined : cloneMaterialData(slot.materialSources);
       const specialRef = vaultSpecialRef(index, slot);
+      // The ONE sim rule (vault_slot_ops.ts vaultRowMovesWhole) decides which
+      // payloads split: a charge-bearing or locked payload is one identity per
+      // unit and moves whole, so its row offers no chosen-quantity action.
+      const splittable = !vaultRowMovesWhole(slot.instance) && slot.count > 0;
       const row: VaultSpecialRowModel = {
         kind: 'special',
         ...common(slot.itemId, slot.count),
-        // One instance payload describes the entire row and may never be
-        // split into two independently mutable identities.
-        canChooseQuantity: instance === undefined && slot.count > 1,
-        partialMax: instance === undefined && slot.count > 1 ? slot.count : null,
+        canChooseQuantity: splittable,
+        partialMax: splittable ? slot.count : null,
         specialRef,
+        ...(materialSources === undefined ? {} : { materialSources }),
         ...(instance === undefined ? {} : { instance }),
         ...(slot.craftedRecipeId === undefined ? {} : { craftedRecipeId: slot.craftedRecipeId }),
       };
@@ -272,6 +298,18 @@ export interface VaultDepositAllPrediction {
   stacks: number;
   items: number;
   full: boolean;
+  /** The id of an epic-or-better material the sweep moved, or null. A bare
+   *  "Materials deposited: N" reads as unremarkable for the common/uncommon/
+   *  rare fodder deposit-all usually sweeps (ore, cloth, disenchant dusts),
+   *  but an epic-or-better one is rare enough, and valuable enough, to name
+   *  rather than fold into a count: a player who has not yet learned this
+   *  new pane exists reads a silent aggregate as the item simply being gone.
+   *  Picks the FIRST qualifying id the descending walk finds; a sweep could
+   *  in principle carry more than one, and this names one representative
+   *  rather than building a localized list for a case the shipped taxonomy
+   *  does not yet produce (today exactly one material, lastflame_core, is
+   *  epic; tests/vault_view.test.ts pins the epic/legendary threshold). */
+  notableItemId: string | null;
 }
 
 /** Replay the sim's deposit-all sweep on the snapshot WITHOUT mutating it.
@@ -284,13 +322,16 @@ export interface VaultDepositAllPrediction {
  *  exhausted are skipped here with the same clamp, and a partial fill moves
  *  what fits and flags `full`. `materialIds` is the caller-supplied honest set
  *  (vaultMaterialIds()), a parameter so tests drive the replay with a small
- *  fixture set. */
+ *  fixture set. `lookup` resolves each moved id's quality for the notable-item
+ *  flag only (a miss is simply never notable, the bank family's tolerant
+ *  precedent). */
 export function predictVaultDepositAll(
   inventory: readonly InvSlot[],
   info: Pick<VaultInfo, 'stock' | 'special' | 'upgrades' | 'perMaterialCap'>,
   materialIds: ReadonlySet<string>,
+  lookup: BankItemLookup,
 ): VaultDepositAllPrediction {
-  if (info.upgrades <= 0) return { stacks: 0, items: 0, full: false };
+  if (info.upgrades <= 0) return { stacks: 0, items: 0, full: false, notableItemId: null };
   // A Map, not a spread: a tolerated save can stock a dormant own '__proto__'
   // row, which a record rebuild would drop into the prototype setter.
   const held = new Map(Object.entries(info.stock));
@@ -303,6 +344,7 @@ export function predictVaultDepositAll(
   let stacks = 0;
   let items = 0;
   let full = false;
+  let notableItemId: string | null = null;
   for (let i = inventory.length - 1; i >= 0; i--) {
     const slot = inventory[i];
     if (!isVaultDepositableSlot(slot, materialIds)) continue;
@@ -312,10 +354,11 @@ export function predictVaultDepositAll(
       full = true;
       continue;
     }
-    // One instance payload describes the whole row. The authoritative sweep
-    // leaves it carried when the entire count cannot fit; predicting a partial
-    // move would claim items were stored when the sim moved none.
-    if (slot.instance !== undefined && headroom < slot.count) {
+    // A whole-move payload (the sim's vaultRowMovesWhole: charge-bearing or
+    // locked) is left carried by the authoritative sweep when the entire count
+    // cannot fit; predicting a partial move would claim items were stored when
+    // the sim moved none. Every other payload partially fills like plain stock.
+    if (vaultRowMovesWhole(slot.instance) && headroom < slot.count) {
       full = true;
       continue;
     }
@@ -324,8 +367,12 @@ export function predictVaultDepositAll(
     else stacks += 1;
     items += moved;
     held.set(slot.itemId, have + moved);
+    if (notableItemId === null) {
+      const quality = lookup(slot.itemId)?.quality;
+      if (quality === 'epic' || quality === 'legendary') notableItemId = slot.itemId;
+    }
   }
-  return { stacks, items, full };
+  return { stacks, items, full, notableItemId };
 }
 
 /** True when the carried inventory holds at least one stack the deposit-all
@@ -340,20 +387,35 @@ export function hasVaultDepositable(
   return inventory.some((s) => isVaultDepositableSlot(s, materialIds));
 }
 
-/** The three deposit-all summary lines, as t() keys so the painter stays a
+/** The five deposit-all summary lines, as t() keys so the painter stays a
  *  thin consumer and the arm CHOICE is unit-pinned here. */
 export type VaultDepositAllSummaryKey =
   | 'hudChrome.bank.vaultDepositAllNone'
   | 'hudChrome.bank.vaultDepositAllFull'
-  | 'hudChrome.bank.vaultDepositAllDone';
+  | 'hudChrome.bank.vaultDepositAllDone'
+  | 'hudChrome.bank.vaultDepositAllNotable'
+  | 'hudChrome.bank.vaultDepositAllNotableFull';
 
-/** Which transient summary a finished deposit-all earns. Exactly one of three
- *  arms: nothing moved (every candidate ceiling-blocked) -> None; some moved
- *  but a ceiling held something back -> Full; everything moved -> Done. */
+/** Which transient summary a finished deposit-all earns. Nothing moved (every
+ *  candidate ceiling-blocked) -> None. Otherwise, an epic-or-better material
+ *  moved -> Notable (or NotableFull when a ceiling ALSO held something else
+ *  back), which NAMES the epic-or-better item and takes priority over the
+ *  plain Full arm: knowing WHAT moved matters more in the moment than whether
+ *  a ceiling also capped something else, and the vault pane itself still
+ *  shows the exact per-material headroom on demand, but the ceiling fact is
+ *  not dropped either: a player who reads "6, including Core of the Last
+ *  Flame" as the whole story would wrongly conclude nothing else was left
+ *  behind. Absent a notable item: a ceiling held something back -> Full;
+ *  everything moved -> Done. */
 export function vaultDepositAllSummaryKey(
-  p: Pick<VaultDepositAllPrediction, 'items' | 'full'>,
+  p: Pick<VaultDepositAllPrediction, 'items' | 'full' | 'notableItemId'>,
 ): VaultDepositAllSummaryKey {
   if (p.items === 0) return 'hudChrome.bank.vaultDepositAllNone';
+  if (p.notableItemId !== null) {
+    return p.full
+      ? 'hudChrome.bank.vaultDepositAllNotableFull'
+      : 'hudChrome.bank.vaultDepositAllNotable';
+  }
   if (p.full) return 'hudChrome.bank.vaultDepositAllFull';
   return 'hudChrome.bank.vaultDepositAllDone';
 }
@@ -372,11 +434,27 @@ export function vaultWithdrawFit(
   craftedRecipeId?: string,
 ): number {
   const fit = countFit(inventory, bagPools(bags), itemId, want, instance, craftedRecipeId);
-  return instance !== undefined && fit < want ? 0 : fit;
+  return vaultRowMovesWhole(instance) && fit < want ? 0 : fit;
 }
 
 function saneStoredCount(count: number): number {
   return Number.isSafeInteger(count) && count > 0 ? count : 0;
+}
+
+/** How many more units of `itemId` the vault can take right now, read off
+ *  the same wire snapshot the tab paints: the per-material ceiling less the
+ *  pooled and identity-row units already stored. Undefined while the vault is
+ *  away or locked (no ceiling to speak of). The picker caps a vault deposit
+ *  at this so an explicit selection never exceeds what the sim would refuse
+ *  (materials_vault.ts vaultDeposit refuses a selection past the headroom
+ *  rather than clipping it). */
+export function vaultMaterialHeadroom(info: VaultInfo | null, itemId: string): number | undefined {
+  if (!info || info.upgrades <= 0) return undefined;
+  let held = Object.hasOwn(info.stock, itemId) ? saneStoredCount(info.stock[itemId]) : 0;
+  for (const slot of info.special) {
+    if (slot.itemId === itemId) held += saneStoredCount(slot.count);
+  }
+  return Math.max(0, info.perMaterialCap - held);
 }
 
 /** Canonical JSON for deterministic special-row ordering across a JSONB wire

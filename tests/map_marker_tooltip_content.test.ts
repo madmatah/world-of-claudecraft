@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GATHER_NODES } from '../src/sim/data';
+import { GATHER_NODES, WORLD_QUESTS } from '../src/sim/data';
 import type { QuestObjectiveRef } from '../src/sim/quest_targets';
-import type { QuestProgress } from '../src/sim/types';
+import type { QuestProgress, WorldQuestProgress } from '../src/sim/types';
 import { MapMarkerTooltipContent } from '../src/ui/hud/map/map_marker_tooltip_content';
-import { setLanguage } from '../src/ui/i18n';
+import { ensureLocaleLoaded, setLanguage } from '../src/ui/i18n';
 import type {
+  MapFarmPatchMarker,
   MapGatherNodeMarker,
   MapNpcMarker,
   MapServiceMarker,
   MapStationMarker,
+  MapWorldQuestMarker,
 } from '../src/ui/map_window_view';
 import type { IWorld } from '../src/world_api';
 
@@ -17,12 +19,20 @@ const GATHER_NODE = GATHER_NODES[0];
 function makeWorld(
   options: {
     questLog?: Map<string, QuestProgress>;
+    worldQuestLog?: Map<string, WorldQuestProgress>;
+    worldQuestExpiresAtMs?: number;
     harvestable?: (nodeId: string) => boolean;
     respawnSeconds?: (nodeId: string) => number | null;
   } = {},
 ): IWorld {
   return {
     questLog: options.questLog ?? new Map(),
+    worldQuestLog: options.worldQuestLog ?? new Map(),
+    worldQuestExpiresAtMs: options.worldQuestExpiresAtMs ?? 0,
+    // The reward line resolves the day's item from the cycle and the viewer's class.
+    worldQuestCycle: 'wq1_0',
+    cfg: { seed: 1, playerClass: 'warrior' },
+    player: { level: 10 },
     inventory: [],
     gatheringProficiency: {},
     toolEffectSlots: [],
@@ -80,6 +90,45 @@ describe('MapMarkerTooltipContent', () => {
     expect(content.service(noticeboard)).toBe('<div class="tt-title">Notice Board</div>');
   });
 
+  it('names a farm patch through the world-content catalog, in every locale', async () => {
+    const content = new MapMarkerTooltipContent(makeWorld());
+    const eastbrook = {
+      mx: 100,
+      my: 100,
+      patchId: 'patch_eastbrook',
+      zoneId: 'eastbrook_vale',
+    } satisfies MapFarmPatchMarker;
+    const mirefen = {
+      mx: 140,
+      my: 140,
+      patchId: 'patch_mirefen',
+      zoneId: 'mirefen_marsh',
+    } satisfies MapFarmPatchMarker;
+
+    // One shared name: the four sites are the same kind of place, and the
+    // zone-scoped map is what tells them apart.
+    expect(content.farm(eastbrook)).toBe('<div class="tt-title">Garden Beds</div>');
+    expect(content.farm(mirefen)).toBe(content.farm(eastbrook));
+
+    // M16: one probe per required fill, so a wrong overlay key path (which
+    // would silently show English) goes red. The locale tables load lazily, so
+    // each probe awaits its table first.
+    const fills: Array<[string, string]> = [
+      ['zh_CN', '菜畦'],
+      ['zh_TW', '菜畦'],
+      ['ja_JP', '菜園'],
+      ['ko_KR', '텃밭'],
+      ['ru_RU', 'Грядки'],
+    ];
+    for (const [locale, text] of fills) {
+      const lang = locale as Parameters<typeof setLanguage>[0];
+      await ensureLocaleLoaded(lang);
+      setLanguage(lang);
+      expect(content.farm(eastbrook), locale).toBe(`<div class="tt-title">${text}</div>`);
+    }
+    setLanguage('en');
+  });
+
   it('memoizes a gather resolve until its owner clears the memo after state changes', () => {
     let ready = false;
     const harvestable = vi.fn(() => ready);
@@ -135,5 +184,34 @@ describe('MapMarkerTooltipContent', () => {
     expect(html).toContain('Wolves at the Door');
     expect(html).toContain('Forest Wolf slain: 8/8');
     expect(html).not.toContain('Stolen Supplies');
+  });
+
+  it('renders a world quest title, live progress, and scaled reward', () => {
+    const quest = WORLD_QUESTS[0];
+    const content = new MapMarkerTooltipContent(
+      makeWorld({
+        worldQuestLog: new Map([[quest.id, { questId: quest.id, count: 2, state: 'active' }]]),
+        worldQuestExpiresAtMs: Date.UTC(2026, 8, 3, 2, 16),
+      }),
+    );
+    const marker = {
+      questId: quest.id,
+      mx: 100,
+      my: 100,
+      radius: 40,
+      state: 'active',
+    } satisfies MapWorldQuestMarker;
+
+    const html = content.worldQuest(marker, Date.UTC(2026, 7, 31, 12, 0));
+
+    expect(html).toContain('Eastbrook Vale: Load freight into the wagon');
+    expect(html).toContain(`Load freight into the wagon: 2/${quest.count}`);
+    expect(html).toContain('Rewards:');
+    expect(html).toContain('experience');
+    expect(html).toContain('Expires in 2 days, 14 hours, and 16 minutes');
+    const semantic = content.worldQuestSemantic(quest.id, Date.UTC(2026, 7, 31, 12, 0));
+    expect(semantic).toContain(`Load freight into the wagon: 2/${quest.count}`);
+    expect(semantic).toContain('Rewards:');
+    expect(semantic).toContain('Expires in 2 days, 14 hours, and 16 minutes');
   });
 });

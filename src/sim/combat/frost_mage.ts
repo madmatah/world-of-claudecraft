@@ -25,10 +25,12 @@ import {
   FROSTQUENCH_2PC_CRIT_BONUS_ICICLES,
   FROSTQUENCH_4PC_WINTERS_CHILL_CHARGES,
 } from '../content/ignivar_set_bonuses';
+import { VANGUARD_FROST_4PC_FLITSTEP_REFUND_SEC } from '../content/vanguard_set_bonuses_b';
 import type { PlayerMeta, ResolvedAbility } from '../sim';
 import type { SimContext } from '../sim_context';
 import type { AbilityDef, Aura, Entity } from '../types';
 import { MOVEMENT_LOCK_AURA_KINDS } from './cc';
+import { hourbinderBarrierHaste } from './chronomancy';
 import { wearsSetBonus } from './set_bonus_wearer';
 
 export const FINGERS_OF_FROST_CHANCE = 0.15;
@@ -46,18 +48,18 @@ export const SHATTER_CRIT_BONUS = 0.5;
 export const ICE_LANCE_FROZEN_MULT = 3;
 
 // Spells that may SPEND a Winter's Chill charge on impact (the PDF's
-// "compatible spells"). Glacial Spike and Comet Storm join in a later phase.
+// "compatible spells"). Rimeneedle and Comet Storm join in a later phase.
 // Flurry is deliberately absent: it PLANTS the debuff and must never eat the
 // charges it just applied. The UI reads this same set for its glow scope.
 export const WINTERS_CHILL_SPENDERS: ReadonlySet<string> = new Set(['ice_lance']);
 
-// Blizzard feeds Frozen Orb: each enemy a pulse strikes shaves this off the
+// Blizzard feeds Frostglobe: each enemy a pulse strikes shaves this off the
 // orb's running cooldown, capped per Blizzard cast (owner design 2026-07-11).
 export const BLIZZARD_ORB_CDR_PER_ENEMY = 0.5;
 export const BLIZZARD_ORB_CDR_CAP = 3;
 
-// Icicles: the frost build-up resource. Rimelance impacts and Frozen Orb pulses
-// each bank one, up to ICICLE_MAX; at the cap Glacial Spike is castable
+// Icicles: the frost build-up resource. Rimelance impacts and Frostglobe pulses
+// each bank one, up to ICICLE_MAX; at the cap Rimeneedle is castable
 // (requiresAuraStacks) and consumes the whole stack. A long duration so a partial
 // stack survives between casts in a real fight, refreshed on each new icicle.
 export const ICICLE_MAX = 5;
@@ -80,7 +82,7 @@ export function frostProcGlowActive(
 }
 
 /** Pure reader: the banked Icicle count (0..ICICLE_MAX). Exposed for the frost
- *  build-up overlay to render the stack as it fills toward a Glacial Spike, the
+ *  build-up overlay to render the stack as it fills toward a Rimeneedle, the
  *  same structural-aura idiom as chronoOverlayCharges. */
 export function frostIcicleCharges(auras: readonly { kind: string; stacks?: number }[]): number {
   const icicles = auras.find((a) => a.kind === 'icicles');
@@ -148,7 +150,7 @@ export function gainBrainFreeze(ctx: SimContext, p: Entity): void {
   ctx.emit({ type: 'spellfx', sourceId: p.id, targetId: p.id, school: 'frost', fx: 'procSurge' });
 }
 
-/** Bank one Icicle (Rimelance impact or Frozen Orb pulse), up to ICICLE_MAX.
+/** Bank one Icicle (Rimelance impact or Frostglobe pulse), up to ICICLE_MAX.
  *  Refreshes the duration on each gain so a partial stack does not decay mid
  *  build-up; at the cap the new icicle is lost (no over-cap), mirroring the
  *  anti-waste rule of the procs. Deterministic aura write, no rng. */
@@ -191,7 +193,7 @@ export function rollFrostboltProcs(ctx: SimContext, p: Entity, meta: PlayerMeta)
  *  streak counter, because the base bank site (frostMageAfterCast) cannot see
  *  the crit flag: it READS a crit already rolled and never draws dice, so
  *  every rng stream stays byte-identical. gainIcicle's ICICLE_MAX cap stands
- *  untouched (at 4 banked, a crit impact still tops out at 5); Frozen Orb
+ *  untouched (at 4 banked, a crit impact still tops out at 5); Frostglobe
  *  pulses stay single-bank (the set doc's disclosed dead zone). */
 export function frostMageOnSpellHit(
   ctx: SimContext,
@@ -315,6 +317,42 @@ function isMageFrozen(ctx: SimContext, target: Entity): boolean {
   );
 }
 
+/** Rimewarden Garb 4pc (Warfare Season 2): shave `seconds` off Flitstep.
+ *  Charge-aware, unlike the generic cooldownRefund response (which edits only
+ *  the plain cooldown map, a no-op for a Double Blink mage): with a charge
+ *  state it shortens the soonest running recharge timer, completing that
+ *  charge when the timer reaches zero (the leftover is not carried to the
+ *  next timer), then re-mirrors the empty-bank cooldown the way updateTimers
+ *  does. Plain tick math; draws no rng. */
+export function refundFlitstep(p: Entity, seconds: number): void {
+  const bank = p.abilityCharges?.blink;
+  if (!bank) {
+    const remaining = p.cooldowns.get('blink');
+    if (remaining === undefined) return;
+    if (remaining <= seconds) p.cooldowns.delete('blink');
+    else p.cooldowns.set('blink', remaining - seconds);
+    return;
+  }
+  if (bank.charges >= bank.maxCharges) return;
+  // An old-format bank (no per-charge timers) missing more than one charge is
+  // rebuilt by updateTimers on the next tick; refunding it here would drop a
+  // charge's timer, so skip that one-tick window.
+  if (!bank.recharges && bank.maxCharges - bank.charges > 1) return;
+  const timers = bank.recharges ?? (bank.recharge > 0 ? [bank.recharge] : []);
+  if (timers.length === 0) return;
+  const soonest = timers[0] - seconds;
+  if (soonest <= 0) {
+    timers.shift();
+    bank.charges = Math.min(bank.maxCharges, bank.charges + 1);
+  } else {
+    timers[0] = soonest;
+  }
+  bank.recharges = bank.charges >= bank.maxCharges ? [] : timers;
+  bank.recharge = bank.recharges[0] ?? 0;
+  if (bank.charges > 0) p.cooldowns.delete('blink');
+  else p.cooldowns.set('blink', bank.recharge);
+}
+
 /** Post-impact rider, called once at the end of runEffects: frostbolt rolls
  *  its two procs; Flurry plants Winter's Chill on its (surviving) target.
  *  Inert for anything that is not a committed-frost mage cast. */
@@ -326,9 +364,15 @@ export function frostMageAfterCast(
   target: Entity | null,
 ): void {
   if (ability.class !== 'mage' || p.kind !== 'player') return;
+  // Warfare Season 2 mage set riders (both no-ops for non-wearers): this is
+  // the one per-cast mage seam that sees the resolved target.
+  hourbinderBarrierHaste(ctx, p, ability.id, target);
+  if (ability.id === 'frost_nova' && wearsSetBonus(ctx, p, 'vanguard_mage_frost', 4)) {
+    refundFlitstep(p, VANGUARD_FROST_4PC_FLITSTEP_REFUND_SEC);
+  }
   if (ability.id === 'frostbolt') {
     rollFrostboltProcs(ctx, p, meta);
-    // Each Rimelance impact also banks an Icicle toward Glacial Spike.
+    // Each Rimelance impact also banks an Icicle toward Rimeneedle.
     if (isCommittedFrost(ctx, meta)) gainIcicle(ctx, p);
   } else if (ability.id === 'flurry' && isCommittedFrost(ctx, meta)) {
     if (target && !target.dead) applyWintersChill(ctx, p, target);
@@ -336,13 +380,13 @@ export function frostMageAfterCast(
 }
 
 /** Channel-start hook (casting_lifecycle's channel block): a fresh Blizzard
- *  gets a fresh Frozen Orb refund budget. Inert for every other channel. */
+ *  gets a fresh Frostglobe refund budget. Inert for every other channel. */
 export function frostMageChannelStart(p: Entity, abilityId: string): void {
   if (abilityId === 'blizzard') p.blizzardOrbCdr = 0;
 }
 
 /** Position-channel pulse hook: every enemy a Blizzard pulse struck shaves
- *  BLIZZARD_ORB_CDR_PER_ENEMY off Frozen Orb's RUNNING cooldown, at most
+ *  BLIZZARD_ORB_CDR_PER_ENEMY off Frostglobe's RUNNING cooldown, at most
  *  BLIZZARD_ORB_CDR_CAP per cast (the budget frostMageChannelStart reset).
  *  Deterministic tick math, no rng; a no-op without a running orb cooldown. */
 export function frostMageChannelPulse(

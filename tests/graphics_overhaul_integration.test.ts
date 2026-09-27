@@ -41,10 +41,11 @@ describe('graphics-overhaul integration', () => {
       'const cz = pz - Math.cos(pose.yaw) * Math.cos(pose.pitch) * boomDistance;',
     );
     expect(renderer).toContain('this.camera.position.set(cx, Math.max(cy, groundY), cz);');
-    const chaseCamera = renderer.slice(
-      renderer.indexOf('const px = this.camBoom.x + this.camFeel.leadX;'),
-      renderer.indexOf('// Spatial-audio listener'),
-    );
+    const chaseStart = renderer.indexOf('const px = pose.x + shoulder.x;');
+    const chaseEnd = renderer.indexOf('// Spatial-audio listener');
+    expect(chaseStart).toBeGreaterThan(0);
+    expect(chaseEnd).toBeGreaterThan(chaseStart);
+    const chaseCamera = renderer.slice(chaseStart, chaseEnd);
     // The requested distance is read, never written: the rally boom profile
     // lengthens the arm through cameraBoomDistance() rather than by moving
     // pose.dist, so scene geometry still cannot pull the camera in.
@@ -61,6 +62,21 @@ describe('graphics-overhaul integration', () => {
     expect(renderer).not.toContain('cameraFeelFovTarget(CAMERA_BASE_FOV,');
   });
 
+  it('hands the occluder fades and ambience the avatar eye, not the Action Cam aim', () => {
+    const renderer = source('src/render/renderer.ts');
+    const tail = renderer.slice(
+      renderer.indexOf('lookAtFrozen(this.camera, this.cameraLookAt);\n    // Later readers'),
+      renderer.indexOf('sink.ambience('),
+    );
+    // After the one aim, cameraLookAt is reset to the un-shifted avatar eye,
+    // and the ambience is sampled there, never at the shifted pivot.
+    expect(tail).toContain(
+      'this.cameraLookAt.set(px - shoulder.x, eyeY + shoulder.drop, pz - shoulder.z);',
+    );
+    expect(tail).toContain('sampleAmbienceInto(this.ambience, eye.x, eye.z, seed, this.weatherOn)');
+    expect(tail).not.toMatch(/zoneBiomeAt\(px|sampleAmbienceInto\([^)]*\bpx\b/);
+  });
+
   it('routes reduced motion through every occluder-fade consumer', () => {
     const consumers = [
       'src/render/props.ts',
@@ -71,15 +87,24 @@ describe('graphics-overhaul integration', () => {
       'src/render/eastbrook_town.ts',
       'src/render/yumi_maze.ts',
       'src/render/battleground_placements.ts',
+      // the Harbormaster's House walk-in cutaway (the shell's per-part fade)
+      'src/render/wyrmwatch_harbor_house.ts',
     ];
     for (const file of consumers) {
       const text = source(file);
-      // Either the core's step (the instanced-ghost consumers and the raid
-      // backface cull, whose trailing argument is the fade floor) or the
-      // gated stepper over it (occluder_fade.ts advanceOccluderFade, the
-      // fade painters); both take the flag after dt.
-      expect(text, file).toMatch(/(?:step|advance)OccluderFade\([^)]+,\s*reducedMotion\s*[,)]/s);
+      // The core's step (the raid backface cull, whose trailing argument is
+      // the fade floor), the gated stepper over it (occluder_fade.ts
+      // advanceOccluderFade, the fade painters), or the ghost pool's step (the
+      // instanced-ghost consumers); all take the flag after dt.
+      expect(text, file).toMatch(
+        /(?:(?:step|advance)OccluderFade|[gG]hosts\.step)\([^)]+,\s*reducedMotion\s*[,)]/s,
+      );
     }
+    // The pool's step is the core's, and the dithered style restores in one
+    // step the way reduced motion does.
+    expect(source('src/render/instanced_occluder_ghosts.ts')).toContain(
+      'stepOccluderFade(alpha, occluded, dt, reducedMotion || this.dithered)',
+    );
   });
 
   it('invalidates the scree placement grid after terrain and water rebuilds', () => {

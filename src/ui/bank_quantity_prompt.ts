@@ -14,6 +14,8 @@
 // Registered in UI_DOM_MODULES (tests/architecture.test.ts): it mounts real
 // DOM. Cold-path chrome: built once per prompt open, no driver, no layout read.
 
+import { mountQuantityStepper } from './quantity_stepper';
+
 export interface QuantityPromptWiring {
   /** The owning window's WCAG prompt-dialog installer (role/aria-modal/Tab
    *  cycle/Escape/inert), so a shared prompt is indistinguishable from a
@@ -27,12 +29,32 @@ export interface QuantityPromptWiring {
   dismissSiblings(): void;
 }
 
+/** Optional step buttons flanking the number input: the shared stepper
+ *  (quantity_stepper.ts), a unit pair inside a big pair that moves `size`
+ *  units (a whole carried stack for the vault). Every press clamps to the
+ *  prompt's [1, maxCount] range so the last one lands on the bound, and both
+ *  pairs disable on their bound (a [1, 1] prompt disables all four). Every
+ *  string arrives resolved, like the rest of the prompt's copy. */
+export interface QuantityPromptStep {
+  size: number;
+  downAriaText: string;
+  upAriaText: string;
+  unitDownAriaText: string;
+  unitUpAriaText: string;
+}
+
 export interface QuantityPromptOpts {
   /** Extra classes after 'prompt panel' (the family's teardown selectors). */
   className: string;
+  step?: QuantityPromptStep;
   titleText: string;
   inputAriaText: string;
   confirmText: string;
+  /** Optional second confirm that submits `maxCount` in one press (the trade
+   *  prompt's "Offer all"); absent on the bank prompts, which keep the
+   *  single confirm. Goes through the same resolveCount clamp as a typed
+   *  count, so a stale ceiling still lands on the live one. */
+  confirmAllText?: string;
   cancelText: string;
   maxCount: number;
   /** Re-resolve the live target at submit: null refuses (stale), else the
@@ -50,13 +72,13 @@ export function showQuantityPrompt(wiring: QuantityPromptWiring, opts: QuantityP
   const stack = document.getElementById('prompt-stack');
   if (!stack) return;
   const prompt = document.createElement('div');
-  prompt.className = `prompt panel ${opts.className}`;
+  prompt.className = `prompt panel ui-window ${opts.className}`;
   const title = document.createElement('div');
   title.className = 'prompt-text';
   title.textContent = opts.titleText;
   prompt.appendChild(title);
   const input = document.createElement('input');
-  input.className = 'prompt-number';
+  input.className = 'prompt-number ui-input';
   input.type = 'number';
   input.setAttribute('aria-label', opts.inputAriaText);
   input.min = '1';
@@ -64,17 +86,50 @@ export function showQuantityPrompt(wiring: QuantityPromptWiring, opts: QuantityP
   input.step = '1';
   input.value = '1';
   const confirm = document.createElement('button');
-  confirm.className = 'btn';
+  confirm.className = 'btn ui-btn ui-btn--red';
   confirm.textContent = opts.confirmText;
   const cancel = document.createElement('button');
-  cancel.className = 'btn';
+  cancel.className = 'btn ui-btn';
   cancel.textContent = opts.cancelText;
-  prompt.append(input, confirm, cancel);
+  const confirmAll = opts.confirmAllText === undefined ? null : document.createElement('button');
+  if (confirmAll) {
+    confirmAll.className = 'btn ui-btn';
+    confirmAll.textContent = opts.confirmAllText ?? '';
+  }
+  const actions = confirmAll ? [confirm, confirmAll, cancel] : [confirm, cancel];
+  if (opts.step) {
+    const { size, downAriaText, upAriaText, unitDownAriaText, unitUpAriaText } = opts.step;
+    const steps = document.createElement('div');
+    steps.className = 'prompt-steps';
+    const stepper = mountQuantityStepper({
+      input,
+      bounds: () => ({ min: 1, max: opts.maxCount }),
+      size,
+      labels: {
+        bigDown: downAriaText,
+        unitDown: unitDownAriaText,
+        unitUp: unitUpAriaText,
+        bigUp: upAriaText,
+      },
+      className: 'prompt-step',
+      bigClassName: 'prompt-step-big',
+    });
+    steps.append(
+      stepper.buttons.bigDown,
+      stepper.buttons.unitDown,
+      input,
+      stepper.buttons.unitUp,
+      stepper.buttons.bigUp,
+    );
+    prompt.append(steps, ...actions);
+  } else {
+    prompt.append(input, ...actions);
+  }
   const { dismiss, dismissAndReturn } = wiring.installPromptDialog(prompt, opener, () =>
     prompt.remove(),
   );
-  const submit = (): void => {
-    const count = opts.resolveCount(Math.floor(Number(input.value) || 0));
+  const submitRequested = (requested: number): void => {
+    const count = opts.resolveCount(requested);
     if (count === null) {
       dismiss();
       opts.afterClose(false);
@@ -84,7 +139,9 @@ export function showQuantityPrompt(wiring: QuantityPromptWiring, opts: QuantityP
     dismiss();
     opts.afterClose(true);
   };
+  const submit = (): void => submitRequested(Math.floor(Number(input.value) || 0));
   confirm.addEventListener('click', submit);
+  confirmAll?.addEventListener('click', () => submitRequested(opts.maxCount));
   cancel.addEventListener('click', dismissAndReturn);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') submit();

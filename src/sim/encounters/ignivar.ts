@@ -78,12 +78,14 @@ import {
   steadyAngleTo,
 } from '../types';
 import { VARKHUL_FORGE_PORTAL_ABILITY_ID } from '../varkhul_forge_intermission';
+import { attemptLost } from './attempt_wipe';
 import { resolveEncounterWipe } from './encounter_wipe';
 import {
   IGNIVAR_DIALOGUE,
   IGNIVAR_DIALOGUE_GAP_SECONDS,
   ignivarDefeatYell,
 } from './ignivar_dialogue';
+import { resolveLivingTarget } from './living_target';
 import { walkEncounterActorTo } from './scripted_walk';
 
 export const IGNIVAR_BRAND_AURA_ID = 'ignivar_brand_of_the_pyre';
@@ -221,16 +223,6 @@ function tankIds(ctx: SimContext): Set<number> {
     if (meta.talentMods.role === 'tank') result.add(meta.entityId);
   }
   return result;
-}
-
-function resolveLivingTarget(boss: Entity, players: readonly Entity[]): Entity | null {
-  const current =
-    boss.aggroTargetId === null
-      ? null
-      : (players.find((player) => player.id === boss.aggroTargetId && !player.dead) ?? null);
-  const target = current ?? players.find((player) => !player.dead) ?? null;
-  boss.aggroTargetId = target?.id ?? null;
-  return target;
 }
 
 function conduitEntities(ctx: SimContext, boss: Entity): Map<IgnivarConduitId, Entity> {
@@ -1611,9 +1603,11 @@ export function updateIgnivarEncounter(ctx: SimContext, boss: Entity, pursueTarg
   if (boss.templateId !== IGNIVAR_BOSS_ID || boss.dead) return;
   const allPlayers = playersInEncounter(ctx, boss, true);
   let players = allPlayers.filter((player) => !player.dead);
-  if (players.length === 0) {
+  // A wipe is "no participant of THIS attempt left alive", not "nobody alive
+  // in the room": a raider who zoned in as the last participant died must not
+  // keep the fight alive at his current health (encounters/attempt_wipe.ts).
+  if (players.length === 0 || attemptLost(boss.ignivar?.attemptParticipantIds, players)) {
     boss.aiState = 'evade';
-    if (boss.combatExitHoldUntil > ctx.time) return;
     for (const playerId of boss.ignivar?.attemptParticipantIds ?? []) {
       const player = ctx.entities.get(playerId);
       const meta = ctx.players.get(playerId);

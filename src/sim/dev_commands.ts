@@ -1,11 +1,29 @@
 import { applyCourserDaze } from './combat/hunter_shared';
 import { DEV_KIT_ROLES, devKitRole } from './content/dev_kit_roles';
+import { MOUNT_SKIN_IDS } from './content/mount_skins';
 import { MOUNT_KEYS } from './content/mounts';
 import { GATHERING_PROFESSIONS } from './content/professions';
-import { DUNGEONS, ITEMS, MOBS, NPCS } from './data';
+import { DUNGEONS, getActiveWorldContent, ITEMS, MOBS, NPCS, WORLD_QUESTS_BY_ID } from './data';
 import { equipBestInSlotForDev } from './dev/bis_gear';
+import { displacePlayerForDev } from './dev/dev_displace';
+import { handleFerryDevChat } from './dev/ferry_dev';
+import { devTownList, resolveDevTown } from './dev/town_teleport';
+import { prepareWeeklyVaultPlaytest } from './dev/weekly_vault_playtest';
+import { handleDevClueCommand } from './dev_clue_scrolls';
 import { applyDevKit } from './dev_kit';
+import { armWeeklyQuestForDev } from './dev_weekly_quest';
+import { armWorldQuestForDev, listWorldQuestsForDev } from './dev_world_quest';
+import { armWorldQuestCannonForDev } from './dev_world_quest_cannon';
+import { armWorldQuestCaravanForDev } from './dev_world_quest_caravan';
+import { armDailyWorldQuestForDev } from './dev_world_quest_daily';
+import { armWorldQuestForgingForDev } from './dev_world_quest_forging';
+import { armWorldQuestGliderForDev } from './dev_world_quest_glider';
+import { armWorldQuestInvestigationForDev } from './dev_world_quest_investigation';
+import { armWorldQuestShadowForDev } from './dev_world_quest_shadow';
+import { armWorldQuestTracingForDev } from './dev_world_quest_tracing';
+import { armWorldQuestWispMazeForDev } from './dev_world_quest_wisp_maze';
 import { createGroundObject, createMob } from './entity';
+import { awardFactionReputation, FACTION_IDS } from './factions';
 import {
   ignivarDevRaidTravelRoster,
   setupIgnivarDevRaid,
@@ -15,9 +33,15 @@ import { IGNIVAR_FORGE_APPROACH_ID, IGNIVAR_RAID_ARENA_ID } from './ignivar_raid
 import { enterDungeon, instanceInfoAt } from './instances/dungeons';
 import { mountItemId, mountOwned } from './mounts';
 import { MOUNT_TRAIN_MIN_LEVEL } from './mounts_training';
+import {
+  isNythraxisDevMechanic,
+  pokeNythraxisDevMechanic,
+  setupNythraxisDevRaid,
+} from './nythraxis_dev_raid';
 import { isGatheringProfessionId, queueGatheringGrant } from './professions/gathering';
 import { placeMobileStationForPlayer } from './professions/mobile_station';
-import { cancelProfessionSessionOnDisplacement } from './professions/session_teardown';
+import { endHillNow, riseHillNow, spawnHillNow, warnNextHillNow } from './pvp/hill';
+import { HILL_DEV_USAGE, isHillDevCommand, parseHillDevCommand } from './pvp/hill_dev';
 import { completeAllQuestsForDev } from './quests/dev_quest_commands';
 import { riftFx } from './rift/fx';
 import { RIFT_RANK_BASE_LEVEL, riftRankForBaseLevel } from './rift/ranks';
@@ -28,6 +52,10 @@ import { bgQueueJoin, bgQueueSize, devEndBg, devStartBg } from './social/battleg
 import { revivePlayerAt } from './spirit';
 import { MAX_LEVEL, type RiftTier } from './types';
 import { setupVarkhulDevRaid } from './varkhul_dev_raid';
+import {
+  worldQuestCycleOfferingQuest,
+  worldQuestPuzzleVariantForCycle,
+} from './world_quest_rotation';
 
 const MAX_DEV_SPAWNS = 20;
 const DEV_SPAWN_RADIUS = 4;
@@ -106,6 +134,7 @@ export function resetCombatForDev(ctx: SimContext, pid: number): void {
   player.queuedOnSwing = null;
   player.queuedCastAbility = null;
   player.queuedCastAim = null;
+  player.queuedCastTargetId = null;
 
   for (const entity of ctx.entities.values()) {
     if (entity.kind !== 'mob') continue;
@@ -139,6 +168,12 @@ export function handleDevChat(
   raw: string,
   pid: number,
 ): SentChat | null | undefined {
+  const weeklyVaultMatch = /^\/dev\s+weeklyvault(?:\s+(rollover))?\s*$/i.exec(raw);
+  if (weeklyVaultMatch) {
+    prepareWeeklyVaultPlaytest(ctx, pid, !!weeklyVaultMatch[1]);
+    return null;
+  }
+  if (handleFerryDevChat(ctx, raw, pid)) return null; // /dev ferry (dev/ferry_dev.ts)
   const levelMatch = /^\/(?:dev\s+level|devlevel)\s+(\d+)\s*$/i.exec(raw);
   if (levelMatch) {
     const level = Number(levelMatch[1]);
@@ -153,11 +188,12 @@ export function handleDevChat(
   if (teleportMatch) {
     const entity = ctx.entities.get(pid);
     if (entity) {
-      cancelProfessionSessionOnDisplacement(ctx, entity);
-      const pos = ctx.groundPos(Number(teleportMatch[1]), Number(teleportMatch[2]));
-      entity.pos = pos;
-      entity.prevPos = { ...pos };
-      ctx.rebucket(entity);
+      const pos = displacePlayerForDev(
+        ctx,
+        entity,
+        Number(teleportMatch[1]),
+        Number(teleportMatch[2]),
+      );
       emitDevLog(ctx, pid, `[dev] Teleported to ${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}.`);
     }
     return null;
@@ -196,6 +232,264 @@ export function handleDevChat(
         ? `[dev] Rally kit: ${charges} of the weapon and ${charges} of every pickup effect.`
         : '[dev] Not in a race.',
     );
+    return null;
+  }
+
+  if (/^\/(?:dev\s+salvage|devsalvage)\s*$/i.test(raw)) {
+    const meta = ctx.players.get(pid);
+    const quest = WORLD_QUESTS_BY_ID.wq_farshore_salvage;
+    const rotation = ctx.currentWorldQuestRotation();
+    const devCycle = worldQuestCycleOfferingQuest(rotation.cycle, quest?.id ?? '');
+    if (!meta || !quest || quest.objective.type !== 'salvage' || !devCycle) {
+      ctx.error(pid, '[dev] Shipwreck salvage is unavailable in this host.');
+      return null;
+    }
+    meta.devWorldQuestCycle = devCycle;
+    if (meta.worldQuestCycle !== devCycle) {
+      meta.worldQuestCycle = devCycle;
+      meta.worldQuestLog.clear();
+      meta.worldQuestAreas.clear();
+    }
+    // Keep the calendar's current weekly layout even when the dev command must
+    // project a nearby offer cycle so the online client's active-id filter admits it.
+    const variant = worldQuestPuzzleVariantForCycle(rotation.cycle, quest.objective.layouts.length);
+    meta.worldQuestLog.set(quest.id, {
+      questId: quest.id,
+      count: 0,
+      state: 'active',
+      puzzleVariant: variant,
+    });
+    meta.worldQuestAreas.delete(quest.id);
+    meta.wireRev++;
+    ctx.setPlayerLevel(Math.max(quest.minLevel, ctx.entities.get(pid)?.level ?? 1), pid);
+    ctx.emit({ type: 'worldQuestStarted', questId: quest.id, pid });
+    emitDevLog(ctx, pid, '[dev] Shipwreck salvage armed. Use /dev tp 320 103 (beside the wreck).');
+    return null;
+  }
+
+  if (/^\/dev\s+shadow\s*$/i.test(raw)) {
+    armWorldQuestShadowForDev(ctx, pid);
+    return null;
+  }
+  const caravanMatch = /^\/(?:dev\s+caravan|devcaravan)(?:\s+(\S+))?\s*$/i.exec(raw);
+  const cannonMatch = /^\/dev\s+cannon(?:\s+(wyrmwatch|last_keep))?\s*$/i.exec(raw);
+  if (/^\/dev\s+(?:infiltrator|investigation|amongus)\s*$/i.test(raw)) {
+    armWorldQuestInvestigationForDev(ctx, pid);
+    return null;
+  }
+  const gliderMatch = /^\/dev\s+(?:glider|slalom|windrider)(?:\s+(start))?\s*$/i.exec(raw);
+  if (gliderMatch) {
+    armWorldQuestGliderForDev(ctx, pid, Boolean(gliderMatch[1]));
+    return null;
+  }
+  const weeklyMatch = /^\/dev\s+weekly(?:\s+(credit))?\s*$/i.exec(raw);
+  if (weeklyMatch) {
+    armWeeklyQuestForDev(ctx, pid, Boolean(weeklyMatch[1]));
+    return null;
+  }
+  if (/^\/dev\s+forge\s*$/i.test(raw)) {
+    armWorldQuestForgingForDev(ctx, pid);
+    return null;
+  }
+  if (cannonMatch) {
+    armWorldQuestCannonForDev(ctx, pid, cannonMatch[1]?.toLowerCase());
+    return null;
+  }
+  if (/^\/dev\s+calligraphy\s*$/i.test(raw)) {
+    armWorldQuestTracingForDev(ctx, pid);
+    return null;
+  }
+  if (caravanMatch) {
+    armWorldQuestCaravanForDev(ctx, pid, (caravanMatch[1] ?? 'eastbrook').toLowerCase());
+    return null;
+  }
+
+  // /dev rep <rift_watch|church_order|automatons|all> <amount>: award faction
+  // standing the way a world-quest turn-in does (same level cap), so the
+  // quartermasters' standing gates can be exercised without the daily grind.
+  const repMatch = /^\/dev\s+rep\s+(\S+)\s+(\d+)\s*$/i.exec(raw);
+  if (repMatch) {
+    const meta = ctx.players.get(pid);
+    const player = ctx.entities.get(pid);
+    if (!meta || !player) return null;
+    const key = repMatch[1].toLowerCase();
+    const factionIds = key === 'all' ? FACTION_IDS : FACTION_IDS.filter((id) => id === key);
+    if (factionIds.length === 0) {
+      emitDevLog(
+        ctx,
+        pid,
+        `[dev] Unknown faction "${repMatch[1]}": rift_watch, church_order, automatons or all.`,
+      );
+      return null;
+    }
+    for (const factionId of factionIds) {
+      const result = awardFactionReputation(meta, factionId, Number(repMatch[2]), player.level);
+      // Same full-pass mark the world-quest turn-in requests, so the standing
+      // deeds grant on the tick the cheat crosses a tier.
+      if (result.gained > 0) ctx.markDeedsDirty(pid);
+      emitDevLog(
+        ctx,
+        pid,
+        `[dev] ${factionId}: +${result.gained} standing, now ${result.total} (${result.tier})${
+          result.capped ? ', capped by level' : ''
+        }.`,
+      );
+    }
+    return null;
+  }
+
+  // /dev clue [hunt <huntId> | solve | casket]: the Clue Scroll playtest
+  // family (src/sim/dev_clue_scrolls.ts owns every arm).
+  const clueMatch = /^\/dev\s+clue(?:\s+(\S+))?(?:\s+(\S+))?\s*$/i.exec(raw);
+  if (clueMatch) {
+    handleDevClueCommand(ctx, pid, (clueMatch[1] ?? '').toLowerCase(), clueMatch[2] ?? '');
+    return null;
+  }
+
+  const dailyWqMatch = /^\/dev\s+wq\s+(candy|ley)(?:\s+(.*?))?\s*$/i.exec(raw);
+  if (dailyWqMatch) {
+    armDailyWorldQuestForDev(ctx, pid, dailyWqMatch[1].toLowerCase(), dailyWqMatch[2] ?? '');
+    return null;
+  }
+  const gliderLevelMatch = /^\/dev\s+wq\s+glider(?:\s+(.*?))?\s*$/i.exec(raw);
+  if (gliderLevelMatch) {
+    armWorldQuestGliderForDev(ctx, pid, true, gliderLevelMatch[1] ?? '1');
+    return null;
+  }
+
+  const wispsMatch = /^\/dev\s+(?:wq\s+)?wisps(?:\s+(easy|normal|hard))?\s*$/i.exec(raw);
+  if (wispsMatch) {
+    armWorldQuestWispMazeForDev(
+      ctx,
+      pid,
+      wispsMatch[1]?.toLowerCase() as 'easy' | 'normal' | 'hard' | undefined,
+    );
+    return null;
+  }
+  const wqMatch = /^\/dev\s+wq(?:\s+(\S+))?\s*$/i.exec(raw);
+  if (wqMatch) {
+    const questKey = wqMatch[1];
+    if (!questKey) {
+      listWorldQuestsForDev(ctx, pid);
+    } else {
+      armWorldQuestForDev(ctx, pid, questKey);
+    }
+    return null;
+  }
+
+  // King of the Hill test levers (grammar in pvp/hill_dev.ts): stage a risen
+  // hill or a countdown and stand the caller on its rim, skip a countdown, end
+  // the hill, or run the real schedule's next hill now.
+  if (isHillDevCommand(raw)) {
+    const cmd = parseHillDevCommand(raw);
+    if (!cmd) {
+      emitDevLog(ctx, pid, HILL_DEV_USAGE);
+      return null;
+    }
+    if (cmd.kind === 'rise' || cmd.kind === 'end') {
+      const hill = cmd.kind === 'rise' ? riseHillNow(ctx) : endHillNow(ctx);
+      emitDevLog(
+        ctx,
+        pid,
+        hill
+          ? `[dev] Hill in ${hill.zoneId} ${cmd.kind === 'rise' ? 'risen' : 'ended'}.`
+          : `[dev] No ${cmd.kind === 'rise' ? 'hill is counting down' : 'hill stands'}.`,
+      );
+      return null;
+    }
+    const hill =
+      cmd.kind === 'next'
+        ? warnNextHillNow(ctx)
+        : spawnHillNow(ctx, cmd.zoneId, {
+            warn: cmd.kind === 'warn',
+            warningSeconds: cmd.kind === 'warn' ? cmd.seconds : undefined,
+          });
+    const entity = ctx.entities.get(pid);
+    if (!hill) {
+      emitDevLog(
+        ctx,
+        pid,
+        '[dev] No hill could rise there (no free-for-all zone, or no open ground).',
+      );
+    } else if (entity) {
+      const pos = displacePlayerForDev(ctx, entity, hill.x + hill.radius - 5, hill.z);
+      const what =
+        hill.phase === 'warning'
+          ? `announced (rises in ${Math.ceil(hill.risesAt - ctx.time)} s)`
+          : 'risen';
+      emitDevLog(
+        ctx,
+        pid,
+        `[dev] Hill ${what} in ${hill.zoneId} at ${hill.x.toFixed(1)}, ${hill.z.toFixed(1)}; you stand at ${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}.`,
+      );
+    }
+    return null;
+  }
+
+  if (/^\/(?:dev\s+healing|devhealing|healing)\s*$/i.test(raw)) {
+    const entity = ctx.entities.get(pid);
+    if (entity) {
+      displacePlayerForDev(ctx, entity, -82, -42);
+      entity.facing = 0;
+      entity.prevFacing = 0;
+      if (entity.level < 20) {
+        ctx.setPlayerLevel(20, pid);
+      }
+      emitDevLog(
+        ctx,
+        pid,
+        '[dev] Teleported to the Healing Training Ground. Level 20 set for healing practice.',
+      );
+    }
+    return null;
+  }
+
+  // /dev town [name]: jump to a settlement by name ("/dev town eastbrook",
+  // "/dev town dawnrest camp", or a zone id). "/dev tp <name>" is an alias so
+  // the coordinate form and the named form share one verb. The destination
+  // set is CLOSED (every zone's hub record, nothing else), unknown names
+  // refuse without moving anyone, and no argument prints the list. Rides the
+  // same ctx.devCommands gate as every other branch here.
+  const townVerb = /^\/(?:dev\s+town|devtown)(?:\s+(.+?))?\s*$/i.exec(raw);
+  const townMatch = townVerb ?? /^\/(?:dev\s+tp|devtp)\s+(\S.*?)\s*$/i.exec(raw);
+  if (townMatch) {
+    const zones = getActiveWorldContent().zones;
+    const query = townMatch[1] ?? '';
+    if (!query.trim()) {
+      ctx.error(pid, `[dev] Towns: ${devTownList(zones)}. Usage: /dev town <name>.`);
+      return null;
+    }
+    // On the tp alias only, a numeric-looking argument is a half-typed
+    // coordinate pair, not a town name: answer with the tp usage rather than
+    // an unknown-town refusal. The town verb never guards, so a hub whose
+    // name slugs to digits stays reachable by name through /dev town.
+    if (!townVerb && /^[-+\d.\s]+$/.test(query)) {
+      ctx.error(pid, '[dev] Usage: /dev tp <x> <z>, or /dev tp <town> (/dev town <name>).');
+      return null;
+    }
+    const town = resolveDevTown(zones, query);
+    if (!town) {
+      ctx.error(pid, `[dev] Unknown town '${query.trim()}'. Towns: ${devTownList(zones)}.`);
+      return null;
+    }
+    const entity = ctx.entities.get(pid);
+    if (entity) {
+      const pos = displacePlayerForDev(ctx, entity, town.x, town.z);
+      emitDevLog(
+        ctx,
+        pid,
+        `[dev] Teleported to ${town.name} (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}).`,
+      );
+    }
+    return null;
+  }
+
+  const classicWqMatch =
+    /^\/dev\s+(eastbrook_bandits|hollow_sporelings|drakelands_brood|frostveil_howlers|amberfall_lurkers|willowfen_ore|nightbloom_barrow|wraithwood_restless|evergarden_watch|proving_shore_scuttlers)\s*$/i.exec(
+      raw,
+    );
+  if (classicWqMatch) {
+    armWorldQuestForDev(ctx, pid, classicWqMatch[1]);
     return null;
   }
 
@@ -307,6 +601,22 @@ export function handleDevChat(
     return null;
   }
 
+  // Grant every catalog mount skin to the (offline, session-local) account
+  // cosmetics so the Cosmetics window can be exercised without the store.
+  // Server-side the session cosmetics are the authority, so this only ever
+  // affects the offline Sim's own mirror.
+  if (/^\/(?:dev\s+mountskins?|devmountskins?)\s*$/i.test(raw)) {
+    const owned = new Set(ctx.accountCosmetics.mountSkinIds);
+    for (const id of MOUNT_SKIN_IDS) owned.add(id);
+    ctx.accountCosmetics = { ...ctx.accountCosmetics, mountSkinIds: [...owned] };
+    emitDevLog(
+      ctx,
+      pid,
+      `[dev] Granted ${MOUNT_SKIN_IDS.length} mount skins to the account. Wear one from the Cosmetics screen.`,
+    );
+    return null;
+  }
+
   if (/^\/(?:dev\s+(?:mountquest|startmount)|devmountquest)\s*$/i.test(raw)) {
     const meta = ctx.players.get(pid);
     const entity = ctx.entities.get(pid);
@@ -316,13 +626,9 @@ export function handleDevChat(
       const leveled = entity.level < gate;
       if (leveled) ctx.setPlayerLevel(gate, pid);
       meta.copper += 100 * 10000;
-      // Every teleport, the dev ones included, runs the one session teardown
-      // (the same call /dev tp makes above).
-      cancelProfessionSessionOnDisplacement(ctx, entity);
-      const pos = ctx.groundPos(marla.pos.x + 2, marla.pos.z + 1);
-      entity.pos = pos;
-      entity.prevPos = { ...pos };
-      ctx.rebucket(entity);
+      // Every dev teleport runs the one displacement (the same call /dev tp
+      // and /dev town make above), session teardown included.
+      displacePlayerForDev(ctx, entity, marla.pos.x + 2, marla.pos.z + 1);
       const levelNote = leveled ? `level ${gate}, ` : '';
       emitDevLog(
         ctx,
@@ -398,6 +704,69 @@ export function handleDevChat(
     }
     const meta = ctx.players.get(pid);
     if (meta) queueGatheringGrant(meta, professionId, amount);
+    return null;
+  }
+
+  // Farming grow-now: bring a growing plot's deadline forward to right now, so
+  // a whole plant-grow-harvest cycle is walkable (and testable) without waiting
+  // out a real crop duration. WRITES STATE AND DRAWS NOTHING: it moves
+  // readyAtMs only, leaving plantedAtMs and the hidden pre-rolled outcome slots
+  // (survivalRoll, yieldSeed) exactly as plant time left them. That is the
+  // whole point, and it is load-bearing beyond convenience: the growth script
+  // is rolled ONCE at plant time, so "grow now" and "wait it out" must resolve
+  // to the identical harvest. The parity scenario states that equivalence, and
+  // the ready-notice and journal phases lean on this cheat to reach a ready
+  // plot in one step.
+  //
+  // A plot already at or past its deadline is left ALONE rather than restamped:
+  // it is already ready, and rewriting a settled timestamp would be a state
+  // change that buys nothing. With a bed argument the lookup is against the
+  // CALLER'S OWN plots, not FARM_BED_IDS: a perfectly real bed with nothing
+  // planted in it is the interesting refusal, and a bed allowlist would answer
+  // "fine" to it.
+  const farmGrowMatch = /^\/(?:dev\s+farmgrow|devfarmgrow)(?:\s+(\S+))?\s*$/i.exec(raw);
+  if (farmGrowMatch) {
+    const meta = ctx.players.get(pid);
+    if (!meta) return null;
+    const bedId = farmGrowMatch[1];
+    // The write-side anchor rule's third statement (plantCrop floors its
+    // plant time and the loader floors its re-anchor the same way): an
+    // unfloored 0 from a fresh never-ticked offline Sim would write a
+    // readyAtMs the loader's positivity arm destroys as tampered.
+    const nowMs = Math.max(ctx.lockoutNowMs(), 1);
+    if (bedId !== undefined) {
+      const plot = meta.farmPlots.get(bedId);
+      if (!plot) {
+        ctx.error(pid, `[dev] No plot on bed '${bedId}'.`);
+        return null;
+      }
+      if (plot.readyAtMs > nowMs) {
+        plot.readyAtMs = nowMs;
+        emitDevLog(ctx, pid, `[dev] Bed ${bedId} is ready.`);
+      } else {
+        // Honest no-work reply, matching the all-plots arm's advanced count: a
+        // settled plot is left alone, and its pre-rolled outcome may well be
+        // withered, so claiming "is ready" here could mislead a dev testing
+        // wither flows.
+        emitDevLog(ctx, pid, `[dev] Bed ${bedId} was already settled; nothing to advance.`);
+      }
+      return null;
+    }
+    if (meta.farmPlots.size === 0) {
+      ctx.error(pid, '[dev] You have no planted beds.');
+      return null;
+    }
+    let advanced = 0;
+    for (const plot of meta.farmPlots.values()) {
+      if (plot.readyAtMs <= nowMs) continue;
+      plot.readyAtMs = nowMs;
+      advanced++;
+    }
+    emitDevLog(
+      ctx,
+      pid,
+      `[dev] Advanced ${advanced} farm plot${advanced === 1 ? '' : 's'} to ready (${meta.farmPlots.size} planted).`,
+    );
     return null;
   }
 
@@ -766,6 +1135,24 @@ export function handleDevChat(
     return null;
   }
 
+  const freezeMatch = /^\/(?:dev\s+freezemobs|devfreezemobs)(?:\s+(on|off))?\s*$/i.exec(raw);
+  if (freezeMatch) {
+    // Sim-wide, unlike noaggro's per-player flag: the placer wants the whole
+    // pack statue-still, not just blind to one designer. Bare form toggles;
+    // an explicit on/off is idempotent so the placer can assert a state on
+    // open and close without tracking what the user toggled by hand.
+    const wanted = freezeMatch[1] ? freezeMatch[1].toLowerCase() === 'on' : undefined;
+    const frozen = ctx.setDevMobsFrozen(wanted);
+    emitDevLog(
+      ctx,
+      pid,
+      frozen
+        ? '[dev] Mobs FROZEN in place: no wander, no aggro, no swings (place freely).'
+        : '[dev] Mobs unfrozen: the world moves again.',
+    );
+    return null;
+  }
+
   if (/^\/(?:dev\s+noaggro|devnoaggro)\s*$/i.test(raw)) {
     const entity = ctx.entities.get(pid);
     if (entity) {
@@ -868,6 +1255,46 @@ export function handleDevChat(
     return null;
   }
 
+  // [dev] The solo Nythraxis practice raid: nine anchored, invulnerable bots
+  // spread across the hall so every mechanic has targets, then the mechanic
+  // pokes (src/sim/nythraxis_dev_raid.ts).
+  const nythraxisRaidMatch = raw.match(
+    /^\/(?:dev\s+nythraxisraid|devnythraxisraid)(?:\s+(normal|heroic))?\s*$/i,
+  );
+  if (nythraxisRaidMatch) {
+    const difficulty = nythraxisRaidMatch[1]?.toLowerCase() as 'normal' | 'heroic' | undefined;
+    const result = setupNythraxisDevRaid(ctx, pid, difficulty);
+    if (!result.ok) ctx.error(pid, `[dev] ${result.message}`);
+    else {
+      emitDevLog(
+        ctx,
+        pid,
+        `[dev] Nythraxis raid ${result.reused ? 'reset' : 'ready'} (${result.difficulty === 'heroic' ? 'Heroic' : 'Normal'}): ${result.allies} stationary, invulnerable allies spread across the hall. Pull him, then /dev nyx <curse|spike|eruption|sigil|rend|rage|storm|wards|phase2|phase3|enrage [sec]> forces a mechanic.`,
+      );
+    }
+    return null;
+  }
+  const nyxMatch = raw.match(/^\/(?:dev\s+nyx|devnyx)\s+([a-z0-9]+)(?:\s+(\d+))?\s*$/i);
+  if (nyxMatch) {
+    const verb = nyxMatch[1].toLowerCase();
+    if (!isNythraxisDevMechanic(verb)) {
+      ctx.error(
+        pid,
+        '[dev] Usage: /dev nyx <curse|spike|eruption|sigil|rend|rage|storm|wards|phase2|phase3|enrage [sec]>.',
+      );
+      return null;
+    }
+    const result = pokeNythraxisDevMechanic(
+      ctx,
+      pid,
+      verb,
+      nyxMatch[2] === undefined ? undefined : Number(nyxMatch[2]),
+    );
+    if (!result.ok) ctx.error(pid, `[dev] ${result.message}`);
+    else emitDevLog(ctx, pid, `[dev] ${result.message}`);
+    return null;
+  }
+
   const varkhulRaidMatch = raw.match(
     /^\/(?:dev\s+varkhulraid|devvarkhulraid)(?:\s+(normal|heroic))?\s*$/i,
   );
@@ -961,7 +1388,7 @@ export function handleDevChat(
   if (/^\/dev(?:\s|$)/i.test(raw)) {
     ctx.error(
       pid,
-      'Dev commands: /dev gui, /dev level, /dev tp, /dev spawn, /dev despawn, /dev killtarget, /dev give, /dev kit, /dev mounts, /dev mountquest, /dev gold, /dev quest, /dev quests, /dev attune, /dev mobilestation, /dev gather, /dev bot, /dev vendor, /dev bg, /dev bis, /dev lfg, /dev portal [seed] [level] [C|B|A|S] [infernal|random], /dev cascade, /dev sandbox, /dev smite, /dev god, /dev noaggro, /dev immortal, /dev ignivarraid [boss], /dev varkhulraid [normal|heroic], /dev heal, /dev hp <1-100>, /dev resource, /dev cooldowns, /dev revive, /dev combatreset, /dev daze, /dev fear, /dev dungeon, /dev raid, /dev kill',
+      'Dev commands: /dev gui, /dev level, /dev tp, /dev town, /dev wq [name], /dev salvage, /dev clue [hunt <huntId>|solve|casket], /dev caravan, /dev calligraphy, /dev spawn, /dev despawn, /dev killtarget, /dev give, /dev kit, /dev mounts, /dev mountquest, /dev gold, /dev quest, /dev quests, /dev attune, /dev mobilestation, /dev gather, /dev bot, /dev vendor, /dev bg, /dev bis, /dev lfg, /dev portal [seed] [level] [C|B|A|S] [infernal|random], /dev cascade, /dev sandbox, /dev smite, /dev god, /dev noaggro, /dev freezemobs, /dev immortal, /dev ignivarraid [boss], /dev varkhulraid [normal|heroic], /dev nythraxisraid [normal|heroic], /dev nyx <mechanic> [sec], /dev heal, /dev hp <1-100>, /dev resource, /dev cooldowns, /dev revive, /dev combatreset, /dev daze, /dev fear, /dev dungeon, /dev raid, /dev kill, /dev hill [zone] | warn [zone] [seconds] | rise | end | next',
     );
     return null;
   }

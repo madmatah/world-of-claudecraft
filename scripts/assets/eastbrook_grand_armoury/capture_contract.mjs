@@ -355,17 +355,13 @@ export const EASTBROOK_TOWN_POLISH_CAPTURE_VIEWS = Object.freeze([
     camera: Object.freeze({ x: -14.5, y: 6, z: -109 }),
     target: Object.freeze({ x: -18.017695018376127, y: 2.5, z: -106.73703645219788 }),
   }),
-  // Re-aimed for owner refinement round 6b: the town's NPCs were redistributed
-  // by role along the dock road and Lin moved from the civic green to the
-  // quayside home at (-72, -96). The view is re-seated, never retired: same
-  // name, same subject, target back on her authored stand and the camera 7 yd
-  // out along her derived facing (toward the civic centre), probed
-  // collision-clear at camera height.
+  // The live portrait follows Lin to the civic square. Historical
+  // captures retain their original camera records and frozen source identity.
   Object.freeze({
     name: 'apothecary-lin',
     subject: 'apothecary_lin',
-    camera: Object.freeze({ x: -65, y: 6, z: -96 }),
-    target: Object.freeze({ x: -72, y: 2.5, z: -96 }),
+    camera: Object.freeze({ x: -12, y: 6, z: -94 }),
+    target: Object.freeze({ x: -11, y: 2.5, z: -89 }),
   }),
   Object.freeze({
     name: 'ravenpost-mailbox',
@@ -379,11 +375,18 @@ export const EASTBROOK_TOWN_POLISH_CAPTURE_VIEWS = Object.freeze([
     camera: Object.freeze({ x: 1, y: 6, z: -92.5 }),
     target: Object.freeze({ x: 3.844569834250236, y: 2.2, z: -89.79055748182878 }),
   }),
+  // Round 7 pointed this at the Realm Builder monument, which replaced the well
+  // beacon on the same civic point; round 8 doubled that statue, and the aim
+  // had to move out with it. It sits on the southwest diagonal, between the
+  // south and west benches and a yard clear of the plinth: due south is a
+  // seat, the middle is the statue, and this point is probed for collision
+  // with a half-yard body. Camera unchanged, so it is still the flank it
+  // always framed, now with a great deal more to frame.
   Object.freeze({
     name: 'civic-motion',
-    subject: 'eastbrook_civic_well_beacon',
+    subject: 'eastbrook_realm_builder_monument',
     camera: Object.freeze({ x: -8, y: 6, z: -110 }),
-    target: Object.freeze({ x: -14.75, y: 2.8, z: -104 }),
+    target: Object.freeze({ x: -12.05, y: 4.5, z: -105.2 }),
   }),
   Object.freeze({
     name: 'ravenpost-chronicler',
@@ -437,8 +440,13 @@ export const EASTBROOK_TOWN_POLISH_MATCHED_VIEW_OVERRIDES = Object.freeze({
     target: Object.freeze({ x: -42.82589170715949, y: 3, z: -90.73189846640925 }),
   }),
   'chapel-and-weaving': Object.freeze({
+    // Round 8: the aim was (-13, -100), the middle of the square, and the
+    // doubled Realm Builder monument now stands there: a target inside a
+    // collider fails the clearance probe. Moved a yard past the plinth's west
+    // face, still an establishing shot across the square with the statue as
+    // its backdrop.
     camera: Object.freeze({ x: 26, y: 12, z: -100 }),
-    target: Object.freeze({ x: -13, y: 3, z: -100 }),
+    target: Object.freeze({ x: -10.5, y: 3, z: -100 }),
   }),
   'toolworks-service-perimeter': Object.freeze({
     camera: Object.freeze({ x: -11, y: 7, z: -120 }),
@@ -464,6 +472,14 @@ export const EASTBROOK_TOWN_POLISH_MATCHED_CAPTURE_VIEWS = Object.freeze([
   }),
 ]);
 
+// FROZEN EVIDENCE, not a live description. Every field below is compared
+// against the committed capture metadata in
+// docs/screenshots/eastbrook-vale-rebuild/polish/metadata/, which records the
+// town as it stood when those frames were shot: the well beacon, and the
+// beacon shader at v1. The Realm Builder monument replaced both in round 7 and
+// the captures were NOT retaken, so this keeps saying what the pictures show.
+// Retaking them is its own deliberate change, and it moves these names, the
+// asset list above and the legacy inventory together.
 export const EASTBROOK_TOWN_MOTION_CAPTURE = Object.freeze({
   viewName: 'civic-motion',
   frameIntervalMs: 1_600,
@@ -482,14 +498,50 @@ export const EASTBROOK_TOWN_MOTION_CAPTURE = Object.freeze({
 const MAILBOX_ASSET_URL = '/models/props/mailbox_pillar.glb';
 const NOTICEBOARD_ASSET_URL = '/models/props/eastbrook_noticeboard.glb';
 export const EASTBROOK_POLISH_BASELINE_REVISION = '3ab740db453bd8b5858a52c304edc811c9d520ca';
+// DELIBERATE EXCLUSION (recorded by the Phase 16 QA, 2026-08-30): the zone
+// prewarm-group builders extracted out of renderer.ts into
+// src/render/zone_prewarm_groups.ts are NOT a leaf here. The polish evidence's
+// claims are about the town's meshes, shaders, layout and view policy, none of
+// which the prewarm grouping decides; the rendererIntegration leaf still
+// covers the renderer's own call sites. Add the module as a leaf at the next
+// legitimate re-mint only if a future capture's claims come to depend on
+// prewarm behavior.
+// SECOND DELIBERATE EXCLUSION (2026-09-12): the monument impostor's GLSL,
+// extracted out of the civicShader module into
+// src/render/realm_builder_monument_impostor_glsl.ts, is NOT a leaf here, and
+// this is the same shape as the exclusion above rather than a new judgement.
+// The extraction bought a real-context link of the shipped strings: importing
+// the fx module into a browser test cost +1.2 s of import time on a file whose
+// own assertions cost 110 ms, while a dependency-free source module costs
+// nothing. Applying the exclusion note's own test, do the polish evidence's
+// claims depend on these bytes: no. MONUMENT_IMPOSTOR_RANGE is 72
+// (realm_builder_monument_fx_core.ts) and the monument sits at (-14.75, -102)
+// (CIVIC_FEATURE_CENTER); every polish view that can contain it is within
+// 51 yd, the farthest being apothecary-lin at 50.6, so the captures show the
+// statue BODY and can never show the impostor card. The one polish view beyond
+// that range (camera (34, 15, 25), target (12.5, 4, -5.5)) is aimed at another
+// district, away from the monument. The civicShader leaf still seals the
+// wiring (which strings, which uniforms, fog: true), and the bytes themselves
+// now carry a stronger guard than a sha256: a real driver links them in
+// tests/browser/dry_compile_sources.browser.test.ts. Add the module as a leaf
+// at the next legitimate re-mint only if a future capture is retaken from
+// beyond 72 yd with the monument in frame.
 export const EASTBROOK_POLISH_PROVENANCE_INPUTS = Object.freeze({
   townAssetSourceFingerprint: 'scripts/assets/eastbrook_town/source_fingerprint.mjs',
   authoritativeLayout: 'src/sim/eastbrook_layout.ts',
-  civicShader: 'src/render/eastbrook_civic_beacon.ts',
+  // Round 8 repointed this leaf. It used to be eastbrook_civic_beacon.ts, the
+  // shader that animated the well beacon's floating crystal inside the merged
+  // emissive batch; that module was deleted when the Realm Builder monument
+  // replaced the crystal and left the batch entirely. The KEY is unchanged on
+  // purpose (it is a name in the committed capture metadata), and it still
+  // means the same thing: the module that animates the square's centrepiece.
+  civicShader: 'src/render/realm_builder_monument_fx.ts',
   townRuntime: 'src/render/eastbrook_town.ts',
   mailboxRuntime: 'src/render/mailbox.ts',
   noticeboardRuntime: 'src/render/noticeboard.ts',
   rendererIntegration: 'src/render/renderer.ts',
+  entityGroundSample: 'src/render/entity_ground_sample.ts',
+  entityGroundSampleCore: 'src/render/entity_ground_sample_core.ts',
   entityViewPolicy: 'src/render/entity_view_policy_core.ts',
   viewPriorityPolicy: 'src/render/prewarm_policy.ts',
   mailboxSourceFingerprint: 'scripts/assets/eastbrook_mailbox/source_fingerprint.mjs',
@@ -609,6 +661,8 @@ export function deriveEastbrookPolishCompositeProvenance({
   mailboxRuntimeSha256,
   noticeboardRuntimeSha256,
   rendererIntegrationSha256,
+  entityGroundSampleSha256,
+  entityGroundSampleCoreSha256,
   entityViewPolicySha256,
   viewPriorityPolicySha256,
   mailboxSourceFingerprint,
@@ -624,6 +678,8 @@ export function deriveEastbrookPolishCompositeProvenance({
     mailboxRuntimeSha256,
     noticeboardRuntimeSha256,
     rendererIntegrationSha256,
+    entityGroundSampleSha256,
+    entityGroundSampleCoreSha256,
     entityViewPolicySha256,
     viewPriorityPolicySha256,
     mailboxSourceFingerprint,
@@ -662,6 +718,14 @@ export function deriveEastbrookPolishCompositeProvenance({
       renderer: {
         path: EASTBROOK_POLISH_PROVENANCE_INPUTS.rendererIntegration,
         sha256: rendererIntegrationSha256,
+      },
+      entityGroundSample: {
+        path: EASTBROOK_POLISH_PROVENANCE_INPUTS.entityGroundSample,
+        sha256: entityGroundSampleSha256,
+      },
+      entityGroundSampleCore: {
+        path: EASTBROOK_POLISH_PROVENANCE_INPUTS.entityGroundSampleCore,
+        sha256: entityGroundSampleCoreSha256,
       },
       entityViewPolicy: {
         path: EASTBROOK_POLISH_PROVENANCE_INPUTS.entityViewPolicy,

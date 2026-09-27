@@ -11,7 +11,7 @@ import {
   gatherNodeToolGateFor,
   gatherNodeTooltipHtml,
 } from '../src/ui/gather_node_tooltip_controller';
-import type { GatherNodeTooltipModel } from '../src/ui/gathering_view';
+import type { GatherNodeTooltipModel } from '../src/ui/hud/professions/gathering_view';
 import { hasTranslation } from '../src/ui/i18n';
 import type { IWorld } from '../src/world_api';
 
@@ -161,7 +161,7 @@ describe('gatherNodeToolGateFor', () => {
       }),
     ).toEqual({
       nodeTier: 2,
-      viewerToolTier: 0,
+      viewerToolTier: 1,
       unmetText: 'You need Mining 40 to swing the pick already in your bags.',
     });
     // Empty bags read as no tool owned (0, #2343: no bare-hands floor), and
@@ -243,7 +243,7 @@ describe('hud gatherDowngrade case mirrors the gatherDenied toast-only pattern (
   it('maps the lost arm through the pure key mapper into showError', () => {
     expect(caseStart).toBeGreaterThan(-1);
     expect(block).toContain('this.showError(');
-    expect(block).toContain('gatherDowngradeLineKey(ev.lost)');
+    expect(block).toContain('gatherDowngradeLineKey(ev.lost, ev.surface)');
   });
 
   it('adds no log line and no audio cue (toast only, the double-feedback trap)', () => {

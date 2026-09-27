@@ -104,6 +104,9 @@ describe('the wired roots (the surfaces the fix covers)', () => {
       '#reliquary-window',
       '#professions-window',
       '#woc-market-window',
+      '#harvest-journal-window',
+      '#plant-sheet-window',
+      '#harvest-preference-window',
       '#side-buttons',
     ]);
   });
@@ -113,6 +116,7 @@ describe('the wired roots (the surfaces the fix covers)', () => {
       ['#quest-tracker', '.qt-header, .qt-title'],
       ['#deed-tracker', '.dt-header'],
       ['#reliquary-tracker', '.dt-header'],
+      ['#recipe-tracker', '.dt-header'],
       ['#minimap-disc', 'button'],
     ]);
   });

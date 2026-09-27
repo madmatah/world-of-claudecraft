@@ -1,8 +1,11 @@
 import { stoneboundThreatMultiplier } from '../src/sim/combat/shaman_warspirit';
+import { RIFT_GEAR_ITEM_ID_SET } from '../src/sim/content/rift/items';
 import type { TalentAllocation } from '../src/sim/content/talents';
 import { ITEMS, MOBS } from '../src/sim/data';
 import { createMob } from '../src/sim/entity';
 import { updateMobTarget } from '../src/sim/mob/targeting';
+import { RIFT_BAND_GEM_SLOTS, RIFT_BAND_MAX_UPGRADE } from '../src/sim/rift/band_ladder';
+import { sanitizeRiftGearInstance } from '../src/sim/rift/progression';
 import { Sim } from '../src/sim/sim';
 import {
   dist2d,
@@ -479,7 +482,30 @@ function equipPbeLoadout(sim: Sim, spec: OwnedDpsSpec): void {
 function equipExactLoadout(sim: Sim, loadout: PbeLoadout): void {
   for (const [slot, itemId] of Object.entries(loadout) as [EquipSlot, string][]) {
     if (!ITEMS[itemId]) throw new Error(`missing PBE fixture item ${itemId}`);
-    sim.addItem(itemId, 1);
+    if (RIFT_GEAR_ITEM_ID_SET.has(itemId)) {
+      // A Riftbound band is priced by its copy (src/sim/rift/band_ladder.ts);
+      // the shell alone is an empty ring. The BiS fixture wears the maxed S
+      // band on the shell the loadout names, both sockets on the DPS ratings.
+      const maxed = sanitizeRiftGearInstance(
+        itemId,
+        {
+          rift: {
+            sourceEventId: 'probe-bis',
+            tier: 'S',
+            power: 4, // re-derived by the sanitizer from the tier
+            upgradeLevel: RIFT_BAND_MAX_UPGRADE,
+            maxUpgradeLevel: RIFT_BAND_MAX_UPGRADE,
+            gemSlots: RIFT_BAND_GEM_SLOTS.S,
+            gems: ['rift_gem_verdant', 'rift_gem_crimson'],
+          },
+        },
+        sim.playerId,
+      );
+      if (!maxed) throw new Error(`could not mint the PBE fixture band ${itemId}`);
+      sim.addItemInstance(itemId, maxed);
+    } else {
+      sim.addItem(itemId, 1);
+    }
     sim.equipItemToSlot(itemId, slot);
   }
   const equipment = sim.players.get(sim.playerId)?.equipment;
@@ -647,18 +673,23 @@ function castFieldcraft(state: RunState): void {
 }
 
 function castThundercall(state: RunState): void {
-  const thunder =
-    state.sim.player.auras.find((aura) => aura.id === 'shaman_thunder_charges')?.stacks ?? 0;
+  const player = state.sim.player;
+  const thunder = player.auras.find((aura) => aura.id === 'shaman_thunder_charges')?.stacks ?? 0;
   if (tryCast(state, 'primal_exaltation')) return;
   if (tryCast(state, 'elemental_mastery')) return;
+  // Stormbreak is the spec's Mana button; the fixture spends it when low.
+  if (player.resource < player.maxResource * 0.5 && tryCast(state, 'thunderstorm')) return;
+  // A Magma Surge proc is an instant, guaranteed-crit Magma Burst: take it first.
+  if (hasAura(player, 'shaman_magma_surge') && tryCast(state, 'lava_burst')) return;
   if (thunder >= 5) {
     if (state.targets.length === 3 && tryCast(state, 'earthquake', state.primary, true)) return;
     if (tryCast(state, 'earth_shock')) return;
   }
-  const missingCinder = state.targets.find(
-    (target) => !ownAura(target, 'flame_shock', state.sim.playerId),
-  );
-  if (missingCinder && thunder < 4 && tryCast(state, 'flame_shock', missingCinder)) return;
+  // Cinder Jolt shares the shock cooldown, so it is refreshed only while the
+  // bank is still filling (a full bank vents first, above).
+  const cinder = ownAura(state.primary, 'flame_shock', state.sim.playerId);
+  if ((!cinder || cinder.remaining <= 2) && thunder < 5 && tryCast(state, 'flame_shock')) return;
+  if (cinder && tryCast(state, 'lava_burst')) return;
   if (state.targets.length === 3 && tryCast(state, 'chain_lightning')) return;
   tryCast(state, 'lightning_bolt');
 }
@@ -814,6 +845,7 @@ export function runOwnedClassDpsProbe(
   // isolates un-geared spec parity, the same low-gear axis a leveling or
   // fresh-alt player experiences.
   gear: 'pbe' | 'naked' = 'pbe',
+  setupEquipment?: (sim: Sim) => void,
 ): OwnedClassBalanceResult {
   const fixture = FIXTURES[spec];
   const sim = new Sim({ seed, playerClass: fixture.cls, autoEquip: false }) as ProbeSim;
@@ -827,6 +859,7 @@ export function runOwnedClassDpsProbe(
     throw new Error(`failed to apply ${fixture.talentSpec}`);
   }
   if (gear === 'pbe') equipPbeLoadout(sim, spec);
+  setupEquipment?.(sim);
   // Keep all three targets in one unobstructed cluster. The starter-world origin
   // has a static collider just left of the player, so a negative offset turns the
   // third target into a line-of-sight fixture instead of an area-damage fixture.
@@ -1099,6 +1132,7 @@ export function runOwnedHealerProbe(
   head = 'working-tree',
   talentRows?: Record<number, string>,
   seconds = 60,
+  setupEquipment?: (sim: Sim) => void,
 ): OwnedHealerBalanceResult {
   const fixture = healerFixture(spec);
   const sim = new Sim({ seed, playerClass: fixture.cls, autoEquip: false }) as ProbeSim;
@@ -1110,6 +1144,7 @@ export function runOwnedHealerProbe(
     throw new Error(`failed to apply ${fixture.talentSpec}`);
   }
   equipExactLoadout(sim, fixture.loadout);
+  setupEquipment?.(sim);
   const healer = sim.player;
   placeEntity(sim, healer, 720, 0);
   const allies: Entity[] = [];
@@ -1274,7 +1309,14 @@ function incomingDamageForPosture(
     throw new Error('failed to apply enhancement');
   }
   equipExactLoadout(sim, WARSPIRIT_PBE_LOADOUT);
-  const attacker = createMob(sim.nextId++, MOBS.forest_wolf, 20, sim.groundPos(0, 3));
+  // Beside the anchored player (the druid probe's idiom): a mob spawned at the
+  // world origin sits beyond THREAT_DROP_RANGE and forgets the player at once.
+  const attacker = createMob(
+    sim.nextId++,
+    MOBS.forest_wolf,
+    20,
+    sim.groundPos(sim.player.pos.x, sim.player.pos.z + 3),
+  );
   attacker.hostile = true;
   attacker.hp = attacker.maxHp = 1_000_000;
   sim.addEntity(attacker);
@@ -1320,7 +1362,12 @@ export function runWarspiritOfftankProbe(
   sim.setPlayerLevel(20, rivalId);
   const rival = sim.entities.get(rivalId);
   if (!rival) throw new Error('missing threat rival');
-  const target = createMob(sim.nextId++, MOBS.forest_wolf, 20, sim.groundPos(0, 3));
+  const target = createMob(
+    sim.nextId++,
+    MOBS.forest_wolf,
+    20,
+    sim.groundPos(sim.player.pos.x, sim.player.pos.z + 3),
+  );
   target.hostile = true;
   target.hp = target.maxHp = 1_000_000;
   target.inCombat = true;

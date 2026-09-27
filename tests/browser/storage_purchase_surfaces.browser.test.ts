@@ -95,7 +95,10 @@ function mountCharterStore(waitForSpend: Promise<void>): {
   document.body.appendChild(stack);
   const world = {
     player: { templateId: 'warrior', mainhandItemId: null },
-    accountCosmetics: { weaponSkinIds: [], weaponSkinLoadout: {} },
+    accountCosmetics: { weaponSkinIds: [], weaponSkinLoadout: {}, mountSkinIds: [] },
+    // The Machine Stable strip reads the account mount skins on every store
+    // paint; nothing is owned here, the arms below are about the Strongbox charters.
+    ownedMounts: () => [],
     bankPurchasedSlots: 0,
   };
   const deps: DailyRewardsWindowDeps = {

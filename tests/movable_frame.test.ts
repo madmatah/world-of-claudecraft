@@ -114,6 +114,7 @@ class FakeEl {
   title = '';
   type = '';
   className = '';
+  textContent = '';
   hidden = false;
   rect = { left: 40, top: 500, width: 612, height: 84 };
   private listeners = new Map<string, Listener[]>();
@@ -144,9 +145,8 @@ class FakeEl {
     return { ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top };
   }
   setPointerCapture(): void {}
-  closest(): null {
-    // event targets in these tests are never inside a button
-    return null;
+  closest(selector: string): FakeEl | null {
+    return selector === '.panel-title' && this.className === 'panel-title' ? this : null;
   }
 }
 
@@ -158,6 +158,16 @@ class FakeEl {
 const docListeners: Array<[string, Listener]> = [];
 const fakeDocument = {
   body: new FakeEl(),
+  // getUiScale caches, and its per-call cache key is the INLINE `--ui-scale` on
+  // the document element (the one thing main.ts's applySetting ever writes; no
+  // stylesheet declares the property). So the fake has to move BOTH reads off
+  // the one uiScaleStub, or flipping the stub would move the computed value
+  // that this fake alone can move and leave the cache holding.
+  documentElement: {
+    style: {
+      getPropertyValue: (p: string) => (p === '--ui-scale' ? String(uiScaleStub) : ''),
+    },
+  },
   createElement: () => new FakeEl(),
   addEventListener: (type: string, fn: Listener) => {
     docListeners.push([type, fn]);
@@ -238,7 +248,7 @@ function makeFrame(opts: { mobile?: boolean; positioned?: Array<boolean> } = {})
 
 // A frame in the "Unlock interface" shape: no permanent chrome, and the SE grip
 // that carries BOTH resize gestures (pointer drag and arrow keys).
-function makeScalableFrame(opts: { mobile?: boolean } = {}) {
+function makeScalableFrame(opts: { mobile?: boolean; maxScale?: number } = {}) {
   const frame = new FakeEl();
   const mover = new MovableFrame({
     frame,
@@ -250,6 +260,7 @@ function makeScalableFrame(opts: { mobile?: boolean } = {}) {
     fallbackSize: { w: 260, h: 84 },
     isMobileLayout: () => opts.mobile ?? false,
     snapToGrid: () => snapOn,
+    maxScale: opts.maxScale,
     scalable: true,
     buttonOnlyWhenUnlocked: true,
   });
@@ -281,6 +292,58 @@ function pointer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('MovableFrame', () => {
+  it('resizes an always-interactive meter box in both axes without scaling its text', () => {
+    const frame = new FakeEl();
+    const mover = new MovableFrame({
+      frame,
+      storageKey: KEY,
+      unlockLabelKey: 'hudChrome.interfaceUnlock.unlockFrame',
+      lockLabelKey: 'hudChrome.interfaceUnlock.lockFrame',
+      resizeLabelKey: 'hudChrome.interfaceUnlock.resizeFrame',
+      draggingBodyClass: 'hud-frame-dragging',
+      fallbackSize: { w: 612, h: 84 },
+      isMobileLayout: () => false,
+      scalable: true,
+      resizeMode: 'box',
+      moveHandle: '.panel-title',
+      buttonOnlyWhenUnlocked: true,
+      onPositioned: (active: boolean) => {
+        // Detaching the meter normally gives it a taller stylesheet default.
+        if (active && !frame.style.height) frame.rect.height = 320;
+      },
+    });
+    const grip = frame.children.find((child) => child.className.includes('mf-resize-grip'));
+    expect(grip?.hidden).toBe(true);
+    grip?.dispatch('pointerdown', pointer({ clientX: 652, clientY: 584 }));
+    fakeDocument.body.dispatch('pointermove', pointer({ clientX: 752, clientY: 634 }));
+    fakeDocument.body.dispatch('pointerup', pointer());
+    grip?.dispatch('keydown', key('ArrowRight'));
+    expect(store.has(KEY)).toBe(false);
+    const heading = new FakeEl();
+    heading.className = 'panel-title';
+    frame.dispatch('pointerdown', pointer({ target: heading, clientX: 100, clientY: 520 }));
+    fakeDocument.body.dispatch('pointermove', pointer({ clientX: 130, clientY: 540 }));
+    fakeDocument.body.dispatch('pointerup', pointer());
+    expect(JSON.parse(store.get(KEY) ?? '{}')).toMatchObject({ left: 70, top: 520, w: 612, h: 84 });
+    frame.dispatch('pointerdown', pointer({ clientX: 652, clientY: 584 }));
+    fakeDocument.body.dispatch('pointermove', pointer({ clientX: 752, clientY: 634 }));
+    fakeDocument.body.dispatch('pointerup', pointer());
+    expect(JSON.parse(store.get(KEY) ?? '{}')).toMatchObject({ w: 612, h: 84 });
+    mover.setUnlocked(true);
+    expect(grip?.hidden).toBe(false);
+    grip?.dispatch('pointerdown', pointer({ clientX: 652, clientY: 584 }));
+    fakeDocument.body.dispatch('pointermove', pointer({ clientX: 752, clientY: 634 }));
+    fakeDocument.body.dispatch('pointerup', pointer());
+    expect(JSON.parse(store.get(KEY) ?? '{}')).toMatchObject({ w: 712, h: 134 });
+    expect(scaleOf(frame)).toBe(1);
+    frame.rect = { ...frame.rect, width: 712, height: 134 };
+    grip?.dispatch('keydown', key('ArrowRight'));
+    expect(JSON.parse(store.get(KEY) ?? '{}')).toMatchObject({ w: 722, h: 134 });
+    grip?.dispatch('keydown', key('ArrowDown'));
+    expect(JSON.parse(store.get(KEY) ?? '{}')).toMatchObject({ w: 722, h: 144 });
+    expect(scaleOf(frame)).toBe(1);
+    mover.setUnlocked(false);
+  });
   it('builds the corner button locked, and a click toggles unlock + aria-pressed', () => {
     const { frame, btn } = makeFrame();
     expect(btn.className).toBe('tf-move-btn');
@@ -585,6 +648,84 @@ describe('MovableFrame resize grip', () => {
     expect(scaleOf(frame)).toBe(FRAME_SCALE_MAX);
     for (let i = 0; i < 60; i++) grip.dispatch('keydown', key('ArrowLeft'));
     expect(scaleOf(frame)).toBe(FRAME_SCALE_MIN);
+  });
+
+  it('a per-frame maxScale lifts the key-step ceiling past the shared band', () => {
+    // The wishlist chip's player-visible feature (grow without limit) at the
+    // MOVER layer, not just the pure helper: a call site that still passed
+    // the shared FRAME_SCALE_MAX would clamp the 60 steps back to 2x here.
+    const { frame, btn, grip } = makeScalableFrame({ maxScale: Number.POSITIVE_INFINITY });
+    btn.dispatch('click', pointer());
+    for (let i = 0; i < 60; i++) grip.dispatch('keydown', key('ArrowRight'));
+    const grown = 1 + 60 * FRAME_SCALE_KEY_STEP;
+    expect(grown).toBeGreaterThan(FRAME_SCALE_MAX);
+    expect(scaleOf(frame)).toBeCloseTo(grown, 9);
+    expect(JSON.parse(store.get(KEY) ?? '{}').scale).toBeCloseTo(grown, 9);
+    // The FLOOR stays shared (grabbability).
+    for (let i = 0; i < 200; i++) grip.dispatch('keydown', key('ArrowLeft'));
+    expect(scaleOf(frame)).toBe(FRAME_SCALE_MIN);
+  });
+
+  it('a saved above-band scale survives the load parse only under its own ceiling', () => {
+    // The parse-on-load call site: a box saved past 2x must come back for the
+    // uncapped frame, and the same saved box must clamp for an ordinary one.
+    const grown = 1 + 60 * FRAME_SCALE_KEY_STEP;
+    store.set(KEY, JSON.stringify({ left: 50, top: 500, vw: 1600, vh: 900, scale: grown }));
+    const uncapped = makeScalableFrame({ maxScale: Number.POSITIVE_INFINITY });
+    expect(scaleOf(uncapped.frame)).toBeCloseTo(grown, 9);
+
+    fakeDocument.body = new FakeEl();
+    for (const [type, fn] of docListeners) fakeDocument.body.addEventListener(type, fn);
+    const capped = makeScalableFrame();
+    expect(scaleOf(capped.frame)).toBe(FRAME_SCALE_MAX);
+  });
+
+  it('the snap-to-grid key branch honors the lifted ceiling too', () => {
+    // The snap branch steps the VISUAL width to grid lines (its own clamp
+    // call sites), so what matters here is only that 60 grows walk PAST the
+    // shared band instead of parking at 2x; the exact value depends on the
+    // frame's live rect, which this fake keeps static.
+    snapOn = true;
+    const { frame, btn, grip } = makeScalableFrame({ maxScale: Number.POSITIVE_INFINITY });
+    btn.dispatch('click', pointer());
+    for (let i = 0; i < 60; i++) grip.dispatch('keydown', key('ArrowRight'));
+    expect(scaleOf(frame)).toBeGreaterThan(FRAME_SCALE_MAX);
+    expect(JSON.parse(store.get(KEY) ?? '{}').scale).toBeGreaterThan(FRAME_SCALE_MAX);
+  });
+
+  it('a function-form frameLabelKey re-resolves the chip per unlock flip', () => {
+    // The proc overlay's chip names the ACTIVE spec's mechanic, so its key is
+    // a resolver over live state; the chip and the frames-menu name must both
+    // follow it, re-read on the same refresh cadence as the static form.
+    let key = 'hudChrome.interfaceUnlock.frameNames.procOverlay';
+    const frame = new FakeEl();
+    const mover = new MovableFrame({
+      frame,
+      storageKey: KEY,
+      unlockLabelKey: 'hudChrome.interfaceUnlock.unlockFrame',
+      lockLabelKey: 'hudChrome.interfaceUnlock.lockFrame',
+      resizeLabelKey: 'hudChrome.interfaceUnlock.resizeFrame',
+      frameLabelKey: () => key as never,
+      draggingBodyClass: 'hud-frame-dragging',
+      fallbackSize: { w: 260, h: 84 },
+      isMobileLayout: () => false,
+      snapToGrid: () => snapOn,
+      scalable: true,
+      buttonOnlyWhenUnlocked: true,
+    });
+    const btn = frame.children[0];
+    const label = frame.children.find((child: FakeEl) => child.className === 'tf-frame-label');
+    btn.dispatch('click', pointer());
+    const first = label?.textContent ?? '';
+    expect(first.length).toBeGreaterThan(0);
+    expect(mover.labelText()).toBe(first);
+
+    // The resolver's state moved (a respec): the next unlock re-reads it.
+    key = 'hudChrome.procOverlay.ruinMeter';
+    btn.dispatch('click', pointer()); // lock
+    btn.dispatch('click', pointer()); // unlock again
+    expect(label?.textContent).not.toBe(first);
+    expect(mover.labelText()).toBe(label?.textContent);
   });
 
   it('relocalize() re-resolves the grip name, not only the move button', () => {
@@ -1283,5 +1424,73 @@ describe('MovableFrame dimensions resize', () => {
       vw: 1600,
       vh: 900,
     });
+  });
+});
+
+// A governed frame that ACCEPTS a drag must not let the pointerdown reach an
+// ancestor frame's mover. Governed frames are siblings on #ui with one
+// exception, the target-of-target mini inside #target-frame: without this,
+// grabbing the mini armed both movers and dragged the target frame along with
+// it (caught while re-shooting the PR screenshots, hence the pins).
+describe('MovableFrame nested inside another movable frame', () => {
+  it('stops the pointerdown once it takes the gesture', () => {
+    const { frame, btn } = makeFrame();
+    btn.dispatch('click', { preventDefault() {}, stopPropagation() {} });
+    let stopped = 0;
+    frame.dispatch(
+      'pointerdown',
+      pointer({
+        clientX: 100,
+        clientY: 520,
+        stopPropagation() {
+          stopped++;
+        },
+      }),
+    );
+    expect(stopped).toBe(1);
+  });
+
+  it('leaves the pointerdown alone when it REFUSES the gesture', () => {
+    // A locked frame, the mobile layout and a press on the frame's own button
+    // all bail before the frame owns anything, so an ancestor (or the world
+    // underneath) must still see the event.
+    const locked = makeFrame();
+    let lockedStops = 0;
+    locked.frame.dispatch(
+      'pointerdown',
+      pointer({
+        stopPropagation() {
+          lockedStops++;
+        },
+      }),
+    );
+    expect(lockedStops).toBe(0);
+
+    const mobile = makeFrame({ mobile: true });
+    mobile.btn.dispatch('click', { preventDefault() {}, stopPropagation() {} });
+    let mobileStops = 0;
+    mobile.frame.dispatch(
+      'pointerdown',
+      pointer({
+        stopPropagation() {
+          mobileStops++;
+        },
+      }),
+    );
+    expect(mobileStops).toBe(0);
+
+    const secondary = makeFrame();
+    secondary.btn.dispatch('click', { preventDefault() {}, stopPropagation() {} });
+    let secondaryStops = 0;
+    secondary.frame.dispatch(
+      'pointerdown',
+      pointer({
+        button: 2,
+        stopPropagation() {
+          secondaryStops++;
+        },
+      }),
+    );
+    expect(secondaryStops).toBe(0);
   });
 });

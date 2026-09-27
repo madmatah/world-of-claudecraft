@@ -110,8 +110,8 @@ const PROVEN_SAFE_BASES: ProvenSafeBase[] = [
     file: 'src/render/ability_vfx/rings.ts',
     base: '1.0 - uProgress',
     sites: 1,
-    anchor: /uniforms\.uProgress\.value = easeOutQuart\(/,
-    why: 'uProgress is written from JS as easeOutQuart(min(1, age / dur)), never above 1',
+    anchor: /slot\.progress = easeOutQuart\(t\)/,
+    why: 'uProgress is written from JS from slot.progress, which is easeOutQuart(min(1, age / dur)), never above 1',
   },
 ];
 
@@ -123,6 +123,13 @@ const POW_SITES_PER_FILE: Record<string, number> = {
   'src/render/battleground_rune_vfx.ts': 3,
   'src/render/battleground_ward.ts': 1,
   'scripts/asset_pipeline/weapon_vfx.js': 4,
+  // Authored Warrior materials are part of the same fail-closed domain scan.
+  'src/render/ability_vfx/baked_impact_layers.ts': 1,
+  'src/render/ability_vfx/ribbons.ts': 1,
+  'src/render/ability_vfx/signature_crests.ts': 4,
+  'src/render/ability_vfx/solid_impact_fragments.ts': 2,
+  'src/render/ability_vfx/warrior_rage_material.ts': 1,
+  'src/render/characters/surface_response.ts': 5,
   'src/render/ability_vfx/rings.ts': 1,
   'src/render/ability_vfx/shells.ts': 1,
   // the armour-dye sRGB<->linear pair (bases clamped with max(c, 0))
@@ -131,8 +138,12 @@ const POW_SITES_PER_FILE: Record<string, number> = {
   'src/render/foliage_shader_core.ts': 1,
   'src/render/ignivar_fire_vfx.ts': 10,
   'src/render/ignivar_model_vfx.ts': 1,
+  'src/render/nythraxis_soft_fire.ts': 1,
   'src/render/pbr_fragment_shader.ts': 1,
   'src/render/post_output_grade.ts': 1,
+  // the monument's beam falloff, lantern-halo core and ember climb/core
+  // (bases clamped with clamp(x, 0, 1) or max(x, 0))
+  'src/render/realm_builder_monument_fx.ts': 5,
   'src/render/sky.ts': 1,
   'src/render/water.ts': 1,
   'src/render/weapon_vfx.ts': 4,

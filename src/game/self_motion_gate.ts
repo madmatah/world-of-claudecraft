@@ -4,10 +4,13 @@
 //
 // Off while spectating, corpse-frozen, or CC'd (playerImmobilized covers
 // stun/root/incapacitate/polymorph, and fear is a fear_incap incapacitate aura;
-// the fear steer and the charge/follow modes run server-side only), and inside a
-// delve (the portcullis door clamps are not mirrored client-side).
+// the fear steer and the charge/follow modes run server-side only). Delves
+// (issue #3480) are no longer excluded: the door/prop state the module-shell
+// clamp needs is derivable from the mirrored entity roster alone (see
+// src/sim/delves/geometry.ts delveDoorClampSolidsFromEntities), so no wire
+// field was needed to mirror it.
 
-import { isDelvePos, isRiftPos } from '../sim/data';
+import { isRiftPos } from '../sim/data';
 import type { Aura } from '../sim/types';
 import type { RiftFloorView } from '../world_api/dungeons';
 
@@ -37,6 +40,7 @@ export interface SelfMotionGateArgs {
   playerImmobilized: boolean;
   posX: number;
   climbing: boolean | undefined;
+  leaping: boolean | undefined;
   riftFloor?: RiftFloorView | null;
   /** A seated pilot whose controls the race authority currently holds (the
    *  grid countdown, a manual recovery). */
@@ -49,7 +53,6 @@ export function selfMotionPredictionEnabled(args: SelfMotionGateArgs): boolean {
     args.spectating === null &&
     !args.movementFrozen &&
     !args.playerImmobilized &&
-    !isDelvePos(args.posX) &&
     // A resumed ClientWorld starts with riftFloor null until the server replays
     // riftState. Once present, the client has the raised-floor descriptor and
     // colliders needed by the shared motion kernel.
@@ -58,6 +61,10 @@ export function selfMotionPredictionEnabled(args: SelfMotionGateArgs): boolean {
     // not re-simulate: predicting a fall through it would fight the
     // authoritative pull-up and show the correction as a stutter.
     args.climbing !== true &&
+    // A Vaulting Charge (heroic_leap) arc is server-owned too. The local
+    // kernel only predicts grounded input, so it must stand down while the
+    // authoritative flight is active.
+    args.leaping !== true &&
     // The Realm Racers authority owns countdown/manual-recovery locks. Keep the
     // predictor present but disabled so it resets its scratch vehicle instead
     // of visually driving through the server-side lock.

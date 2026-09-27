@@ -344,6 +344,18 @@ describe('createPartyRow: decorative badges + relocalize hook (a11y + live langu
     expect(String(row.group.className)).toContain('visually-hidden');
   });
 
+  it('builds the library panel, flat bars, and decorative raid role swatch once', () => {
+    const row = build();
+    expect(String(row.el.className)).toContain('ui-panel');
+    expect(String(row.role.className)).toBe('pfm-role');
+    expect(row.role.getAttribute('aria-hidden')).toBe('true');
+    expect(
+      Array.from(row.el.childNodes).some((child) =>
+        String((child as unknown as FakeEl).className).includes('ui-bar--hp'),
+      ),
+    ).toBe(true);
+  });
+
   it('relocalize() re-sets every badge tooltip (the pool reuses row DOM, so a switch needs it)', () => {
     const row = build();
     // Localized once at build.
@@ -364,6 +376,7 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
   let painter: PartyFramesPainter;
   let targeted: number[];
   let toggles: number;
+  let hovered: number | null;
 
   beforeEach(() => {
     container = fakeEl('div');
@@ -371,6 +384,7 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     calls = facet.calls;
     targeted = [];
     toggles = 0;
+    hovered = null;
     painter = new PartyFramesPainter(
       facet.writers,
       container as unknown as HTMLElement,
@@ -378,7 +392,9 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
         classCss: () => 'var(--cls)',
         onTarget: (pid) => targeted.push(pid),
         onContextMenu: () => {},
-        onHover: () => {},
+        onHover: (pid) => {
+          hovered = pid;
+        },
         onTargetPet: () => {},
         petLabel: (name: string, frac: number) => `${name} ${Math.round(frac * 100)}%`,
         chipLabel: () => 'Party',
@@ -395,6 +411,7 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
   // only DIV child is the wrapper itself). Resolve the wrapper, then its member-row DIVs.
   const wrapperOf = () =>
     container.childNodes.find((c) => String(c.className).includes('party-rows'));
+  const headerOf = () => container.childNodes.find((c) => c.id === 'party-frame-header');
   const rows = () => {
     const w = wrapperOf();
     return w ? w.childNodes.filter((c) => c.tagName === 'DIV') : [];
@@ -416,6 +433,58 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     expect(targeted).toEqual([2]);
   });
 
+  it('paints a desktop Party N disclosure through the shared persisted collapse callback', () => {
+    painter.setCollapse(true, false, false, false);
+    painter.sync([member({ pid: 2 }), member({ pid: 3 })], 1, false);
+    const header = headerOf();
+    expect(header).toBeTruthy();
+    expect(container.childNodes[0]).toBe(header);
+    expect(calls).toContainEqual(expect.objectContaining({ m: 'setText', args: ['Party'] }));
+    expect(calls).toContainEqual(expect.objectContaining({ m: 'setText', args: ['2'] }));
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'setAttr', args: ['aria-expanded', 'true'] }),
+    );
+
+    calls.length = 0;
+    header?.fire('click', {});
+    expect(toggles).toBe(1);
+    painter.setCollapse(true, false, true, false);
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'setAttr', args: ['aria-expanded', 'false'] }),
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'toggleClass', args: ['party-header-collapsed', true] }),
+    );
+    expect(String(header?.className)).toContain('ui-cin ui-outline');
+    expect(header?.getAttribute('aria-controls')).toBe('party-frame-rows');
+  });
+
+  it('paints target and role classes for compact raid cells', () => {
+    painter.sync(
+      [
+        member({ pid: 2, role: 'tank' }),
+        member({ pid: 3, role: 'healer' }),
+        member({ pid: 4, role: 'dps' }),
+      ],
+      1,
+      true,
+      DEFAULT_PARTY_FRAME_DISPLAY,
+      3,
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'toggleClass', args: ['is-on', true] }),
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'toggleClass', args: ['tank', true] }),
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'toggleClass', args: ['healer', true] }),
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({ m: 'toggleClass', args: ['damage', true] }),
+    );
+  });
+
   it('recycles a departed row to a new pid and the recycled listener reads the NEW member', () => {
     painter.sync([member({ pid: 2, name: 'Alice' })], 1, false);
     const rowA = rows()[0];
@@ -431,6 +500,51 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     expect(targeted).toEqual([9]); // the live slot, not the stale Alice (pid 2)
   });
 
+  it('clears hover when its row is detached, recycled, or the party is cleared', () => {
+    painter.sync([member({ pid: 2 })], 1, false);
+    rows()[0].fire('mouseenter', {});
+    expect(hovered).toBe(2);
+
+    // Removing a hovered DOM node need not dispatch mouseleave. Its old pid
+    // must not redirect the next heal, even if the entity still exists.
+    painter.sync([member({ pid: 3 })], 1, false);
+    expect(hovered).toBeNull();
+    rows()[0].fire('mouseenter', {});
+    expect(hovered).toBe(3);
+
+    painter.clear();
+    expect(hovered).toBeNull();
+  });
+
+  it('keeps the hovered member when a different row leaves', () => {
+    painter.sync([member({ pid: 2 }), member({ pid: 3 })], 1, false);
+    rows()[0].fire('mouseenter', {});
+    painter.sync([member({ pid: 2 })], 1, false);
+    expect(hovered).toBe(2);
+  });
+
+  it('clears hover when party frames are hidden by collapse or mobile chat', () => {
+    painter.sync([member({ pid: 2 })], 1, false);
+    const row = rows()[0];
+    row.fire('mouseenter', {});
+    painter.setCollapse(true, false, false, false);
+    expect(hovered).toBe(2);
+    painter.setCollapse(true, false, true, false);
+    expect(hovered).toBeNull();
+
+    row.fire('mouseenter', {});
+    painter.setCollapse(true, true, false, true);
+    expect(hovered).toBeNull();
+
+    // The mobile chat flag does not hide desktop frames when expanded.
+    row.fire('mouseenter', {});
+    painter.setCollapse(true, false, false, true);
+    expect(hovered).toBe(2);
+
+    painter.setCollapse(false, false, false, false);
+    expect(hovered).toBeNull();
+  });
+
   it('paints each member aura strip (one icon per wire aura) and re-syncs it on a set change', () => {
     painter.sync(
       [
@@ -438,6 +552,10 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
           pid: 2,
           auras: [
             { id: 'weapon_imbue', kind: 'imbue' },
+            // the live unified food-buff id (Masterwrought 11c): every buff
+            // food mints it (PartyMemberAura is the projected wire shape,
+            // which carries no value field; the predicate-level fixture in
+            // tests/party_frames.test.ts walks the real magnitude)
             { id: 'well_fed', kind: 'buff_sta' },
             { id: 'arcane_intellect', kind: 'buff_int_pct' },
             { id: 'temporal_exhaustion', kind: 'sated' },
@@ -540,8 +658,11 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
           call.m === 'toggleClass' && call.args[0] === 'pf-hide-auras' && call.args[1] === true,
       ),
     ).toBe(true);
+    // showAbsorbs off: a zero-width segment in the row's quantized form.
     expect(
-      calls.some((call) => call.m === 'setTransform' && call.args[0] === 'scaleX(0.000)'),
+      calls.some(
+        (call) => call.m === 'setTransform' && call.args[0] === 'translateX(0%) scaleX(0.000)',
+      ),
     ).toBe(true);
   });
 
@@ -556,14 +677,14 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     expect(reordered[0]).toBe(r4);
     expect(reordered[1]).toBe(r2);
     expect(reordered[2]).toBe(r3);
-    expect(container.childNodes).toHaveLength(1);
+    expect(container.childNodes).toHaveLength(2);
     // The middle member (pid 2) leaves: the remaining two keep their order.
     painter.sync([member({ pid: 4 }), member({ pid: 3 })], 1, false);
     const trimmed = rows();
     expect(trimmed).toHaveLength(2);
     expect(trimmed[0]).toBe(r4);
     expect(trimmed[1]).toBe(r3);
-    expect(container.childNodes).toHaveLength(1);
+    expect(container.childNodes).toHaveLength(2);
   });
 
   it('a steady-state rebuild (same members + order) moves no node, so a focused row keeps its place', () => {
@@ -586,7 +707,7 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     painter.setGuideControl(guide as unknown as HTMLElement);
     painter.sync([member({ pid: 2 })], 1, false);
 
-    expect(container.childNodes).toEqual([wrapperOf(), guide, master]);
+    expect(container.childNodes).toEqual([headerOf(), wrapperOf(), guide, master]);
     const movesBefore = container._mutations;
     painter.setGuideControl(guide as unknown as HTMLElement);
     painter.sync([member({ pid: 2, hp: 40 })], 1, false);
@@ -658,11 +779,14 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     // A combat member is NOT also dead (dead wins), so its combat is on but dead off.
     // The hp bar keeps the inline .toFixed(3) precision via formatScaleX.
     expect(has('setTransform', (c) => /^scaleX\(\d\.\d{3}\)$/.test(String(c.args[0])))).toBe(true);
-    // Party frames reuse the shared UnitFramePainter's classic absorb overlay (a
-    // left-origin scaleX to (hp + absorb) / maxHp), matching the player and target
-    // frames, so there is no positioned --absorb-start segment here.
+    // Party frames reuse the shared UnitFramePainter's absorb SEGMENT (a translate
+    // to the health edge plus a quantized scaleX of the shield width), matching the
+    // player and target frames, so there is no positioned --absorb-start segment
+    // here and the hatch never covers the health fill itself (hp 50 + shield 25 of
+    // 100 hatches 50%..75%, not 0%..75%).
     expect(has('setStyleProp', (c) => c.args[0] === '--absorb-start')).toBe(false);
-    expect(has('setTransform', (c) => c.args[0] === 'scaleX(0.750)')).toBe(true);
+    expect(has('setTransform', (c) => c.args[0] === 'translateX(50%) scaleX(0.250)')).toBe(true);
+    expect(has('setTransform', (c) => c.args[0] === 'scaleX(0.750)')).toBe(false);
     // The compact party row never appends the absorb total to the HP text (that is a
     // player/target-frame affordance), so "(25)" must not appear.
     expect(has('setText', (c) => String(c.args[0]).includes('(25)'))).toBe(false);
@@ -678,6 +802,13 @@ describe('PartyFramesPainter: keyed pool over the elided writers', () => {
     // each show at least once across the three members.
     expect(has('setDisplay', (c) => c.args[0] === '')).toBe(true);
     expect(has('setDisplay', (c) => c.args[0] === 'none')).toBe(true);
+  });
+
+  it('quantizes a non-round shield segment so the elided transform key is stable', () => {
+    painter.sync([member({ pid: 2, hp: 37, mhp: 100, absorb: 11 })], 2, false);
+    expect(
+      calls.some((c) => c.m === 'setTransform' && c.args[0] === 'translateX(37%) scaleX(0.110)'),
+    ).toBe(true);
   });
 
   it('emits a visually-hidden "Group n" raid label per member only in raid mode', () => {

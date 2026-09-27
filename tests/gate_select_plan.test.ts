@@ -1048,6 +1048,11 @@ describe('discovery scope matches vitest collection over the real tree', () => {
     // sibling sees it at all, which is why this row is about a directory that
     // is absent from CI rather than about a location the walk should learn.
     'private',
+    // Handoff snapshots copy another branch's code in at its original
+    // repo-relative path, so docs/ holds *.test.ts files that are reference text
+    // rather than product test sources. vitest excludes the directory for the
+    // same reason, so the walker and the collector still agree.
+    'docs',
   ]);
 
   it('finds no collected test file outside tests/', () => {

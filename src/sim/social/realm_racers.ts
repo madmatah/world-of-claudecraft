@@ -131,7 +131,7 @@ import {
   resetVehicleDrive,
   vehicleMaxSlip,
 } from '../vehicle_motion';
-import { cloneAbilityCharges, cloneCcDr, isArenaQueued, snapshotArenaReturnPools } from './arena';
+import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from './arena';
 
 /** The machine every pilot is loaned, as a VEHICLE_PROFILES key. A roster of
  *  machines is a later workstream. */
@@ -882,16 +882,7 @@ function restoreRacer(ctx: SimContext, match: RealmRacersMatch, meta: PlayerMeta
   e.mountCastRemaining = 0;
   ctx.resetForArena(e);
   const pools = match.preMatchPools.get(meta.entityId);
-  if (pools) {
-    e.cooldowns = new Map(pools.cooldowns);
-    e.abilityCharges =
-      Object.keys(pools.abilityCharges).length > 0
-        ? cloneAbilityCharges(pools.abilityCharges)
-        : undefined;
-    e.ccDr = cloneCcDr(pools.ccDr);
-    e.hp = Math.max(0, Math.min(pools.hp, e.maxHp));
-    e.resource = Math.max(0, Math.min(pools.resource, e.maxResource));
-  }
+  if (pools) restoreArenaReturnPools(ctx, e, pools);
   restorePetFromDelveStash(ctx, meta.entityId);
   if (ret) {
     e.pos = ctx.groundPos(ret.x, ret.z);

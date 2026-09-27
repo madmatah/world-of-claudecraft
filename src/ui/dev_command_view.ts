@@ -212,6 +212,22 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
     },
   },
   {
+    id: 'farmgrow',
+    category: 'progress',
+    labelKey: 'devCommand.actions.farmgrow.label',
+    descriptionKey: 'devCommand.actions.farmgrow.description',
+    // The bed is OPTIONAL, the one shape /dev farmgrow already accepts: with
+    // a bed it advances that plot, without one it advances every planted bed
+    // the caller owns. An unusable value therefore falls back to the
+    // all-plots form rather than refusing (the biskit optional-spec
+    // contract), because there is nothing to inject into: the token gate is
+    // what keeps a crafted value out of the command line either way.
+    command: (values) => {
+      const bed = token(values, 'bed');
+      return bed ? `/dev farmgrow ${bed}` : '/dev farmgrow';
+    },
+  },
+  {
     id: 'teleport',
     category: 'travel',
     labelKey: 'devCommand.actions.teleport.label',
@@ -220,6 +236,19 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
       const x = Number(values.x);
       const z = Number(values.z);
       return Number.isFinite(x) && Number.isFinite(z) ? `/dev tp ${x} ${z}` : null;
+    },
+  },
+  {
+    id: 'town',
+    category: 'travel',
+    labelKey: 'devCommand.actions.town.label',
+    descriptionKey: 'devCommand.actions.town.description',
+    // The select carries town slugs (a closed list the sim re-validates), so
+    // the token gate is belt-and-braces: a crafted value never reaches the
+    // command line, it simply builds nothing.
+    command: (values) => {
+      const town = token(values, 'town');
+      return town ? `/dev town ${town}` : null;
     },
   },
   {
@@ -295,6 +324,35 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
     labelKey: 'devCommand.actions.lfgboard.label',
     descriptionKey: 'devCommand.actions.lfgboard.description',
     command: fixed('/dev lfg board'),
+  },
+  // King of the Hill test levers (src/sim/pvp/hill_dev.ts has the grammar).
+  {
+    id: 'hillwarn',
+    category: 'scenarios',
+    labelKey: 'devCommand.actions.hillwarn.label',
+    descriptionKey: 'devCommand.actions.hillwarn.description',
+    command: fixed('/dev hill warn'),
+  },
+  {
+    id: 'hillnow',
+    category: 'scenarios',
+    labelKey: 'devCommand.actions.hillnow.label',
+    descriptionKey: 'devCommand.actions.hillnow.description',
+    command: fixed('/dev hill'),
+  },
+  {
+    id: 'hillrise',
+    category: 'scenarios',
+    labelKey: 'devCommand.actions.hillrise.label',
+    descriptionKey: 'devCommand.actions.hillrise.description',
+    command: fixed('/dev hill rise'),
+  },
+  {
+    id: 'hillend',
+    category: 'scenarios',
+    labelKey: 'devCommand.actions.hillend.label',
+    descriptionKey: 'devCommand.actions.hillend.description',
+    command: fixed('/dev hill end'),
   },
 ];
 

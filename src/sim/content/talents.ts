@@ -24,6 +24,7 @@ import { WARRIOR_TALENTS } from './talents_warrior';
 
 export {
   type ClassChoiceRows,
+  classTalentChoiceAbilityGroups,
   isTalentRowLevel,
   OPTIONS_PER_ROW,
   ROW_COUNT,
@@ -139,7 +140,7 @@ export interface GlobalModEffect {
   // of maximum mana spent, capped at 10 sec per 30 sec (casting_lifecycle's
   // spendAbilityCost, the Colossal Might pattern on mana).
   manaDefCdrPer10?: number;
-  // Blink While Casting: 1 when picked; Flickerstep slips through the busy
+  // Blink While Casting: 1 when picked; Flitstep slips through the busy
   // guard without touching the cast in progress (casting_lifecycle).
   blinkCast?: number;
   // Damage cast-pushback removed, 0..1 (1 = immune). The talent-seam twin of
@@ -175,7 +176,7 @@ export interface GlobalModEffect {
   paladinPerpetualSun?: number;
   // Rogue v0.29 rows (docs/design/rogue-v029-class-design.md):
   // Kill Chain: combo points granted on a killing blow (refreshes, never banks
-  // past the combo cap) and 1 to refresh Smokestep's cooldown on a kill.
+  // past the combo cap) and 1 to refresh Smokefade's cooldown on a kill.
   onKillCombo?: number;
   onKillVanishReset?: number;
   // Second Shadow: fraction of a 5-combo Dirt Nap's resolved damage repeated
@@ -262,8 +263,20 @@ export type ProcResponse =
     }
   // A plain self-aura (Deathless Will's escape burst): applied to the proc
   // owner with the def's school; value semantics follow the aura kind (a
-  // buff_speed of 1.4 is +40% movement).
-  | { kind: 'aura'; auraKind: AuraKind; value: number; duration: number; name: string };
+  // buff_speed of 1.4 is +40% movement). auraId overrides the aura id (default:
+  // the proc id), so one proc can grant several auras that never replace each
+  // other (applyAura replaces by id and source). target 'subject' lands it on
+  // the trigger subject instead of the owner (the Veilpsalm 4pc: the shielded
+  // ally of a shieldConsumed proc); omitted, it stays on the owner.
+  | {
+      kind: 'aura';
+      auraKind: AuraKind;
+      value: number;
+      duration: number;
+      name: string;
+      auraId?: string;
+      target?: 'subject';
+    };
 
 export interface ProcDef {
   id: string;
@@ -422,6 +435,10 @@ export const TALENTS = {
 
 export function talentsFor(cls: PlayerClass): ClassTalents | null {
   return (TALENTS as Partial<Record<PlayerClass, ClassTalents>>)[cls] ?? null;
+}
+
+export function classSpecs(cls: PlayerClass): string[] {
+  return talentsFor(cls)?.specs.map((s) => s.id) ?? [];
 }
 
 export function hasTalents(cls: PlayerClass): boolean {

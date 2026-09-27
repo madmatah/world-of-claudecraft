@@ -25,6 +25,8 @@ export const ITEM_WEAPON_VARIANTS: Record<string, string> = {
   valeborn_spellblade: 'sword_g', // crystalline
   maldrecs_soulbinder: 'sword_g',
   highwatch_warblade: 'adv_sword_1handed',
+  duskforged_warblade: 'adv_sword_1handed', // crafted apex 1H (masterwrought); warblades share adv_sword_1handed
+  riftwarden_voidblade: 'adv_sword_1handed', // Faction vendor epic 1H sword
   eastbrook_greatsword: 'adv_sword_2handed',
   highwatch_greatsword: 'adv_sword_2handed',
   verlans_oathblade: 'adv_sword_2handed',
@@ -119,6 +121,7 @@ export const ITEM_WEAPON_VARIANTS: Record<string, string> = {
   crag_warden_cudgel: 'hammer_b',
   voss_sanctified_mace: 'hammer_c',
   bogiron_mace: 'hammer_c',
+  dawnkeeper_consecrated_mace: 'hammer_c', // Faction vendor epic mace
   bristleback_maul: 'hammer_d',
   brutoks_maul: 'hammer_d',
   drownedmoon_maul: 'hammer_d',
@@ -128,6 +131,7 @@ export const ITEM_WEAPON_VARIANTS: Record<string, string> = {
   gravewyrm_thornmaul: 'hammer_d', // feral ladder maul
   maul_of_the_scourged_wilds: 'hammer_d', // feral ladder, Nythraxis raid rung
   wildsoul_maul: 'hammer_d', // feral ladder, heroic-only ilvl 31 rung
+  ridgebreaker: 'hammer_d', // crafted apex 2H maul (masterwrought); mauls share hammer_d
   varkhul_forgebreaker: 'hammer_varkhul', // LEGENDARY: Ignivar raid (animated engine maul)
 
   // ---- axes (axe_a..d + adv axes) --------------------------------------------
@@ -139,7 +143,17 @@ export const ITEM_WEAPON_VARIANTS: Record<string, string> = {
   arcanite_war_axe: 'axe_d', // crafted (weaponcrafting tier 3)
   gorraks_cleaver: 'adv_axe_1handed',
   tradesman_hatchet: 'adv_axe_1handed',
+  forgemaster_crag_cleaver: 'adv_axe_2handed', // Faction vendor epic two-handed axe
   gravewyrm_cleaver: 'adv_axe_1handed', // EPIC: Heroic Korzul axe
+  // Nythraxis gap-fill one-handers (content/zone3.ts): the violet-gem KayKit
+  // set, the Deathless Court's bone-and-violet palette in hand (purple_dagger
+  // is shared with Duskwhisper; the sword and axe were unused). Their
+  // inventory icons are in-engine stills of these models
+  // (scripts/render_weapon_still_icons.mjs over the jobs table in
+  // docs/achievements/nythraxis-gap-weapon-renders-2026-09-04/).
+  courtiers_bonefang: 'purple_dagger',
+  thornpeak_wardblade: 'purple_sword',
+  gravecourt_hewer: 'purple_axe',
   pitlords_cleaver: 'adv_axe_1handed', // rift rare cleaver (heroic clone rides heroicOf)
   tunnelkings_spade: 'adv_axe_2handed',
 
@@ -160,4 +174,11 @@ export const ITEM_WEAPON_VARIANTS: Record<string, string> = {
   staff_of_the_last_spring: 'adv_staff',
   forgefire_spire: 'adv_staff',
   wand_of_quenched_sparks: 'adv_wand',
+
+  // ---- Warfare Season 2 honor weapons (pvp_honor_season2.ts) ------------------
+  // Held models reuse shipped GLBs.
+  vanguard_verdict_greatsword: 'adv_sword_2handed',
+  vanguard_oath_blade: 'adv_sword_1handed',
+  vanguard_fang_dagger: 'adv_dagger',
+  vanguard_warstaff: 'adv_staff',
 };

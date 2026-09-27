@@ -30,10 +30,13 @@ import { marshDressingPreloadInternalsForTest } from '../src/render/delve_marsh_
 import { delvePropsPreloadInternalsForTest } from '../src/render/delve_props';
 import { doorPortalPreloadInternalsForTest } from '../src/render/door_portal';
 import { eastbrookGrandArmouryInternalsForTest } from '../src/render/eastbrook_grand_armoury';
+import { farmPatchesPreloadInternalsForTest } from '../src/render/farm_patches';
 import { fishPreloadInternalsForTest } from '../src/render/fish';
 import { galeFeaturesPreloadInternalsForTest } from '../src/render/gale_features';
 import { gardenFeaturesPreloadInternalsForTest } from '../src/render/garden_features';
 import { gatherNodePreloadInternalsForTest } from '../src/render/gather_nodes';
+import { gliderCourseVisualPreloadInternalsForTest } from '../src/render/glider_course_visual';
+import { harborRouteMarkerInternalsForTest } from '../src/render/harbor_route_markers';
 import { ignivarEnvPropsInternalsForTest } from '../src/render/ignivar_env_props';
 import { mailboxPreloadInternalsForTest } from '../src/render/mailbox';
 import { propPreloadInternalsForTest } from '../src/render/props';
@@ -45,7 +48,11 @@ import {
 import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { stationsPreloadInternalsForTest } from '../src/render/stations';
+import { transportShipInternalsForTest } from '../src/render/transport_ship';
+import { wickharborHarborInternalsForTest } from '../src/render/wickharbor_harbor';
+import { wickharborWharfInternalsForTest } from '../src/render/wickharbor_wharf';
 import { wildheartPropsPreloadInternalsForTest } from '../src/render/wildheart_props';
+import { wyrmwatchHarborInternalsForTest } from '../src/render/wyrmwatch_harbor';
 import { yumiMazePreloadInternalsForTest } from '../src/render/yumi_maze';
 import { EASTBROOK_GRAND_ARMOURY } from '../src/sim/building_layout';
 import type { BuildingDef } from '../src/sim/types';
@@ -79,7 +86,7 @@ const armouryFinalPipelineEnabled =
     item.src?.endsWith('eastbrook_grand_armoury-final.glb'),
   ) ?? false;
 const ARMOURY_SHIPPING_BYTE_CEILING = 160 * 1024;
-const ARMOURY_SHIPPING_SHA256 = 'd7c056c90862ef3684ac33008ff8b748cb04b784f1629fe6f7c4cc36f669401e';
+const ARMOURY_SHIPPING_SHA256 = '666a77aacdd1fd52e3cd473956b3d67d640441be63a57dc88fa44a7ef71e2764';
 const MANIFEST_HASH_LENGTH = 12;
 
 function expectAssetExistsAndManifested(url: string): void {
@@ -500,6 +507,28 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     expectAssetExistsAndManifested(fishPreloadInternalsForTest.fishAssetUrl);
   });
 
+  it('transport ship assets', () => {
+    for (const url of Object.values(transportShipInternalsForTest.models)) {
+      expectAssetExistsAndManifested(url);
+    }
+  });
+
+  it('harbor route marker asset', () => {
+    expectAssetExistsAndManifested(harborRouteMarkerInternalsForTest.assetUrl);
+  });
+
+  it('wyrmwatch cliff harbor asset', () => {
+    expectAssetExistsAndManifested(wyrmwatchHarborInternalsForTest.assetUrl);
+  });
+
+  it('wickharbor ferry wharf asset', () => {
+    expectAssetExistsAndManifested(wickharborWharfInternalsForTest.assetUrl);
+  });
+
+  it('wickharbor harbor asset', () => {
+    expectAssetExistsAndManifested(wickharborHarborInternalsForTest.assetUrl);
+  });
+
   it('gather node assets', () => {
     for (const url of Object.values(gatherNodePreloadInternalsForTest.nodeAssetUrl)) {
       expectAssetExistsAndManifested(url);
@@ -508,6 +537,20 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
 
   it('mailbox pillar asset', () => {
     expectAssetExistsAndManifested(mailboxPreloadInternalsForTest.mailboxAssetUrl);
+  });
+
+  // The farm patch set: garden beds, the compost bin, and the per-family crop
+  // stage and withered meshes. The renderer's own url list is the source here,
+  // so a family or stage added to the core without an export reds this.
+  it('farm patch assets', () => {
+    const urls = farmPatchesPreloadInternalsForTest.modelUrls;
+    // The full committed set: bed + bin + shared sprout + 3 families x
+    // (stage2, stage3, stage4, withered), plus BOTH harvest feast tables (the
+    // Phase 12 party trestle table and the Phase 18 apex pedestal banquet the
+    // three role feasts wear). A new family, stage or table moves this count
+    // deliberately, in the same change that commits its GLB.
+    expect(urls.length).toBe(17);
+    for (const url of urls) expectAssetExistsAndManifested(url);
   });
 
   // Thornhollow Fields rune pads: all three defs are filled in now, so this
@@ -769,6 +812,10 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     for (const url of galeFeaturesPreloadInternalsForTest.towerAssetUrl) {
       expectAssetExistsAndManifested(url);
     }
+  });
+
+  it('Windrider glider apparatus (world quests round 2)', () => {
+    expectAssetExistsAndManifested(gliderCourseVisualPreloadInternalsForTest.apparatusAssetUrl);
   });
 
   it('every decor prop asset (the full PROP_ASSET_DEFS catalog)', () => {

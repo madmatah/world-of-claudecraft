@@ -14,6 +14,7 @@ import {
   wocBrowseStripHtml,
   wocEndsAtText,
   wocErrorStatusHtml,
+  wocItemCellHtml,
   wocLoadingStatusHtml,
   wocMarketBannersHtml,
   wocSalesHistoryHtml,
@@ -219,13 +220,15 @@ describe('woc_market_chrome: the standing banners', () => {
   it('the wallet card is the Claudium card: title, state sentence, one action button', () => {
     const html = wocMarketBannersHtml({ paused: false, wallet: view(null, null) });
     expect(html).toContain('<div class="wm-strip">');
-    expect(html).toContain('class="wm-banner wm-banner-wallet" data-wallet-kind="unlinked"');
+    expect(html).toContain(
+      'class="wm-banner wm-banner-wallet ui-card" data-wallet-kind="unlinked"',
+    );
     expect(html).toContain(`<strong>${t('hudChrome.wocStore.wallet.title')}</strong>`);
     expect(html).toContain(`<p>${t('hudChrome.wocStore.wallet.unlinked')}</p>`);
     // The button keeps the window's connect-wallet click action and its focus
     // key, so the existing handler arm and the focus-restore ladder both reach it.
     expect(html).toContain(
-      `<button type="button" data-action="connect-wallet" data-focus-key="wm-connect-wallet">${t(
+      `<button type="button" class="ui-btn" data-action="connect-wallet" data-focus-key="wm-connect-wallet">${t(
         'hudChrome.wocStore.wallet.connect',
       )}</button>`,
     );
@@ -248,6 +251,26 @@ describe('woc_market_chrome: the standing banners', () => {
     expect(mismatched).toContain(`>${t('hudChrome.wocStore.wallet.verify')}</button>`);
   });
 
+  it('offers a dismiss glyph on the reconnect state only, ahead of the sentence', () => {
+    // Its own focus key: the window's restore ladder falls from it to the
+    // selected tab once the glyph has removed itself.
+    const dismiss = `<button type="button" class="x-btn wm-banner-dismiss" data-action="dismiss-wallet-card" data-focus-key="wm-wallet-dismiss" aria-label="${t(
+      'hudChrome.wocMarket.walletCardDismiss',
+    )}">`;
+    const disconnected = wocMarketBannersHtml({ paused: false, wallet: view('L', null) });
+    expect(disconnected).toContain(dismiss);
+    // Title, dismiss, sentence: the glyph shares the title row in every layout.
+    expect(disconnected.indexOf('wm-banner-dismiss')).toBeGreaterThan(
+      disconnected.indexOf('<strong>'),
+    );
+    expect(disconnected.indexOf('wm-banner-dismiss')).toBeLessThan(disconnected.indexOf('<p>'));
+    // The states that gate buying or selling keep the card on screen, and so
+    // does the connected card (balance readout + Manage wallet, no re-show).
+    for (const w of [view(null, null), view(null, 'C'), view('L', 'M'), view('L', 'L')]) {
+      expect(wocMarketBannersHtml({ paused: false, wallet: w })).not.toContain('wm-banner-dismiss');
+    }
+  });
+
   it('places the verified $WOC balance and USD equivalent before the wallet button', () => {
     const html = wocMarketBannersHtml({
       paused: false,
@@ -258,7 +281,7 @@ describe('woc_market_chrome: the standing banners', () => {
     expect(html).toContain('15,625 $WOC');
     expect(html).toContain('$2.00 USD');
     expect(html.indexOf('wm-wallet-balance')).toBeLessThan(
-      html.indexOf('button type="button" data-action="connect-wallet"'),
+      html.indexOf('button type="button" class="ui-btn" data-action="connect-wallet"'),
     );
   });
 
@@ -323,7 +346,7 @@ describe('woc_market_chrome: the standing banners', () => {
       'utf8',
     );
     expect(componentsCss).toMatch(
-      /#woc-market-window \.wm-banner-wallet \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(160px, 220px\);/,
+      /#woc-market-window \.wm-banner-wallet \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(160px, 220px\) auto;/,
     );
     expect(componentsCss).toMatch(
       /#woc-market-window \.wm-wallet-balance \{[^}]*grid-column: 2;[^}]*grid-row: 1 \/ 3;/,
@@ -331,14 +354,47 @@ describe('woc_market_chrome: the standing banners', () => {
     expect(componentsCss).toMatch(
       /#woc-market-window \.wm-banner-wallet button \{[^}]*grid-column: 3;[^}]*grid-row: 1 \/ 3;/,
     );
+    // The touch stack keeps one content column; the second `auto` column is the
+    // dismiss glyph's corner seat on the title row.
     expect(mobileCss).toMatch(
-      /body\.mobile-touch #woc-market-window \.wm-banner-wallet \{[^}]*grid-template-columns: minmax\(0, 1fr\);/,
+      /body\.mobile-touch #woc-market-window \.wm-banner-wallet \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto;/,
     );
     expect(mobileCss).toMatch(
       /body\.mobile-touch #woc-market-window \.wm-wallet-balance \{[^}]*grid-column: 1;[^}]*grid-row: auto;[^}]*align-items: flex-start;[^}]*text-align: left;/,
     );
     expect(mobileCss).toMatch(
-      /body\.mobile-touch #woc-market-window \.wm-banner-wallet button \{[^}]*grid-column: 1;[^}]*grid-row: auto;[^}]*min-height: 44px;/,
+      /body\.mobile-touch #woc-market-window \.wm-banner-wallet button \{[^}]*grid-column: 1 \/ -1;[^}]*grid-row: auto;[^}]*min-height: 44px;/,
+    );
+    // The dismiss glyph sits in the corner column on every layout, at the 44px
+    // touch floor on the phone sheet.
+    expect(componentsCss).toMatch(
+      /#woc-market-window \.wm-banner-wallet button\.wm-banner-dismiss \{[^}]*grid-column: 4;[^}]*grid-row: 1;/,
+    );
+    expect(mobileCss).toMatch(
+      /body\.mobile-touch #woc-market-window \.wm-banner-wallet button\.wm-banner-dismiss \{[^}]*grid-column: 2;[^}]*grid-row: 1;[^}]*min-height: 44px;[^}]*min-width: 44px;/,
+    );
+  });
+
+  it('lays the card out as one row on a landscape phone (the only in-game orientation)', () => {
+    // The portrait-style stack spent four rows of a 412px-tall sheet on a status
+    // line; landscape restores the desktop row shape (title over sentence,
+    // balance, action, dismiss) inside body.mobile-touch, action at the 44px floor.
+    const mobileCss = readFileSync(
+      new URL('../src/styles/hud.mobile.css', import.meta.url),
+      'utf8',
+    );
+    const landscape = mobileCss.slice(
+      mobileCss.indexOf('body.mobile-touch #woc-market-window .wm-wallet-balance {'),
+    );
+    const block = landscape.slice(landscape.indexOf('@media (orientation: landscape) {'));
+    expect(block).toMatch(
+      /^@media \(orientation: landscape\) \{\s*body\.mobile-touch #woc-market-window \.wm-banner-wallet \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(150px, 200px\) auto;/,
+    );
+    expect(block).toMatch(
+      /body\.mobile-touch #woc-market-window \.wm-banner-wallet button \{[^}]*grid-column: 3;[^}]*grid-row: 1 \/ 3;/,
+    );
+    expect(block).toMatch(
+      /body\.mobile-touch #woc-market-window \.wm-banner-wallet button\.wm-banner-dismiss \{[^}]*grid-column: 4;[^}]*grid-row: 1 \/ 3;/,
     );
   });
 
@@ -347,5 +403,25 @@ describe('woc_market_chrome: the standing banners', () => {
     expect(html.indexOf('wm-banner-paused')).toBeGreaterThan(-1);
     expect(html.indexOf('wm-banner-paused')).toBeLessThan(html.indexOf('wm-banner-wallet'));
     expect(html).toContain(t('hudChrome.wocMarket.pausedBanner'));
+  });
+});
+
+describe('Exchange exact-copy item cells', () => {
+  it('escapes names and tooltip keys while keeping enhanced tier independent of rarity', () => {
+    const instance = {
+      lootQuality: {
+        version: 1 as const,
+        tier: 3 as const,
+        weights: [900, 100, 250, 750, 500] as [number, number, number, number, number],
+      },
+    };
+    const html = wocItemCellHtml('<rare>', 'item.webp', 'rare', 'key" onclick="bad', instance);
+    expect(html).toContain('q-rare');
+    expect(html).toContain('&lt;rare&gt;');
+    expect(html).toContain('aria-label="Magnificent"');
+    expect(html).not.toContain(' onclick="bad');
+    expect(wocItemCellHtml('ordinary', 'item.webp', 'rare', 'key')).not.toContain(
+      'loot-quality-badge',
+    );
   });
 });

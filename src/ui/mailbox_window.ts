@@ -13,17 +13,22 @@
 
 import { audio } from '../game/audio';
 import { ITEMS } from '../sim/data';
-import { itemInstancePayloadsEqual } from '../sim/item_instance_merge';
+import { isMergeableInstancePayload, itemInstancePayloadsEqual } from '../sim/item_instance_merge';
 import { isTransferLockedInstance } from '../sim/item_instance_transfer';
+import type { MaterialComposition } from '../sim/material_sources';
 import type { InvSlot, ItemInstancePayload } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { markDialogRoot } from './dialog_root';
-import { itemDisplayName, knownLetterId, tEntity } from './entity_i18n';
+import { knownLetterId, tEntity } from './entity_i18n';
 import { esc } from './esc';
 import { captureFocusKey, restoreFirstEnabled } from './focus_restore';
 import { captureFormDraft, restoreFormDraft } from './form_draft';
 import { formatMoney, formatNumber, t } from './i18n';
-import { QUALITY_COLOR } from './icons';
+import {
+  appendableMailParcelCount,
+  mailParcelCountCeiling,
+  plannedMailParcelSources,
+} from './mail_parcel_sources_view';
 import {
   buildMailboxView,
   canStageInstancedCopy,
@@ -37,10 +42,17 @@ import {
   recipientSuggestions,
   wrappedSuggestionIndex,
 } from './mailbox_view';
+import {
+  appendMaterialSourcesActionAfter,
+  attachMaterialSourcesContextMenu,
+  closeMaterialSourcesDialogForOwner,
+  type MaterialSourcesDialogOpener,
+} from './material_sources_dialog';
+import { materialSourcesForDisplay } from './material_sources_view';
 import type { PainterHostPresentation } from './painter_host';
 import { svgIcon } from './ui_icons';
+import { wornItemCellParts } from './worn_item_cell_view';
 
-const QUALITY_DEFAULT_COLOR = 'var(--color-quality-default)';
 // Copper-per-denomination (mirrors market_view's COPPER_PER_*).
 const COPPER_PER_GOLD = 10_000;
 const COPPER_PER_SILVER = 100;
@@ -111,12 +123,14 @@ export class MailboxWindow {
 
   close(): void {
     if (!this.opened) return;
+    const root = this.deps.root();
+    closeMaterialSourcesDialogForOwner(root);
     window.clearTimeout(this.recipientSuggestTimer);
     this.recipientSuggest = { items: [], index: -1 };
     this.opened = false;
     this.openedId = null;
     this.attachments = [];
-    this.deps.root().style.display = 'none';
+    root.style.display = 'none';
     this.deps.hideTooltip();
     this.deps.syncBags(false);
     this.deps.restoreFocus(this.openerFocus);
@@ -124,13 +138,49 @@ export class MailboxWindow {
   }
 
   /** Stage a bag stack as a parcel (called by the bags window on click).
-   *  `instance` is the clicked slot's payload (issue 1165): an instanced copy
-   *  stages as ITSELF, a fixed single-copy parcel (the qty stepper stays
-   *  fungible-only); a plain stack stages fungibly exactly as before. */
+   *  `instance` is the clicked slot's payload (issue 1165): a MERGEABLE
+   *  instanced copy (item_instance_merge.ts isMergeableInstancePayload, e.g. a
+   *  rare-quality crafted potion whose only payload field is the crafter's
+   *  signature) stages the WHOLE owned unlocked stock as one slot, exactly
+   *  like a plain stack; a non-mergeable instanced copy (a unique rolled
+   *  item, a locked or charge-bearing one) still stages as ITSELF, a fixed
+   *  single-copy parcel; a plain stack stages fungibly exactly as before. */
   stageParcel(itemId: string, instance?: ItemInstancePayload): void {
     if (!this.isSendTab) return;
     const info = this.deps.world().mailInfo;
     const max = info?.maxAttachments ?? 3;
+    const materialCount = appendableMailParcelCount(
+      this.deps.world().inventory,
+      this.attachments,
+      itemId,
+      instance,
+    );
+    if (instance && materialCount === null && isMergeableInstancePayload(instance)) {
+      // Already staged: the first click already grabbed every owned unlocked
+      // copy, so a re-click is a no-op, exactly like the fungible dedupe
+      // below rather than a second, redundant slot.
+      if (
+        this.attachments.some(
+          (s) =>
+            s.itemId === itemId && !!s.instance && itemInstancePayloadsEqual(s.instance, instance),
+        )
+      )
+        return;
+      const owned = this.ownedInstancedCountFor(itemId, instance);
+      if (owned < 1) return;
+      if (this.attachments.length >= max) {
+        this.deps.showError(
+          t('hudChrome.mailbox.result.tooManyParcels', {
+            count: formatNumber(max, { maximumFractionDigits: 0 }),
+          }),
+        );
+        return;
+      }
+      this.attachments.push({ itemId, count: owned, instance });
+      audio.click();
+      this.renderParcels();
+      return;
+    }
     if (this.attachments.length >= max) {
       this.deps.showError(
         t('hudChrome.mailbox.result.tooManyParcels', {
@@ -140,20 +190,20 @@ export class MailboxWindow {
       return;
     }
     if (instance) {
-      // One chip per COPY, not per distinct payload: byte-equal copies are
-      // interchangeable and the sim escrows each named entry separately, so a
-      // player holding several identical signed copies can send several in one
-      // letter (bounded by what they hold unlocked and by the parcel limit
-      // above). Differently-instanced copies of one item id each get their own
-      // chip as before.
+      // Material payloads can be reconstructed from source descriptors, so the
+      // shared planner decides how many matching units remain after earlier
+      // chips. Other non-mergeable items retain the established one-copy
+      // one-slot rule.
       if (
-        !canStageInstancedCopy(
-          this.attachments,
-          itemId,
-          instance,
-          this.ownedInstancedCountFor(itemId, instance),
-          max,
-        )
+        materialCount !== null
+          ? materialCount < 1
+          : !canStageInstancedCopy(
+              this.attachments,
+              itemId,
+              instance,
+              this.ownedInstancedCountFor(itemId, instance),
+              max,
+            )
       )
         return;
       this.attachments.push({ itemId, count: 1, instance });
@@ -162,7 +212,7 @@ export class MailboxWindow {
       return;
     }
     if (this.attachments.some((s) => s.itemId === itemId && !s.instance)) return;
-    const count = this.ownedCountFor(itemId);
+    const count = materialCount ?? this.ownedCountFor(itemId);
     if (count < 1) return;
     this.attachments.push({ itemId, count });
     audio.click();
@@ -207,11 +257,37 @@ export class MailboxWindow {
       .reduce((n, s) => n + s.count, 0);
   }
 
+  private parcelCountCeiling(index: number): number {
+    const slot = this.attachments[index];
+    if (slot === undefined) return 0;
+    const materialCeiling = mailParcelCountCeiling(
+      this.deps.world().inventory,
+      this.attachments,
+      index,
+    );
+    if (materialCeiling !== null) return materialCeiling;
+    // A mergeable instanced slot (a signed potion, say) has its own owned
+    // count: ownedCountFor filters instanced slots out entirely, so it would
+    // wrongly floor this stepper at 0.
+    return slot.instance
+      ? this.ownedInstancedCountFor(slot.itemId, slot.instance)
+      : this.ownedCountFor(slot.itemId);
+  }
+
+  /** Whether a staged slot's quantity may move at all: every plain stack, plus
+   *  a MERGEABLE instanced one (item_instance_merge.ts
+   *  isMergeableInstancePayload), which stages as a single count-N slot the
+   *  same as a plain stack. A non-mergeable instanced slot (unique rolled,
+   *  locked, charge-bearing) stays fixed at its single copy. */
+  private parcelQtyAdjustable(slot: InvSlot): boolean {
+    return !slot.instance || isMergeableInstancePayload(slot.instance);
+  }
+
   /** Nudge a staged parcel's quantity from the +/- stepper (#1444). */
-  private adjustParcelQty(itemId: string, delta: number): void {
-    const slot = this.attachments.find((s) => s.itemId === itemId && !s.instance);
-    if (!slot) return;
-    const next = clampParcelQty(slot.count, delta, this.ownedCountFor(itemId));
+  private adjustParcelQty(index: number, delta: number): void {
+    const slot = this.attachments[index];
+    if (!slot || !this.parcelQtyAdjustable(slot)) return;
+    const next = clampParcelQty(slot.count, delta, this.parcelCountCeiling(index));
     if (next === slot.count) return;
     slot.count = next;
     audio.click();
@@ -221,10 +297,10 @@ export class MailboxWindow {
   /** Commit a TYPED parcel quantity (the chip input's change event). Always
    *  repaints, even when the count is unchanged, so a normalized-away entry
    *  ("007", "", "999" over stock) snaps the field back to the real value. */
-  private setParcelQty(itemId: string, raw: string): void {
-    const slot = this.attachments.find((s) => s.itemId === itemId && !s.instance);
-    if (!slot) return;
-    const next = parseParcelQty(raw, this.ownedCountFor(itemId), slot.count);
+  private setParcelQty(index: number, raw: string): void {
+    const slot = this.attachments[index];
+    if (!slot || !this.parcelQtyAdjustable(slot)) return;
+    const next = parseParcelQty(raw, this.parcelCountCeiling(index), slot.count);
     if (next !== slot.count) {
       slot.count = next;
       audio.click();
@@ -351,10 +427,10 @@ export class MailboxWindow {
           })
         : t('hudChrome.mailbox.tabInbox');
     const tabButton = (id: MailTab, label: string) =>
-      `<button type="button" class="mail-tab${this.tab === id ? ' sel' : ''}" data-tab="${id}" aria-pressed="${this.tab === id ? 'true' : 'false'}">${esc(label)}</button>`;
+      `<button type="button" class="mail-tab ui-tab${this.tab === id ? ' sel is-on' : ''}" data-tab="${id}" aria-pressed="${this.tab === id ? 'true' : 'false'}">${esc(label)}</button>`;
     el.innerHTML =
-      `<div class="panel-title"><span>${esc(t('hudChrome.mailbox.title'))} <span class="panel-subtitle">${esc(t('hudChrome.mailbox.subtitle'))}</span></span><button type="button" class="x-btn" data-close aria-label="${esc(t('hudChrome.mailbox.close'))}">${svgIcon('close')}</button></div>` +
-      `<div class="mail-tabs">${tabButton('inbox', inboxLabel)}${tabButton('send', t('hudChrome.mailbox.tabSend'))}</div>` +
+      `<div class="panel-title ui-win-head"><span class="ui-win-title">${esc(t('hudChrome.mailbox.title'))} <span class="panel-subtitle ui-win-sub">${esc(t('hudChrome.mailbox.subtitle'))}</span></span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hudChrome.mailbox.close'))}">${svgIcon('close')}</button></div>` +
+      `<div class="mail-tabs ui-tabs">${tabButton('inbox', inboxLabel)}${tabButton('send', t('hudChrome.mailbox.tabSend'))}</div>` +
       `<div id="mailbox-body"></div>`;
     el.querySelector('[data-close]')?.addEventListener('click', () => this.close());
     el.querySelectorAll('[data-tab]').forEach((node) => {
@@ -410,7 +486,7 @@ export class MailboxWindow {
       const subject = this.subjectLabel(row);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `mail-row${row.unread ? ' unread' : ''}`;
+      btn.className = `mail-row ui-card${row.unread ? ' unread' : ''}`;
       btn.setAttribute('aria-label', t('hudChrome.mailbox.openAria', { subject, name: sender }));
       btn.innerHTML =
         `<span class="mail-row-icon${row.unread ? ' unread' : ''}">${svgIcon('mail')}</span>` +
@@ -449,13 +525,16 @@ export class MailboxWindow {
         : opened.body;
     body.innerHTML =
       `<div class="mail-reading">` +
-      `<button type="button" class="mail-back" data-mail-back>${svgIcon('prev')}<span>${esc(t('hudChrome.mailbox.back'))}</span></button>` +
+      `<button type="button" class="mail-back ui-btn" data-mail-back>${svgIcon('prev')}<span>${esc(t('hudChrome.mailbox.back'))}</span></button>` +
       `<div class="mail-reading-head"><span class="mail-reading-subject">${esc(subject)}</span>` +
       `<span class="mail-reading-sender">${esc(sender)}</span></div>` +
-      `<div class="mail-reading-body">${esc(letterBody).replace(/\n/g, '<br>')}</div>` +
+      `<div class="mail-reading-body ui-card">${esc(letterBody).replace(/\n/g, '<br>')}</div>` +
       `<div class="mail-attachments" id="mail-attachments"></div>` +
-      `<div class="mail-actions" id="mail-actions"></div>` +
-      `</div>`;
+      `</div>` +
+      // Outside .mail-reading-body, which is the pane's scrollport: a long letter
+      // must never push Reply / Return / Delete out of reach (the window-shell
+      // rule, library.css).
+      `<div class="mail-actions" id="mail-actions"></div>`;
     body.querySelector('[data-mail-back]')?.addEventListener('click', () => {
       this.openedId = null;
       this.lastSig = '';
@@ -466,24 +545,47 @@ export class MailboxWindow {
     if (attachmentsRow) {
       if (opened.copper > 0) {
         const coin = document.createElement('span');
-        coin.className = 'mail-attachment-coin';
+        coin.className = 'mail-attachment-coin ui-card ui-money';
         coin.innerHTML = this.deps.moneyHtml(opened.copper);
         attachmentsRow.appendChild(coin);
       }
       for (const slot of opened.items) {
         const item = ITEMS[slot.itemId];
         const chip = document.createElement('span');
-        chip.className = 'mail-attachment-item';
+        chip.className = 'mail-attachment-item ui-card';
+        let displayedName = slot.itemId;
+        let displayedSources: MaterialComposition | undefined;
         if (item) {
-          const qColor = QUALITY_COLOR[item.quality ?? 'common'] ?? QUALITY_DEFAULT_COLOR;
+          // The chip describes the attached COPY (the all-surfaces item-cell
+          // rule, worn_item_cell_view.ts): a legacy legendary-rolled copy is
+          // mailable and reads legendary here, never its def tier.
+          const cell = wornItemCellParts(item, slot.instance);
           const stack =
             slot.count > 1 ? ` x${formatNumber(slot.count, { maximumFractionDigits: 0 })}` : '';
-          chip.innerHTML = `${this.deps.itemIcon(item)}<span style="color:${qColor}">${esc(itemDisplayName(item))}${esc(stack)}</span>`;
-          this.deps.attachTooltip(chip, () => this.deps.itemTooltip(item, slot.instance));
+          chip.innerHTML = `<span class="ui-socket ui-socket--bag">${this.deps.itemIcon(item, cell.quality)}${cell.qualityBadgeLabelled}</span><span style="color:${cell.color}">${esc(cell.name)}${esc(stack)}</span>`;
+          // An attached material stack keeps its contributors on the way
+          // through the post: the letter's slot IS the stack.
+          displayedName = cell.name;
+          displayedSources = materialSourcesForDisplay(slot);
+          this.deps.attachTooltip(chip, () =>
+            this.deps.itemTooltip(item, slot.instance, displayedSources),
+          );
+          attachMaterialSourcesContextMenu(
+            chip,
+            cell.name,
+            displayedSources,
+            this.deps.openMaterialSources,
+          );
         } else {
           chip.textContent = slot.itemId;
         }
         attachmentsRow.appendChild(chip);
+        appendMaterialSourcesActionAfter(
+          chip,
+          displayedName,
+          displayedSources,
+          this.deps.openMaterialSources,
+        );
       }
     }
     const actions = body.querySelector<HTMLElement>('#mail-actions');
@@ -491,7 +593,7 @@ export class MailboxWindow {
     if (opened.hasAttachments) {
       const take = document.createElement('button');
       take.type = 'button';
-      take.className = 'mail-action-btn';
+      take.className = 'mail-action-btn ui-btn ui-btn--red';
       take.textContent = t('hudChrome.mailbox.take');
       take.addEventListener('click', () => {
         this.deps.world().mailTake(opened.id);
@@ -502,7 +604,7 @@ export class MailboxWindow {
     } else {
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'mail-action-btn danger';
+      del.className = 'mail-action-btn danger ui-btn';
       del.textContent = t('hudChrome.mailbox.delete');
       del.setAttribute(
         'aria-label',
@@ -523,18 +625,19 @@ export class MailboxWindow {
     this.recipientSuggest = { items: [], index: -1 };
     body.innerHTML =
       `<div class="mail-send-form">` +
+      `<div class="mail-send-fields">` +
       `<div class="mail-field"><label for="mail-to">${esc(t('hudChrome.mailbox.toLabel'))}</label>` +
       `<div class="mail-to-wrap">` +
       `<div class="mail-to-suggest" id="mail-to-suggest" role="listbox"></div>` +
-      `<input id="mail-to" type="text" maxlength="32" autocomplete="off" placeholder="${esc(t('hudChrome.mailbox.toPlaceholder'))}" role="combobox" aria-autocomplete="list" aria-controls="mail-to-suggest" aria-expanded="false"></div></div>` +
+      `<input id="mail-to" class="ui-input" type="text" maxlength="32" autocomplete="off" placeholder="${esc(t('hudChrome.mailbox.toPlaceholder'))}" role="combobox" aria-autocomplete="list" aria-controls="mail-to-suggest" aria-expanded="false"></div></div>` +
       `<div class="mail-field"><label for="mail-subject">${esc(t('hudChrome.mailbox.subjectLabel'))}</label>` +
-      `<input id="mail-subject" type="text" maxlength="64" autocomplete="off"></div>` +
+      `<input id="mail-subject" class="ui-input" type="text" maxlength="64" autocomplete="off"></div>` +
       `<div class="mail-field"><label for="mail-body">${esc(t('hudChrome.mailbox.bodyLabel'))}</label>` +
-      `<textarea id="mail-body" maxlength="600" rows="5"></textarea></div>` +
+      `<textarea id="mail-body" class="ui-input" maxlength="600" rows="5"></textarea></div>` +
       `<div class="mail-field mail-coin-row"><label>${esc(t('hudChrome.mailbox.coinLabel'))}</label>` +
-      `<input class="coininput" id="mail-g" type="number" min="0" value="0" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span>` +
-      `<input class="coininput" id="mail-s" type="number" min="0" max="99" value="0" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span>` +
-      `<input class="coininput" id="mail-c" type="number" min="0" max="99" value="0" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span></div>` +
+      `<input class="coininput ui-input" id="mail-g" type="number" min="0" value="0" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span>` +
+      `<input class="coininput ui-input" id="mail-s" type="number" min="0" max="99" value="0" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span>` +
+      `<input class="coininput ui-input" id="mail-c" type="number" min="0" max="99" value="0" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span></div>` +
       `<div class="mail-field"><label>${esc(t('hudChrome.mailbox.parcelsLabel'))}</label>` +
       `<div class="mail-parcels" id="mail-parcels"></div></div>` +
       `<div class="mail-note">${esc(
@@ -543,8 +646,11 @@ export class MailboxWindow {
           seconds: formatNumber(view.deliverySeconds, { maximumFractionDigits: 0 }),
         }),
       )}</div>` +
-      `<button type="button" class="mail-send-btn" id="mail-send-btn">${esc(t('hudChrome.mailbox.sendButton'))}</button>` +
-      `</div>`;
+      `</div>` +
+      // The one pinned action row: the field stack above it scrolls instead.
+      `<div class="mail-send-actions">` +
+      `<button type="button" class="mail-send-btn ui-btn ui-btn--red" id="mail-send-btn">${esc(t('hudChrome.mailbox.sendButton'))}</button>` +
+      `</div></div>`;
     this.renderParcels();
     // Bags ride alongside so parcels can be clicked straight onto the letter.
     // NOT on the relocalize path (revealBags false): syncBags(true) REVEALS the
@@ -728,6 +834,28 @@ export class MailboxWindow {
     }
   }
 
+  private currentParcelSources(index: number): MaterialComposition | undefined {
+    return plannedMailParcelSources(this.deps.world().inventory, this.attachments)?.[index];
+  }
+
+  private attachParcelSourceDetails(
+    element: HTMLElement,
+    itemName: string,
+    index: number,
+    displayedSources: MaterialComposition | undefined,
+  ): void {
+    const open = this.deps.openMaterialSources;
+    if (displayedSources === undefined || displayedSources.length === 0 || open === undefined)
+      return;
+    const openCurrent: MaterialSourcesDialogOpener = (options) => {
+      const sources = this.currentParcelSources(index);
+      if (sources === undefined || sources.length === 0) return;
+      open({ ...options, sources });
+    };
+    attachMaterialSourcesContextMenu(element, itemName, displayedSources, openCurrent);
+    appendMaterialSourcesActionAfter(element, itemName, displayedSources, openCurrent);
+  }
+
   private renderParcels(): void {
     const parcels = this.deps.root().querySelector<HTMLElement>('#mail-parcels');
     if (!parcels) return;
@@ -738,12 +866,19 @@ export class MailboxWindow {
     // container passed is the PARCEL LIST, not the window root, so focus
     // sitting anywhere else in the mailbox is correctly left alone.
     const focusKey = captureFocusKey(parcels);
+    const displayedSourcePlan = plannedMailParcelSources(
+      this.deps.world().inventory,
+      this.attachments,
+    );
     parcels.innerHTML = '';
     if (this.attachments.length === 0) {
+      const socket = document.createElement('span');
+      socket.className = 'ui-socket ui-socket--bag empty';
+      socket.setAttribute('aria-hidden', 'true');
       const hint = document.createElement('span');
       hint.className = 'mail-parcel-hint';
       hint.textContent = t('hudChrome.mailbox.parcelsHint');
-      parcels.appendChild(hint);
+      parcels.append(socket, hint);
       return;
     }
     const itemControls = new Map<
@@ -765,38 +900,45 @@ export class MailboxWindow {
       // the array order is stable across repaints, so the focus restore lands
       // on the same chip.
       const chipKey = slot.instance ? `${slot.itemId}#i${chipIdx}` : slot.itemId;
-      const qColor = QUALITY_COLOR[item.quality ?? 'common'] ?? QUALITY_DEFAULT_COLOR;
+      // The staged COPY's own presentation (the all-surfaces item-cell rule).
+      const cell = wornItemCellParts(item, slot.instance);
       const chip = document.createElement('span');
-      chip.className = 'mail-parcel-chip';
+      chip.className = 'mail-parcel-chip ui-card';
       const name = document.createElement('span');
       name.className = 'mail-parcel-name';
       // Keyboard-focusable so Tab can reach it: attachTooltip's keyboard path
       // is a focusin listener on this exact element.
       name.tabIndex = 0;
-      name.innerHTML = `${this.deps.itemIcon(item)}<span style="color:${qColor}">${esc(itemDisplayName(item))}</span>`;
-      this.deps.attachTooltip(name, () => this.deps.itemTooltip(item, slot.instance));
+      name.innerHTML = `<span class="ui-socket ui-socket--bag">${this.deps.itemIcon(item, cell.quality)}${cell.qualityBadgeLabelled}</span><span style="color:${cell.color}">${esc(cell.name)}</span>`;
+      const displayedSources = displayedSourcePlan?.[chipIdx];
+      this.deps.attachTooltip(name, () =>
+        this.deps.itemTooltip(item, slot.instance, this.currentParcelSources(chipIdx)),
+      );
       chip.appendChild(name);
-      const owned = this.ownedCountFor(slot.itemId);
+      this.attachParcelSourceDetails(name, cell.name, chipIdx, displayedSources);
+      const owned = this.parcelCountCeiling(chipIdx);
       const controls: {
         minus?: HTMLButtonElement;
         plus?: HTMLButtonElement;
         qty?: HTMLInputElement;
         remove?: HTMLButtonElement;
       } = {};
-      if (!slot.instance && owned > 1) {
+      if (this.parcelQtyAdjustable(slot) && owned > 1) {
         const step = document.createElement('span');
         step.className = 'mail-parcel-qty';
         const minus = document.createElement('button');
         minus.type = 'button';
-        minus.className = 'mail-parcel-step';
+        minus.className = 'mail-parcel-step ui-btn';
         minus.textContent = '−';
         minus.disabled = slot.count <= 1;
         minus.dataset.focusKey = `${slot.itemId}:minus`;
         minus.setAttribute(
           'aria-label',
-          t('hudChrome.mailbox.parcelQtyDecreaseAria', { item: itemDisplayName(item) }),
+          t('hudChrome.mailbox.parcelQtyDecreaseAria', {
+            item: cell.name,
+          }),
         );
-        minus.addEventListener('click', () => this.adjustParcelQty(slot.itemId, -1));
+        minus.addEventListener('click', () => this.adjustParcelQty(chipIdx, -1));
         // Typeable quantity (was a read-only span): validated on change/blur,
         // never per keystroke, so typing is not interrupted by the repaint.
         // Purely client UX: the sim's post office re-validates every send
@@ -806,7 +948,7 @@ export class MailboxWindow {
         qty.min = '1';
         qty.max = String(owned);
         qty.inputMode = 'numeric';
-        qty.className = 'mail-parcel-qty-input';
+        qty.className = 'mail-parcel-qty-input ui-input';
         qty.value = String(slot.count);
         qty.dataset.focusKey = `${slot.itemId}:qty`;
         // Still a live region even as an input: a +/- stepper click changes
@@ -815,7 +957,9 @@ export class MailboxWindow {
         qty.setAttribute('aria-live', 'polite');
         qty.setAttribute(
           'aria-label',
-          t('hudChrome.mailbox.parcelQtyAria', { item: itemDisplayName(item) }),
+          t('hudChrome.mailbox.parcelQtyAria', {
+            item: cell.name,
+          }),
         );
         // The coin-input focus contract: select the value so typing replaces it
         // (clicking into "2" and typing 5 must mean 5, not 25); the once-only
@@ -824,7 +968,7 @@ export class MailboxWindow {
           qty.select();
           qty.addEventListener('mouseup', (e) => e.preventDefault(), { once: true });
         });
-        qty.addEventListener('change', () => this.setParcelQty(slot.itemId, qty.value));
+        qty.addEventListener('change', () => this.setParcelQty(chipIdx, qty.value));
         qty.addEventListener('keydown', (ke) => {
           if (ke.key === 'Enter') {
             ke.preventDefault();
@@ -833,15 +977,17 @@ export class MailboxWindow {
         });
         const plus = document.createElement('button');
         plus.type = 'button';
-        plus.className = 'mail-parcel-step';
+        plus.className = 'mail-parcel-step ui-btn';
         plus.textContent = '+';
         plus.disabled = slot.count >= owned;
         plus.dataset.focusKey = `${slot.itemId}:plus`;
         plus.setAttribute(
           'aria-label',
-          t('hudChrome.mailbox.parcelQtyIncreaseAria', { item: itemDisplayName(item) }),
+          t('hudChrome.mailbox.parcelQtyIncreaseAria', {
+            item: cell.name,
+          }),
         );
-        plus.addEventListener('click', () => this.adjustParcelQty(slot.itemId, 1));
+        plus.addEventListener('click', () => this.adjustParcelQty(chipIdx, 1));
         step.append(minus, qty, plus);
         chip.appendChild(step);
         controls.minus = minus;
@@ -850,12 +996,14 @@ export class MailboxWindow {
       }
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.className = 'mail-parcel-remove-btn';
+      remove.className = 'mail-parcel-remove-btn ui-x-btn';
       remove.innerHTML = svgIcon('close', { cls: 'mail-parcel-remove' });
       remove.dataset.focusKey = `${chipKey}:remove`;
       remove.setAttribute(
         'aria-label',
-        t('hudChrome.mailbox.removeParcelAria', { item: itemDisplayName(item) }),
+        t('hudChrome.mailbox.removeParcelAria', {
+          item: cell.name,
+        }),
       );
       remove.addEventListener('click', () => {
         // Reference identity, not item id: with a plain stack AND an instanced

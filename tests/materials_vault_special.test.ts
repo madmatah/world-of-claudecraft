@@ -67,11 +67,17 @@ describe('identity-preserving Materials Vault stacks', () => {
     sim.vaultDeposit(0);
     expect(meta.inventory).toEqual([]);
     expect(meta.vault.stock).toEqual({});
+    // The legacy signer rides a SOURCE BUCKET now, not the payload. That is the
+    // shared material model's projection (material_stack.ts
+    // normalizeMaterialStack), applied by the packing core every material grant
+    // goes through, and it is lossless in both directions: the same signature,
+    // the same premium eligibility, one representation instead of two.
     expect(meta.vault.special).toEqual([
       {
         itemId: 'copper_ore',
         count: 1,
-        instance: { signer: 'Ada', rolled: { quality: 'rare', stats: { sta: 2 } } },
+        instance: { rolled: { quality: 'rare', stats: { sta: 2 } } },
+        materialSources: [{ source: { signer: 'Ada' }, count: 1 }],
       },
     ]);
     expect(meta.vault.special[0]).not.toBe(carried);
@@ -137,17 +143,27 @@ describe('identity-preserving Materials Vault stacks', () => {
 
     expect(vaultStoredCount(meta.vault, 'copper_ore')).toBe(40);
     expect(meta.vault.stock.copper_ore).toBe(39);
-    expect(meta.inventory).toEqual([{ itemId: 'copper_ore', count: 2 }]);
+    // The remainder carries its EXACT per-unit quantities, never a bare count:
+    // two units nobody recorded a gatherer for are two units in the unrecorded
+    // bucket. (The crafted row already in `special` cannot share with plain
+    // stock, so this deposit still pools rather than folding.)
+    expect(meta.inventory).toEqual([
+      { itemId: 'copper_ore', count: 2, materialSources: [{ source: {}, count: 2 }] },
+    ]);
   });
 
-  it('moves instance stacks whole but permits partial recipe-only moves', () => {
+  it('moves whole-move payload stacks whole but permits partial recipe-only moves', () => {
     const sim = makeSim();
     const meta = metaOf(sim);
     meta.vault.stock.copper_ore = 39;
+    // A LOCKED payload is one identity per unit (vault_slot_ops.ts
+    // vaultRowMovesWhole), so it deposits whole or not at all; a signer or
+    // bind-on-trade payload splits like a plain stack now
+    // (tests/materials_vault_row_packing.test.ts pins that arm).
     const instance: InvSlot = {
       itemId: 'copper_ore',
       count: 2,
-      instance: { signer: 'Ada' },
+      instance: { locked: true },
     };
     meta.inventory.push(instance);
 
@@ -166,11 +182,22 @@ describe('identity-preserving Materials Vault stacks', () => {
       craftedRecipeId: 'smelt_copper',
     });
     sim.vaultDeposit(0);
+    // Both halves carry their exact per-unit quantities.
     expect(meta.inventory).toEqual([
-      { itemId: 'copper_ore', count: 2, craftedRecipeId: 'smelt_copper' },
+      {
+        itemId: 'copper_ore',
+        count: 2,
+        craftedRecipeId: 'smelt_copper',
+        materialSources: [{ source: {}, count: 2 }],
+      },
     ]);
     expect(meta.vault.special).toEqual([
-      { itemId: 'copper_ore', count: 1, craftedRecipeId: 'smelt_copper' },
+      {
+        itemId: 'copper_ore',
+        count: 1,
+        craftedRecipeId: 'smelt_copper',
+        materialSources: [{ source: {}, count: 1 }],
+      },
     ]);
   });
 
@@ -181,19 +208,26 @@ describe('identity-preserving Materials Vault stacks', () => {
     const ben: InvSlot = { itemId: 'copper_ore', count: 1, instance: { signer: 'Ben' } };
     meta.vault.special.push(ada, ben);
 
+    // Ben's units come back with the signature in a SOURCE BUCKET (the shared
+    // model's projection), not in the payload it was persisted under.
+    const withdrawnBen = {
+      itemId: 'copper_ore',
+      count: 1,
+      materialSources: [{ source: { signer: 'Ben' }, count: 1 }],
+    };
     const staleBenRef = ref(0, ben);
     sim.vaultWithdraw('copper_ore', undefined, staleBenRef);
     expect(meta.vault.special).toEqual([ada]);
-    expect(meta.inventory).toEqual([ben]);
+    expect(meta.inventory).toEqual([withdrawnBen]);
 
     const wrongRef: VaultSpecialRef = { index: 0, instance: { signer: 'Mallory' } };
     sim.vaultWithdraw('copper_ore', undefined, wrongRef);
     expect(meta.vault.special).toEqual([ada]);
-    expect(meta.inventory).toEqual([ben]);
+    expect(meta.inventory).toEqual([withdrawnBen]);
 
     sim.vaultWithdraw('copper_ore');
     expect(meta.vault.special).toEqual([ada]);
-    expect(meta.inventory).toEqual([ben]);
+    expect(meta.inventory).toEqual([withdrawnBen]);
   });
 
   it('sanitizes full payloads without aliasing, retains unknown rows, and keeps demoted rows special', () => {
@@ -215,12 +249,17 @@ describe('identity-preserving Materials Vault stacks', () => {
     const clean = sanitizeVaultState(raw, 'Ada', dropped, 1);
 
     expect(clean.special).toEqual([
+      // An UNKNOWN id with no source marker stays dormant exactly as stored:
+      // the shared reader has no material model to apply to it, so it neither
+      // normalizes nor refuses (its buckets are the thing that would be judged).
       {
         itemId: 'future_material',
         count: 2,
         instance: { signer: 'Ada', rolled: { quality: 'rare', stats: { sta: 3 } } },
       },
-      { itemId: 'copper_ore', count: 1 },
+      // A KNOWN material does normalize, so its one unit gets the unrecorded
+      // bucket it always implied.
+      { itemId: 'copper_ore', count: 1, materialSources: [{ source: {}, count: 1 }] },
     ]);
     expect(clean.special[0]).not.toBe(raw.special[0]);
     expect(clean.special[0].instance).not.toBe(raw.special[0].instance);
@@ -241,5 +280,90 @@ describe('identity-preserving Materials Vault stacks', () => {
     seedItemDiscovery((sim as unknown as { ctx: never }).ctx, meta);
     expect(meta.deedStats.itemsDiscovered.has('copper_ore')).toBe(true);
     expect(meta.deedStats.visited.has('quality:rare')).toBe(true);
+  });
+});
+
+// Locking a stack of material is one flag over the WHOLE counted stack
+// (item_lock.ts setItemLocked), never a per-unit identity like a charge-bearing
+// payload; a deposit into the vault's identity collection must land it as ONE
+// row carrying the full count, exactly like an unlocked stack would, rather
+// than splitting it into a row per unit (the material_stack_packing.ts
+// perFreshSlot regression a player hit locking a stack of 20 and depositing).
+describe('a LOCKED material stack deposits as one whole vault row, never one row per unit', () => {
+  it('vaultDeposit: lands the whole locked stack in a single special row', () => {
+    const sim = makeSim();
+    const pid = sim.playerId;
+    const meta = metaOf(sim);
+    meta.inventory.push({ itemId: 'bone_fragments', count: 20 });
+
+    sim.setItemLocked('bone_fragments', true, pid, 0);
+    expect(meta.inventory).toHaveLength(1);
+    expect(meta.inventory[0].instance).toEqual({ locked: true });
+
+    sim.vaultDeposit(0);
+
+    expect(meta.inventory).toEqual([]);
+    expect(meta.vault.stock).toEqual({});
+    const rows = meta.vault.special.filter((s) => s.itemId === 'bone_fragments');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(20);
+    expect(rows[0].instance).toEqual({ locked: true });
+    expect(vaultStoredCount(meta.vault, 'bone_fragments')).toBe(20);
+  });
+
+  it('vaultDepositAll ("add all materials"): the same whole-stack result as the targeted deposit', () => {
+    const sim = makeSim();
+    const meta = metaOf(sim);
+    meta.inventory.push({ itemId: 'bone_fragments', count: 20 });
+
+    sim.setItemLocked('bone_fragments', true, sim.playerId, 0);
+    sim.vaultDepositAll();
+
+    expect(meta.inventory).toEqual([]);
+    const rows = meta.vault.special.filter((s) => s.itemId === 'bone_fragments');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(20);
+    expect(rows[0].instance).toEqual({ locked: true });
+  });
+
+  it('vaultWithdraw: the deposited locked row returns as ONE carried stack, not 20 withdrawals', () => {
+    const sim = makeSim();
+    const pid = sim.playerId;
+    const meta = metaOf(sim);
+    meta.inventory.push({ itemId: 'bone_fragments', count: 20 });
+    sim.setItemLocked('bone_fragments', true, pid, 0);
+    sim.vaultDeposit(0);
+    const deposited = meta.vault.special.find((s) => s.itemId === 'bone_fragments');
+    if (!deposited) throw new Error('expected the deposited locked row');
+
+    sim.vaultWithdraw('bone_fragments', undefined, ref(0, deposited));
+
+    expect(meta.vault.special.some((s) => s.itemId === 'bone_fragments')).toBe(false);
+    const carried = meta.inventory.filter((s) => s.itemId === 'bone_fragments');
+    expect(carried).toHaveLength(1);
+    expect(carried[0].count).toBe(20);
+    expect(carried[0].instance).toEqual({ locked: true });
+  });
+
+  it('deposits a tolerated OVER-CAP locked stack as two capped rows, not 25 one-unit rows', () => {
+    // A single carried slot never legitimately exceeds the item's own stack
+    // cap (item_lock.ts / bags.ts instancedCountCap holds a locked stack to
+    // stackSizeOf), so the only way a locked stack of 25 carries a stack cap
+    // of 20 is a tolerated legacy/hand-edited holding; the vault's own
+    // per-material ceiling (40 at rung 1) still has room for all 25. The
+    // deposit must split it into TWO capped rows [20, 5], not 25 rows of 1.
+    const sim = makeSim();
+    const meta = metaOf(sim);
+    meta.inventory.push({ itemId: 'bone_fragments', count: 25, instance: { locked: true } });
+
+    sim.vaultDeposit(0);
+
+    expect(meta.inventory).toEqual([]);
+    const rows = meta.vault.special
+      .filter((s) => s.itemId === 'bone_fragments')
+      .sort((a, b) => b.count - a.count);
+    expect(rows.map((s) => s.count)).toEqual([20, 5]);
+    for (const row of rows) expect(row.instance).toEqual({ locked: true });
+    expect(vaultStoredCount(meta.vault, 'bone_fragments')).toBe(25);
   });
 });

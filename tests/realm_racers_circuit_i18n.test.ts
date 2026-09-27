@@ -26,7 +26,7 @@ describe('Realm Racers circuit names', () => {
   it('gives the three shipped circuits their authored names', () => {
     expect(realmRacersCircuitName(REALM_RACERS_PRACTICE_CIRCUIT_ID)).toBe('Evergarden Bootcamp');
     expect(realmRacersCircuitName('evergarden_express_tour')).toBe('Evergarden Express Tour');
-    expect(realmRacersCircuitName('nightbloom_moonwell_run')).toBe('Nightbloom Moonwell Run');
+    expect(realmRacersCircuitName('nightbloom_moonwell_run')).toBe('Nightbloom Moonspring Run');
   });
 
   it('answers null for a circuit nothing names, rather than throwing or leaking an id', () => {

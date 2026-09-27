@@ -1,13 +1,21 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DELVES, NPCS, QUESTS, STATIONS } from '../src/sim/data';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  INVESTIGATION_CLUES,
+  INVESTIGATION_NPC_IDS,
+  INVESTIGATION_NPCS,
+  INVESTIGATION_QUEST_ID,
+} from '../src/sim/content/world_quest_investigation';
+import { DELVES, ITEMS, NPCS, QUESTS, STATIONS } from '../src/sim/data';
 import { CHRONICLER_TEMPLATE_IDS } from '../src/sim/deeds';
 import type { Entity } from '../src/sim/types';
+import { WEEKLY_KEEPER_ENTITY_ID, WEEKLY_KEEPER_ID } from '../src/sim/weekly_rewards';
 import { craftNameText } from '../src/ui/char_window';
+import { itemDisplayName } from '../src/ui/entity_i18n';
 import type { FocusTrapHandle } from '../src/ui/focus_manager';
 import { QuestDialogController } from '../src/ui/hud/quest/quest_dialog_controller';
-import { t } from '../src/ui/i18n';
+import { ensureLocaleLoaded, setLanguage, supportedLanguages, t } from '../src/ui/i18n';
 import type { IWorld } from '../src/world_api';
 
 function npc(id: number, templateId: string, x = 0): Entity {
@@ -34,6 +42,7 @@ function harness(
   entity = npc(10, ordinaryNpcId()),
   questState = 'available',
   identityExtra: Record<string, unknown> = {},
+  worldExtra: Record<string, unknown> = {},
 ) {
   document.body.innerHTML = '';
   const element = document.createElement('div');
@@ -46,6 +55,7 @@ function harness(
   const acceptQuest = vi.fn();
   const turnInQuest = vi.fn();
   const reportTelemetry = vi.fn();
+  const convertHusks = vi.fn();
   const world = {
     entities,
     cfg: { playerClass: 'warrior' },
@@ -75,6 +85,9 @@ function harness(
     acceptQuest,
     turnInQuest,
     reportTelemetry,
+    convertHusks,
+    clueHunt: null,
+    ...worldExtra,
   } as unknown as IWorld;
   const release = vi.fn();
   const focusFirst = vi.fn();
@@ -98,6 +111,7 @@ function harness(
   const openCrucibleVendor = vi.fn();
   const openWarfareVendor = vi.fn();
   const openMarket = vi.fn();
+  const openWorldQuestBoard = vi.fn();
   const openDelveBoard = vi.fn();
   const openCardDuel = vi.fn();
   const openTrain = vi.fn();
@@ -135,6 +149,7 @@ function harness(
     openCrucibleVendor,
     openWarfareVendor,
     openMarket,
+    openWorldQuestBoard,
     openDelveBoard,
     openCardDuel,
     openTrain,
@@ -156,6 +171,7 @@ function harness(
     acceptQuest,
     turnInQuest,
     reportTelemetry,
+    convertHusks,
     release,
     focusFirst,
     trapOpener,
@@ -167,6 +183,7 @@ function harness(
     openCrucibleVendor,
     openWarfareVendor,
     openMarket,
+    openWorldQuestBoard,
     openDelveBoard,
     openCardDuel,
     openTrain,
@@ -180,6 +197,10 @@ describe('QuestDialogController', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
   });
+  // The per-locale label-in-name arm switches the module-global language; a
+  // failure mid-loop must not cascade a non-English locale into every later
+  // test in this file.
+  afterEach(() => setLanguage('en'));
 
   it('owns the normal gossip lifecycle and fades the greeting from NPC distance', () => {
     const test = harness();
@@ -285,6 +306,93 @@ describe('QuestDialogController', () => {
     );
   });
 
+  it('routes the Weekly Vault Keeper through authoritative interaction without gossip', () => {
+    const keeper = harness(npc(WEEKLY_KEEPER_ENTITY_ID, WEEKLY_KEEPER_ID));
+    keeper.controller.open(WEEKLY_KEEPER_ENTITY_ID);
+    expect(keeper.targetEntity).toHaveBeenCalledWith(WEEKLY_KEEPER_ENTITY_ID);
+    expect(keeper.interact).toHaveBeenCalledTimes(1);
+    expect(keeper.element.style.display).not.toBe('block');
+  });
+
+  it('a clue hand-over at an ordinary quest giver renders the row and the click sends the interact', () => {
+    // The 2026-09-22 playtest bug: the fenwitch salt hunt's first step is a
+    // hand-over of one cooking salt at Mother Sedge, an ORDINARY quest giver.
+    // The gossip menu only sent the interact for service NPCs or an active
+    // quest's discuss row, so the sim's clue check (talkToNpc runs
+    // onNpcTalkedForClueHunt first on every host) was never reached and the
+    // salt was never taken. The row is the one affordance that sends it.
+    const sedge = harness(
+      npc(77, 'mother_sedge'),
+      'none',
+      {},
+      {
+        clueHunt: { huntId: 'hunt_willowfen_fenwitch_salt', step: 0 },
+      },
+    );
+    sedge.controller.open(77);
+    expect(sedge.element.style.display).toBe('block');
+    const row = sedge.element.querySelector<HTMLButtonElement>('[data-clue-step]');
+    expect(row).not.toBeNull();
+    const salt = itemDisplayName(ITEMS.cooking_salt);
+    expect(row?.textContent).toContain(t('questUi.dialog.clueDeliver', { count: '1', item: salt }));
+    expect(row?.getAttribute('aria-label')).toBe(
+      t('questUi.dialog.clueDeliverAria', { count: '1', item: salt, name: 'npc:mother_sedge' }),
+    );
+    // The English literals once, beside the t() form.
+    expect(row?.textContent).toContain(`Hand over 1 ${salt}.`);
+    expect(row?.getAttribute('aria-label')).toBe(`Hand over 1 ${salt} to npc:mother_sedge`);
+    expect(sedge.interact).not.toHaveBeenCalled();
+    row?.click();
+    expect(sedge.targetEntity).toHaveBeenCalledWith(77);
+    expect(sedge.interact).toHaveBeenCalledTimes(1);
+    // No successor window: close WITH the trap's own focus restore (the husk
+    // trade shape), never the bindRoute release(false).
+    expect(sedge.release).toHaveBeenCalledWith(true);
+    expect(sedge.release).not.toHaveBeenCalledWith(false);
+    expect(sedge.controller.isOpen).toBe(false);
+  });
+
+  it('the clue row is absent for another NPC, a non-talk step, or no hunt', () => {
+    // Same hunt, wrong NPC: the step names mother_sedge, not widow_tansy.
+    const tansy = harness(
+      npc(78, 'widow_tansy'),
+      'none',
+      {},
+      {
+        clueHunt: { huntId: 'hunt_willowfen_fenwitch_salt', step: 0 },
+      },
+    );
+    tansy.controller.open(78);
+    expect(tansy.element.querySelector('[data-clue-step]')).toBeNull();
+    // Right NPC, no hunt (the harness default): nothing to hand over.
+    const idle = harness(npc(77, 'mother_sedge'), 'none');
+    idle.controller.open(77);
+    expect(idle.element.querySelector('[data-clue-step]')).toBeNull();
+    expect(idle.interact).not.toHaveBeenCalled();
+  });
+
+  it('refreshIfChanged repaints the open dialog when the clue step moves off this NPC', () => {
+    const sedge = harness(
+      npc(77, 'mother_sedge'),
+      'none',
+      {},
+      {
+        clueHunt: { huntId: 'hunt_willowfen_fenwitch_salt', step: 0 },
+      },
+    );
+    sedge.controller.open(77);
+    expect(sedge.element.querySelector('[data-clue-step]')).not.toBeNull();
+    // Unchanged state: no repaint (the DOM node identity survives).
+    const before = sedge.element.querySelector('[data-clue-step]');
+    sedge.controller.refreshIfChanged();
+    expect(sedge.element.querySelector('[data-clue-step]')).toBe(before);
+    // The hunt ended (or advanced past this NPC): the row must go. The
+    // harness world is the live object the controller reads.
+    (sedge.world as unknown as { clueHunt: unknown }).clueHunt = null;
+    sedge.controller.refreshIfChanged();
+    expect(sedge.element.querySelector('[data-clue-step]')).toBeNull();
+  });
+
   it('routes bankers and chroniclers through authoritative interaction without gossip', () => {
     const bankerId = Object.values(NPCS).find((definition) => definition.banker)?.id;
     if (!bankerId) throw new Error('banker fixture not found');
@@ -295,6 +403,16 @@ describe('QuestDialogController', () => {
     expect(banker.targetEntity).toHaveBeenCalledWith(20);
     expect(banker.interact).toHaveBeenCalledTimes(1);
     expect(banker.element.style.display).not.toBe('block');
+
+    // The Riftwright (riftForge flag) takes the same short-circuit: the sim's
+    // interact emits the window-opening event, identical on every host.
+    const forgeId = Object.values(NPCS).find((definition) => definition.riftForge)?.id;
+    if (!forgeId) throw new Error('rift forge fixture not found');
+    const forge = harness(npc(22, forgeId));
+    forge.controller.open(22);
+    expect(forge.targetEntity).toHaveBeenCalledWith(22);
+    expect(forge.interact).toHaveBeenCalledTimes(1);
+    expect(forge.element.style.display).not.toBe('block');
 
     const chronicler = harness(npc(21, CHRONICLER_TEMPLATE_IDS[0]));
     chronicler.controller.open(21);
@@ -489,6 +607,15 @@ describe('QuestDialogController', () => {
     market.element.querySelector<HTMLButtonElement>('[data-market]')?.click();
     expect(market.openMarket).toHaveBeenCalledTimes(1);
 
+    // The World Quest taskmaster offers the board row and nothing else; the
+    // row routes to the map rail through openWorldQuestBoard.
+    const boardId = Object.values(NPCS).find((definition) => definition.worldQuestBoard)?.id;
+    if (!boardId) throw new Error('world quest board fixture not found');
+    const taskmaster = harness(npc(45, boardId));
+    taskmaster.controller.open(45);
+    taskmaster.element.querySelector<HTMLButtonElement>('[data-world-quest-board]')?.click();
+    expect(taskmaster.openWorldQuestBoard).toHaveBeenCalledTimes(1);
+
     const heroic = harness(npc(42, heroicId));
     heroic.controller.open(42);
     const heroicButton = heroic.element.querySelector<HTMLButtonElement>('[data-heroic-shop]');
@@ -610,6 +737,97 @@ describe('QuestDialogController', () => {
     button?.click();
     expect(master.openTrain).toHaveBeenCalledWith(46);
     expect(master.release).toHaveBeenCalledWith(false);
+  });
+
+  it('a farmer NPC offers the husk-trade row and the click sends convertHusks once, then closes', () => {
+    // The farming go-live: every NpcDef carrying the farmer flag renders the
+    // [data-husk-trade] row (the ONE UI affordance for convert_husks). The
+    // fixture entity has NO quests and NO vendor rows, so the row is what
+    // keeps this dialog worth opening at all. The click goes straight to the
+    // live world (IWorldFarming.convertHusks) exactly once, and the dialog
+    // closes like every other non-quest destination (the market-row shape).
+    const farmerId = Object.values(NPCS).find((definition) => definition.farmer)?.id;
+    if (!farmerId) throw new Error('farmer NPC fixture not found');
+    const farmer = harness(npc(48, farmerId));
+    farmer.controller.open(48);
+    expect(farmer.element.style.display).toBe('block');
+    const button = farmer.element.querySelector<HTMLButtonElement>('[data-husk-trade]');
+    expect(button).not.toBeNull();
+    expect(button?.textContent).toContain(t('hudChrome.farming.huskTrade'));
+    expect(button?.getAttribute('aria-label')).toBe(
+      t('hudChrome.farming.huskTradeAria', { name: `npc:${farmerId}` }),
+    );
+    // The English literals once, beside the t() form: a key swap to any other
+    // existing key would keep the t() comparisons green on their own.
+    expect(button?.textContent).toContain('Trade husks for compost');
+    expect(button?.getAttribute('aria-label')).toBe(`Trade husks for compost with npc:${farmerId}`);
+    // WCAG 2.5.3 label-in-name (the Phase 14 a11y batch): the accessible
+    // name CONTAINS the visible label verbatim, so speech-input users can
+    // say what they see. Pinned as the containment PROPERTY, not just the
+    // literal above, so a future reword of either key must keep it.
+    expect(button?.getAttribute('aria-label')).toContain(button?.textContent?.trim() ?? 'MISSING');
+    // No shop row for an empty stock, so the trade row is the only action.
+    expect(farmer.element.querySelector('[data-vendor]')).toBeNull();
+    expect(farmer.convertHusks).not.toHaveBeenCalled();
+    button?.click();
+    expect(farmer.convertHusks).toHaveBeenCalledTimes(1);
+    // The trade opens NO successor window (the sim's own event lines are the
+    // feedback), so the dialog closes WITH focus restore: the bindRoute
+    // family releases with false because it hands the trap opener to a
+    // successor that restores focus on its own close; with no successor that
+    // chain would drop keyboard focus to <body> (Phase 9 QA, the frontend
+    // seam's finding).
+    expect(farmer.release).toHaveBeenCalledWith(true);
+    expect(farmer.release).not.toHaveBeenCalledWith(false);
+    expect(farmer.controller.isOpen).toBe(false);
+  });
+
+  it('label-in-name holds in EVERY locale for the husk pair (WCAG 2.5.3)', async () => {
+    // The Phase 14 a11y batch reworded the aria pair so the accessible name
+    // contains the visible label verbatim in every locale (speech-input
+    // users say what they see in their language). The property is asserted
+    // across the WHOLE supported set: the five filled non-Latin locales
+    // render their fills, the rest English-fall-back BOTH keys together, so
+    // containment must hold everywhere; a future one-sided fill (aria
+    // translated, visible pending, or vice versa) reds here. Rendered
+    // through the real sink in the app's own order (await, then switch).
+    const FILLED = new Set(['ja_JP', 'ko_KR', 'ru_RU', 'zh_CN', 'zh_TW']);
+    for (const locale of supportedLanguages) {
+      if (locale === 'en') continue;
+      await ensureLocaleLoaded(locale);
+      setLanguage(locale);
+      const visible = t('hudChrome.farming.huskTrade');
+      const aria = t('hudChrome.farming.huskTradeAria', { name: 'X' });
+      expect(aria, locale).toContain(visible);
+      // Non-vacuity where a real fill exists: not English-falling-back.
+      if (FILLED.has(locale)) expect(visible, locale).not.toBe('Trade husks for compost');
+    }
+    setLanguage('en');
+  });
+
+  it('a farmer with stock renders the trade row BESIDE the goods row', () => {
+    // The two go-live counters at once: Jessica sells seeds and trades husks
+    // from the same dialog, so neither row may suppress the other.
+    const stocked = npc(49, 'farmer_jessica');
+    stocked.vendorItems = [...(NPCS.farmer_jessica.vendorItems ?? [])];
+    const jessica = harness(stocked);
+    jessica.controller.open(49);
+    expect(jessica.element.querySelector('[data-vendor]')).not.toBeNull();
+    expect(jessica.element.querySelector('[data-husk-trade]')).not.toBeNull();
+  });
+
+  it('a non-farmer NPC renders no husk-trade row', () => {
+    const plainId = Object.values(NPCS).find(
+      (definition) =>
+        !definition.banker &&
+        !definition.farmer &&
+        !(CHRONICLER_TEMPLATE_IDS as readonly string[]).includes(definition.id),
+    )?.id;
+    if (!plainId) throw new Error('non-farmer NPC fixture not found');
+    const plain = harness(npc(50, plainId));
+    plain.controller.open(50);
+    expect(plain.element.querySelector('[data-husk-trade]')).toBeNull();
+    expect(plain.convertHusks).not.toHaveBeenCalled();
   });
 
   it('a non-master NPC renders no Train option', () => {
@@ -739,5 +957,108 @@ describe('QuestDialogController', () => {
     test.controller.refreshIfChanged();
 
     expect(test.element.querySelector('[data-prof-intro-hint]')).toBe(hintNode);
+  });
+
+  it('opens a caravan briefing and confirms through target then interact', () => {
+    const caravan = {
+      ...npc(80, 'eastbrook_freight_caravan'),
+      kind: 'mob',
+      dead: false,
+    } as Entity;
+    const test = harness(caravan);
+    test.world.player.level = 60;
+    test.world.player.dead = false;
+    test.world.worldQuestLog = new Map([
+      ['wq_eastbrook_caravan', { questId: 'wq_eastbrook_caravan', state: 'active', count: 0 }],
+    ]);
+
+    test.controller.open(caravan.id);
+    const start = test.element.querySelector<HTMLButtonElement>('[data-start-wq]');
+    expect(test.controller.isOpen).toBe(true);
+    expect(start).not.toBeNull();
+    expect(start?.hidden).toBe(false);
+    start?.click();
+    expect(test.targetEntity).toHaveBeenCalledWith(caravan.id);
+    expect(test.interact).toHaveBeenCalledTimes(1);
+    expect(test.targetEntity.mock.invocationCallOrder[0]).toBeLessThan(
+      test.interact.mock.invocationCallOrder[0],
+    );
+  });
+});
+
+describe('investigation quest dialogue', () => {
+  it('opens records using existing dialogue chrome and distance dismissal', () => {
+    const clue = INVESTIGATION_CLUES[0];
+    const entity = {
+      ...npc(clue.entityId, `ground_${clue.objectItemId}`),
+      kind: 'object',
+    } as Entity;
+    const h = harness(entity);
+    h.world.worldQuestCycle = 'wq3_0';
+    h.world.worldQuestLog = new Map([
+      [
+        INVESTIGATION_QUEST_ID,
+        {
+          questId: INVESTIGATION_QUEST_ID,
+          state: 'active',
+          count: 0,
+          investigation: { heard: 0, clues: 1, cleared: 0 },
+        },
+      ],
+    ]);
+    h.controller.open(entity.id);
+    expect(h.controller.isOpen).toBe(true);
+    expect(h.element.querySelector('#quest-dialog-title')?.textContent).toBe('Standing Orders');
+    expect(h.element.querySelector('[data-close]')).not.toBeNull();
+    expect(h.element.querySelector('[data-accuse]')).toBeNull();
+    const title = h.element.querySelector('#quest-dialog-title');
+    h.controller.refreshIfChanged();
+    expect(h.element.querySelector('#quest-dialog-title')).toBe(title);
+    h.world.player.pos.x = 100;
+    h.controller.updateProximity();
+    expect(h.controller.isOpen).toBe(false);
+    expect(h.release).toHaveBeenCalled();
+  });
+  it('refreshes after online snapshot arrival, emits only accusation intent and restores correction', () => {
+    const entity = npc(INVESTIGATION_NPC_IDS[0], INVESTIGATION_NPCS[0].id);
+    const h = harness(entity);
+    h.world.worldQuestCycle = 'wq3_0';
+    const progress = {
+      questId: INVESTIGATION_QUEST_ID,
+      state: 'active' as const,
+      count: 0,
+      investigation: { heard: 7, clues: 3, cleared: 0, mobId: undefined as number | undefined },
+    };
+    h.world.worldQuestLog = new Map([[INVESTIGATION_QUEST_ID, progress]]);
+    h.world.accuseWorldQuestSuspect = vi.fn();
+    h.controller.open(entity.id);
+    expect(h.element.querySelector('[data-accuse]')).toBeNull();
+    progress.investigation.heard = 15;
+    h.controller.refreshIfChanged();
+    // One option per guard, in post order, each naming the guard.
+    const options = Array.from(h.element.querySelectorAll<HTMLButtonElement>('[data-accuse]'));
+    expect(options.map((b) => Number(b.dataset.accuse))).toEqual(INVESTIGATION_NPC_IDS.slice(1));
+    expect(options[0].textContent).toBe('Accuse npc:infiltrator_nella');
+    options[1].click();
+    expect(h.world.accuseWorldQuestSuspect).toHaveBeenCalledWith(INVESTIGATION_NPC_IDS[2]);
+    expect(progress.investigation.cleared).toBe(0);
+    expect(h.controller.isOpen).toBe(false);
+    progress.investigation.cleared = 2;
+    h.controller.open(entity.id);
+    expect(h.element.textContent).toContain('try again');
+    expect(
+      Array.from(h.element.querySelectorAll<HTMLButtonElement>('[data-accuse]')).map((b) =>
+        Number(b.dataset.accuse),
+      ),
+    ).toEqual([INVESTIGATION_NPC_IDS[1], INVESTIGATION_NPC_IDS[3], INVESTIGATION_NPC_IDS[4]]);
+    // A guard's own dialog never carries the option.
+    const guard = npc(INVESTIGATION_NPC_IDS[2], INVESTIGATION_NPCS[2].id);
+    h.world.entities.set(guard.id, guard);
+    h.controller.open(guard.id);
+    expect(h.element.querySelector('[data-accuse]')).toBeNull();
+    h.controller.open(entity.id);
+    progress.investigation.mobId = 500;
+    h.controller.refreshIfChanged();
+    expect(h.controller.isOpen).toBe(false);
   });
 });

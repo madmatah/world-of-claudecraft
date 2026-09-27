@@ -8,14 +8,19 @@ import {
   castHoldStep,
   desiredBaseState,
   drivesPose,
+  GAIT_WIND_DOWN_SETTLE,
+  gaitWindDownTimeScale,
+  isSubmergedAtHeadHeight,
   isWadingAtDepth,
   locomotionTimeScale,
   needsAnimRepair,
   SWIM_PITCH_FULL_SPEED,
   SWIM_PITCH_MAX,
   scanAnimRepair,
+  shouldInterruptLanding,
   shouldPlayLanding,
   shouldPlayOutCastExit,
+  weaponStowedOverlay,
 } from '../src/render/characters/anim_state';
 
 // A three.js SkinnedMesh renders BIND POSE (arms out, the T-pose) whenever the
@@ -48,6 +53,65 @@ const anim = (over: Partial<AnimState> = {}): AnimState => ({
   wading: false,
   sitting: false,
   ...over,
+});
+
+describe('cat prowl states', () => {
+  const choose = (over: Partial<AnimState>) =>
+    desiredBaseState(anim({ stealthed: true, ...over }), true, true, true, true, true);
+
+  it('crouches while concealed and uses the stalking gait even at a running speed', () => {
+    expect(choose({ combat: true })).toBe('prowlIdle');
+    expect(choose({ moving: true, running: true })).toBe('prowlWalk');
+    expect(choose({ moving: true, backwards: true })).toBe('prowlWalk');
+    expect(choose({ stealthed: false, moving: true, running: true })).toBe('run');
+  });
+
+  it('keeps higher-priority poses and rigs without prowl clips unchanged', () => {
+    expect(choose({ airborne: true })).toBe('jump');
+    expect(choose({ swimming: true })).toBe('swimIdle');
+    expect(choose({ sitting: true })).toBe('sit');
+    expect(choose({ casting: true })).toBe('cast');
+    expect(choose({ moving: true, wading: true })).toBe('wade');
+    expect(desiredBaseState(anim({ stealthed: true }), true)).toBe('idle');
+    expect(desiredBaseState(anim({ stealthed: true, moving: true }), true)).toBe('walk');
+  });
+
+  it('matches stalk tempo to its own foot speed and reverses backpedaling', () => {
+    expect(locomotionTimeScale('prowlWalk', anim({ speed: 1.4 }), 2.2, 7, 1.4)).toBe(1);
+    expect(
+      locomotionTimeScale('prowlWalk', anim({ speed: 1.4, backwards: true }), 2.2, 7, 1.4),
+    ).toBe(-1);
+    expect(locomotionTimeScale('prowlIdle', anim())).toBeNull();
+    expect(
+      locomotionTimeScale('walkBack', anim({ speed: 4.25, backwards: true }), 1.4, 7, 6, 4.25),
+    ).toBe(1);
+    expect(locomotionTimeScale('run', anim({ speed: 3.5 }), 2.12, 7, 6, 4.25, 0.35)).toBe(0.5);
+    expect(locomotionTimeScale('run', anim({ speed: 3.5 }), 2.12, 7)).toBe(0.6);
+  });
+});
+
+describe('swimming head-height selection', () => {
+  it('keeps the cat surfaced at its physical surface pivot, including after a dive', () => {
+    // Surface feet stay .75 below the waterline; the posed cat head is 1.0
+    // above that pivot. The humanoid height fraction incorrectly submerged it.
+    expect(isSubmergedAtHeadHeight(false, true, 0.75, 1)).toBe(false);
+    expect(isSubmergedAtHeadHeight(false, true, 1.1, 1)).toBe(true);
+    expect(isSubmergedAtHeadHeight(true, true, 0.75, 1)).toBe(false);
+    expect(isSubmergedAtHeadHeight(false, true, 1.019, 1)).toBe(false);
+    expect(isSubmergedAtHeadHeight(false, true, 1.021, 1)).toBe(true);
+    expect(isSubmergedAtHeadHeight(true, true, 0.779, 1)).toBe(false);
+    expect(isSubmergedAtHeadHeight(true, true, 0.781, 1)).toBe(true);
+    expect(isSubmergedAtHeadHeight(true, false, 1.1, 1)).toBe(false);
+  });
+});
+
+describe('landing recovery interruption', () => {
+  it('recovers on the ground and releases for any new physical motion', () => {
+    expect(shouldInterruptLanding(anim())).toBe(false);
+    expect(shouldInterruptLanding(anim({ moving: true }))).toBe(true);
+    expect(shouldInterruptLanding(anim({ airborne: true }))).toBe(true);
+    expect(shouldInterruptLanding(anim({ swimming: true }))).toBe(true);
+  });
 });
 
 describe('drivesPose', () => {
@@ -239,6 +303,84 @@ describe('locomotionTimeScale', () => {
     expect(locomotionTimeScale('run', { speed: 99, backwards: false })).toBeCloseTo(1.6);
   });
 
+  it('lets a rig raise the cadence ceilings past the stock clamp', () => {
+    // A mount travels at ONE fixed speed, so its time scale is a constant and
+    // the CEILING binds, not the reference: past that point lowering the ref
+    // changes nothing and the knob reads as dead. The Valestrider's real
+    // numbers, forward at RUN_SPEED 7 * 1.8 = 12.6 yd/s.
+    const fast = { speed: 12.6, backwards: false };
+    // stock ceiling: 12.6/7.64 and 12.6/7.16 both saturate to the same 1.6
+    expect(locomotionTimeScale('run', fast, undefined, 7.64)).toBeCloseTo(1.6);
+    expect(locomotionTimeScale('run', fast, undefined, 7.16)).toBeCloseTo(1.6);
+    // raised ceiling: the reference is live again and the two differ
+    expect(
+      locomotionTimeScale(
+        'run',
+        fast,
+        undefined,
+        7.64,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        2,
+      ),
+    ).toBeCloseTo(1.649);
+    expect(
+      locomotionTimeScale(
+        'run',
+        fast,
+        undefined,
+        7.16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        2,
+      ),
+    ).toBeCloseTo(1.76);
+    // reverse: 12.6 * BACKPEDAL_MULT 0.65 = 8.19 against the walk band
+    expect(locomotionTimeScale('walkBack', { speed: 8.19, backwards: true }, 5.52)).toBeCloseTo(
+      1.484,
+    );
+    // a raised ceiling never LOWERS anything: below it, nothing changes
+    expect(
+      locomotionTimeScale(
+        'run',
+        { speed: 7, backwards: false },
+        undefined,
+        7,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        2,
+      ),
+    ).toBeCloseTo(1);
+  });
+
+  it('brakes an outgoing gait to a HOLD early in its crossfade', () => {
+    const fade = 0.22;
+    const brake = fade * GAIT_WIND_DOWN_SETTLE; // 0.044s
+    // Full cadence on the frame the fade starts, then straight down.
+    expect(gaitWindDownTimeScale(1.76, 0, fade)).toBeCloseTo(1.76);
+    expect(gaitWindDownTimeScale(1.76, brake / 2, fade)).toBeCloseTo(0.88);
+    // Frozen by the end of the brake, which is a fifth of the way in: the
+    // REST of the crossfade blends a still pose, so the legs return to idle
+    // from wherever they were instead of playing out the cycle.
+    expect(gaitWindDownTimeScale(1.76, brake, fade)).toBeCloseTo(0);
+    expect(gaitWindDownTimeScale(1.76, fade / 2, fade)).toBeCloseTo(0);
+    expect(gaitWindDownTimeScale(1.76, fade, fade)).toBeCloseTo(0);
+    // Never goes NEGATIVE however long the caller keeps ticking: a negative
+    // scale would run the outgoing clip backwards under the blend.
+    expect(gaitWindDownTimeScale(1.76, 99, fade)).toBe(0);
+    // A zero-length fade freezes immediately rather than dividing by zero.
+    expect(gaitWindDownTimeScale(1.2, 0, 0)).toBe(0);
+    // The brake is proportional to the cadence the clip was actually at, so a
+    // sprint and an amble both take the same TIME to stop.
+    expect(gaitWindDownTimeScale(0.6, brake / 2, fade)).toBeCloseTo(0.3);
+  });
+
   it('returns null for every non-locomotion pose', () => {
     for (const state of ['idle', 'cast', 'spin', 'sit', 'jump'] as const) {
       expect(locomotionTimeScale(state, { speed: 4, backwards: false }), state).toBeNull();
@@ -402,7 +544,7 @@ describe('tread blend', () => {
 });
 
 describe('shouldPlayLanding', () => {
-  // (wasAirborne, airborne, dead, hasLandClip)
+  // (wasAirborne, airborne, dead, hasLandClip, swimming = false)
   it('fires exactly on the airborne -> grounded edge', () => {
     expect(shouldPlayLanding(true, false, false, true)).toBe(true);
   });
@@ -422,6 +564,41 @@ describe('shouldPlayLanding', () => {
 
   it('yields to death: a body killed mid-air collapses, it does not stick a landing', () => {
     expect(shouldPlayLanding(true, false, true, true)).toBe(false);
+  });
+
+  it('yields to water: a jump that ends in a lake enters the swim, not a landing', () => {
+    // The grounded edge fires as the feet pass the swim latch too; the water
+    // entry owns that frame (advanceSwimBlend), so no touchdown one-shot plays.
+    expect(shouldPlayLanding(true, false, false, true, true)).toBe(false);
+    expect(shouldPlayLanding(true, false, false, true, false)).toBe(true);
+  });
+});
+
+describe('weaponStowedOverlay', () => {
+  it('draws normally when the player has it drawn and is neither swimming nor mounted', () => {
+    expect(weaponStowedOverlay(false, false, false)).toBe(false);
+  });
+
+  it("respects the player's own sheathe choice on dry land, unmounted", () => {
+    expect(weaponStowedOverlay(true, false, false)).toBe(true);
+  });
+
+  it('forces the sheathed pose while swimming, regardless of the sim bit', () => {
+    expect(weaponStowedOverlay(false, true, false)).toBe(true);
+    expect(weaponStowedOverlay(true, true, false)).toBe(true);
+  });
+
+  it('forces the sheathed pose while mounted, regardless of the sim bit', () => {
+    expect(weaponStowedOverlay(false, false, true)).toBe(true);
+    expect(weaponStowedOverlay(true, false, true)).toBe(true);
+  });
+
+  it('is only ever an overlay: it never reports drawn when any input says stowed', () => {
+    expect(weaponStowedOverlay(true, true, true)).toBe(true);
+    // Swimming and mounted can never both be true in the live sim (mounting
+    // auto-dismounts on water entry), but the pure overlay still resolves the
+    // combination correctly rather than depending on that sim invariant.
+    expect(weaponStowedOverlay(false, true, true)).toBe(true);
   });
 });
 

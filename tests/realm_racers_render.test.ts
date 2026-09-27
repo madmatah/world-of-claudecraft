@@ -1270,6 +1270,31 @@ describe('Realm Racers procedural render', () => {
       expect(column.visible).toBe(false);
     });
 
+    it('gives back every minted material and geometry on renderer teardown', async () => {
+      const blasts = await groundBlastVisuals();
+      blasts.fire(0, 0, 0, 30, 0.5, 0);
+      blasts.impact(0, 30, 0);
+      const disposed = new Set<unknown>();
+      blasts.group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const material = mesh.material as THREE.Material;
+        material.addEventListener('dispose', () => disposed.add(material));
+        mesh.geometry.addEventListener('dispose', () => disposed.add(mesh.geometry));
+      });
+      const minted = new Set<unknown>();
+      blasts.group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        minted.add(mesh.material);
+        minted.add(mesh.geometry);
+      });
+      blasts.dispose();
+      expect([...minted].filter((resource) => !disposed.has(resource))).toEqual([]);
+      expect(blasts.group.children).toHaveLength(0);
+      expect(blasts.inFlight).toBe(0);
+    });
+
     it('never resizes the hazard disc, only the countdown inside it', async () => {
       // Gameplay-neutral: the disc IS the blast the player reacts to, so its
       // size is fixed for the whole flight and identical on every preset. Only

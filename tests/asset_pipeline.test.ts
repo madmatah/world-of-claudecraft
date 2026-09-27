@@ -1253,8 +1253,9 @@ describe('asset library registry parsers', () => {
     const map = library.parseVisualUrls(src);
     expect(map.get('models/chars/players/knight.glb')).toContain('player_warrior');
     expect(map.get('models/creatures/wolf_basic.glb')).toEqual(
-      expect.arrayContaining(['form_cat', 'mob_wolf']),
+      expect.arrayContaining(['form_ghost_wolf', 'mob_wolf']),
     );
+    expect(map.get('models/creatures/druid_cat_form.glb')).toEqual(['form_cat']);
     // Attach urls are attributed too (the knight's default sword).
     expect(map.get('models/weapons/sword_1handed.glb')).toContain('player_warrior');
   });
@@ -1299,5 +1300,43 @@ describe('asset library registry parsers', () => {
     );
     expect(knight.registration.visualKeys).toContain('player_warrior');
     expect(knight.registration.referenced).toBe(true);
+  });
+});
+
+describe('authored-surface handoffs', () => {
+  it('emits authoredAtlas on every generated creature VisualDef snippet', () => {
+    const out = integrate.visualDefSnippet({
+      name: 'ridge_lynx',
+      kind: 'creature',
+      height: 1.4,
+      clips: {},
+      hasCast: false,
+      hasJump: false,
+    });
+    // the flag sits inside the def block, between the tint rows and the close
+    const defOpen = out.indexOf('  mob_ridge_lynx: {');
+    const defClose = out.indexOf('\n  },', defOpen); // the 4-space clips close never matches
+    expect(defOpen).toBeGreaterThanOrEqual(0);
+    const body = out.slice(defOpen, defClose);
+    expect(body).toContain('    authoredAtlas: true,');
+    expect(body.indexOf("    tint: 'entity',")).toBeLessThan(
+      body.indexOf('    authoredAtlas: true,'),
+    );
+    expect(body).toContain('tests/authored_surfaces.test.ts');
+  });
+
+  it('hands a generated held model its surface decision by name', () => {
+    const line = integrate.authoredHeldModelFollowUp('ridge_cleaver');
+    expect(line).toContain('ridge_cleaver');
+    expect(line).toContain('AUTHORED_HELD_MODELS');
+    expect(line).toContain('LEGACY_POLISHED_HELD_MODELS');
+    expect(line).toContain('tests/authored_surfaces.test.ts');
+    // and registerWeapon actually returns it: it writes into the real
+    // registries, so pin the call site in source rather than run it
+    const src = readFileSync(join(ROOT, 'scripts/asset_pipeline/lib/integrate.mjs'), 'utf8');
+    const fnStart = src.indexOf('export function registerWeapon(');
+    const fnEnd = src.indexOf('\nexport function', fnStart + 1);
+    expect(fnStart).toBeGreaterThanOrEqual(0);
+    expect(src.slice(fnStart, fnEnd)).toContain('actions.push(authoredHeldModelFollowUp(key));');
   });
 });

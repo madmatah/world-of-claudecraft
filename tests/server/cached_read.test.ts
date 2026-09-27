@@ -8,7 +8,7 @@
 // timers or sleeps anywhere: in-flight windows are driven by deferred promises.
 
 import { describe, expect, it, vi } from 'vitest';
-import { createCachedRead } from '../../server/cached_read';
+import { createCachedRead, deepFreezeSnapshot } from '../../server/cached_read';
 
 // Deferred promise whose resolve/reject the test drives, standing in for the
 // expensive read so the in-flight window is held open exactly as long as a
@@ -136,6 +136,58 @@ describe('createCachedRead: stale-serve on refresh failure', () => {
   });
 });
 
+describe('createCachedRead: refresh (the warm loops)', () => {
+  it('refreshes inside the TTL window where read() would serve the cache, and installs', async () => {
+    let value = 'first';
+    const refresh = vi.fn(async () => value);
+    const cache = createCachedRead(refresh, { ttlMs: 1_000, now: () => 0 });
+    await expect(cache.read()).resolves.toBe('first');
+    value = 'second';
+    await expect(cache.read()).resolves.toBe('first');
+    expect(refresh).toHaveBeenCalledOnce();
+    await expect(cache.refresh()).resolves.toBe('second');
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(cache.peek()).toBe('second');
+    await expect(cache.read()).resolves.toBe('second');
+  });
+
+  it('shares ONE flight with a concurrent refresh or read', async () => {
+    const d = deferred<string>();
+    const refresh = vi.fn(() => d.promise);
+    const cache = createCachedRead(refresh, { ttlMs: 1_000, now: () => 0 });
+    const flights = [cache.refresh(), cache.refresh(), cache.read()];
+    expect(refresh).toHaveBeenCalledOnce();
+    d.resolve('board');
+    await expect(Promise.all(flights)).resolves.toEqual(['board', 'board', 'board']);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it('rejects on failure and never stale-serves (a warm loop logs and moves on)', async () => {
+    let fail = false;
+    const refresh = vi.fn(async () => {
+      if (fail) throw new Error('db down');
+      return 'board';
+    });
+    const cache = createCachedRead(refresh, { ttlMs: 1_000, now: () => 0 });
+    await cache.read();
+    fail = true;
+    await expect(cache.refresh()).rejects.toThrow('db down');
+    // The installed value survives for read()'s stale-serve.
+    expect(cache.peek()).toBe('board');
+  });
+
+  it('declines its install when a bust lands mid-flight (the epoch guard)', async () => {
+    const d = deferred<string>();
+    const refresh = vi.fn(() => d.promise);
+    const cache = createCachedRead(refresh, { ttlMs: 1_000, now: () => 0 });
+    const flight = cache.refresh();
+    cache.bust();
+    d.resolve('pre-bust');
+    await expect(flight).resolves.toBe('pre-bust');
+    expect(cache.peek()).toBeNull();
+  });
+});
+
 describe('createCachedRead: bust', () => {
   it('forces the next read to refresh even inside the TTL window; peek() empties', async () => {
     let t = 0;
@@ -224,5 +276,52 @@ describe('createCachedRead: epoch guard (lost-bust race)', () => {
     t = 1;
     await expect(cache.read()).resolves.toBe('fresh');
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deepFreezeSnapshot: the WHOLE-tree freeze the serialize-once memo depends on.
+// ---------------------------------------------------------------------------
+describe('deepFreezeSnapshot', () => {
+  it('freezes the nested rows under an already-SHALLOW-frozen wrapper', () => {
+    // The exact case this helper exists to fix: a tenant that froze only its
+    // top level. A `Object.isFrozen(value)` short-circuit returns here having
+    // frozen nothing, leaving the rows the memo shares mutable.
+    const rows = [{ id: 1, tags: ['a'] }];
+    const snapshot = Object.freeze({ rows });
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(rows)).toBe(false);
+
+    expect(deepFreezeSnapshot(snapshot)).toBe(snapshot);
+
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(Object.isFrozen(rows[0])).toBe(true);
+    expect(Object.isFrozen(rows[0].tags)).toBe(true);
+  });
+
+  it('freezes the whole tree of an unfrozen snapshot', () => {
+    const snapshot = { rows: [{ id: 1, nested: { deep: [2] } }], total: 1 };
+    expect(deepFreezeSnapshot(snapshot)).toBe(snapshot);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.rows)).toBe(true);
+    expect(Object.isFrozen(snapshot.rows[0])).toBe(true);
+    expect(Object.isFrozen(snapshot.rows[0].nested)).toBe(true);
+    expect(Object.isFrozen(snapshot.rows[0].nested.deep)).toBe(true);
+  });
+
+  it('freezes a child shared by two parents once and terminates', () => {
+    // The visited set (not a frozen check) is what makes the second sighting
+    // cheap, and it must not skip the FIRST one.
+    const shared = { tags: ['x'] };
+    const snapshot = { left: { shared }, right: { shared } };
+    deepFreezeSnapshot(snapshot);
+    expect(Object.isFrozen(shared)).toBe(true);
+    expect(Object.isFrozen(shared.tags)).toBe(true);
+  });
+
+  it('passes primitives and null through untouched', () => {
+    expect(deepFreezeSnapshot(7)).toBe(7);
+    expect(deepFreezeSnapshot(null)).toBe(null);
+    expect(deepFreezeSnapshot('rows')).toBe('rows');
   });
 });

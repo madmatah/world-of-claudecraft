@@ -10,12 +10,12 @@ export const BAKED_MAP_BG = {
   "eastbrook_vale": {
     "w": 480,
     "h": 480,
-    "rowHash": "b9a4df2b"
+    "rowHash": "acee1960"
   },
   "mirefen_marsh": {
     "w": 480,
     "h": 480,
-    "rowHash": "0576b60c"
+    "rowHash": "675cccde"
   },
   "thornpeak_heights": {
     "w": 480,
@@ -85,7 +85,7 @@ export const BAKED_MAP_BG = {
   "world_strip": {
     "w": 140,
     "h": 337,
-    "rowHash": "112a75a2"
+    "rowHash": "952fd0be"
   }
 },
 } as const;

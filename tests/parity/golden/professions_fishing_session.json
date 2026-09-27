@@ -17,8 +17,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 999,
-      "state": "06cbf5e3",
+      "nextId": 1011,
+      "state": "3b28d21f",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -50,6 +50,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -63,14 +64,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -91,7 +97,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -106,7 +114,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
@@ -120,7 +128,7 @@
           "fiveSecondRule": 99,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -164,9 +172,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 999,
-      "state": "a38e7350",
-      "events": "d265d153",
+      "nextId": 1011,
+      "state": "d49f3b5e",
+      "events": "c4514c52",
       "rng": {
         "draws": 1,
         "digest": "acd1c827"
@@ -197,6 +205,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -211,14 +220,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -243,7 +257,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -258,13 +274,13 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "castRemaining": 15,
-          "castTotal": 15,
+          "castRemaining": 16,
+          "castTotal": 16,
           "castingAbility": "fishing",
           "combatTimer": 99,
           "comboUntil": -1,
@@ -277,7 +293,7 @@
           "fiveSecondRule": 99,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -321,9 +337,9 @@
     {
       "tick": 91,
       "time": 4.55,
-      "nextId": 999,
-      "state": "f36c6a15",
-      "events": "db5bea94",
+      "nextId": 1011,
+      "state": "d16c337d",
+      "events": "238e2198",
       "rng": {
         "draws": 1,
         "digest": "acd1c827"
@@ -354,6 +370,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -368,14 +385,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -400,7 +422,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -415,13 +439,13 @@
               "name": "Battle Stance",
               "remaining": 3595.45,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "castRemaining": 10.45,
-          "castTotal": 15,
+          "castRemaining": 11.45,
+          "castTotal": 16,
           "castingAbility": "fishing",
           "combatTimer": 103.55,
           "comboUntil": -1,
@@ -434,7 +458,7 @@
           "fiveSecondRule": 103.55,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -478,9 +502,9 @@
     {
       "tick": 91,
       "time": 4.55,
-      "nextId": 999,
-      "state": "da2f3da5",
-      "events": "09091ff7",
+      "nextId": 1011,
+      "state": "15edd3d9",
+      "events": "04ba906b",
       "rng": {
         "draws": 2,
         "digest": "00a2a78c"
@@ -511,6 +535,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -529,14 +554,19 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
           "heroicDaily": {},
           "inventory": [
             {
@@ -549,14 +579,20 @@
             },
             {
               "count": 1,
-              "itemId": "raw_river_perch"
+              "itemId": "raw_river_perch",
+              "materialSources": [
+                {
+                  "count": 1,
+                  "source": {}
+                }
+              ]
             }
           ],
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "pendingGatherGrants": [
             {
-              "amount": 1,
+              "amount": 0.08,
               "professionId": "fishing"
             }
           ],
@@ -571,7 +607,9 @@
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -586,12 +624,12 @@
               "name": "Battle Stance",
               "remaining": 3595.45,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "castTotal": 15,
+          "castTotal": 16,
           "combatTimer": 103.55,
           "comboUntil": -1,
           "critChance": 0.06,
@@ -601,7 +639,7 @@
           "fiveSecondRule": 103.55,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -645,9 +683,9 @@
     {
       "tick": 99,
       "time": 4.95,
-      "nextId": 999,
-      "state": "6eabb7be",
-      "events": "b28e2055",
+      "nextId": 1011,
+      "state": "d0a1cc36",
+      "events": "8dee233a",
       "rng": {
         "draws": 3,
         "digest": "1e79975d"
@@ -678,6 +716,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
+          "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
             "counters": {},
@@ -698,23 +737,24 @@
             [
               "chr_vale_first_cast",
               ""
-            ],
-            [
-              "prog_first_harvest",
-              ""
             ]
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 994,
+          "entityId": 1003,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
             "offhand": "eastbrook_buckler"
           },
           "equipmentInstance": {},
+          "factions": {},
           "gatheringProficiency": {
-            "fishing": 1
+            "fishing": 0.08
+          },
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
           },
           "heroicDaily": {},
           "inventory": [
@@ -728,7 +768,13 @@
             },
             {
               "count": 1,
-              "itemId": "raw_river_perch"
+              "itemId": "raw_river_perch",
+              "materialSources": [
+                {
+                  "count": 1,
+                  "source": {}
+                }
+              ]
             }
           ],
           "mailWelcomed": true,
@@ -738,14 +784,16 @@
             "counts": {},
             "firstFind": {}
           },
-          "renown": 10,
+          "renown": 5,
           "talents": {
             "rows": {}
           },
           "townFocus": {},
           "vault": {
             "stock": {}
-          }
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
         }
       ],
       "entities": [
@@ -760,13 +808,13 @@
               "name": "Battle Stance",
               "remaining": 3595.05,
               "school": "physical",
-              "sourceId": 994
+              "sourceId": 1003
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "castRemaining": 14.6,
-          "castTotal": 15,
+          "castRemaining": 15.6,
+          "castTotal": 16,
           "castingAbility": "fishing",
           "combatTimer": 103.95,
           "comboUntil": -1,
@@ -779,7 +827,7 @@
           "fiveSecondRule": 103.95,
           "healPower": 5,
           "hp": 100,
-          "id": 994,
+          "id": 1003,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",

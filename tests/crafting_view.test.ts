@@ -22,7 +22,7 @@ import {
   craftingReagentSig,
   craftLearnHints,
   type RecipeDefLike,
-} from '../src/ui/crafting_view';
+} from '../src/ui/hud/professions/crafting_view';
 
 function item(id: string): ItemDef {
   return {
@@ -60,6 +60,24 @@ describe('buildCraftingView', () => {
     );
     expect(view.recipes[0].craftable).toBe(true);
     expect(view.recipes[0].reagents[0]).toMatchObject({ required: 2, have: 3, satisfied: true });
+  });
+
+  it('mirrors the static oncePerDay marker onto the row and omits it otherwise', () => {
+    // The batch affordances read this field to cap their preview at one
+    // (craft_cast_view.ts maxCraftBatchFit); a row without the marker must
+    // not carry the key at all, matching the sparse recipe record shape.
+    const inventory: InvSlot[] = [{ itemId: 'bone_fragments', count: 6 }];
+    const gated = {
+      ...recipe('recipe_d', [{ itemId: 'bone_fragments', count: 2 }]),
+      oncePerDay: true as const,
+    };
+    const view = buildCraftingView(
+      [gated, recipe('recipe_e', [{ itemId: 'bone_fragments', count: 2 }])],
+      inventory,
+      table(item('bone_fragments'), item('recipe_d_result'), item('recipe_e_result')),
+    );
+    expect(view.recipes[0].oncePerDay).toBe(true);
+    expect('oncePerDay' in view.recipes[1]).toBe(false);
   });
 
   it('marks a recipe not craftable when any single reagent is short', () => {
@@ -820,16 +838,34 @@ describe('craftLearnHints (discoverability)', () => {
     expect(craftLearnHints(known, STATIONS).has('weaponcrafting')).toBe(false);
   });
 
-  it('never hints a craft with no physical station, and stays safe for unknown crafts', () => {
-    const hints = craftLearnHints([], []);
-    // Every hinted craft resolves to the station type it was paired with.
+  it('a station-less craft hints through its foreign-bound teaching home, and unknowns stay safe', () => {
+    // With no stations at all nothing is hinted: there is no master to point at.
+    expect(craftLearnHints([], []).size).toBe(0);
+    const hints = craftLearnHints([], STATIONS);
+    // Every hinted craft with a station of its own hints AT that station.
+    // Exactly three station-less crafts hint through a foreign-bound teaching
+    // home (trainingStationTypeFor): enchanting via the toolworks charms,
+    // jewelcrafting via its forge-bound catalog, and inscription via its
+    // apothecary-bound catalog (phase 06). Any new station-less hinted
+    // craft must be added here deliberately.
     for (const [craft, hint] of hints) {
-      expect(stationTypeForCraft(craft)).toBe(hint.stationType);
+      const own = stationTypeForCraft(craft);
+      if (own) expect(own, craft).toBe(hint.stationType);
+      else expect(['enchanting', 'jewelcrafting', 'inscription'], craft).toContain(craft);
       expect(hint.masterNpcId).toBeTruthy();
     }
-    // jewelcrafting has no station master, so it is never hinted even unlearned;
-    // a bogus craft id is simply absent (no crash, no entry).
-    expect(hints.has('jewelcrafting')).toBe(false);
+    expect(hints.get('jewelcrafting')).toEqual({
+      stationType: 'forge',
+      masterNpcId: 'forgemistress_darva',
+    });
+    // Phase 06: the inscription base catalog binds to the apothecary (explicit
+    // foreign stationType, the jewelcrafting-at-the-forge precedent), so
+    // inscription now hints at the apothecary master. A bogus craft id stays
+    // simply absent (no crash, no entry).
+    expect(hints.get('inscription')).toEqual({
+      stationType: 'apothecary',
+      masterNpcId: 'alchemist_verane',
+    });
     expect(hints.has('not-a-craft')).toBe(false);
   });
 });
@@ -921,6 +957,75 @@ describe('buildCraftingView spans material grades', () => {
     const view = buildCraftingView([fineRecipe], plainOnly, GRADE_ITEMS);
     expect(view.recipes[0].reagents[0]).toMatchObject({ have: 0, satisfied: false });
     expect(view.recipes[0].craftable).toBe(false);
+  });
+
+  it('ordinaryHeld names the plain stock a fine-only row is NOT met by (the Bronze Hoe report)', () => {
+    // The player holds Vale Wheat against a Fine Vale Wheat bill: the row is
+    // unsatisfied (farm twins never substitute in either direction), and the
+    // note carries what they hold and which item it is, so the 0/4 has a
+    // reason beside it.
+    const WHEAT_ITEMS = table(
+      item('vale_wheat'),
+      item('fine_vale_wheat'),
+      item('recipe_hoe_result'),
+    );
+    const hoe = recipe('recipe_hoe', [{ itemId: 'fine_vale_wheat', count: 4 }]);
+    const plainWheat: InvSlot[] = [{ itemId: 'vale_wheat', count: 7 }];
+    const view = buildCraftingView([hoe], plainWheat, WHEAT_ITEMS);
+    expect(view.recipes[0].reagents[0]).toMatchObject({
+      have: 0,
+      satisfied: false,
+      ordinaryHeld: 7,
+      ordinaryItemId: 'vale_wheat',
+      ordinaryItem: item('vale_wheat'),
+    });
+    expect(view.recipes[0].craftable).toBe(false);
+    // The node ladder reads the same way: plain copper against a fine-only bill.
+    const fineRecipe = recipe('recipe_fine_only', [{ itemId: 'fine_copper_ore', count: 4 }]);
+    const plainOnly: InvSlot[] = [{ itemId: 'copper_ore', count: 8 }];
+    const copperView = buildCraftingView([fineRecipe], plainOnly, GRADE_ITEMS);
+    expect(copperView.recipes[0].reagents[0]).toMatchObject({ ordinaryHeld: 8 });
+    expect(copperView.recipes[0].reagents[0].ordinaryItem).toEqual(item('copper_ore'));
+    // Drawable vault stock of the plain grade is counted too (it is what the
+    // player HAS, the same fold the have column uses).
+    const vaultView = buildCraftingView(
+      [hoe],
+      [],
+      WHEAT_ITEMS,
+      {},
+      gradeIdentity,
+      new Set(),
+      null,
+      { vale_wheat: 3 },
+    );
+    expect(vaultView.recipes[0].reagents[0].ordinaryHeld).toBe(3);
+  });
+
+  it('ordinaryHeld is 0 once the row is satisfied, and for a reagent with no fine twin', () => {
+    // Satisfied: fine wheat covers the bill, the plain stack beside it needs
+    // no explaining (no note, no ordinaryItem key at all).
+    const WHEAT_ITEMS = table(
+      item('vale_wheat'),
+      item('fine_vale_wheat'),
+      item('recipe_hoe_result'),
+    );
+    const hoe = recipe('recipe_hoe', [{ itemId: 'fine_vale_wheat', count: 4 }]);
+    const covered: InvSlot[] = [
+      { itemId: 'vale_wheat', count: 7 },
+      { itemId: 'fine_vale_wheat', count: 4 },
+    ];
+    const coveredRow = buildCraftingView([hoe], covered, WHEAT_ITEMS).recipes[0].reagents[0];
+    expect(coveredRow).toMatchObject({ satisfied: true, ordinaryHeld: 0 });
+    expect('ordinaryItem' in coveredRow).toBe(false);
+    expect('ordinaryItemId' in coveredRow).toBe(false);
+    // A base reagent short of stock has no twin to point at: 0.
+    const short: InvSlot[] = [{ itemId: 'copper_ore', count: 1 }];
+    expect(
+      buildCraftingView([gradeRecipe], short, GRADE_ITEMS).recipes[0].reagents[0],
+    ).toMatchObject({
+      satisfied: false,
+      ordinaryHeld: 0,
+    });
   });
 
   it('a self-signed FINE copy earns the displayed discount, matching what the sim charges', () => {
@@ -1036,6 +1141,7 @@ describe('buildCraftingView craft-from-vault fold (Phase 04)', () => {
         satisfied: false,
         fineSubstituted: 0,
         vaultDrawn: 0,
+        ordinaryHeld: 0,
       },
     ]);
     expect(row.craftable).toBe(false);

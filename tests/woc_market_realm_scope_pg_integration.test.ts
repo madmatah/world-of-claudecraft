@@ -14,6 +14,7 @@
 // database the URL points at. Pattern: tests/woc_market_settlement_pg_integration.test.ts.
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { materialSourceConnection } from '../server/material_source_connection';
 import type { WocListingRow, WocSettlementRow } from '../server/woc_market';
 import type { PgWocMarketDb } from '../server/woc_market_db';
 import type { CharacterState } from '../src/sim/sim';
@@ -66,7 +67,7 @@ describeDb('woc market realm scoping against real Postgres', () => {
     await db.ensureSchema();
     await db.runConcurrentIndexMigrations();
 
-    pool = new Pool({ connectionString: verifyUrl(ADMIN_URL as string), max: 8 });
+    pool = new Pool({ ...materialSourceConnection(verifyUrl(ADMIN_URL as string)), max: 8 });
     marketDb = new marketDbMod.PgWocMarketDb(pool);
   }, 120_000);
 
@@ -571,6 +572,44 @@ describeDb('woc market realm scoping against real Postgres', () => {
       expect(await marketDb.setSaleExcluded(a, true)).toBe('ok');
       expect(await marketDb.salesForItem(alpha, 'crown_of_embers', 10)).toEqual([]);
       expect(await marketDb.salesForSeller(alpha, 'S', 10)).toEqual([]);
+    }, 20_000);
+
+    it('salesForRealm reads only the realm ledger and drops a voided sale', async () => {
+      const { alpha, beta } = realmPair('sales-realm');
+      const seller = await seedAccount();
+      const buyer = await seedAccount();
+      const sale = async (realm: string): Promise<number> =>
+        marketDb.insertSale({
+          realm,
+          listingId: await seedListing(realm, seller, { status: 'closed', resolution: 'sold' }),
+          itemId: 'crown_of_embers',
+          item: { itemId: 'crown_of_embers', count: 1 },
+          priceCents: 1000,
+          amountBase: null,
+          sellerAccount: seller,
+          buyerAccount: buyer,
+          sellerName: 'S',
+          buyerName: 'B',
+        });
+      const a = await sale(alpha);
+      // Load-bearing by EXISTENCE: the realm-wide read must exclude the beta sale.
+      await sale(beta);
+      const q = {
+        page: 0,
+        pageSize: 10,
+        quality: null,
+        format: null,
+        category: null,
+        subcategory: null,
+        itemIds: null,
+      } as const;
+      const page = await marketDb.salesForRealm(alpha, q);
+      // The exact set is the whole pin: only the alpha sale, and no next page.
+      expect(ids(page.rows)).toEqual([a]);
+      expect(page.hasMore).toBe(false);
+      // The excluded=false arm: a voided sale drops out of the realm list too.
+      expect(await marketDb.setSaleExcluded(a, true)).toBe('ok');
+      expect((await marketDb.salesForRealm(alpha, q)).rows).toEqual([]);
     }, 20_000);
 
     it('the category backfill stamps pre-round rows and the filter then reaches them', async () => {

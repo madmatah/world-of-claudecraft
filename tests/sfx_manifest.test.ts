@@ -164,18 +164,51 @@ describe('buildManifest', () => {
     expect(manifest).toContain('cast_lightning_bolt');
   });
 
-  it('keeps the release catalog, all 13 mount cues, and all 62 UI cues in one 271-key inventory', () => {
+  it('keeps release mount/UI cues and Warrior recordings in one 390-key inventory', () => {
+    // Combine the release farming/crafting cues with the candidate mount cues.
+    // Release inventory: 319 total, 92 UI, 34 mount. A mount may share
+    // player footfalls or have several cues, so this is not a mount count.
+    // 319 = the 299-key release inventory plus the 20 player-selectable aura
+    // proc alerts (src/game/aura_cue_catalog.ts), which are all ui_aura_ keys.
+    // 381 adds 62 new keys on top of that 319: 60 whose name contains
+    // "_warrior_" (asserted below), plus two that do not, piercing_howl and
+    // impact_masterwork_execution (also asserted below).
+    // 387 adds the Viridian Valestrider's six mount cues on top of that 381:
+    // its gait pool, summon call, takeoff, touchdown, and the squawk/flap pair
+    // it calls at the apex of a jump. Mount cues 34 -> 40; UI is unchanged.
+    // 390 adds the three Realm Racers race cues (move_groundshaker_engine,
+    // proj_groundshaker, impact_groundshaker).
     const keys = new Set(SFX.map((entry) => entry.key));
-    // 271 = the release catalog plus the two gendered player-voice keys from
-    // PR #2320 and the rickshaw mount's summon/loop cues, plus the three Realm
-    // Racers race cues (move_groundshaker_engine, proj_groundshaker,
-    // impact_groundshaker).
-    expect(keys.size).toBe(271);
-    expect([...keys].filter((key) => key.startsWith('ui_'))).toHaveLength(62);
+    expect(keys.size).toBe(390);
+    expect([...keys].filter((key) => key.includes('_warrior_'))).toHaveLength(60);
+    expect([...keys].filter((key) => key.includes('_masterwork_'))).toEqual([
+      'impact_masterwork_execution',
+    ]);
+    expect([...keys].filter((key) => key.startsWith('signature_'))).toHaveLength(0);
+    expect(keys.has('piercing_howl')).toBe(true);
+    expect([...keys].filter((key) => key.startsWith('ui_aura_'))).toHaveLength(20);
+    expect([...keys].filter((key) => key.startsWith('ui_'))).toHaveLength(92);
+    expect([...keys].filter((key) => key.startsWith('mount_'))).toHaveLength(40);
     expect(keys.has('ui_craft_cast')).toBe(true);
+    expect(keys.has('ui_farm_plant')).toBe(true);
+    expect(keys.has('ui_farm_harvest')).toBe(true);
+    expect(keys.has('ui_farm_withered')).toBe(true);
+    expect(keys.has('ui_farm_ready')).toBe(true);
+    expect(keys.has('ui_farm_golden')).toBe(true);
+    expect(keys.has('ui_farm_feast')).toBe(true);
+    expect(keys.has('ui_perfecting_attempt')).toBe(true);
+    expect(keys.has('ui_perfecting_success')).toBe(true);
+    expect(keys.has('ui_legendary_forged')).toBe(true);
+    expect(keys.has('ui_sunder_complete')).toBe(true);
     for (const key of [
       'cast_lightning_bolt',
       'impact_groundshaker',
+      // the Mech Bird, the store mount: the 1-2-1 gait beat plus the game's
+      // first standstill idle hum and mount-specific jump/land takes
+      'mount_run_mech_bird',
+      'mount_idle_mech_bird',
+      'mount_jump_mech_bird',
+      'mount_land_mech_bird',
       'mob_mudfin_attack',
       'mob_burrower_attack',
       'mob_reptile_attack',
@@ -250,7 +283,8 @@ describe('buildManifest', () => {
     // purely filesystem-discovered.
     const mobFamilyKeys = [...keys].filter((key) => key.startsWith('mob_'));
     expect(mobFamilyKeys).toHaveLength(65); // 13 families x 5 actions
-    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(271);
+    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(390);
+    expect([...SFX_FIXED_CATALOG_KEYS].sort()).toEqual([...keys].sort());
   });
 
   it('lazy-loads the Realm Racers engine without changing movement defaults', () => {
@@ -451,6 +485,17 @@ describe('mob subfamily scanning', () => {
     expect(spatialForSfx('amb_campfire')).toBe(true);
     expect(spatialForSfx('amb_forge')).toBe(true);
     expect(spatialForSfx('amb_water')).toBe(false);
+  });
+});
+
+describe('Mech Bird jump and landing asset binding', () => {
+  it('ships byte-distinct launch and impact recordings', () => {
+    const jump = readFileSync(path.join(realSfxDir, 'mount_jump_mech_bird.mp3'));
+    const land = readFileSync(path.join(realSfxDir, 'mount_land_mech_bird.mp3'));
+    const jumpHash = createHash('sha256').update(jump).digest('hex');
+    const landHash = createHash('sha256').update(land).digest('hex');
+
+    expect(landHash).not.toBe(jumpHash);
   });
 });
 

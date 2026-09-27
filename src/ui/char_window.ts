@@ -18,24 +18,38 @@
 // raw hex sits in this painter.
 
 import { audio } from '../game/audio';
+import { CRAFT_RING } from '../sim/content/professions';
 import { ITEMS } from '../sim/data';
-import { type EquipSlot, isMechWearer } from '../sim/types';
+import { type EquipSlot, type ItemDef, type ItemInstancePayload, isMechWearer } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { STAT_PANELS } from './char_stats_view';
-import { buildPaperdollView, type PaperdollSlot } from './char_view';
-import { craftNameText } from './craft_name_view';
+import {
+  buildCharacterSidebarView,
+  buildPaperdollView,
+  type CharacterSidebarTab,
+  type PaperdollSlot,
+} from './char_view';
+import { specializationPanelHtml } from './character_progression_view';
 import { currencyIconHtml } from './currency_art';
+import { DeferredDragRender } from './deferred_drag_render';
 import { markDialogRoot } from './dialog_root';
 import { classDisplayName, itemDisplayName } from './entity_i18n';
-import { dropRequiredLevel, paperdollDropAction } from './equip_drop_core';
+import { draggedCopySlotIndex, dropRequiredLevel, paperdollDropAction } from './equip_drop_core';
 import { esc } from './esc';
 import { focusedWithin, restoreFirstEnabled } from './focus_restore';
-import { gatheringProfessionNameKey } from './gathering_profession_name';
-import { buildGatheringProficiencyRows } from './gathering_view';
+import { writeHotbarDragData } from './hud/action_bar/hotbar';
+import { isUsableTrinketId } from './hud/action_bar/trinket_slot_core';
+import { currenciesTabHtml } from './hud/currencies';
+import { archetypeTitleText, craftNameText } from './hud/professions/craft_name_view';
+import { gatheringProfessionNameKey } from './hud/professions/gathering_profession_name';
+import { buildGatheringProficiencyRows } from './hud/professions/gathering_view';
+import { archetypeImageUrl } from './hud/professions/profession_art';
+import { reputationTabHtml } from './hud/reputation';
 import { formatNumber, type TranslationKey, t, tPlural } from './i18n';
-import { iconDataUrl, QUALITY_COLOR } from './icons';
+import { iconDataUrl, professionIconUrl, professionImageUrl } from './icons';
 import type { ItemDragState } from './item_drag_state';
 import { wornTooltipInstance } from './item_instance_tooltip';
+import { masterwroughtCapReadout } from './masterwrought_cap_view';
 import type { PainterHostPresentation } from './painter_host';
 import { playtimeParts, playtimeShape } from './playtime_view';
 import {
@@ -45,53 +59,37 @@ import {
   onPortraitUpdate,
   portraitChipHtml,
 } from './portrait_chip';
-import { archetypeImageUrl, professionImageUrl } from './profession_art';
 import { qualityGlowShadow } from './quality_glow';
 import { tSim } from './sim_i18n';
 import type { StatId } from './stat_tooltip';
+import { focusActiveTab, wireTabStrip } from './tab_strip_painter';
+import { tabStripHtml, tabStripModel } from './tab_strip_view';
 import { svgIcon } from './ui_icons';
+import { wornItemCellParts } from './worn_item_cell_view';
 
-// Quality / empty-slot colors as CSS custom properties: the shared
-// QUALITY_COLOR map carries the per-quality hex, and these tokens cover the
-// unranked item plus the empty-slot label and icon border, so no raw hex lives
-// in this painter.
-const QUALITY_DEFAULT_COLOR = 'var(--color-quality-default)';
+// Empty-slot colors as CSS custom properties (the worn cell's own color comes
+// from worn_item_cell_view.ts, which carries the unranked-item token): these
+// cover the empty-slot label and icon border, so no raw hex lives in this
+// painter.
 const SLOT_EMPTY_TEXT_COLOR = 'var(--color-slot-empty-text)';
 const SLOT_EMPTY_BORDER_COLOR = 'var(--color-slot-empty-border)';
 
-// The ten pair-archetype title keys (issue 1130, pair-named under Professions
-// 2.0), one per canonical pair id (see src/sim/professions/archetype.ts
-// ARCHETYPE_PAIR_TARGETS and getArchetypeTitle: the title identifier IS the
-// pair id). Every player-visible string is a t() key, so this is a literal
-// id-to-key table, never a built string.
-const ARCHETYPE_PAIR_TITLE_KEYS: Record<string, TranslationKey> = {
-  'engineering+alchemy': 'hudChrome.archetypePair.engineering+alchemy',
-  'alchemy+cooking': 'hudChrome.archetypePair.alchemy+cooking',
-  'cooking+leatherworking': 'hudChrome.archetypePair.cooking+leatherworking',
-  'leatherworking+tailoring': 'hudChrome.archetypePair.leatherworking+tailoring',
-  'tailoring+inscription': 'hudChrome.archetypePair.tailoring+inscription',
-  'inscription+enchanting': 'hudChrome.archetypePair.inscription+enchanting',
-  'enchanting+jewelcrafting': 'hudChrome.archetypePair.enchanting+jewelcrafting',
-  'jewelcrafting+weaponcrafting': 'hudChrome.archetypePair.jewelcrafting+weaponcrafting',
-  'weaponcrafting+armorcrafting': 'hudChrome.archetypePair.weaponcrafting+armorcrafting',
-  'armorcrafting+engineering': 'hudChrome.archetypePair.armorcrafting+engineering',
+const CHARACTER_SIDEBAR_LABEL_KEYS: Record<CharacterSidebarTab, TranslationKey> = {
+  stats: 'hudChrome.charSidebar.character',
+  progression: 'hudChrome.charSidebar.progression',
+  skills: 'hudChrome.charSidebar.professions',
+  reputation: 'hudChrome.charSidebar.reputation',
+  currencies: 'hudChrome.charSidebar.currencies',
 };
+
+const charSidebarTabId = (id: CharacterSidebarTab): string => `char-sidebar-tab-${id}`;
 
 // The per-craft display-name table lives in the shared craft_name_view.ts
 // pure core (the material_profession_hint_view Used-by line reads it too, and
 // a pure core may not import a *_window module). Re-exported here so the
 // historical import sites (crafting window, identity card, quest dialog,
 // train window, professions window, hud) keep resolving unchanged.
-export { craftNameText };
-
-/** Localized text for the granted pair-archetype title (the input is the
- *  canonical pair id from IWorld `archetypeTitle`), or the "no title yet" copy
- *  when the player has not completed the zone-1 acceptance quest (or the id is
- *  somehow unrecognized). Exported for the view-model test. */
-export function archetypeTitleText(pairId: string | null): string {
-  const key = pairId !== null ? ARCHETYPE_PAIR_TITLE_KEYS[pairId] : undefined;
-  return t(key ?? 'hudChrome.archetypeTitle.none');
-}
+export { archetypeTitleText, craftNameText };
 
 /** Localized text for the hobby craft (issue 1294): a hobby id IS a craft id
  *  on the ring, so this renders the per-craft display name, or the "no hobby
@@ -138,7 +136,10 @@ export function playtimeText(seconds: number): string {
  * WCAG focus-return, and the two HUD-owned render regions (3D preview + skin
  * picker) invoked by callback.
  */
-export interface CharWindowDeps extends PainterHostPresentation {
+export interface CharWindowDeps extends Omit<PainterHostPresentation, 'itemTooltip'> {
+  /** Tooltip for a copy already worn on this paperdoll. It must not append a
+   *  comparison against the same equipped slot. */
+  wornItemTooltip(item: ItemDef, instance?: ItemInstancePayload): string;
   root(): HTMLElement;
   world(): IWorld;
   closeOthers(): void;
@@ -148,12 +149,13 @@ export interface CharWindowDeps extends PainterHostPresentation {
   slotName(slot: EquipSlot): string;
   statCellHtml(stat: StatId): string;
   statTooltipHtml(stat: StatId): string;
-  talentSummaryHtml(): string;
   progressionHtml(level: number): string;
   /** Remove the equipped piece in `slot` to bags and repaint bags + the sheet. */
   unequip(slot: EquipSlot): void;
-  /** Stage a drag-to-unequip: record the slot HUD-side and reveal the bags drop. */
-  beginUnequipDrag(slot: EquipSlot): void;
+  /** Stage a drag-to-unequip: record the slot HUD-side and reveal the bags drop.
+   *  `hotbarAction` is set when the worn piece is also placeable on the action
+   *  bar (a usable trinket), so the same drag can drop onto a bar slot. */
+  beginUnequipDrag(slot: EquipSlot, hotbarAction: { type: 'item'; id: string } | null): void;
   /** End a drag-to-unequip: clear the HUD slot and the bags drop-target hint. */
   endUnequipDrag(): void;
   /** Mount the shared 3D turntable into the model panel (HUD-owned lifecycle). */
@@ -164,6 +166,8 @@ export interface CharWindowDeps extends PainterHostPresentation {
   openPrestige(): void;
   /** Open the Book of Deeds (the active-title line's button). */
   openDeeds(): void;
+  /** Open the Cosmetics window (the skin row's manage button). */
+  openCosmetics(): void;
   /** Open The Reliquary (the sheet completion line's button). */
   openReliquary(): void;
   /** The shared in-flight bag-item drag (published by the bags grid). The paperdoll
@@ -196,6 +200,18 @@ const SHARE_GLYPH =
 
 export class CharWindow {
   private openerFocus: HTMLElement | null = null;
+  private sidebarTab: CharacterSidebarTab = 'stats';
+  // True while a native drag started on one of this window's own equipped-item
+  // rows (dragging a piece off the paperdoll to unequip it) is in flight. A
+  // browser never fires dragend on a source element that has already left the
+  // document, so render()'s innerHTML rebuild (routine here: the 2 Hz staleness
+  // latch repaints an open sheet within 500ms of a loot, deed, or mount gain)
+  // must defer while one of these rows is the live drag source, or the row is
+  // destroyed before its own dragend fires and the shared drag state it feeds
+  // gets stuck for the rest of the session (see deferred_drag_render.ts;
+  // bags_window.ts hit this hazard first, for bag-item drags).
+  private unequipDragActive = false;
+  private readonly dragRenderGate = new DeferredDragRender();
 
   constructor(private readonly deps: CharWindowDeps) {
     this.watchComposedPortrait();
@@ -241,6 +257,15 @@ export class CharWindow {
   }
 
   render(): void {
+    // A native drag's source row dies with the rest of the sheet on an innerHTML
+    // rebuild, and a browser never fires dragend on a row that already left the
+    // document: the shared unequip-drag state it feeds would then stay stuck on
+    // the stale drag for the rest of the session, silently failing every later
+    // drop. Defer the rebuild instead of tearing the dragged row out from under
+    // it; the row's own dragend flushes it once the drag actually concludes
+    // (deferred_drag_render.ts; the same hazard bags_window.ts guards against
+    // for bag-item drags).
+    if (this.dragRenderGate.shouldDefer(this.unequipDragActive)) return;
     const el = this.deps.root();
     // The 2 Hz staleness latch (Hud.refreshCharSheetIfChanged) makes mid-focus
     // rebuilds ROUTINE: a loot, a deed earn, or a mount gain repaints the open
@@ -255,6 +280,7 @@ export class CharWindow {
     // fallback stays the exception.
     const focusedControl = focusedWithin(el);
     const focusedAct = focusedControl?.dataset.act ?? null;
+    const focusedTab = focusedControl?.dataset.tab ?? null;
     const hadFocus = focusedControl !== null;
     const world = this.deps.world();
     const p = world.player;
@@ -268,44 +294,75 @@ export class CharWindow {
       ? `<img class="char-archetype-title-crest" src="${esc(archetypeCrestUrl)}" alt="" draggable="false">`
       : '';
     const hobbyCraft = hobbyCraftText(world.hobbyCraft);
-    const hobbyRow =
-      world.hobbyCraft !== null
-        ? `<span class="panel-subtitle char-hobby-craft">${esc(t('hudChrome.archetypeTitle.hobbyLabel'))}: ${esc(hobbyCraft)}</span>`
-        : '';
-    let html = `<div class="panel-title char-title-portrait">${portraitChipHtml({ cls: world.cfg.playerClass, skin: p.skin ?? 0, name: p.name, variant: 'md', catalog: p.skinCatalog, look: isMechWearer(world.player) ? null : modularLookFor(world.player) })}<span class="char-title-text" id="char-title">${esc(p.name)} <span class="panel-subtitle">${esc(t('itemUi.equipment.levelClass', { level, className }))}</span><span class="panel-subtitle char-archetype-title">${archetypeCrest}${esc(t('hudChrome.archetypeTitle.label'))}: ${esc(archetypeTitle)}</span>${hobbyRow}<span class="panel-subtitle char-honor-balance">${currencyIconHtml('honor')}${esc(t('hudChrome.warfare.balance', { amount: formatNumber(world.honor, { maximumFractionDigits: 0 }) }))}</span></span><button type="button" class="x-btn" data-close aria-label="${esc(t('hud.options.returnToGame'))}">${svgIcon('close')}</button></div>`;
-    html += `<div class="paperdoll">
-      <div class="equip-col" id="equip-col-left"></div>
-      <div class="char-model-panel">
-        <div id="char-model-preview" class="char-model-preview" role="img" aria-label="${esc(t('hudChrome.character.modelPreview'))}"></div>
-        <div id="char-skin-row" class="skin-row char-skin-row" role="list" aria-label="${esc(t('auth.appearance'))}"></div>
-      </div>
-      <div class="equip-col equip-col-right" id="equip-col-right"></div>
-    </div>`;
-    // Stats as the showcase layout: five primary tiles, then the Offense and
-    // Defense panels. The partition + heading keys come from the char_stats_view
-    // pure core; each cell is the same unit-tested stat_tooltip_view cell (colon
-    // dropped, since flex layout separates label from value in tiles and panels).
-    html += `<div class="stat-panels">${STAT_PANELS.map((panel) => {
-      const cells = panel.stats.map((stat) => this.deps.statCellHtml(stat)).join('');
-      const title = panel.titleKey
-        ? `<div class="sp-title">${esc(t(panel.titleKey as TranslationKey))}</div>`
-        : '';
-      const cls = panel.kind === 'tiles' ? 'stat-panel attrs-tiles' : 'stat-panel';
-      return `<div class="${cls}">${title}${cells}</div>`;
-    }).join('')}</div>`;
-    html += this.deps.talentSummaryHtml();
-    html += this.deps.progressionHtml(p.level);
-    html += this.gatheringHtml(world);
-    html += this.playtimeHtml(world);
-    html += `<div class="pc-share-row"><button type="button" class="btn pc-share-btn" data-act="share-card">${SHARE_GLYPH}<span>${esc(t('playerCard.shareButton'))}</span></button></div>`;
+    const sidebar = buildCharacterSidebarView(this.sidebarTab);
+    this.sidebarTab = sidebar.selected;
+    const subtitle =
+      world.hobbyCraft === null
+        ? t('hudChrome.charSidebar.subtitleNoHobby', {
+            level,
+            className,
+            archetype: archetypeTitle,
+          })
+        : t('hudChrome.charSidebar.subtitle', {
+            level,
+            className,
+            archetype: archetypeTitle,
+            hobby: hobbyCraft,
+          });
+    let html = `<div class="panel-title char-title-portrait ui-win-head">${portraitChipHtml({ cls: world.cfg.playerClass, skin: p.skin ?? 0, name: p.name, variant: 'sm', catalog: p.skinCatalog, look: isMechWearer(world.player) ? null : modularLookFor(world.player) })}<span class="char-title-text ui-win-title" id="char-title">${esc(p.name)}<span class="ui-win-sub char-title-sub">${archetypeCrest}${esc(subtitle)}</span></span><span class="char-honor-balance">${currencyIconHtml('honor')}${esc(t('hudChrome.warfare.balance', { amount: formatNumber(world.honor, { maximumFractionDigits: 0 }) }))}</span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hud.options.returnToGame'))}">${svgIcon('close')}</button></div>`;
+    const panelLabel = `aria-labelledby="${esc(charSidebarTabId(sidebar.selected))}"`;
+    const paperdoll = `<section class="char-equipment-pane"><div class="paperdoll">
+        <div class="equip-col" id="equip-col-left"></div>
+        <div class="char-model-panel ui-card">
+          <div id="char-model-preview" class="char-model-preview" role="img" aria-label="${esc(t('hudChrome.character.modelPreview'))}"></div>
+          <div id="char-skin-row" class="skin-row char-skin-row" role="list" aria-label="${esc(t('auth.appearance'))}"></div>
+        </div>
+        <div class="equip-col equip-col-right" id="equip-col-right"></div>
+        <div class="equip-row-weapons" id="equip-row-weapons"></div>
+      </div>${this.masterwroughtSlotsHtml(world)}</section>`;
+    // The Character tab keeps the paperdoll and adds the stats rail beside it
+    // (Offense and Defense, scrolling), with the primary attributes in a row
+    // beneath; every other tab takes the whole body. The one tabpanel keeps
+    // its id, tab stop and name in both shapes (the WAI-ARIA tabs pattern,
+    // axe's scrollable-region-focusable).
+    html += '<div class="char-sheet">';
+    if (sidebar.selected === 'stats') {
+      html += `<div class="char-body char-body--sheet">${paperdoll}<aside id="char-sidebar-panel" class="char-sidebar-panel char-stats-rail" role="tabpanel" tabindex="0" ${panelLabel}>${this.statsRailHtml(world)}</aside></div><div class="char-attr-row stat-panel attrs-tiles">${this.attributeTilesHtml()}</div>`;
+    } else {
+      html += `<div class="char-body char-body--tab"><div id="char-sidebar-panel" class="char-sidebar-panel char-tab-panel" role="tabpanel" tabindex="0" ${panelLabel}>${this.sidebarHtml(world, sidebar.selected)}</div></div>`;
+    }
+    html += `<footer class="char-footer">${tabStripHtml(
+      tabStripModel({
+        ariaLabel: t('hudChrome.charSidebar.label'),
+        panelId: 'char-sidebar-panel',
+        stripClass: 'char-sidebar-tabs ui-seg',
+        tabClass: 'char-sidebar-tab ui-seg-tab',
+        selectedClass: 'is-selected',
+        tabs: sidebar.tabs.map(({ id }) => ({
+          id,
+          label: t(CHARACTER_SIDEBAR_LABEL_KEYS[id]),
+          buttonId: charSidebarTabId(id),
+        })),
+        selected: sidebar.selected,
+      }),
+    )}<div class="pc-share-row"><button type="button" class="btn ui-btn char-cosmetics-btn" data-act="open-cosmetics">${esc(t('hudChrome.cosmetics.title'))}</button><button type="button" class="pc-share-btn ui-btn ui-btn--red" data-act="share-card">${SHARE_GLYPH}<span>${esc(t('playerCard.shareButton'))}</span></button></div></footer></div>`;
     el.innerHTML = html;
     hydratePortraits(el);
+    wireTabStrip(el, 'char-sidebar-tab', (id, focusFollow) => {
+      this.sidebarTab = buildCharacterSidebarView(id).selected;
+      this.render();
+      if (focusFollow) focusActiveTab(el, 'char-sidebar-tab', 'is-selected');
+    });
     el.querySelector('[data-act="prestige"]')?.addEventListener('click', () =>
       this.deps.openPrestige(),
     );
     el.querySelector('[data-act="open-deeds"]')?.addEventListener('click', () => {
       audio.click();
       this.deps.openDeeds();
+    });
+    el.querySelector('[data-act="open-cosmetics"]')?.addEventListener('click', () => {
+      audio.click();
+      this.deps.openCosmetics();
     });
     el.querySelector('[data-act="open-reliquary"]')?.addEventListener('click', () => {
       audio.click();
@@ -314,6 +371,10 @@ export class CharWindow {
     el.querySelector('[data-act="share-card"]')?.addEventListener('click', () => {
       audio.click();
       this.deps.openPlayerCard();
+    });
+    el.querySelector('[data-act="open-professions"]')?.addEventListener('click', () => {
+      audio.click();
+      document.getElementById('mm-professions')?.click();
     });
     const playtimeEye = el.querySelector<HTMLElement>('[data-act="toggle-playtime"]');
     if (playtimeEye) {
@@ -336,11 +397,23 @@ export class CharWindow {
         );
       });
     }
-    const view = buildPaperdollView(world.equipment, ITEMS);
+    const view = buildPaperdollView(world.equipment, ITEMS, world.equipmentInstances);
     const leftCol = el.querySelector('#equip-col-left');
     const rightCol = el.querySelector('#equip-col-right');
+    const weaponsRow = el.querySelector('#equip-row-weapons');
     for (const cell of view.left) leftCol?.appendChild(this.buildSlotRow(cell));
     for (const cell of view.right) rightCol?.appendChild(this.buildSlotRow(cell));
+    for (const cell of view.weapons) weaponsRow?.appendChild(this.buildSlotRow(cell));
+
+    // A character-sheet rebuild mints new socket nodes, including after the
+    // inventory-change path has synchronized the old set. Restore the active
+    // exact-copy promise on those new nodes for both desktop and touch drags.
+    const drag = this.deps.dragState.get();
+    if (drag) {
+      const named = draggedCopySlotIndex(world.inventory, drag.itemId, drag);
+      if (named === null) this.markDropTargets(null);
+      else this.markDropTargets(drag.itemId, named);
+    }
 
     for (const cell of el.querySelectorAll<HTMLElement>('.stat-panels [data-stat]')) {
       const stat = cell.dataset.stat as StatId;
@@ -361,8 +434,79 @@ export class CharWindow {
             (control) => control.dataset.act === focusedAct,
           )
         : undefined;
-      restoreFirstEnabled([sameAct, el.querySelector<HTMLElement>('[data-close]')]);
+      const sameTab = focusedTab
+        ? [...el.querySelectorAll<HTMLElement>('[data-tab]')].find(
+            (control) => control.dataset.tab === focusedTab,
+          )
+        : undefined;
+      restoreFirstEnabled([sameAct, sameTab, el.querySelector<HTMLElement>('[data-close]')]);
     }
+  }
+
+  /** Catch up a rebuild render() deferred (see its own comment) because an
+   *  equipped-item row was mid-drag. Called from that row's own dragend, after
+   *  unequipDragActive has already cleared. */
+  private flushDeferredRender(): void {
+    this.dragRenderGate.flush(() => this.render());
+  }
+
+  private sidebarHtml(world: IWorld, selected: CharacterSidebarTab): string {
+    // Playtime lives with the rest of the character's progression readouts
+    // (the footer keeps only the share and cosmetics actions).
+    if (selected === 'progression')
+      return this.deps.progressionHtml(world.player.level) + this.playtimeHtml(world);
+    if (selected === 'skills') return this.skillsHtml(world);
+    if (selected === 'reputation') return reputationTabHtml(world, Date.now());
+    if (selected === 'currencies') return currenciesTabHtml(world);
+    return this.statsRailHtml(world);
+  }
+
+  /** The titled stat boards (Offense, Defense, then Specialization): the
+   *  Character tab's rail. */
+  private statsRailHtml(world: IWorld): string {
+    return `<div class="char-rail-panels">${STAT_PANELS.filter((panel) => panel.kind !== 'tiles')
+      .map((panel) => {
+        const cells = panel.stats
+          .map((stat) =>
+            this.deps
+              .statCellHtml(stat)
+              .replace('class="stat-cell"', 'class="stat-cell ui-stat-row"'),
+          )
+          .join('');
+        const title = panel.titleKey
+          ? `<div class="sp-title">${esc(t(panel.titleKey as TranslationKey))}</div>`
+          : '';
+        return `<div class="stat-panel ui-card">${title}${cells}</div>`;
+      })
+      .join('')}${specializationPanelHtml(world)}</div>`;
+  }
+
+  /** The five primary attributes as tiles: the row under the paperdoll. */
+  private attributeTilesHtml(): string {
+    return STAT_PANELS.filter((panel) => panel.kind === 'tiles')
+      .flatMap((panel) => panel.stats)
+      .map((stat) =>
+        this.deps
+          .statCellHtml(stat)
+          .replace('class="stat-cell"', 'class="stat-cell ui-stat-row ui-card"'),
+      )
+      .join('');
+  }
+
+  private skillsHtml(world: IWorld): string {
+    const crafting = CRAFT_RING.map((craft) => {
+      const value = Math.max(0, Math.floor(world.craftingIdentity.craftSkills[craft.id] ?? 0));
+      const skill = t('hudChrome.professions.skillValue', {
+        skill: formatNumber(value, { maximumFractionDigits: 0 }),
+        max: formatNumber(craft.maxSkill, { maximumFractionDigits: 0 }),
+      });
+      const iconUrl = professionImageUrl(`prof_${craft.id}`);
+      const icon = iconUrl
+        ? `<img class="char-craft-icon" src="${esc(iconUrl)}" alt="" draggable="false">`
+        : '';
+      return `<span class="char-skill-row${value === 0 ? ' is-empty' : ''}">${icon}<span class="char-skill-copy"><span>${esc(craftNameText(craft.id))}</span><b>${esc(skill)}</b><span class="char-skill-rail" style="--char-skill-pct:${Math.min(100, (value / craft.maxSkill) * 100)}%"><span></span></span></span></span>`;
+    }).join('');
+    return `<div class="char-skills"><section class="char-skill-group ui-card"><h3>${esc(t('hudChrome.charSidebar.gathering'))}</h3>${this.gatheringHtml(world)}</section><section class="char-skill-group ui-card"><h3>${esc(t('hudChrome.charSidebar.crafting'))}</h3><div class="char-skill-list">${crafting}</div></section><button type="button" class="ui-btn ui-btn--gold char-open-professions" data-act="open-professions">${esc(t('hudChrome.charSidebar.openProfessions'))}</button></div>`;
   }
 
   // The "Gathering" section (issue 1124): one row per gathering profession, showing
@@ -377,18 +521,21 @@ export class CharWindow {
       .map((r) => {
         const key = gatheringProfessionNameKey(r.professionId);
         if (key === undefined) return '';
-        const imageUrl = professionImageUrl(`gather_${r.professionId}`);
-        const icon = imageUrl
-          ? `<img class="char-gather-icon" src="${esc(imageUrl)}" alt="" draggable="false">`
-          : '';
+        // professionIconUrl, not professionImageUrl: a pending-art profession
+        // (farming) must paint its procedural composer icon, never an iconless
+        // gap beside painted siblings; the professions window resolves the
+        // same way. 56 keeps the 28px slot crisp on 2x displays.
+        const iconUrl = professionIconUrl(`gather_${r.professionId}`, 56);
+        const icon = `<img class="char-gather-icon" src="${esc(iconUrl)}" alt="" draggable="false">`;
         const skillValue = t('hudChrome.professions.skillValue', {
           skill: formatNumber(r.displayValue, { maximumFractionDigits: 0 }),
           max: formatNumber(r.maxSkill, { maximumFractionDigits: 0 }),
         });
-        return `<span class="char-gather-row">${icon}<span>${esc(t(key))}: <b>${esc(skillValue)}</b></span></span>`;
+        const percent = Math.min(100, (r.displayValue / r.maxSkill) * 100);
+        return `<span class="char-gather-row char-skill-row${r.displayValue === 0 ? ' is-empty' : ''}">${icon}<span class="char-skill-copy"><span>${esc(t(key))}</span><b>${esc(skillValue)}</b><span class="char-skill-rail" style="--char-skill-pct:${percent}%"><span></span></span></span></span>`;
       })
       .join('');
-    return `<div class="char-progression"><div class="cp-title">${esc(t('hudChrome.gathering.title'))}</div><div class="char-stats cp-stats">${items}</div></div>`;
+    return `<div class="char-stats cp-stats char-skill-list">${items}</div>`;
   }
 
   // The lifetime "Time Played" line (the same running total the /playtime
@@ -408,11 +555,29 @@ export class CharWindow {
     const eyeLabel = t(
       visible ? 'hudChrome.charSheet.hidePlaytimeAria' : 'hudChrome.charSheet.showPlaytimeAria',
     );
-    return `<div class="char-progression char-playtime"><span class="cp-title char-playtime-label">${esc(t('hudChrome.charSheet.playtimeLabel'))}</span><b class="char-playtime-value${visible ? '' : ' char-playtime-value-hidden'}">${esc(value)}</b><button type="button" class="char-playtime-eye" data-act="toggle-playtime" aria-pressed="${visible ? 'false' : 'true'}" aria-label="${esc(eyeLabel)}">${svgIcon(visible ? 'eye' : 'eye-off')}</button></div>`;
+    return `<div class="char-progression char-playtime"><span class="cp-title char-playtime-label">${esc(t('hudChrome.charSheet.playtimeLabel'))}</span><b class="char-playtime-value${visible ? '' : ' char-playtime-value-hidden'}">${esc(value)}</b><button type="button" class="char-playtime-eye ui-x-btn" data-act="toggle-playtime" aria-pressed="${visible ? 'false' : 'true'}" aria-label="${esc(eyeLabel)}">${svgIcon(visible ? 'eye' : 'eye-off')}</button></div>`;
+  }
+
+  // The Masterwrought slots readout (phase 14): the character-sheet face of
+  // the equip cap (src/sim/equipment_rules.ts MASTERWROUGHT_EQUIP_CAP),
+  // rendered as a slim row right under the paperdoll it describes. Shown only
+  // once a Masterwrought piece is actually worn: before endgame the cap never
+  // binds, and a standing "0 / 2" row would be noise on every sheet. Counts
+  // come from the masterwrought_cap_view pure core, the same flag walk the
+  // equip refusal runs, so the readout can never disagree with the rule.
+  private masterwroughtSlotsHtml(world: IWorld): string {
+    const readout = masterwroughtCapReadout(world.equipment, ITEMS);
+    if (!readout) return '';
+    const num = (n: number) => formatNumber(n, { maximumFractionDigits: 0 });
+    const value = t('hudChrome.masterwrought.slotsValue', {
+      used: num(readout.used),
+      cap: num(readout.cap),
+    });
+    return `<div class="char-progression char-mw-slots"><span class="cp-title char-mw-slots-label">${esc(t('hudChrome.masterwrought.slotsLabel'))}</span><b class="char-mw-slots-value">${esc(value)}</b></div>`;
   }
 
   private buildSlotRow(cell: PaperdollSlot): HTMLElement {
-    const { slot, item } = cell;
+    const { slot, item, instance } = cell;
     const row = document.createElement('div');
     row.className = 'equip-slot';
     // Stable id + programmatic focusability so the corner-x rebuild can hand focus
@@ -423,14 +588,27 @@ export class CharWindow {
     // the touch hit test (item_drop_hit_test.ts), which has no drop event to read.
     row.dataset.equipSlot = slot;
     this.bindEquipDropTarget(row, slot);
-    const qColor = !item
-      ? SLOT_EMPTY_TEXT_COLOR
-      : (QUALITY_COLOR[item.quality ?? 'common'] ?? QUALITY_DEFAULT_COLOR);
+    // The row describes the worn COPY, not just its def (the all-surfaces
+    // item-cell rule, one authority: worn_item_cell_view.ts): instance-effective
+    // quality colors the line and drives the icon's q-<quality> rim (so a
+    // promoted copy's orange glow never sits on a purple def rim), and a
+    // promoted copy's player-chosen name replaces the def name. The chosen
+    // name is player-authored text, so it is esc'd raw, never through t().
+    const parts = item ? wornItemCellParts(item, instance) : null;
+    const wornName = parts ? parts.name : null;
+    const qColor = parts ? parts.color : SLOT_EMPTY_TEXT_COLOR;
     const icon = item
-      ? this.deps.itemIcon(item)
-      : `<img class="item-icon" style="border-color:${SLOT_EMPTY_BORDER_COLOR}" src="${iconDataUrl('item', 'slot_empty')}" alt="" draggable="false">`;
-    row.innerHTML = `${icon}
-        <div><div class="slot-name">${esc(this.deps.slotName(slot))}</div><div class="slot-item" style="color:${qColor}">${item ? esc(itemDisplayName(item)) : esc(t('itemUi.equipment.empty'))}</div></div>`;
+      ? this.deps.itemIcon(item, parts?.quality)
+      : `<img class="item-icon ui-socket ui-socket--bag" style="border-color:${SLOT_EMPTY_BORDER_COLOR}" src="${iconDataUrl('item', 'slot_empty')}" alt="" draggable="false">`;
+    // The worn Masterwrought mark (phase 14): a small gold diamond beside the
+    // slot name, the paperdoll's per-slot half of the cap readout above it.
+    // role=img + a t() aria-label because the diamond is CSS-drawn (no glyph
+    // to read); the full cap relationship rides the row tooltip below.
+    const mwChip = item?.masterwrought
+      ? ` <span class="equip-mw-chip" role="img" aria-label="${esc(t('hudChrome.masterwrought.pieceMark'))}"></span>`
+      : '';
+    row.innerHTML = `<span class="equip-quality-socket">${icon}${parts?.qualityBadgeLabelled ?? ''}</span>
+        <div><div class="slot-name">${esc(this.deps.slotName(slot))}${mwChip}</div><div class="slot-item" style="color:${qColor}">${wornName !== null ? esc(wornName) : esc(t('itemUi.equipment.empty'))}</div></div>`;
     // The helmet-visibility eye (head socket only): a standing wardrobe control,
     // so unlike the corner x it is always visible, and it rides the socket
     // because that is where the player looks for "my helmet". State + side
@@ -461,18 +639,36 @@ export class CharWindow {
     if (item) {
       // Soft glow in the item's quality color (derived, no getComputedStyle).
       const iconEl = row.querySelector<HTMLImageElement>('.item-icon');
-      if (iconEl) iconEl.style.boxShadow = qualityGlowShadow(qColor);
+      if (iconEl) {
+        iconEl.classList.add('ui-socket', 'ui-socket--bag');
+        iconEl.style.boxShadow = qualityGlowShadow(qColor);
+      }
       this.deps.attachTooltip(row, () => {
-        // Own worn copy's per-copy lines (seal, enchanted marker, maker's mark):
-        // the self entity mirror carries equippedInstances in both worlds.
-        // Projected through wornTooltipInstance so the offline
-        // full payload renders exactly what the online eqi-trimmed mirror
-        // does: worn identity is signer/enchant/rolled, never the bond.
+        // Own worn copy's per-copy lines (seal, enchanted marker, maker's mark,
+        // the phase 13 unique tag): read from IWorld.equipmentInstances, the
+        // owner's FULL worn map on both hosts (offline the live meta, online
+        // the einst self mirror), never the self ENTITY mirror, which online
+        // is the eqi-trimmed peer projection and drops `perfected` (the phase
+        // 13 QA parity finding: the tag vanished on one host only). Projected
+        // through wornTooltipInstance so the tooltip renders the worn
+        // identity plus the self-only Perfected stamp, never the bond.
         const world = this.deps.world();
-        const instance = wornTooltipInstance(
-          world.entities.get(world.playerId)?.equippedInstances?.[slot],
-        );
-        return `${this.deps.itemTooltip(item, instance)}<div class="tt-sub">${esc(t('hudChrome.paperdoll.unequipHint'))}</div>`;
+        const instance = wornTooltipInstance(world.equipmentInstances?.[slot]);
+        // The worn cap-relationship line (phase 14): this piece OCCUPIES one
+        // of the Masterwrought slots, with the live in-use count, resolved at
+        // hover so it tracks re-equips. Worn here, so the readout is never
+        // null; the def tooltip's own Masterwrought line states the budget,
+        // this one states this copy's claim on it.
+        const readout = item.masterwrought ? masterwroughtCapReadout(world.equipment, ITEMS) : null;
+        const mwLine = readout
+          ? `<div class="tt-sub" style="color:var(--gold)">${esc(
+              t('hudChrome.masterwrought.tooltipWorn', {
+                used: formatNumber(readout.used, { maximumFractionDigits: 0 }),
+                cap: formatNumber(readout.cap, { maximumFractionDigits: 0 }),
+              }),
+            )}</div>`
+          : '';
+        return `${this.deps.wornItemTooltip(item, instance)}${mwLine}<div class="tt-sub">${esc(t('hudChrome.paperdoll.unequipHint'))}</div>`;
       });
       // Corner x: a styled glyph control (not an in-game icon), revealed on
       // hover/focus and always shown on touch where right-click is unavailable.
@@ -480,9 +676,11 @@ export class CharWindow {
       unequip.type = 'button';
       unequip.className = 'equip-unequip-btn';
       unequip.innerHTML = svgIcon('close');
+      // The aria interpolates the same worn-copy name the row shows (a named
+      // legendary hears its chosen name), still as a t() VALUE.
       unequip.setAttribute(
         'aria-label',
-        t('hudChrome.paperdoll.unequipAria', { item: itemDisplayName(item) }),
+        t('hudChrome.paperdoll.unequipAria', { item: parts?.ariaName ?? itemDisplayName(item) }),
       );
       unequip.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -497,11 +695,22 @@ export class CharWindow {
       // Drag the piece out onto the bags window to unequip it.
       row.draggable = true;
       row.addEventListener('dragstart', (e) => {
-        this.deps.beginUnequipDrag(slot);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        this.unequipDragActive = true;
+        // A usable trinket also drags onto the action bar (it is used where it
+        // is worn): the bar reads the payload, the bags still take the unequip.
+        const hotbarAction = isUsableTrinketId(item.id)
+          ? { type: 'item' as const, id: item.id }
+          : null;
+        this.deps.beginUnequipDrag(slot, hotbarAction);
+        if (hotbarAction) writeHotbarDragData(e.dataTransfer, hotbarAction);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = hotbarAction ? 'copyMove' : 'move';
         this.deps.hideTooltip();
       });
-      row.addEventListener('dragend', () => this.deps.endUnequipDrag());
+      row.addEventListener('dragend', () => {
+        this.unequipDragActive = false;
+        this.deps.endUnequipDrag();
+        this.flushDeferredRender();
+      });
     } else {
       // Empty slot: still swallow the native menu so right-click feels consistent.
       row.addEventListener('contextmenu', (ev) => ev.preventDefault());
@@ -530,8 +739,16 @@ export class CharWindow {
         world.player.level,
         world.talentSpec,
         world.equipment,
+        world.equipmentInstances,
+        world.inventory,
+        target?.slotIndex,
       )
     ) {
+      case 'blockedSelection':
+        // The sim's early invalid-selection gate answers "You don't have that
+        // item." (items.ts equipItem); the mirror pre-empts with the same key.
+        this.deps.showError(tSim('error.noItem'));
+        return;
       case 'blockedSlot':
         this.deps.showError(tSim('error.wrongEquipSlot'));
         return;
@@ -548,6 +765,12 @@ export class CharWindow {
       case 'blockedUnique':
         this.deps.showError(tSim('error.uniqueEquipped'));
         return;
+      case 'blockedMasterwroughtCap':
+        this.deps.showError(tSim('error.masterwroughtCap'));
+        return;
+      case 'blockedMasterwroughtLegendary':
+        this.deps.showError(tSim('error.masterwroughtLegendary'));
+        return;
       case 'equip':
         world.equipItemToSlot(itemId, slot, target);
         audio.click();
@@ -559,8 +782,10 @@ export class CharWindow {
 
   /** Light up every socket that would ACCEPT the stack in flight (null clears them).
    *  Only the accepting sockets light: the feedback is the same pure decision the
-   *  drop itself runs, so a lit socket always takes the piece. */
-  markDropTargets(itemId: string | null): void {
+   *  drop itself runs, so a lit socket always takes the piece. `slotIndex` names
+   *  the drag source's bag cell (the copy the drop would consume), threaded so
+   *  the lit set matches the drop verdict for a named copy too. */
+  markDropTargets(itemId: string | null, slotIndex?: number): void {
     const el = this.deps.root();
     const world = this.deps.world();
     const item = itemId ? ITEMS[itemId] : undefined;
@@ -576,6 +801,9 @@ export class CharWindow {
           world.player.level,
           world.talentSpec,
           world.equipment,
+          world.equipmentInstances,
+          world.inventory,
+          slotIndex,
         ) === 'equip';
       row.classList.toggle('drop-target', accepts);
     }
@@ -590,8 +818,17 @@ export class CharWindow {
       if (!drag) return;
       const item = ITEMS[drag.itemId];
       const world = this.deps.world();
+      // Re-resolve the dragged COPY every dragover, not once at pick-up: the
+      // bags can shift mid-drag, after which the pick-up index either names
+      // nothing (the socket stays lit from dragstart while the drop is silently
+      // refused: the light-then-refuse) or names a different copy of the same id
+      // (worse, since that drop succeeds on the wrong piece).
+      const named = draggedCopySlotIndex(world.inventory, drag.itemId, drag);
+      if (!item || named === null) {
+        this.markDropTargets(null);
+        return;
+      }
       if (
-        !item ||
         paperdollDropAction(
           item,
           slot,
@@ -599,6 +836,9 @@ export class CharWindow {
           world.player.level,
           world.talentSpec,
           world.equipment,
+          world.equipmentInstances,
+          world.inventory,
+          named,
         ) !== 'equip'
       )
         return;
@@ -611,14 +851,21 @@ export class CharWindow {
       e.preventDefault();
       this.deps.dragState.end();
       this.markDropTargets(null);
-      // The desktop drop carries the drag's bag index the same way the touch path
+      // The desktop drop carries the drag's bag copy the same way the touch path
       // does; without it the most ordinary equip gesture fell back to the guess.
-      // `drag.index` is already null for a sorted or filtered grid, which names no
-      // position, so that case correctly sends no selection.
+      // Resolved by PIN against the live bags (see the dragover above), so an
+      // untouched drag lands on its own cell and a shifted one follows its copy;
+      // null means the copy left the bags, which refuses with the sim's own
+      // wording rather than letting the id-only walk take an id-mate.
+      const named = draggedCopySlotIndex(this.deps.world().inventory, drag.itemId, drag);
+      if (named === null) {
+        this.deps.showError(tSim('error.noItem'));
+        return;
+      }
       this.dropOnEquipSlot(
         drag.itemId,
         slot,
-        drag.index !== null && drag.index >= 0 ? { slotIndex: drag.index } : undefined,
+        named === undefined ? undefined : { slotIndex: named },
       );
     });
   }

@@ -1,11 +1,22 @@
 import type { NetPipelineSummary } from '../net/net_pipeline_stats';
 import { type AssetTimingSnapshot, assetTimingSnapshot } from '../render/assets/stats';
+import { frameLoadMs } from '../render/chosen_cadence';
+import { gpuTimerOverlayLines } from '../render/gpu_timer_probe_core';
+import { postRevealLinksSnapshot } from '../render/live_program_watch';
+import type { PostRevealLinksSnapshot } from '../render/post_reveal_links_core';
 import type { Renderer } from '../render/renderer';
 import {
   censusTableLines,
   type HitchSummary,
   type SceneCensusReport,
 } from '../render/scene_census_core';
+import { type ShaderWarmAuditSnapshot, shaderWarmAuditSnapshot } from '../render/shader_warm_audit';
+import {
+  noteShaderWarmFrameMs,
+  type ShaderWarmSnapshot,
+  shaderWarmSnapshot,
+} from '../render/shader_warm_client';
+import { frameCadenceHealth, frameCadenceOverlayLine } from './frame_cadence_wiring';
 import {
   createHeapSawtooth,
   type HeapFloorTrend,
@@ -18,17 +29,26 @@ import {
   type HitchForensicsState,
 } from './hitch_forensics';
 import type { PerfDiagnosticsPanel } from './perf_diagnostics_panel';
+import type { FrameHealthCadence } from './perf_frame_health_core';
+import { bindPerfPageVisibility } from './perf_page_visibility';
 import { NumberSampleRing, TimedNumberSampleRing } from './sample_ring';
 import { createWorstWindow, type WorstWindowSummary } from './worst_window';
 
 export interface PerfSnapshot {
   seconds: number;
+  // Wall seconds minus the hidden-time ledger (desktop window minimized, or a
+  // browser tab in the background): the fps denominator, shipped so a reader
+  // can tell a discounted session from a diluted one.
+  visibleSeconds: number;
   frames: number;
   // Frames the desktop shell skipped because the window was hidden. These are
   // deliberately NOT counted in `frames` or sampled into frameMs (a renderless
   // frame would fake a healthy fps and p95), so this counter is the only
   // evidence the skip is working.
   hiddenPresentSkips: number;
+  // The chosen frame rate ceiling (frame_cadence_wiring.ts), or null when the
+  // display paces the frames: what the frame-health readers judge against.
+  cadence: FrameHealthCadence | null;
   fps: number;
   frameMs: { avg: number; p50: number; p95: number; p99: number; max: number; long50: number };
   windows: {
@@ -55,6 +75,23 @@ export interface PerfSnapshot {
   // frame crossed the hitch threshold stores the DIFF between its two
   // bracketing snapshots, so a production hitch carries its own diagnosis.
   hitchForensics: HitchForensicsRecord[];
+  // Always-on post-curtain program window (src/render/post_reveal_links_core.ts):
+  // how much three's program list grew in the first seconds after the reveal,
+  // the live-frame half of the prewarm's programsDelta. Null before the reveal.
+  postRevealLinks: PostRevealLinksSnapshot | null;
+  // The shader warm audit (src/render/shader_warm_audit.ts, `?perf` only): do
+  // the sources a gate dry-assembles at creation match what three links later.
+  // Local-only, never in the beacon payload (perf_reporter.ts builds it field
+  // by field). Under the flags the audit adds its own work to the frames and
+  // to the compile units the budget learns from; its `selfCostMs` says how
+  // much, so a capture taken with it on is read net of it, never compared
+  // raw to one taken without.
+  shaderWarmAudit: ShaderWarmAuditSnapshot;
+  // The shader warm worker's readout (src/render/shader_warm_client.ts):
+  // what the gates asked, held, bypassed and got. Local, except the eight
+  // fields the beacon projects out of it (src/game/perf_shader_warm_core.ts):
+  // the adapter, the bypass counts and the timings stay on the machine.
+  shaderWarm: ShaderWarmSnapshot;
   input: {
     intents: number;
     lastKind: string;
@@ -504,10 +541,21 @@ export class PerfMonitor {
       this.skipNextFrameSample = false;
       return;
     }
+    // A frame that arrives while the ledger has the page hidden (a captured
+    // or screen-shared background tab keeps its rAF alive) must not count:
+    // the denominator is frozen for that span, so counting the numerator
+    // would inflate the session fps. Same shape as the desktop shell's
+    // presentation skip, which main.ts routes here instead of frame().
+    if (!this.frameSampling) {
+      this.hiddenPresentSkips++;
+      return;
+    }
     this.frames++;
     const ms = Math.min(250, Math.max(0, dt * 1000));
     this.lastFrameMs = ms;
     this.frameMs.push(ms);
+    // The warm worker's pause signal rides the same reading.
+    noteShaderWarmFrameMs(frameLoadMs(ms));
     this.frameWindow.push(now, ms);
     this.frameWindow.pruneBefore(now - MAX_WINDOW_MS);
   }
@@ -581,7 +629,27 @@ export class PerfMonitor {
   private hiddenAccumMs = 0;
   private hiddenSince: number | null = null;
 
+  // The two hidden sources, composed: the presentation gate (the desktop
+  // shell's push, written every frame by main.ts) and the page's own
+  // visibility (a browser tab in the background, bound by
+  // perf_page_visibility.ts). Web rAF pauses in a hidden tab, so frames stop
+  // while wall seconds keep counting; without the page arm the session fps
+  // was permanently diluted after every background stint. The page flag MASKS
+  // the gate's per-frame true, so a stray frame cannot close the span early.
+  private gateSampling = true;
+  private pageHidden = false;
+
   setFrameSampling(on: boolean, now = performance.now()): void {
+    this.gateSampling = on;
+    this.applySampling(on && !this.pageHidden, now);
+  }
+
+  setPageHidden(hidden: boolean, now = performance.now()): void {
+    this.pageHidden = hidden;
+    this.applySampling(this.gateSampling && !hidden, now);
+  }
+
+  private applySampling(on: boolean, now: number): void {
     if (on === this.frameSampling) return;
     this.frameSampling = on;
     if (!on) {
@@ -1024,8 +1092,10 @@ export class PerfMonitor {
     const inputDebug = this.readInputDebug();
     const snapshot: PerfSnapshot = {
       seconds: round(seconds),
+      visibleSeconds: round(visibleSeconds),
       frames: this.frames,
       hiddenPresentSkips: this.hiddenPresentSkips,
+      cadence: frameCadenceHealth(),
       fps: round(this.frames / visibleSeconds),
       frameMs: summarizeFrames(this.frameMs.toArray()),
       windows: {
@@ -1041,6 +1111,9 @@ export class PerfMonitor {
       netPipeline: this.netPipelineSource?.summary() ?? null,
       heapSawtooth: this.heapSawtooth.summary(),
       hitchForensics: this.hitchForensics.records(),
+      postRevealLinks: postRevealLinksSnapshot(),
+      shaderWarmAudit: shaderWarmAuditSnapshot(),
+      shaderWarm: shaderWarmSnapshot(),
       input: {
         intents: this.inputIntents,
         lastKind: this.lastInputKind,
@@ -1246,7 +1319,7 @@ export class PerfMonitor {
       `hud writes ${hud?.hotDomWrites ?? 0}  skip ${Math.round((hud?.hotDomSkipRate ?? 0) * 100)}%`,
       `rph e ${rp?.entities.p95 ?? 0} w ${rp?.world.p95 ?? 0} np ${rp?.nameplates.p95 ?? 0} sub ${rp?.submit.p95 ?? 0}ms`,
       `calls ${r?.calls ?? 0}  tris ${r?.triangles ?? 0}  tex ${r?.textures ?? 0}`,
-      `scale ${r?.effectiveRenderScale ?? 0}/${r?.renderScale ?? 0}  tier ${r?.tier ?? '-'}`,
+      `scale ${r?.effectiveRenderScale ?? 0}/${r?.renderScale ?? 0}  tier ${r?.tier ?? '-'}  post ${r?.postShedRung ?? '-'}`,
       `assets wait ${s.assets.preload.waitMs}ms  gltf ${gltf?.count ?? 0}/${gltf?.p95Ms ?? 0}ms  hdr ${hdr?.count ?? 0}/${hdr?.p95Ms ?? 0}ms  tex ${tex?.count ?? 0}/${tex?.p95Ms ?? 0}ms`,
       `input f ${s.input.intentToFrame.p95}ms  send ${s.input.intentToSend.p95}ms  echo ${s.input.sendToEcho.p95}ms  vis ${s.input.intentToVisible.p95}ms`,
       `gl ${r?.glRenderer ? r.glRenderer.slice(0, 34) : '-'}  lost ${r?.contextLost ?? 0}`,
@@ -1254,6 +1327,8 @@ export class PerfMonitor {
         ? `net ${net.connected ? 'up' : 'down'} snap ${net.snapInterval}ms age ${net.lastSnapAge}ms a ${net.alpha}`
         : 'net offline',
       ...(hitchLine ? [hitchLine] : []),
+      frameCadenceOverlayLine(),
+      ...gpuTimerOverlayLines(r?.gpuTimer),
       ...censusLines,
       'click: copy json',
     ].join('\n');
@@ -1261,5 +1336,17 @@ export class PerfMonitor {
 }
 
 export function createPerfMonitor(renderer: Renderer | null, desktopShell = false): PerfMonitor {
-  return new PerfMonitor(renderer, null, desktopShell);
+  const perf = new PerfMonitor(renderer, null, desktopShell);
+  // The browser arm of the hidden-time ledger. Inert in the desktop shell,
+  // whose document stays 'visible' while minimized (the shell push drives the
+  // gate arm instead), and absent under plain Node.
+  if (typeof document !== 'undefined') {
+    try {
+      bindPerfPageVisibility(perf, document);
+    } catch {
+      // A document without event listeners (a stub): the ledger keeps its
+      // gate arm only.
+    }
+  }
+  return perf;
 }

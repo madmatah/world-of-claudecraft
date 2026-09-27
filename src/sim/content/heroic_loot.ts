@@ -1,22 +1,10 @@
-// Heroic-only boss drops: epic gear that ONLY rolls when the final boss of a
-// heroic instance dies (loot/loot_roll.ts appends these entries to the normal
-// table when the mob's claimed instance is heroic, so party need/greed rules
-// apply unchanged). Every piece reads item level 31: the source index
-// (item_level.ts) registers these ids at HEROIC_LOOT_SOURCE_LEVEL 25 (level-20
-// content plus the heroic tier bump) and the epic quality bonus adds 6. Stat
-// sums are exact per the item-level budget (STAT_PER_ILVL x slot mult), pinned
-// by the tests/item_level.test.ts heroic sweep. requiredClass locks follow the
-// established archetype groups so every class has a near-complete set to chase.
-//
-// Each final boss drops TWO heroic epics: one from its `_heroic` group and one
-// from its `_heroic2` group (each group's chances sum to 1, so exactly one item
-// drops per group). The set is built so every armor archetype covers all eight
-// droppable slots (helmet/shoulder/chest/waist/legs/gloves/feet + mainhand;
-// neck + rings come from the Heroic Quartermaster), and the mail casters
-// (elemental/resto shaman, holy paladin) and str plate get real coverage rather
-// than a single token piece.
+// Heroic boss equipment shares one guaranteed slot per five-player encounter.
+// Every former base-gear and bespoke heroic path remains in that slot, weighted
+// by its former per-kill chance. Normal loot and non-equipment chances are
+// unchanged. Migrated base drops retain their original source tier and stats.
 
 import { VARKHUL_BOSS_ID } from '../ignivar_raid_ids';
+import { weightedLootGroup } from '../loot/weighted_loot_group';
 import { IGNIVAR_BOSS_ID, type ItemDef, type LootEntry } from '../types';
 import { FERAL } from './items';
 
@@ -88,7 +76,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'gloves',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 52, int: 9, spi: 6 },
+    stats: { armor: 52, int: 9, spi: 6, sta: 5 },
     hitRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: CASTER,
@@ -127,7 +115,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'feet',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 44, int: 8, spi: 6 },
+    stats: { armor: 44, int: 8, spi: 6, sta: 5 },
     critRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: CASTER,
@@ -180,14 +168,14 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'waist',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 48, int: 9, sta: 6 },
+    stats: { armor: 48, int: 9, sta: 6, spi: 5 },
     hitRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: CASTER,
   },
   mistforged_pauldrons: {
     id: 'mistforged_pauldrons',
-    name: 'Mistforged Pauldrons',
+    name: 'Fogforged Pauldrons',
     kind: 'armor',
     armorType: 'mail',
     slot: 'shoulder',
@@ -219,7 +207,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'shoulder',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 56, int: 9, spi: 7 },
+    stats: { armor: 56, int: 9, spi: 7, sta: 5 },
     hasteRating: ARMOR_RATING,
     sellValue: 11000,
     requiredClass: CASTER,
@@ -233,7 +221,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     weapon: { min: 36, max: 60, speed: 3.0 },
-    stats: { int: 13, spi: 9 },
+    stats: { int: 13, spi: 9, sta: 7 },
     hitRating: FIVE_MAN_WEAPON_RATING,
     sellValue: 15000,
     requiredClass: CASTER_WEAPON_CLASSES,
@@ -259,7 +247,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'helmet',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 292, int: 10, spi: 8 },
+    stats: { armor: 292, int: 10, spi: 8, sta: 6 },
     hasteRating: ARMOR_RATING,
     sellValue: 12000,
     requiredClass: HEAL_MAIL,
@@ -272,7 +260,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'legs',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 72, int: 12, spi: 8 },
+    stats: { armor: 72, int: 12, spi: 8, sta: 7 },
     hitRating: ARMOR_RATING,
     sellValue: 12000,
     requiredClass: CASTER,
@@ -285,7 +273,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'shoulder',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 240, int: 9, spi: 7 },
+    stats: { armor: 240, int: 9, spi: 7, sta: 5 },
     critRating: ARMOR_RATING,
     sellValue: 11000,
     requiredClass: HEAL_MAIL,
@@ -325,7 +313,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'chest',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 90, int: 12, spi: 10 },
+    stats: { armor: 90, int: 12, spi: 10, sta: 7 },
     critRating: ARMOR_RATING,
     sellValue: 14000,
     requiredClass: CASTER,
@@ -377,7 +365,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'gloves',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 224, int: 9, spi: 6 },
+    stats: { armor: 224, int: 9, spi: 6, sta: 5 },
     hasteRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: HEAL_MAIL,
@@ -392,7 +380,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     // Item level 31 heroic-only drop: waist budget 15.
-    stats: { armor: 100, int: 9, spi: 6 },
+    stats: { armor: 100, int: 9, spi: 6, sta: 5 },
     hasteRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: HEAL_LEATHER,
@@ -406,7 +394,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     // Item level 31 heroic-only drop: feet budget 14.
-    stats: { armor: 96, int: 8, spi: 6 },
+    stats: { armor: 96, int: 8, spi: 6, sta: 5 },
     critRating: ARMOR_RATING,
     sellValue: 9500,
     requiredClass: HEAL_LEATHER,
@@ -420,7 +408,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     // Item level 31 heroic-only drop: shoulder budget 16.
-    stats: { armor: 148, int: 9, spi: 5, sta: 2 },
+    stats: { armor: 148, int: 9, spi: 7, sta: 5 },
     critRating: ARMOR_RATING,
     sellValue: 11000,
     requiredClass: HEAL_LEATHER,
@@ -436,7 +424,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     // Item level 31 heroic-only feral two-hander: 2H dps on the weaponDpsBudget(31)
     // x TWOHAND_DPS_MULT curve (~18.4 at speed 3.6), stat budget 29.
     weapon: { min: 55, max: 78, speed: 3.6 },
-    stats: { str: 13, agi: 9, sta: 7 },
+    stats: { str: 11, agi: 8, sta: 10 },
     hitRating: FIVE_MAN_WEAPON_RATING,
     sellValue: 15000,
     requiredClass: FERAL,
@@ -467,7 +455,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     // The first druid int-leather chest anywhere in the game.
-    stats: { armor: 172, int: 13, spi: 9 },
+    stats: { armor: 172, int: 13, spi: 9, sta: 7 },
     hasteRating: ARMOR_RATING,
     sellValue: 14000,
     requiredClass: HEAL_LEATHER,
@@ -481,7 +469,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     // Fills the int-mail chest hole left by the retired soulforged_warplate.
-    stats: { armor: 335, int: 12, spi: 10 },
+    stats: { armor: 335, int: 12, spi: 10, sta: 7 },
     hasteRating: ARMOR_RATING,
     sellValue: 14000,
     requiredClass: HEAL_MAIL,
@@ -512,7 +500,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'helmet',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 76, int: 11, spi: 7 },
+    stats: { armor: 76, int: 11, spi: 7, sta: 6 },
     critRating: ARMOR_RATING,
     sellValue: 12000,
     requiredClass: CASTER,
@@ -541,7 +529,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     weapon: { min: 29, max: 51, speed: 2.4 },
-    stats: { int: 13, spi: 10 },
+    stats: { int: 13, spi: 10, sta: 8 },
     hasteRating: RAID_WEAPON_PRIMARY_RATING,
     critRating: RAID_SECONDARY_RATING,
     sellValue: 16000,
@@ -574,7 +562,7 @@ export const HEROIC_ITEMS: Record<string, ItemDef> = {
     quality: 'epic',
     requiredLevel: 20,
     weapon: { min: 31, max: 52, speed: 2.5 },
-    stats: { int: 14, spi: 9 },
+    stats: { int: 14, spi: 9, sta: 8 },
     hasteRating: RAID_WEAPON_PRIMARY_RATING,
     critRating: RAID_SECONDARY_RATING,
     sellValue: 16000,
@@ -611,7 +599,7 @@ export const RETIRED_HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'helmet',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 76, int: 10, spi: 8 },
+    stats: { armor: 76, int: 10, spi: 8, sta: 6 },
     sellValue: 12000,
     requiredClass: CASTER,
   },
@@ -635,15 +623,14 @@ export const RETIRED_HEROIC_ITEMS: Record<string, ItemDef> = {
     slot: 'chest',
     quality: 'epic',
     requiredLevel: 20,
-    stats: { armor: 335, int: 12, spi: 10 },
+    stats: { armor: 335, int: 12, spi: 10, sta: 7 },
     sellValue: 14000,
     requiredClass: HEAL_MAIL,
   },
 };
 
-// Heroic-only drop tables per final boss, TWO rollGroups each (chances inside a
-// group sum to 1.0, so exactly one item drops per group => two heroic epics per
-// heroic kill). loot_roll.ts rolls these only for a heroic-claimed instance.
+// Heroic-only append tables. Five-player encounters pay one equipment group;
+// raid heroic slots replace their Normal-only slot. Non-gear rolls stay separate.
 // Heroic mount drop rates per rarity tier. These are APPENDED after all gear
 // roll-group draws so the gear draw-order stays byte-identical to non-mount runs.
 // Green (UNCOMMON) mounts: 0.5% per heroic clear on their single boss. The tier
@@ -657,78 +644,305 @@ const HEROIC_GREEN_MOUNT_CHANCE = 0.005;
 const HEROIC_BLUE_MOUNT_CHANCE = 0.001;
 const HEROIC_RAID_BLUE_MOUNT_CHANCE = 0.001;
 
+// Farming's DUNGEON channel (Phase 11f, masterwrought R8): the two rung-75
+// farm patterns ride every heroic FIVE-MAN final boss as one appended tail
+// rollGroup. This is the pillar the packet had never used for a recipe, so it
+// takes the lowest-risk shape available.
+//
+// WHY A GROUP AND NOT TWO UNGROUPED ROWS, even though the four-reins ungrouped
+// pin in tests/dungeons.test.ts reads only the RAID table and would not have
+// moved: a group is one draw instead of two, it partitions rather than
+// compounding (at most one pattern per clear), and it keeps the ungrouped set
+// on every five-man table exactly the mount rows it has always been, which is
+// what makes a future ungrouped entry a visible decision.
+//
+// WHY IT MUST SIT LAST IN EACH TABLE, and the detail worth writing down: in
+// EVERY heroic table the ungrouped mount rows sit at the END, and loot_roll.ts
+// walks heroic entries in array order. Splicing the group in above them would
+// move each mount's chance() draw one position later and change which value it
+// compares against. Appended after them, the group adds exactly one draw at the
+// very end and every mount roll keeps its stream position.
+//
+// RATE: 0.04 per entry, the SHIPPED per-pattern point from the raid channel,
+// reused rather than re-derived. Two entries, so 0.08 total per heroic clear,
+// against five heroic five-mans; the deterministic quartermaster route at 12
+// marks is what keeps either pattern from fossilizing behind that.
+const FARM_PATTERN_HEROIC_CHANCE = 0.04;
+/** The rollGroup name, EXPORTED because five suites need to exclude it from a
+ *  gear census and a copied string literal in each is how one of them silently
+ *  stops matching. The IMPORTERS are four: tests/dungeons.test.ts (the channel
+ *  and append-position pins), tests/apex_pattern_channels.test.ts (the
+ *  sanctioned-host registry), tests/wildheart.test.ts (the gear arms) and
+ *  tests/farm_pattern_items.test.ts (the farm channel map). The Reliquary
+ *  carve-out and the heroic item-level sweep exclude the same rows BY KIND
+ *  instead, deliberately, so their reason travels with the item rather than
+ *  with this group name. */
+export const FARM_HEROIC_PATTERN_GROUP = 'heroic_farm_patterns';
+const heroicFarmPatternRows = (): LootEntry[] => [
+  {
+    itemId: 'pattern_highwatch_gourd_soup',
+    chance: FARM_PATTERN_HEROIC_CHANCE,
+    rollGroup: FARM_HEROIC_PATTERN_GROUP,
+  },
+  {
+    itemId: 'pattern_highwatch_barley_porridge',
+    chance: FARM_PATTERN_HEROIC_CHANCE,
+    rollGroup: FARM_HEROIC_PATTERN_GROUP,
+  },
+];
+
+// These former base-table sources must not acquire the bespoke heroic tier
+// merely because their acquisition rows now share the heroic equipment slot.
+const PRESERVED_BASE_LOOT_SOURCES = new Set([
+  'bloodmane_warleggings',
+  'boneplate_vest',
+  'cryptbone_greaves',
+  'cryptbone_helm',
+  'cryptbone_pauldrons',
+  'cultist_flayer',
+  'eelskin_tunic',
+  'emberwood_staff',
+  'fenmist_robe',
+  'greyjaw_hide_boots',
+  'heroic_boneguard_breastplate',
+  'heroic_boundstone_girdle',
+  'heroic_boundstone_helm',
+  'heroic_deathlord_legguards',
+  'heroic_deathlord_warplate',
+  'heroic_deathlords_dread_visage',
+  'heroic_drowned_prayer_leggings',
+  'heroic_drowned_prayer_sandals',
+  'heroic_eelscale_leggings',
+  'heroic_eelscale_treads',
+  'heroic_fang_of_korzul',
+  'heroic_gravewyrm_bone_quiver',
+  'heroic_gravewyrm_gauntlets',
+  'heroic_gravewyrm_mantle',
+  'heroic_gravewyrm_sabatons',
+  'heroic_gravewyrm_stalkers_treads',
+  'heroic_grovewardens_grips',
+  'heroic_korgaths_chainwraps',
+  'heroic_moonshroud_breastplate',
+  'heroic_moonshroud_robe',
+  'heroic_moonshroud_tunic',
+  'heroic_necromancers_soulspire_mantle',
+  'heroic_necromancers_soulsteps',
+  'heroic_necromancers_starshroud',
+  'heroic_nightfangs_greatstaff',
+  'heroic_selthes_seastriders',
+  'heroic_shadowmeld_tunic',
+  'heroic_staff_of_the_gravewyrm',
+  'heroic_staff_of_velkhar',
+  'heroic_tideguard_greaves',
+  'heroic_tideguard_sabatons',
+  'heroic_tidescale_vest',
+  'heroic_verdant_walkers',
+  'heroic_wildgrowth_leggings',
+  'heroic_wildheart_fangknife',
+  'heroic_wildheart_hexwood_staff',
+  'heroic_wildheart_tuskblade',
+  'heroic_wyrmcult_grand_robe',
+  'heroic_wyrmcult_soulsteps',
+  'heroic_wyrmfang_greatblade',
+  'heroic_wyrmshadow_harness',
+  'heroic_wyrmshadow_legguards',
+  'heroic_wyrmshadow_talongrips',
+  'heroic_wyrmshadow_treads',
+  'heroic_ysols_pearl_greaves',
+  'marshstrider_boots',
+  'mistveil_cord',
+  'mistveil_grips',
+  'nightwalk_jerkin',
+  'oiled_boots',
+  'quilted_trousers',
+  'revenant_silk_robe',
+  'sunbone_ritual_sarong',
+  'trollhide_leggings',
+  'vineclaw_stalking_breeches',
+  'zealotsbane_blade',
+]);
+
+const preserveBaseLootSource = (entry: LootEntry): LootEntry =>
+  entry.itemId && PRESERVED_BASE_LOOT_SOURCES.has(entry.itemId)
+    ? { ...entry, preserveSourceTier: true }
+    : entry;
+
 export const HEROIC_BOSS_LOOT: Record<string, LootEntry[]> = {
+  sexton_marrow: [
+    ...weightedLootGroup('sexton_marrow_heroic', [
+      ['quilted_trousers', 0.4],
+      ['oiled_boots', 0.4],
+    ]).map(preserveBaseLootSource),
+  ],
+  knight_commander_olen: [
+    ...weightedLootGroup('knight_commander_olen_heroic', [
+      ['trollhide_leggings', 0.5],
+      ['marshstrider_boots', 0.5],
+      ['fenmist_robe', 0.25],
+      ['heroic_tideguard_greaves', 0.1],
+      ['heroic_tideguard_sabatons', 0.1],
+      ['heroic_eelscale_leggings', 0.1],
+    ]).map(preserveBaseLootSource),
+  ],
+  choirmother_selthe: [
+    ...weightedLootGroup('choirmother_selthe_heroic', [['heroic_selthes_seastriders', 0.4]]).map(
+      preserveBaseLootSource,
+    ),
+  ],
+  korgath_the_bound: [
+    ...weightedLootGroup('korgath_the_bound_heroic', [
+      ['boneplate_vest', 0.34],
+      ['revenant_silk_robe', 0.33],
+      ['nightwalk_jerkin', 0.33],
+      ['zealotsbane_blade', 0.19],
+      ['heroic_korgaths_chainwraps', 0.1],
+      ['heroic_staff_of_velkhar', 0.1],
+      ['heroic_shadowmeld_tunic', 0.1],
+      ['heroic_wyrmcult_grand_robe', 0.1],
+      ['heroic_gravewyrm_sabatons', 0.1],
+      ['heroic_wyrmcult_soulsteps', 0.1],
+      ['heroic_wyrmshadow_treads', 0.05],
+      ['heroic_boundstone_helm', 0.08],
+      ['heroic_gravewyrm_mantle', 0.08],
+    ]).map(preserveBaseLootSource),
+  ],
+  grand_necromancer_velkhar: [
+    ...weightedLootGroup('grand_necromancer_velkhar_heroic', [
+      ['boneplate_vest', 0.34],
+      ['revenant_silk_robe', 0.33],
+      ['nightwalk_jerkin', 0.33],
+      ['emberwood_staff', 0.2],
+      ['heroic_boneguard_breastplate', 0.1],
+      ['heroic_shadowmeld_tunic', 0.1],
+      ['heroic_staff_of_velkhar', 0.1],
+      ['heroic_gravewyrm_stalkers_treads', 0.1],
+      ['heroic_deathlord_legguards', 0.05],
+      ['heroic_necromancers_soulsteps', 0.05],
+      ['heroic_wyrmshadow_legguards', 0.05],
+    ]).map(preserveBaseLootSource),
+    { itemId: 'necromancers_reagent_satchel', chance: 0.2, preserveSourceTier: true },
+  ],
   morthen: [
-    { itemId: 'morthens_cryptforged_hauberk', chance: 0.25, rollGroup: 'morthen_heroic' },
-    { itemId: 'shadowpulse_handwraps', chance: 0.25, rollGroup: 'morthen_heroic' },
-    { itemId: 'bonechill_striders', chance: 0.25, rollGroup: 'morthen_heroic' },
-    { itemId: 'lunarward_cinch', chance: 0.25, rollGroup: 'morthen_heroic' },
-    { itemId: 'cryptplate_helm', chance: 0.34, rollGroup: 'morthen_heroic2' },
-    { itemId: 'shadowpulse_slippers', chance: 0.33, rollGroup: 'morthen_heroic2' },
-    { itemId: 'bonechill_cord', chance: 0.33, rollGroup: 'morthen_heroic2' },
-    // Uncommon mount (0.5%): heroic-gated only, never on a normal table.
+    ...weightedLootGroup('morthen_heroic', [
+      ['cryptbone_greaves', 0.34],
+      ['quilted_trousers', 0.33],
+      ['oiled_boots', 0.33],
+      ['greyjaw_hide_boots', 0.25],
+      ['cryptbone_helm', 0.18],
+      ['cryptbone_pauldrons', 0.18],
+      ['morthens_cryptforged_hauberk', 0.25],
+      ['shadowpulse_handwraps', 0.25],
+      ['bonechill_striders', 0.25],
+      ['lunarward_cinch', 0.25],
+      ['cryptplate_helm', 0.34],
+      ['shadowpulse_slippers', 0.33],
+      ['bonechill_cord', 0.33],
+      // Trinkets (content/trinkets.ts): one per heroic final boss, each in a
+      // different dungeon, inside the one guaranteed equipment slot.
+      ['bastion_sigil', 0.25],
+    ]).map(preserveBaseLootSource),
+    { itemId: 'gravewoven_bag', chance: 0.2, preserveSourceTier: true },
     { itemId: 'reins_stormfeather_griffin', chance: HEROIC_GREEN_MOUNT_CHANCE },
+    ...heroicFarmPatternRows(),
   ],
   vael_the_mistcaller: [
-    { itemId: 'mistcallers_fang', chance: 0.34, rollGroup: 'vael_heroic' },
-    { itemId: 'tidebound_spaulders', chance: 0.33, rollGroup: 'vael_heroic' },
-    { itemId: 'sash_of_the_sunken_court', chance: 0.33, rollGroup: 'vael_heroic' },
-    { itemId: 'mistforged_pauldrons', chance: 0.25, rollGroup: 'vael_heroic2' },
-    { itemId: 'tideguard_faceguard', chance: 0.25, rollGroup: 'vael_heroic2' },
-    { itemId: 'sunken_court_mantle', chance: 0.25, rollGroup: 'vael_heroic2' },
-    { itemId: 'dreamroot_boots', chance: 0.25, rollGroup: 'vael_heroic2' },
-    // Uncommon mount (0.5%): heroic-gated only, never on a normal table.
+    ...weightedLootGroup('vael_heroic', [
+      ['trollhide_leggings', 0.34],
+      ['marshstrider_boots', 0.33],
+      ['fenmist_robe', 0.33],
+      ['eelskin_tunic', 0.2],
+      ['heroic_tidescale_vest', 0.1],
+      ['heroic_drowned_prayer_leggings', 0.1],
+      ['heroic_drowned_prayer_sandals', 0.1],
+      ['heroic_eelscale_treads', 0.1],
+      ['mistveil_cord', 0.12],
+      ['mistveil_grips', 0.12],
+      ['mistcallers_fang', 0.34],
+      ['tidebound_spaulders', 0.33],
+      ['sash_of_the_sunken_court', 0.33],
+      ['mistforged_pauldrons', 0.25],
+      ['tideguard_faceguard', 0.25],
+      ['sunken_court_mantle', 0.25],
+      ['dreamroot_boots', 0.25],
+      ['stormjar', 0.25],
+    ]).map(preserveBaseLootSource),
+    { itemId: 'mistcallers_duffel', chance: 0.1, preserveSourceTier: true },
     { itemId: 'reins_shadowjump_toad', chance: HEROIC_GREEN_MOUNT_CHANCE },
+    ...heroicFarmPatternRows(),
   ],
   ysolei: [
-    { itemId: 'lunar_tide_greatstaff', chance: 0.25, rollGroup: 'ysolei_heroic' },
-    { itemId: 'tidewoven_trousers', chance: 0.25, rollGroup: 'ysolei_heroic' },
-    { itemId: 'choirmothers_casque', chance: 0.25, rollGroup: 'ysolei_heroic' },
-    { itemId: 'stormbark_mantle', chance: 0.25, rollGroup: 'ysolei_heroic' },
-    { itemId: 'lunar_choir_leggings', chance: 0.34, rollGroup: 'ysolei_heroic2' },
-    { itemId: 'choir_blessed_spaulders', chance: 0.33, rollGroup: 'ysolei_heroic2' },
-    { itemId: 'tideworn_warboots', chance: 0.33, rollGroup: 'ysolei_heroic2' },
-    // Rare mount (0.1%): heroic-gated only, never on a normal table.
+    ...weightedLootGroup('ysolei_heroic', [
+      ['heroic_ysols_pearl_greaves', 0.5],
+      ['heroic_moonshroud_breastplate', 0.34],
+      ['heroic_moonshroud_robe', 0.33],
+      ['heroic_moonshroud_tunic', 0.33],
+      ['lunar_tide_greatstaff', 0.25],
+      ['tidewoven_trousers', 0.25],
+      ['choirmothers_casque', 0.25],
+      ['stormbark_mantle', 0.25],
+      ['lunar_choir_leggings', 0.34],
+      ['choir_blessed_spaulders', 0.33],
+      ['tideworn_warboots', 0.33],
+      ['menders_hourglass', 0.25],
+    ]).map(preserveBaseLootSource),
     { itemId: 'reins_grag_bear', chance: HEROIC_BLUE_MOUNT_CHANCE },
+    ...heroicFarmPatternRows(),
   ],
   korzul_the_gravewyrm: [
-    { itemId: 'gravewyrm_cleaver', chance: 0.34, rollGroup: 'korzul_heroic' },
-    { itemId: 'shroud_of_the_gravewyrm', chance: 0.33, rollGroup: 'korzul_heroic' },
-    { itemId: 'sanctum_prowlers_grips', chance: 0.33, rollGroup: 'korzul_heroic' },
-    { itemId: 'gravewyrm_claws', chance: 0.25, rollGroup: 'korzul_heroic2' },
-    { itemId: 'gravescale_girdle', chance: 0.25, rollGroup: 'korzul_heroic2' },
-    { itemId: 'wyrmchoir_handwraps', chance: 0.25, rollGroup: 'korzul_heroic2' },
-    { itemId: 'wildsoul_maul', chance: 0.25, rollGroup: 'korzul_heroic2' },
-    // Rare mount (0.1%): heroic-gated only, never on a normal table.
+    ...weightedLootGroup('korzul_heroic', [
+      ['boneplate_vest', 0.34],
+      ['revenant_silk_robe', 0.33],
+      ['nightwalk_jerkin', 0.33],
+      ['cultist_flayer', 0.1],
+      ['heroic_wyrmfang_greatblade', 0.05],
+      ['heroic_staff_of_the_gravewyrm', 0.05],
+      ['heroic_fang_of_korzul', 0.05],
+      ['heroic_deathlord_warplate', 0.05],
+      ['heroic_necromancers_starshroud', 0.05],
+      ['heroic_wyrmshadow_harness', 0.05],
+      ['heroic_boundstone_girdle', 0.05],
+      ['heroic_gravewyrm_gauntlets', 0.05],
+      ['heroic_deathlords_dread_visage', 0.04],
+      ['heroic_necromancers_soulspire_mantle', 0.04],
+      ['heroic_wyrmshadow_talongrips', 0.04],
+      ['heroic_nightfangs_greatstaff', 0.05],
+      ['heroic_wildgrowth_leggings', 0.05],
+      ['heroic_grovewardens_grips', 0.05],
+      ['heroic_verdant_walkers', 0.05],
+      ['heroic_gravewyrm_bone_quiver', 0.05],
+      ['gravewyrm_cleaver', 0.34],
+      ['shroud_of_the_gravewyrm', 0.33],
+      ['sanctum_prowlers_grips', 0.33],
+      ['gravewyrm_claws', 0.25],
+      ['gravescale_girdle', 0.25],
+      ['wyrmchoir_handwraps', 0.25],
+      ['wildsoul_maul', 0.25],
+    ]).map(preserveBaseLootSource),
     { itemId: 'reins_stalkglider_snail', chance: HEROIC_BLUE_MOUNT_CHANCE },
+    ...heroicFarmPatternRows(),
   ],
   // Heroic mid-boss table: the Fanglord Beastmaster drops the heroic twin of
   // Duskwhisper (the normal drops from his normal-mode kill in WILDHEART_ITEMS).
   wildheart_beastmaster: [{ itemId: 'heroic_duskwhisper', chance: 0.18 }],
   wildheart_high_priest: [
-    // Two groups of three DISTINCT items, the shape every other heroic
-    // five-man uses: per-item rates stay at the house 0.33-0.34 (the earlier
-    // dup-path version pushed the re-listed chests to 0.56-0.66 per kill,
-    // well above any other heroic item in the game).
-    { itemId: 'basin_stalkers_tunic', chance: 0.34, rollGroup: 'wildheart_heroic' },
-    { itemId: 'verdant_heart_vestment', chance: 0.33, rollGroup: 'wildheart_heroic' },
-    { itemId: 'sunbone_ritual_hauberk', chance: 0.33, rollGroup: 'wildheart_heroic' },
-    { itemId: 'greatfang_of_the_basin', chance: 0.34, rollGroup: 'wildheart_heroic2' },
-    { itemId: 'sunbone_oracles_crown', chance: 0.33, rollGroup: 'wildheart_heroic2' },
-    { itemId: 'bloodmane_war_legguards', chance: 0.33, rollGroup: 'wildheart_heroic2' },
-    // Rare mounts (0.1% each). The basin is the FIFTH heroic five-man and the
-    // catalog's two blues are already paired to Ysolei and Korzul, so rather
-    // than a fifth signature mount it carries equal-rate SECONDARY paths to
-    // both, exactly as the Nythraxis heroic raid does for all four five-man
-    // mounts. Per-MOUNT rate parity is the invariant that matters (0.1%
-    // wherever a blue drops), so the basin is never a cheaper route to either
-    // one. It does make the basin the only five-man offering two blues, so its
-    // aggregate blue rate is 0.2% per heroic clear against Ysolei's and
-    // Korzul's 0.1% (owner call, 2026-08-01). Epic mounts stay rift-S
-    // exclusive and never appear here. Appended AFTER the gear roll groups so
-    // the gear draw order stays byte-identical.
+    ...weightedLootGroup('wildheart_heroic', [
+      ['bloodmane_warleggings', 0.34],
+      ['vineclaw_stalking_breeches', 0.33],
+      ['sunbone_ritual_sarong', 0.33],
+      ['heroic_wildheart_tuskblade', 0.06],
+      ['heroic_wildheart_hexwood_staff', 0.06],
+      ['heroic_wildheart_fangknife', 0.06],
+      ['basin_stalkers_tunic', 0.34],
+      ['verdant_heart_vestment', 0.33],
+      ['sunbone_ritual_hauberk', 0.33],
+      ['greatfang_of_the_basin', 0.34],
+      ['sunbone_oracles_crown', 0.33],
+      ['bloodmane_war_legguards', 0.33],
+      ['paired_talons', 0.25],
+    ]).map(preserveBaseLootSource),
     { itemId: 'reins_grag_bear', chance: HEROIC_BLUE_MOUNT_CHANCE },
     { itemId: 'reins_stalkglider_snail', chance: HEROIC_BLUE_MOUNT_CHANCE },
+    ...heroicFarmPatternRows(),
   ],
   nythraxis_scourge_of_thornpeak: [
     // The heroic set pieces and legendaries come free from the heroic loot swap:
@@ -736,16 +950,22 @@ export const HEROIC_BOSS_LOOT: Record<string, LootEntry[]> = {
     // raid-tier (item level 33/37) heroic variants in a heroic claim
     // (loot/loot_roll.ts + heroic_variants.ts). This table adds only the
     // heroic-ONLY extras the normal table never carries: the three bespoke raid
-    // weapons, one of which drops per heroic kill (chances sum to 1.0), plus the
+    // weapons and the four raid trinkets (content/trinkets.ts), one of which
+    // drops per heroic kill (chances sum to 1.0; weapons half, trinkets half,
+    // so the kill still pays exactly two equipment items), plus the
     // blue and green mount secondary paths (same per-mount rate as their five-man
     // sources; the raid offers both of each so every heroic raider has a path).
-    { itemId: 'deathless_greatblade', chance: 0.34, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'deathless_greatblade', chance: 0.17, rollGroup: 'nythraxis_heroic_weapon' },
     {
       itemId: 'scepter_of_the_deathless_court',
-      chance: 0.33,
+      chance: 0.17,
       rollGroup: 'nythraxis_heroic_weapon',
     },
-    { itemId: 'stormcallers_focus', chance: 0.33, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'stormcallers_focus', chance: 0.16, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'mooring_stone', chance: 0.125, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'wellspring_seed', chance: 0.125, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'hunters_tally', chance: 0.125, rollGroup: 'nythraxis_heroic_weapon' },
+    { itemId: 'echoing_lens', chance: 0.125, rollGroup: 'nythraxis_heroic_weapon' },
     // Blue mount secondary paths on the heroic raid (0.1% each, equal per-mount
     // to the five-man rate; both blues available so aggregate ~0.2%); the primary
     // path for each is its five-man heroic boss. Epic mounts are rift S-only.
@@ -758,38 +978,68 @@ export const HEROIC_BOSS_LOOT: Record<string, LootEntry[]> = {
   ],
   // ============== Crucible of the Last Spring (Heroic-only appends) ==============
   // The Ignivar raid has NO heroic item-level layer (docs/prd/ignivar-raid-loot.md):
-  // a Heroic kill drops its Normal groups PLUS these, so Heroic pays in access
-  // (the Robe sigil that finishes the 5-piece, the shields) at the same ilvl 35.
-  // The ids register at IGNIVAR_RAID_LOOT_SOURCE_LEVEL in item_level.ts, which
-  // out-ranks this table's default source. Heroic weapon groups join at the end
-  // with the weapon wave. APPEND-only, never reorder.
+  // a Heroic kill pays the SAME count as Normal (one item per five raiders, so
+  // two on the 10-player raid) at the same ilvl 35, and differs only in WHICH
+  // items it can drop. Each boss's Normal-only off-set slot (LootEntry.normalOnly
+  // in dungeons.ts) is skipped on a heroic claim and this ONE exclusive group
+  // pays in its place: the Robe sigil that finishes the 5-piece, the marquee
+  // weapons, and (Varkhul) the shields. The ids register at
+  // IGNIVAR_RAID_LOOT_SOURCE_LEVEL in item_level.ts, which out-ranks this table's
+  // default source. Re-cut 2026-09-02 from the launch appends (one robe group
+  // plus one weapon group per boss, plus Varkhul's shield group); from here the
+  // partition is APPEND-only, never reorder.
+  // Crucible of the Last Spring (docs/prd/ignivar-raid-loot.md, "Boss loot
+  // tables"): a Heroic kill pays TWO guaranteed groups here, on top of the
+  // boss's shared sigil slot. The exclusive slot is gear only (marquee
+  // weapons, and Varkhul's shields); the Robe sigil has its OWN guaranteed
+  // group, appended after it. Re-cut 2026-09-11: the Robes used to share the
+  // exclusive slot, so a Heroic kill could roll a second sigil and no weapon
+  // (the same two-sigil haul Normal pays). Draw order is parity-sensitive on
+  // a heroic claim: the exclusive group keeps its position, the Robe group
+  // draws after it, entries APPEND, never reorder.
   [IGNIVAR_BOSS_ID]: [
-    { itemId: 'sigil_anvil_chest', chance: 0.34, rollGroup: 'ignivar_h_sigil_robe' },
-    { itemId: 'sigil_ember_chest', chance: 0.33, rollGroup: 'ignivar_h_sigil_robe' },
-    { itemId: 'sigil_tempest_chest', chance: 0.33, rollGroup: 'ignivar_h_sigil_robe' },
-    // Three entries, not four: the Emberflight Longbow was pulled from the
-    // tier (bows wait for the hunter ranged-slot rework; maintainer decision
-    // 2026-08-28), and the hunter ranged marquee returns with that rework.
-    { itemId: 'forgefathers_warhammer', chance: 0.34, rollGroup: 'ignivar_h_weapon' },
-    { itemId: 'anvilguard_blade', chance: 0.33, rollGroup: 'ignivar_h_weapon' },
-    { itemId: 'springtouched_crozier', chance: 0.33, rollGroup: 'ignivar_h_weapon' },
+    // Seven Heroic gear rows, one guaranteed: the three marquee weapons plus
+    // Wand of Quenched Sparks (redistributed from Ignivar's Normal off-set
+    // partition on 2026-09-07) at 5/32 each, and the three raid trinkets
+    // (content/trinkets.ts, item level 35 like every exclusive here) at 1/8
+    // each: binary fractions, so the group sums to EXACTLY 1 in row order.
+    // Three weapons, not four before the wand: Emberflight Longbow waits for
+    // the hunter ranged-slot rework.
+    { itemId: 'forgefathers_warhammer', chance: 0.15625, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'anvilguard_blade', chance: 0.15625, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'springtouched_crozier', chance: 0.15625, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'wand_of_quenched_sparks', chance: 0.15625, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'kindling_orb', chance: 0.125, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'molten_fletching', chance: 0.125, rollGroup: 'ignivar_h_exclusive' },
+    { itemId: 'last_flame_lantern', chance: 0.125, rollGroup: 'ignivar_h_exclusive' },
+    // The Robe sigil, one guaranteed per Heroic kill: Anvil 0.34 / Ember 0.33
+    // / Tempest 0.33, the same family balance as the merged sigil slot.
+    { itemId: 'sigil_anvil_chest', chance: 0.34, rollGroup: 'ignivar_h_robe' },
+    { itemId: 'sigil_ember_chest', chance: 0.33, rollGroup: 'ignivar_h_robe' },
+    { itemId: 'sigil_tempest_chest', chance: 0.33, rollGroup: 'ignivar_h_robe' },
   ],
   [VARKHUL_BOSS_ID]: [
-    { itemId: 'sigil_anvil_chest', chance: 0.34, rollGroup: 'varkhul_h_sigil_robe' },
-    { itemId: 'sigil_ember_chest', chance: 0.33, rollGroup: 'varkhul_h_sigil_robe' },
-    { itemId: 'sigil_tempest_chest', chance: 0.33, rollGroup: 'varkhul_h_sigil_robe' },
-    // Emberward shares the existing shield partition so its 3 percent chance
-    // adds no heroic RNG draw. The two epic outcomes split the remaining 97
-    // percent evenly, and the group still guarantees exactly one shield.
-    {
-      itemId: 'bulwark_of_the_inner_crucible',
-      chance: 0.485,
-      rollGroup: 'varkhul_h_shields',
-    },
-    { itemId: 'ember_wardens_barrier', chance: 0.485, rollGroup: 'varkhul_h_shields' },
-    { itemId: 'varkhul_emberward', chance: 0.03, rollGroup: 'varkhul_h_shields' },
-    { itemId: 'heart_of_the_end_greatblade', chance: 0.34, rollGroup: 'varkhul_h_weapon' },
-    { itemId: 'forgefire_spire', chance: 0.33, rollGroup: 'varkhul_h_weapon' },
-    { itemId: 'staff_of_the_last_spring', chance: 0.33, rollGroup: 'varkhul_h_weapon' },
+    // Shields 0.354 / marquee weapons 0.301 / held offhands 0.075 / raid
+    // trinkets 0.24, with Emberward at its ABSOLUTE 3 percent per heroic kill
+    // inside the shield share (the two epic shields split the rest evenly). The
+    // held offhands came over from Varkhul's Normal off-set partition; the two
+    // raid trinkets (content/trinkets.ts, item level 35) are appended at 0.12
+    // each with every other non-legendary row scaled down together. Every
+    // weight is chosen so the group sums to EXACTLY 1 in floating point in this
+    // row order (tests/ignivar_loot.test.ts pins it with toBe(1)).
+    { itemId: 'bulwark_of_the_inner_crucible', chance: 0.177, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'ember_wardens_barrier', chance: 0.177, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'varkhul_emberward', chance: 0.03, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'heart_of_the_end_greatblade', chance: 0.1045, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'forgefire_spire', chance: 0.098, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'staff_of_the_last_spring', chance: 0.0985, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'orb_of_the_last_spring', chance: 0.0375, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'cinder_of_the_first_design', chance: 0.0375, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'forgefathers_temper', chance: 0.12, rollGroup: 'varkhul_h_exclusive' },
+    { itemId: 'heart_of_the_crucible', chance: 0.12, rollGroup: 'varkhul_h_exclusive' },
+    // The Robe sigil, one guaranteed per Heroic kill (see Ignivar above).
+    { itemId: 'sigil_anvil_chest', chance: 0.34, rollGroup: 'varkhul_h_robe' },
+    { itemId: 'sigil_ember_chest', chance: 0.33, rollGroup: 'varkhul_h_robe' },
+    { itemId: 'sigil_tempest_chest', chance: 0.33, rollGroup: 'varkhul_h_robe' },
   ],
 };

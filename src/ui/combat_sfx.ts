@@ -1,4 +1,6 @@
+import { furyAudioClaimed } from '../game/fury_audio_core';
 import type { SfxId } from '../game/sfx_manifest.generated';
+import { warriorRecoveryAudio } from '../game/warrior_recovery_core';
 import { ABILITIES, MOBS } from '../sim/data';
 import type { Aura, Entity, SimEvent } from '../sim/types';
 import { isAuraDebuff } from './auras_view';
@@ -8,6 +10,8 @@ type SpellFxEvent = Extract<SimEvent, { type: 'spellfx' }>;
 type AuraEvent = Extract<SimEvent, { type: 'aura' }>;
 type VarkhulCallout = Extract<SimEvent, { type: 'varkhulCallout' }>['call'];
 type VarkhulCalloutEvent = Extract<SimEvent, { type: 'varkhulCallout' }>;
+type NythraxisCallout = Extract<SimEvent, { type: 'nythraxisCallout' }>['call'];
+type NythraxisCalloutEvent = Extract<SimEvent, { type: 'nythraxisCallout' }>;
 type MagicSchool = 'fire' | 'frost' | 'arcane' | 'shadow' | 'holy' | 'nature';
 export type MobVoiceAction = 'aggro' | 'attack' | 'death' | 'hurt' | 'idle';
 
@@ -70,6 +74,93 @@ export function dispatchVarkhulCalloutSfx(
   return true;
 }
 
+// Nythraxis callouts: the Bone Spike pair share the bone impact (the victim
+// hears only the personal one, the room hears only the raid one), a shattered
+// spike resolves on the raid-milestone chime, and the swap call lands as a
+// shadow impact under the Dread Curse hit it announces.
+const NYTHRAXIS_CALLOUT_CUES = {
+  impaled: 'impact_bone',
+  youAreImpaled: 'impact_bone',
+  spikeBroken: 'ui_achievement',
+  dreadCurseSwap: 'impact_shadow',
+  sigilAppears: 'impact_arcane',
+  sigilBound: 'impact_arcane',
+  sigilUnbound: 'impact_shadow',
+  gravefireTarget: 'impact_shadow',
+  kingsWrath: 'impact_shadow',
+  boneStormBegins: 'impact_bone',
+  boneStormCharge: 'impact_bone',
+  boneStormEnds: 'impact_bone',
+  crownEndures60: 'impact_shadow',
+  crownEndures30: 'impact_shadow',
+  crownEndures10: 'impact_shadow',
+  crownEndures: 'impact_shadow',
+} as const satisfies Record<NythraxisCallout, SfxId>;
+
+export function nythraxisCalloutCue(call: NythraxisCallout): SfxId {
+  return NYTHRAXIS_CALLOUT_CUES[call];
+}
+
+export type NythraxisCalloutSfxPlan = VarkhulCalloutSfxPlan;
+
+export function nythraxisCalloutSfxPlan(
+  event: NythraxisCalloutEvent,
+  entityOf: (entityId: number) => Pick<Entity, 'pos'> | undefined,
+): NythraxisCalloutSfxPlan | null {
+  const source = entityOf(event.sourceId);
+  if (!source) return null;
+  return {
+    cue: nythraxisCalloutCue(event.call),
+    x: source.pos.x,
+    y: source.pos.y,
+    z: source.pos.z,
+    gain: 0.9,
+    cooldown: 0.08,
+    jitter: false,
+  };
+}
+
+export function dispatchNythraxisCalloutSfx(
+  event: NythraxisCalloutEvent,
+  entityOf: (entityId: number) => Pick<Entity, 'pos'> | undefined,
+  sink: (plan: NythraxisCalloutSfxPlan) => void,
+): boolean {
+  const plan = nythraxisCalloutSfxPlan(event, entityOf);
+  if (!plan) return false;
+  sink(plan);
+  return true;
+}
+
+export type RaidCalloutSfxEvent = VarkhulCalloutEvent | NythraxisCalloutEvent;
+export type RaidCalloutSfxPlay = (
+  cue: SfxId,
+  x: number,
+  y: number,
+  z: number,
+  gain: number,
+  opts: { cooldown: number; jitter: false },
+) => void;
+
+/**
+ * The one HUD entry for every structured raid callout: routes the event to its
+ * boss's planner and plays the plan through the HUD's positional combat player.
+ * Returns false when the source entity is out of interest scope (no sound).
+ */
+export function dispatchRaidCalloutSfx(
+  event: RaidCalloutSfxEvent,
+  entityOf: (entityId: number) => Pick<Entity, 'pos'> | undefined,
+  play: RaidCalloutSfxPlay,
+): boolean {
+  const sink = (plan: VarkhulCalloutSfxPlan) =>
+    play(plan.cue, plan.x, plan.y, plan.z, plan.gain, {
+      cooldown: plan.cooldown,
+      jitter: plan.jitter,
+    });
+  return event.type === 'varkhulCallout'
+    ? dispatchVarkhulCalloutSfx(event, entityOf, sink)
+    : dispatchNythraxisCalloutSfx(event, entityOf, sink);
+}
+
 const SILENT_ASCENSION_AURA_IDS: ReadonlySet<string> = new Set([
   'divine_ascension',
   'dawns_path_speed',
@@ -111,6 +202,7 @@ const NOVA_ABILITY_CUES: Partial<Record<string, SfxId>> = {
   psychic_scream: 'fear_shout',
   howl_of_terror: 'fear_shout',
   intimidating_shout: 'intimidating_shout',
+  piercing_howl: 'piercing_howl',
   frost_nova: 'frost_nova',
   flamestrike: 'flamestrike',
 };
@@ -148,6 +240,13 @@ export function groundTickAbilityCue(ability: string | undefined): SfxId | null 
 // Every other fire spell (Fireball, the rest of the bolt/burst family)
 // keeps the shared impact_fire.
 const IMPACT_ABILITY_CUES: Partial<Record<string, SfxId>> = {
+  // Decisive single-hit weapon attacks use the prepared heavy contact take.
+  // Compound hits retain their material cues to avoid stacking that full take.
+  mortal_strike: 'impact_masterwork_execution',
+  execute: 'impact_masterwork_execution',
+  slam: 'impact_masterwork_execution',
+  breachmaker: 'impact_masterwork_execution',
+  shield_slam: 'impact_metal',
   scorch: 'scorch',
   pyroblast: 'pyroblast',
   frozen_orb: 'frozen_orb',
@@ -368,6 +467,7 @@ export function materialImpactCue(target: Entity): SfxId {
 const RIFT_HAZARD_ABILITY_IDS = new Set(['rift_hazard_molten', 'rift_hazard_boulder']);
 
 export function impactCueForDamage(event: DamageEvent, target: Entity): SfxId | null {
+  if (furyAudioClaimed(event)) return null;
   if (event.abilityId && RIFT_HAZARD_ABILITY_IDS.has(event.abilityId)) return null;
   // Keyed off the stable abilityId, not the display-label `ability` field:
   // a display rename (Scald/Pyrelance/Aether Surge/Dirt Nap/Wicked Slash/
@@ -385,6 +485,7 @@ export function impactCueForDamage(event: DamageEvent, target: Entity): SfxId | 
 }
 
 export function spellFxCue(event: SpellFxEvent): { key: SfxId; anchorId: number } | null {
+  if (furyAudioClaimed(event)) return null;
   if (event.fx === 'projectile') {
     if (event.school === 'physical') return { key: 'melee_bow', anchorId: event.sourceId };
     const school = magicSchool(event.school);
@@ -395,7 +496,13 @@ export function spellFxCue(event: SpellFxEvent): { key: SfxId; anchorId: number 
     return { key, anchorId: event.sourceId };
   }
   if (event.fx === 'nova') {
-    return { key: novaAbilityCue(event.ability), anchorId: event.targetId };
+    return {
+      key: novaAbilityCue(event.ability),
+      anchorId:
+        event.ability === 'piercing_howl' || event.ability === 'intimidating_shout'
+          ? event.sourceId
+          : event.targetId,
+    };
   }
   if (event.fx === 'fearImpact') return { key: 'fear', anchorId: event.targetId };
   if (event.fx === 'ccImpact') {
@@ -436,7 +543,7 @@ export function spellFxCue(event: SpellFxEvent): { key: SfxId; anchorId: number 
 // Per-ability overrides for a buff's apply moment: normally every buff plays
 // the shared buff_apply chime, keyed off Aura.id (the ability that applied
 // it). Ice Block (Cold Coffin), Cloak of Shadows (Shadecloak, an absorb
-// aura, same apply path), Vanish (Smokestep, a toggle stealth selfBuff, same
+// aura, same apply path), Vanish (Smokefade, a toggle stealth selfBuff, same
 // apply path too), and Stealth (Duskveil, the opening rogue stealth toggle,
 // identical selfBuff shape) get their own distinct cue instead. Greater
 // Invisibility (mage, kind:'stealth' too, effect_dispatch.ts's
@@ -459,11 +566,43 @@ const BUFF_APPLY_ABILITY_CUES: Partial<Record<string, SfxId>> = {
 
 export function auraApplyCue(event: AuraEvent, aura: Aura | null): SfxId | null {
   if (!event.gained || !aura || SILENT_ASCENSION_AURA_IDS.has(aura.id)) return null;
+  // The authored defensive clench owns Mending's activation in both clients.
+  if (aura.id === 'furious_mending' && aura.kind === 'buff_dr') return null;
   if (isAuraDebuff(aura)) return 'debuff_apply';
   return BUFF_APPLY_ABILITY_CUES[aura.id] ?? 'buff_apply';
 }
 
 type HealEvent = Extract<SimEvent, { type: 'heal' }>;
+
+/** Sound ownership for direct heals, consumables and periodic recovery.
+ * Extracted from the HUD heal arm (hud.ts) unchanged; the rules it carries:
+ * - A potion/eat/drink heal (items.ts / combat/auras.ts) plays its own dedicated
+ *   cue instead of the generic heal_impact; consumeHealCue returns null for every
+ *   other heal source (leech, second wind, companion heals, ...), which falls
+ *   through to heal_impact unchanged. A `heal` with a source and no cue is an
+ *   eat/drink tick that is not a sound tick.
+ * - A HoT tick fires every couple of seconds for its whole duration; the one-shot
+ *   application cue (Sim.applyAura) covers the "heal landed" moment instead, so
+ *   ticks stay silent. Frenzied Regeneration is fully exempt (a Bear Form
+ *   self-heal, never aimed at anyone else, so the repeat does not read as spammy
+ *   the way a party HoT does): it keeps its old tick-only sound, so the one-shot
+ *   application emit is skipped for it too. Confirmed in-game on Priest (Renew)
+ *   and Druid (Rejuvenation, Regrowth, Frenzied Regeneration).
+ * - Only after those gates does an actual Warrior Bloodletting recovery take its
+ *   own quieter cue (warriorRecoveryAudio), or stay silent when nothing was
+ *   restored; it never bypasses the tick rules above. */
+export function healAudioPlan(
+  ev: Extract<SimEvent, { type: 'heal' | 'heal2' }>,
+): { cue: string; gain: number } | null {
+  const cue = ev.type === 'heal' ? consumeHealCue(ev) : null;
+  if (ev.type === 'heal' && ev.source && !cue) return null;
+  const hot = ev.type === 'heal2' && ev.hot === true;
+  const regeneration = ev.type === 'heal2' && ev.abilityId === 'frenzied_regeneration';
+  if (hot ? !regeneration : regeneration) return null;
+  const recovery = ev.type === 'heal2' ? warriorRecoveryAudio(ev) : undefined;
+  if (recovery !== undefined) return recovery ? { cue: recovery, gain: 0.75 } : null;
+  return { cue: cue ?? 'heal_impact', gain: 1 };
+}
 
 // A potion, eat, or drink heal (items.ts / combat/auras.ts) plays its own
 // dedicated cue instead of the generic heal_impact every other heal source
@@ -504,6 +643,7 @@ export function weaponSwingCue(entity: Entity): SfxId {
 }
 
 export function playerSwingCueForDamage(event: DamageEvent, source: Entity | null): SfxId | null {
+  if (furyAudioClaimed(event)) return null;
   if (
     source?.kind !== 'player' ||
     (event.school && event.school !== 'physical') ||

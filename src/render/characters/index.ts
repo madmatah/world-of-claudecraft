@@ -5,6 +5,7 @@
 import { type Entity, isMechWearer, type PlayerClass } from '../../sim/types';
 import { logAssetMissOnce } from './asset_miss_log';
 import { type AssembleOptions, modularHeadFor } from './assets';
+import { type CharacterFormKey, characterFormAssetKey } from './form_visual_selection_core';
 import { composedLookPiecesFor, type LookPieceQueue, type LookPieces } from './look_pieces';
 import {
   mechHeldWeaponOverride,
@@ -17,12 +18,20 @@ import { MODULAR_WARRIOR_KEY, type ModularLook } from './modular';
 import { npcModularKeyFor } from './npc_looks';
 import { CharacterVisual } from './visual';
 
-export { type AnimOverrideFacts, applyEntityAnimOverrides } from './anim_state_entity_core';
+export {
+  type AnimOverrideFacts,
+  applyDisplayedAnimMotion,
+  applyEntityAnimOverrides,
+} from './anim_state_entity_core';
 export type { AssembleOptions } from './assets';
 export { type LookPiecesStats, lookPiecesStats } from './look_pieces';
 export { npcLookFor } from './npc_looks';
 export { CharacterPreview } from './preview';
-export type { PreviewAppearance } from './preview_appearance';
+export {
+  type AppearancePreviewRow,
+  type PreviewAppearance,
+  previewAppearanceForRow,
+} from './preview_appearance';
 export type { PreviewFramingName } from './preview_framing';
 export type { AnimState, FarBakeGate } from './visual';
 export { CharacterVisual, setWeaponVfxViewportHeight } from './visual';
@@ -104,7 +113,7 @@ export function createMountVisual(visualKey: string): CharacterVisual {
  *  training dummy freeze). */
 export function createCharacterVisual(
   e: Entity,
-  formKey?: 'form_sheep' | 'form_bear' | 'form_cat' | 'form_travel' | 'form_metamorph',
+  formKey?: CharacterFormKey,
   opts?: AssembleOptions,
 ): CharacterVisual | null {
   // Forms are their own models. Skins and held weapons
@@ -113,7 +122,11 @@ export function createCharacterVisual(
   // Combat Mech wearer: the mech is a whole replacement body, so the cosmetic
   // must win over the authored look (composing over it hid a purchased skin).
   const look = formKey || isMechWearer(e) ? null : (modularLookProvider?.(e) ?? null);
-  const key = formKey ?? (look ? modularKeyFor(e) : visualKeyFor(e));
+  const key = formKey
+    ? characterFormAssetKey(formKey, e.auras)
+    : look
+      ? modularKeyFor(e)
+      : visualKeyFor(e);
   // The class-agnostic Combat Mech adopts the wearer's independent mainhand and
   // offhand layout. e.templateId is the player's class on every host, so this
   // matches offline and online.

@@ -44,22 +44,31 @@ import { isPersistentEngineAura } from '../persistent_aura';
 import type { PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { type Aura, type AuraKind, CAST_COMPLETE_EPS, DT, type Entity } from '../types';
-import { tickAfflictionAura, tickMaledictGaze } from './affliction';
+import { applyWellFedOnMealComplete } from '../wellfed';
+import { tickAfflictionAura, tickHexOfViolence, tickMaledictGaze } from './affliction';
+import { regenParkedCatEnergy } from './cat_form_energy';
 import { isStunned } from './cc';
+import {
+  cleanupCraftedCollectionAuras,
+  onCraftedCollectionHeal,
+} from './crafted_collection_effects';
 import { regenerateRuinOutOfCombat, tickPyreGuardian } from './destruction';
 import { druidEngineOnBleedTick } from './druid_engines';
 import { applyGreaterInvisibilityAftereffect } from './greater_invisibility';
 import { consumeHealAbsorb } from './heal';
+import { isColdsightInternalMarkerAuraId } from './hunter_coldsight_read';
 import {
   detonateOssuaryMark,
   OSSUARY_MARK_ABILITY_ID,
   regenerateSoulFragmentsOutOfCombat,
 } from './necromancy';
 import { tickPaladinOathChainPull } from './paladin_control';
+import { periodicHarmStands } from './periodic_harm';
 import { priestOnAuraEnded } from './priest/talents';
 import { preservesGloomtithe, vespersOnDotTick } from './priest/vespers';
 import { tickMendingCurrent } from './shaman_spiritmend';
 import { tickShamanTalentAura } from './shaman_talents';
+import { thundercallOnDotTick } from './shaman_thundercall_kit';
 import { stoneboundThreatMultiplier } from './shaman_warspirit';
 import { onHotExpired, tickProcState } from './talent_procs';
 import { temporalHourglassCooldownDelta, tickTemporalHourglassHealing } from './temporal_hourglass';
@@ -109,6 +118,9 @@ export function updateRegen(ctx: SimContext, p: Entity, meta: PlayerMeta): void 
       }
     }
   }
+  // A druid out of Cat Form keeps regenerating the energy parked on the way out,
+  // at the base tick, so shifting back returns what staying in Cat would have.
+  if (p.resourceType !== 'energy') regenParkedCatEnergy(p);
   if (p.resourceType === 'mana') {
     // Spirit regen: the FULL amount out of combat (past the five-second rule),
     // and COMBAT_SPIRIT_REGEN_FRACTION of it while the rule is active, so Spirit
@@ -179,7 +191,23 @@ export function updateRegen(ctx: SimContext, p: Entity, meta: PlayerMeta): void 
       });
     }
     c.remaining -= 2;
-    if (c.remaining <= 0) p[slot] = null;
+    if (c.remaining <= 0) {
+      // The meal FINISHED, which is the only moment a Well Fed buff is owed
+      // (classic: interrupted eating grants nothing, and every early exit
+      // clears the slot without reaching here). The mint itself lives in
+      // src/sim/wellfed.ts (one aura id, one mint site); it draws no rng.
+      // Clear THEN grant: the payload is held in a local and the consuming slot
+      // is nulled before the aura lands, so the meal is already over from every
+      // reader's point of view when applyAura runs. The reverse order works
+      // today only because nothing on the apply path consults isConsuming; this
+      // one stays correct if anything ever does (a buff that refuses to land on
+      // an eating character, a cancel-on-consume rule).
+      // Only the food arm of Consuming can carry a payload (FoodConsuming,
+      // src/sim/types.ts); the narrowing is the type's, not a runtime guard.
+      const wellFed = c.kind === 'food' ? c.wellFed : undefined;
+      p[slot] = null;
+      applyWellFedOnMealComplete(ctx, p, wellFed);
+    }
   }
 }
 
@@ -255,6 +283,7 @@ export function cleanseFriendlyNpcAuras(ctx: SimContext, e: Entity): void {
 }
 
 export function updateAuras(ctx: SimContext, e: Entity): void {
+  cleanupCraftedCollectionAuras(ctx, e);
   if (e.dead) {
     e.stealthed = e.auras.some((a) => a.kind === 'stealth');
     return;
@@ -306,8 +335,19 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
           tickTemporalHourglassHealing(ctx, e, a);
         } else if (a.id === 'sacrilegious_march' && a.kind === 'buff_speed') {
           tickSacrilegiousMarch(ctx, e, a);
+        } else if (
+          (a.kind === 'dot' || a.kind === 'affliction_eye' || a.kind === 'affliction_violence') &&
+          !periodicHarmStands(ctx, ctx.entities.get(a.sourceId) ?? null, e)
+        ) {
+          // The verdict lapsed since the aura landed (the victim left the
+          // free-for-all ground, entered a sanctuary, or the duel ended): no
+          // tick, and the expiry below prunes the aura this pass
+          // (periodic_harm.ts).
+          a.remaining = 0;
         } else if (a.kind === 'affliction_eye') {
           tickMaledictGaze(ctx, e, a);
+        } else if (a.kind === 'affliction_violence') {
+          tickHexOfViolence(ctx, e, a);
         } else if (a.kind === 'dot') {
           const dotSource = ctx.entities.get(a.sourceId) ?? null;
           let tickDamage = a.value;
@@ -325,7 +365,7 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
             school: a.school,
             fx: 'tick',
           });
-          ctx.dealDamage(
+          const tickLanded = ctx.dealDamage(
             dotSource,
             e,
             tickDamage,
@@ -358,6 +398,7 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
             a.finalDamage === true,
           );
           vespersOnDotTick(ctx, e, a);
+          thundercallOnDotTick(ctx, dotSource, a, tickLanded);
           druidEngineOnBleedTick(ctx, dotSource, a);
           if (a.leechPct !== undefined) {
             const src = dotSource;
@@ -369,6 +410,7 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
               const landing = consumeHealAbsorb(ctx, src, intended);
               const absorbed = intended - landing;
               const healed = Math.min(landing, src.maxHp - src.hp);
+              onCraftedCollectionHeal(ctx, src, src, landing - healed);
               if (healed > 0 || absorbed > 0) {
                 if (healed > 0) src.hp += healed;
                 const overheal = landing - healed;
@@ -401,6 +443,8 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
           const landing = consumeHealAbsorb(ctx, e, intended);
           const absorbed = intended - landing;
           const healed = Math.min(landing, e.maxHp - e.hp);
+          const healer = ctx.entities.get(a.sourceId);
+          if (healer) onCraftedCollectionHeal(ctx, healer, e, landing - healed);
           if (healed > 0 || absorbed > 0) {
             if (healed > 0) e.hp += healed;
             const overheal = landing - healed;
@@ -452,7 +496,12 @@ export function updateAuras(ctx: SimContext, e: Entity): void {
       if (a.id === CHEATER_MARK_AURA_ID) e.cheaterMark = undefined;
       priestOnAuraEnded(ctx, e, a);
       ctx.applyNonPlayerStatAura(e, a, -1);
-      ctx.emit({ type: 'aura', targetId: e.id, name: a.name, gained: false });
+      // Coldsight Read's three internal bookkeeping markers never emit, even
+      // via this generic path (they carry an 86400s timeout that should never
+      // fire, but a marker forced to zero must still stay silent).
+      if (!isColdsightInternalMarkerAuraId(a.id)) {
+        ctx.emit({ type: 'aura', targetId: e.id, name: a.name, gained: false });
+      }
       applyGreaterInvisibilityAftereffect(ctx, e, a);
       // A HoT that ran its FULL duration (this natural-expiry path, never a
       // dispel/overwrite) reports to the caster's talent procs. No rng.

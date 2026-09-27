@@ -110,8 +110,10 @@ const EXCLUDED_PATHS = new Set<string>(ORPHAN_DEVIATION?.routes ?? []);
 const REGISTRY_ONLY_PATHS = new Set<string>([
   '/api/deeds/rarity',
   '/api/guilds/roster',
+  '/api/world-quests/leaderboard',
   '/api/reliquary/rarity',
   '/api/deeds/broadcasts',
+  '/api/discord/queue-pings',
   '/api/characters/:id/deeds-recent',
   '/api/characters/:id/appearance-reroll',
   '/api/steam/link',
@@ -121,6 +123,10 @@ const REGISTRY_ONLY_PATHS = new Set<string>([
   '/api/epic/status',
   '/api/ota/updates',
   '/api/seeker/entitlement',
+  // The Realm Builder of the Month roll the Eastbrook Vale monument reads
+  // (server/realm_builder.ts): registry-only on the same terms as the deeds
+  // family.
+  '/api/realm-builder',
   // The $WOC Exchange family (server/woc_market_routes.ts): a brand-new,
   // config-gated /api/woc-market/* prefix with no legacy ladder twin.
   '/api/woc-market/status',
@@ -136,6 +142,7 @@ const REGISTRY_ONLY_PATHS = new Set<string>([
   '/api/woc-market/step-up/challenge',
   '/api/woc-market/history/:itemId',
   '/api/woc-market/seller-history/:name',
+  '/api/woc-market/sales',
   '/api/woc-market/listings/:id/cancel',
   '/api/woc-market/listings/:id/bids',
   '/api/woc-market/bids/:id/bond-quote',
@@ -346,14 +353,24 @@ describe('registry completeness: migrated baseline (public reads + auth + charac
     // The signpost guild board's roster drill-in (server/guild_roster.ts):
     // registry-only on the same terms as the deeds family.
     { method: 'GET', path: '/api/guilds/roster' },
+    // The world-quest scoreboards read (server/world_quest_leaderboard.ts):
+    // registry-only on the same terms as the deeds family.
+    { method: 'GET', path: '/api/world-quests/leaderboard' },
     { method: 'GET', path: '/api/deeds/broadcasts' },
     { method: 'POST', path: '/api/deeds/broadcasts' },
+    // The queue-pop Discord DM opt-in toggle (server/discord_queue_pings.ts):
+    // registry-only on the deeds broadcasts shape.
+    { method: 'GET', path: '/api/discord/queue-pings' },
+    { method: 'POST', path: '/api/discord/queue-pings' },
     // The reliquary rarity read (server/reliquary.ts): registry-only on the
     // same terms as the deeds family, and it shares their cache and flight.
     { method: 'GET', path: '/api/reliquary/rarity' },
     // The Thornhollow Fields ladder (server/battleground.ts): registry-only like the
     // deeds family, per the same new-route rule.
     { method: 'GET', path: '/api/battleground/leaderboard' },
+    // The Realm Builder of the Month roll (server/realm_builder.ts):
+    // registry-only like the deeds family, per the same new-route rule.
+    { method: 'GET', path: '/api/realm-builder' },
     // The Steam link trio (server/steam/routes.ts): registry-only like the
     // deeds pair, env-gated dark until STEAM_ENABLED=1.
     { method: 'POST', path: '/api/steam/link' },
@@ -399,6 +416,7 @@ describe('registry completeness: migrated baseline (public reads + auth + charac
     { method: 'POST', path: '/api/woc-market/offers/:id/withdraw' },
     { method: 'GET', path: '/api/woc-market/history/:itemId' },
     { method: 'GET', path: '/api/woc-market/seller-history/:name' },
+    { method: 'GET', path: '/api/woc-market/sales' },
     { method: 'POST', path: '/api/woc-market/step-up/challenge' },
     { method: 'POST', path: '/api/woc-market/listings' },
     { method: 'POST', path: '/api/woc-market/listings/:id/cancel' },

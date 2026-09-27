@@ -11,7 +11,13 @@
 import { CLASSES, DUNGEONS, ZONES } from '../sim/data';
 import type { PlayerClass } from '../sim/types';
 import { tEntity } from './entity_i18n';
-import { getLanguage, type InterpolationValues, type SupportedLanguage, tPlural } from './i18n';
+import {
+  formatMoney,
+  getLanguage,
+  type InterpolationValues,
+  type SupportedLanguage,
+  tPlural,
+} from './i18n';
 import { SERVER_NEW } from './server_i18n.newlocales';
 import { IN_GAME_MODERATION_MESSAGES } from './server_i18n_moderation';
 
@@ -85,6 +91,8 @@ export const DICT: Record<string, Record<string, string>> = {
     // refused, because anything banked in that gap would be destroyed with the
     // row. Two DB round trips wide.
     'guild.bankClosing': 'The guild bank is closing. Try again in a moment.',
+    'guild.bankSettling': 'The guild bank is still saving a recent change. Try again in a moment.',
+    'guild.bankBusy': 'You are busy. Try again in a moment.',
     'guild.onlyOfficersInvite': 'Only officers and the Guild Master may invite.',
     'guild.alreadyInThis': 'You are already in the guild.',
     'guild.mustBeOnline': '{name} must be online to be invited.',
@@ -106,6 +114,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'You cannot remove the Guild Master.',
     'guild.onlyGmRemoveOfficer': 'Only the Guild Master may remove an officer.',
     'guild.onlyGmChangeRanks': 'Only the Guild Master may change ranks.',
+    'guild.belowRankOnly': 'You can only do that to members below your own rank.',
+    'guild.titleNotAllowed': 'That rank title is not allowed.',
+    'guild.ladderUpdated': 'The guild ranks have been updated.',
+    'guild.rankNumbered': 'Rank {n}',
     'guild.useTransfer': 'Use a guild transfer to hand over leadership.',
     'guild.alreadyRank': '{name} is already {rank}.',
     'guild.onlyOfficersChat': 'Only officers and the Guild Master can use officer chat.',
@@ -116,6 +128,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> has been disbanded.',
     'guild.removedFrom': 'You have been removed from <{name}>.',
     'guild.joined': '{name} has joined the guild.',
+    'guild.bankGoldDeposited': '{name} deposited {amount} into the guild bank.',
+    'guild.bankGoldWithdrawn': '{name} withdrew {amount} from the guild bank.',
     'guild.memberLeft': '{name} has left the guild.',
     'guild.newMaster': '{name} is now the Guild Master of <{guild}>.',
     'guild.removedBy': '{name} has been removed from the guild by {actor}.',
@@ -149,6 +163,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterMuted': "That language isn't allowed here. You're muted for {duration}.",
     'chat.filterWarning': "Warning: that language isn't allowed here. Continued use will mute you.",
     'pet.nameNotAllowed': 'Pet name is not allowed.',
+    'legendary.nameNotAllowed': 'That name is not allowed.',
     'chat.muted': 'You are muted from chat for {minutes} more minutes.{reason}',
     'chat.mutedOne': 'You are muted from chat for {minutes} more minute.{reason}',
     'chat.muteReason': ' Reason: {reason}',
@@ -168,6 +183,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterMuted': "That language isn't allowed here. You're muted for {duration}.",
     'chat.filterWarning': "Warning: that language isn't allowed here. Continued use will mute you.",
     'pet.nameNotAllowed': 'Pet name is not allowed.',
+    'legendary.nameNotAllowed': 'That name is not allowed.',
     'chat.muted': 'You are muted from chat for {minutes} more minutes.{reason}',
     'chat.mutedOne': 'You are muted from chat for {minutes} more minute.{reason}',
     'chat.muteReason': ' Reason: {reason}',
@@ -237,6 +253,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': 'You need {amount} gold to found a guild.',
     'guild.bankNotEmpty': 'The guild bank must be emptied before the guild can be disbanded.',
     'guild.bankClosing': 'The guild bank is closing. Try again in a moment.',
+    'guild.bankSettling': 'The guild bank is still saving a recent change. Try again in a moment.',
+    'guild.bankBusy': 'You are busy. Try again in a moment.',
     'guild.onlyOfficersInvite': 'Only officers and the Guild Master may invite.',
     'guild.alreadyInThis': 'You are already in the guild.',
     'guild.mustBeOnline': '{name} must be online to be invited.',
@@ -258,6 +276,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'You cannot remove the Guild Master.',
     'guild.onlyGmRemoveOfficer': 'Only the Guild Master may remove an officer.',
     'guild.onlyGmChangeRanks': 'Only the Guild Master may change ranks.',
+    'guild.belowRankOnly': 'You can only do that to members below your own rank.',
+    'guild.titleNotAllowed': 'That rank title is not allowed.',
+    'guild.ladderUpdated': 'The guild ranks have been updated.',
+    'guild.rankNumbered': 'Rank {n}',
     'guild.useTransfer': 'Use a guild transfer to hand over leadership.',
     'guild.alreadyRank': '{name} is already {rank}.',
     'guild.onlyOfficersChat': 'Only officers and the Guild Master can use officer chat.',
@@ -268,6 +290,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> has been disbanded.',
     'guild.removedFrom': 'You have been removed from <{name}>.',
     'guild.joined': '{name} has joined the guild.',
+    'guild.bankGoldDeposited': '{name} deposited {amount} into the guild bank.',
+    'guild.bankGoldWithdrawn': '{name} withdrew {amount} from the guild bank.',
     'guild.memberLeft': '{name} has left the guild.',
     'guild.newMaster': '{name} is now the Guild Master of <{guild}>.',
     'guild.removedBy': '{name} has been removed from the guild by {actor}.',
@@ -305,6 +329,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Advertencia: ese lenguaje no está permitido aquí. Si continúas, se te silenciará.',
     'pet.nameNotAllowed': 'Ese nombre de mascota no está permitido.',
+    'legendary.nameNotAllowed': 'Ese nombre no está permitido.',
     'chat.muted': 'Estás silenciado en el chat durante {minutes} minutos más.{reason}',
     'chat.mutedOne': 'Estás silenciado en el chat durante {minutes} minuto más.{reason}',
     'chat.muteReason': ' Motivo: {reason}',
@@ -379,6 +404,9 @@ export const DICT: Record<string, Record<string, string>> = {
       'El banco de hermandad debe vaciarse antes de poder disolver la hermandad.',
     'guild.bankClosing':
       'El banco de hermandad se está cerrando. Inténtalo de nuevo en un momento.',
+    'guild.bankSettling':
+      'El banco de hermandad aún está guardando un cambio reciente. Inténtalo de nuevo en un momento.',
+    'guild.bankBusy': 'Estás ocupado. Inténtalo de nuevo en un momento.',
     'guild.onlyOfficersInvite': 'Solo los oficiales y el Maestro de hermandad pueden invitar.',
     'guild.alreadyInThis': 'Ya perteneces a la hermandad.',
     'guild.mustBeOnline': '{name} debe estar conectado para ser invitado.',
@@ -401,6 +429,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'No puedes expulsar al Maestro de hermandad.',
     'guild.onlyGmRemoveOfficer': 'Solo el Maestro de hermandad puede expulsar a un oficial.',
     'guild.onlyGmChangeRanks': 'Solo el Maestro de hermandad puede cambiar los rangos.',
+    'guild.belowRankOnly': 'Solo puedes hacer eso con miembros de rango inferior al tuyo.',
+    'guild.titleNotAllowed': 'Ese título de rango no está permitido.',
+    'guild.ladderUpdated': 'Se han actualizado los rangos de la hermandad.',
+    'guild.rankNumbered': 'Rango {n}',
     'guild.useTransfer': 'Usa una transferencia de hermandad para ceder el liderazgo.',
     'guild.alreadyRank': '{name} ya es {rank}.',
     'guild.onlyOfficersChat':
@@ -412,6 +444,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> ha sido disuelta.',
     'guild.removedFrom': 'Has sido expulsado de <{name}>.',
     'guild.joined': '{name} se ha unido a la hermandad.',
+    'guild.bankGoldDeposited': '{name} depositó {amount} en el banco de la hermandad.',
+    'guild.bankGoldWithdrawn': '{name} retiró {amount} del banco de la hermandad.',
     'guild.memberLeft': '{name} ha abandonado la hermandad.',
     'guild.newMaster': '{name} ahora es el Maestro de hermandad de <{guild}>.',
     'guild.removedBy': '{name} ha sido expulsado de la hermandad por {actor}.',
@@ -451,6 +485,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Advertencia: ese lenguaje no está permitido aquí. Si continúas, se te silenciará.',
     'pet.nameNotAllowed': 'Ese nombre de mascota no está permitido.',
+    'legendary.nameNotAllowed': 'Ese nombre no está permitido.',
     'chat.muted': 'Estás silenciado en el chat durante {minutes} minutos más.{reason}',
     'chat.mutedOne': 'Estás silenciado en el chat durante {minutes} minuto más.{reason}',
     'chat.muteReason': ' Motivo: {reason}',
@@ -525,6 +560,9 @@ export const DICT: Record<string, Record<string, string>> = {
       'El banco de hermandad debe vaciarse antes de poder disolver la hermandad.',
     'guild.bankClosing':
       'El banco de hermandad se está cerrando. Inténtalo de nuevo en un momento.',
+    'guild.bankSettling':
+      'El banco de hermandad aún está guardando un cambio reciente. Inténtalo de nuevo en un momento.',
+    'guild.bankBusy': 'Estás ocupado. Inténtalo de nuevo en un momento.',
     'guild.onlyOfficersInvite': 'Solo los oficiales y el Maestro de hermandad pueden invitar.',
     'guild.alreadyInThis': 'Ya perteneces a la hermandad.',
     'guild.mustBeOnline': '{name} debe estar conectado para poder ser invitado.',
@@ -547,6 +585,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'No puedes expulsar al Maestro de hermandad.',
     'guild.onlyGmRemoveOfficer': 'Solo el Maestro de hermandad puede expulsar a un oficial.',
     'guild.onlyGmChangeRanks': 'Solo el Maestro de hermandad puede cambiar los rangos.',
+    'guild.belowRankOnly': 'Solo puedes hacer eso con miembros de rango inferior al tuyo.',
+    'guild.titleNotAllowed': 'Ese título de rango no está permitido.',
+    'guild.ladderUpdated': 'Se han actualizado los rangos de la hermandad.',
+    'guild.rankNumbered': 'Rango {n}',
     'guild.useTransfer': 'Usa una transferencia de hermandad para ceder el liderazgo.',
     'guild.alreadyRank': '{name} ya es {rank}.',
     'guild.onlyOfficersChat':
@@ -558,6 +600,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> se ha disuelto.',
     'guild.removedFrom': 'Has sido expulsado de <{name}>.',
     'guild.joined': '{name} se ha unido a la hermandad.',
+    'guild.bankGoldDeposited': '{name} depositó {amount} en el banco de la hermandad.',
+    'guild.bankGoldWithdrawn': '{name} retiró {amount} del banco de la hermandad.',
     'guild.memberLeft': '{name} ha abandonado la hermandad.',
     'guild.newMaster': '{name} es ahora el Maestro de hermandad de <{guild}>.',
     'guild.removedBy': '{name} ha sido expulsado de la hermandad por {actor}.',
@@ -615,6 +659,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       "Avertissement : ce langage n'est pas autorisé ici. Continuer entraînera une coupure de votre accès au chat.",
     'pet.nameNotAllowed': "Ce nom de familier n'est pas autorisé.",
+    'legendary.nameNotAllowed': "Ce nom n'est pas autorisé.",
     'chat.muted': 'Votre accès au chat est coupé pour encore {minutes} minutes.{reason}',
     'chat.mutedOne': 'Votre accès au chat est coupé pour encore {minutes} minute.{reason}',
     'chat.muteReason': ' Motif : {reason}',
@@ -671,6 +716,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.bankNotEmpty':
       'La banque de guilde doit être vidée avant que la guilde puisse être dissoute.',
     'guild.bankClosing': 'La banque de guilde est en cours de fermeture. Réessaie dans un instant.',
+    'guild.bankSettling':
+      'La banque de guilde enregistre encore une modification récente. Réessaie dans un instant.',
+    'guild.bankBusy': 'Tu es occupé. Réessaie dans un instant.',
     'guild.onlyOfficersInvite': 'Seuls les officiers et le maître de guilde peuvent inviter.',
     'guild.alreadyInThis': 'Vous appartenez déjà à cette guilde.',
     'guild.mustBeOnline': '{name} doit être en ligne pour être invité.',
@@ -693,6 +741,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Vous ne pouvez pas renvoyer le maître de guilde.',
     'guild.onlyGmRemoveOfficer': 'Seul le maître de guilde peut renvoyer un officier.',
     'guild.onlyGmChangeRanks': 'Seul le maître de guilde peut modifier les rangs.',
+    'guild.belowRankOnly': "Vous ne pouvez faire cela qu'aux membres de rang inférieur au vôtre.",
+    'guild.titleNotAllowed': "Ce titre de rang n'est pas autorisé.",
+    'guild.ladderUpdated': 'Les rangs de la guilde ont été mis à jour.',
+    'guild.rankNumbered': 'Rang {n}',
     'guild.useTransfer': 'Utilisez un transfert de guilde pour céder le commandement.',
     'guild.alreadyRank': '{name} est déjà {rank}.',
     'guild.onlyOfficersChat':
@@ -704,6 +756,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> a été dissoute.',
     'guild.removedFrom': 'Vous avez été renvoyé de <{name}>.',
     'guild.joined': '{name} a rejoint la guilde.',
+    'guild.bankGoldDeposited': '{name} a déposé {amount} dans la banque de guilde.',
+    'guild.bankGoldWithdrawn': '{name} a retiré {amount} de la banque de guilde.',
     'guild.memberLeft': '{name} a quitté la guilde.',
     'guild.newMaster': '{name} est désormais le maître de guilde de <{guild}>.',
     'guild.removedBy': '{name} a été renvoyé de la guilde par {actor}.',
@@ -760,6 +814,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       "Avertissement : ce langage n'est pas autorisé ici. Continuer entraînera une coupure de votre accès au chat.",
     'pet.nameNotAllowed': "Ce nom de familier n'est pas autorisé.",
+    'legendary.nameNotAllowed': "Ce nom n'est pas autorisé.",
     'chat.muted': 'Votre accès au chat est coupé pour encore {minutes} minutes.{reason}',
     'chat.mutedOne': 'Votre accès au chat est coupé pour encore {minutes} minute.{reason}',
     'chat.muteReason': ' Motif : {reason}',
@@ -817,6 +872,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.bankNotEmpty':
       'La banque de guilde doit être vidée avant que la guilde puisse être dissoute.',
     'guild.bankClosing': 'La banque de guilde est en cours de fermeture. Réessaie dans un instant.',
+    'guild.bankSettling':
+      'La banque de guilde enregistre encore une modification récente. Réessaie dans un instant.',
+    'guild.bankBusy': 'Tu es occupé. Réessaie dans un instant.',
     'guild.onlyOfficersInvite': 'Seuls les officiers et le maître de guilde peuvent inviter.',
     'guild.alreadyInThis': 'Vous faites déjà partie de la guilde.',
     'guild.mustBeOnline': '{name} doit être en ligne pour être invité.',
@@ -839,6 +897,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Vous ne pouvez pas retirer le maître de guilde.',
     'guild.onlyGmRemoveOfficer': 'Seul le maître de guilde peut retirer un officier.',
     'guild.onlyGmChangeRanks': 'Seul le maître de guilde peut modifier les rangs.',
+    'guild.belowRankOnly': "Vous ne pouvez faire cela qu'aux membres de rang inférieur au vôtre.",
+    'guild.titleNotAllowed': "Ce titre de rang n'est pas autorisé.",
+    'guild.ladderUpdated': 'Les rangs de la guilde ont été mis à jour.',
+    'guild.rankNumbered': 'Rang {n}',
     'guild.useTransfer': 'Utilisez un transfert de guilde pour céder le commandement.',
     'guild.alreadyRank': '{name} est déjà {rank}.',
     'guild.onlyOfficersChat':
@@ -850,6 +912,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> a été dissoute.',
     'guild.removedFrom': 'Vous avez été retiré de <{name}>.',
     'guild.joined': '{name} a rejoint la guilde.',
+    'guild.bankGoldDeposited': '{name} a déposé {amount} dans la banque de guilde.',
+    'guild.bankGoldWithdrawn': '{name} a retiré {amount} de la banque de guilde.',
     'guild.memberLeft': '{name} a quitté la guilde.',
     'guild.newMaster': '{name} est maintenant le maître de guilde de <{guild}>.',
     'guild.removedBy': '{name} a été retiré de la guilde par {actor}.',
@@ -889,6 +953,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Avvertimento: quel linguaggio non è consentito qui. Continuando verrai silenziato.',
     'pet.nameNotAllowed': 'Questo nome per la mascotte non è consentito.',
+    'legendary.nameNotAllowed': 'Questo nome non è consentito.',
     'chat.muted': 'Sei silenziato dalla chat per altri {minutes} minuti.{reason}',
     'chat.mutedOne': 'Sei silenziato dalla chat per ancora {minutes} minuto.{reason}',
     'chat.muteReason': ' Motivo: {reason}',
@@ -958,6 +1023,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.bankNotEmpty':
       'La banca di gilda deve essere svuotata prima di poter sciogliere la gilda.',
     'guild.bankClosing': 'La banca di gilda si sta chiudendo. Riprova tra un momento.',
+    'guild.bankSettling':
+      'La banca di gilda sta ancora salvando una modifica recente. Riprova tra un momento.',
+    'guild.bankBusy': 'Sei occupato. Riprova tra un momento.',
     'guild.onlyOfficersInvite': 'Solo gli ufficiali e il Maestro di Gilda possono invitare.',
     'guild.alreadyInThis': 'Fai già parte della gilda.',
     'guild.mustBeOnline': '{name} deve essere connesso per essere invitato.',
@@ -980,6 +1048,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Non puoi rimuovere il Maestro di Gilda.',
     'guild.onlyGmRemoveOfficer': 'Solo il Maestro di Gilda può rimuovere un ufficiale.',
     'guild.onlyGmChangeRanks': 'Solo il Maestro di Gilda può cambiare i gradi.',
+    'guild.belowRankOnly': 'Puoi farlo solo con i membri di grado inferiore al tuo.',
+    'guild.titleNotAllowed': 'Quel titolo di grado non è consentito.',
+    'guild.ladderUpdated': 'I gradi della gilda sono stati aggiornati.',
+    'guild.rankNumbered': 'Grado {n}',
     'guild.useTransfer': 'Usa un trasferimento di gilda per cedere il comando.',
     'guild.alreadyRank': '{name} è già {rank}.',
     'guild.onlyOfficersChat':
@@ -991,6 +1063,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> è stata sciolta.',
     'guild.removedFrom': 'Sei stato rimosso da <{name}>.',
     'guild.joined': '{name} è entrato nella gilda.',
+    'guild.bankGoldDeposited': '{name} ha depositato {amount} nella banca della gilda.',
+    'guild.bankGoldWithdrawn': '{name} ha ritirato {amount} dalla banca della gilda.',
     'guild.memberLeft': '{name} ha abbandonato la gilda.',
     'guild.newMaster': '{name} ora è il Maestro di Gilda di <{guild}>.',
     'guild.removedBy': '{name} è stato rimosso dalla gilda da {actor}.',
@@ -1031,6 +1105,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Warnung: Diese Sprache ist hier nicht erlaubt. Weitere Verwendung schaltet Euch stumm.',
     'pet.nameNotAllowed': 'Dieser Begleitername ist nicht erlaubt.',
+    'legendary.nameNotAllowed': 'Dieser Name ist nicht erlaubt.',
     'chat.muted': 'Ihr seid noch {minutes} Minuten lang vom Chat stummgeschaltet.{reason}',
     'chat.mutedOne': 'Ihr seid noch {minutes} Minute lang vom Chat stummgeschaltet.{reason}',
     'chat.muteReason': ' Grund: {reason}',
@@ -1104,6 +1179,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.bankNotEmpty':
       'Die Gildenbank muss geleert werden, bevor die Gilde aufgelöst werden kann.',
     'guild.bankClosing': 'Die Gildenbank wird geschlossen. Versuche es gleich noch einmal.',
+    'guild.bankSettling':
+      'Die Gildenbank speichert noch eine kürzliche Änderung. Versuche es gleich noch einmal.',
+    'guild.bankBusy': 'Du bist beschäftigt. Versuche es gleich noch einmal.',
     'guild.onlyOfficersInvite': 'Nur Offiziere und der Gildenmeister können einladen.',
     'guild.alreadyInThis': 'Ihr seid bereits in der Gilde.',
     'guild.mustBeOnline': '{name} muss online sein, um eingeladen zu werden.',
@@ -1125,6 +1203,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Ihr könnt den Gildenmeister nicht entfernen.',
     'guild.onlyGmRemoveOfficer': 'Nur der Gildenmeister kann einen Offizier entfernen.',
     'guild.onlyGmChangeRanks': 'Nur der Gildenmeister kann Ränge ändern.',
+    'guild.belowRankOnly': 'Ihr könnt das nur bei Mitgliedern unter Eurem eigenen Rang tun.',
+    'guild.titleNotAllowed': 'Dieser Rangtitel ist nicht erlaubt.',
+    'guild.ladderUpdated': 'Die Gildenränge wurden aktualisiert.',
+    'guild.rankNumbered': 'Rang {n}',
     'guild.useTransfer': 'Benutzt eine Gildenübertragung, um die Führung abzugeben.',
     'guild.alreadyRank': '{name} ist bereits {rank}.',
     'guild.onlyOfficersChat':
@@ -1136,6 +1218,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> wurde aufgelöst.',
     'guild.removedFrom': 'Ihr wurdet aus <{name}> entfernt.',
     'guild.joined': '{name} ist der Gilde beigetreten.',
+    'guild.bankGoldDeposited': '{name} hat {amount} in die Gildenbank eingezahlt.',
+    'guild.bankGoldWithdrawn': '{name} hat {amount} aus der Gildenbank abgehoben.',
     'guild.memberLeft': '{name} hat die Gilde verlassen.',
     'guild.newMaster': '{name} ist jetzt der Gildenmeister von <{guild}>.',
     'guild.removedBy': '{name} wurde von {actor} aus der Gilde entfernt.',
@@ -1174,6 +1258,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterMuted': '此处不允许这种言论。你已被禁言 {duration}。',
     'chat.filterWarning': '警告：此处不允许这种言论。继续使用将会被禁言。',
     'pet.nameNotAllowed': '该宠物名称不可使用。',
+    'legendary.nameNotAllowed': '该名称不可使用。',
     'chat.muted': '你已被禁言，还需 {minutes} 分钟才能聊天。{reason}',
     'chat.mutedOne': '你已被禁言，还需 {minutes} 分钟才能聊天。{reason}',
     'chat.muteReason': ' 原因：{reason}',
@@ -1242,6 +1327,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': '创建公会需要{amount}金币。',
     'guild.bankNotEmpty': '必须先清空公会银行才能解散公会。',
     'guild.bankClosing': '公会银行正在关闭。请稍后再试。',
+    'guild.bankSettling': '公会银行仍在保存最近的一次变动。请稍后再试。',
+    'guild.bankBusy': '你正忙着。请稍后再试。',
     'guild.onlyOfficersInvite': '只有官员和会长才能邀请成员。',
     'guild.alreadyInThis': '你已经在该公会中了。',
     'guild.mustBeOnline': '{name}必须在线才能被邀请。',
@@ -1262,6 +1349,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': '你无法移除会长。',
     'guild.onlyGmRemoveOfficer': '只有会长才能移除官员。',
     'guild.onlyGmChangeRanks': '只有会长才能更改职位。',
+    'guild.belowRankOnly': '你只能对职位低于你的成员这样做。',
+    'guild.titleNotAllowed': '该职位名称不被允许。',
+    'guild.ladderUpdated': '公会职位已更新。',
+    'guild.rankNumbered': '职位 {n}',
     'guild.useTransfer': '请使用公会转让来移交会长职位。',
     'guild.alreadyRank': '{name}已经是{rank}。',
     'guild.onlyOfficersChat': '只有官员和会长才能使用官员频道。',
@@ -1272,6 +1363,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}>已被解散。',
     'guild.removedFrom': '你已被移出<{name}>。',
     'guild.joined': '{name}加入了公会。',
+    'guild.bankGoldDeposited': '{name}向公会银行存入了{amount}。',
+    'guild.bankGoldWithdrawn': '{name}从公会银行取出了{amount}。',
     'guild.memberLeft': '{name}离开了公会。',
     'guild.newMaster': '{name}现在是<{guild}>的会长。',
     'guild.removedBy': '{name}被{actor}移出了公会。',
@@ -1308,6 +1401,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterMuted': '此處不允許這種言語。你已被禁言 {duration}。',
     'chat.filterWarning': '警告：此處不允許這種言語。繼續使用將會被禁言。',
     'pet.nameNotAllowed': '此寵物名稱不可使用。',
+    'legendary.nameNotAllowed': '該名稱不可使用。',
     'chat.muted': '你已被禁言，還有 {minutes} 分鐘無法聊天。{reason}',
     'chat.mutedOne': '你已被禁言，還有 {minutes} 分鐘無法聊天。{reason}',
     'chat.muteReason': ' 原因：{reason}',
@@ -1376,6 +1470,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': '建立公會需要 {amount} 金幣。',
     'guild.bankNotEmpty': '必須先清空公會銀行才能解散公會。',
     'guild.bankClosing': '公會銀行正在關閉。請稍後再試。',
+    'guild.bankSettling': '公會銀行仍在儲存最近的一次變動。請稍後再試。',
+    'guild.bankBusy': '你正在忙。請稍後再試。',
     'guild.onlyOfficersInvite': '只有幹部和會長才能邀請成員。',
     'guild.alreadyInThis': '你已經是這個公會的成員。',
     'guild.mustBeOnline': '{name} 必須在線上才能被邀請。',
@@ -1396,6 +1492,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': '你無法移除會長。',
     'guild.onlyGmRemoveOfficer': '只有會長才能移除幹部。',
     'guild.onlyGmChangeRanks': '只有會長才能變更階級。',
+    'guild.belowRankOnly': '你只能對階級低於你的成員這麼做。',
+    'guild.titleNotAllowed': '該階級名稱不被允許。',
+    'guild.ladderUpdated': '公會階級已更新。',
+    'guild.rankNumbered': '階級 {n}',
     'guild.useTransfer': '請使用公會轉讓來移交領導權。',
     'guild.alreadyRank': '{name} 已經是{rank}。',
     'guild.onlyOfficersChat': '只有幹部和會長才能使用幹部頻道。',
@@ -1406,6 +1506,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> 已被解散。',
     'guild.removedFrom': '你已被移出 <{name}>。',
     'guild.joined': '{name} 已加入公會。',
+    'guild.bankGoldDeposited': '{name} 已將 {amount} 存入公會銀行。',
+    'guild.bankGoldWithdrawn': '{name} 已從公會銀行提取 {amount}。',
     'guild.memberLeft': '{name} 已離開公會。',
     'guild.newMaster': '{name} 現在是 <{guild}> 的會長。',
     'guild.removedBy': '{name} 已被 {actor} 移出公會。',
@@ -1443,6 +1545,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       '경고: 여기서는 허용되지 않는 표현입니다. 계속 사용하면 채팅이 금지됩니다.',
     'pet.nameNotAllowed': '사용할 수 없는 소환수 이름입니다.',
+    'legendary.nameNotAllowed': '사용할 수 없는 이름입니다.',
     'chat.muted': '채팅이 금지되어 {minutes}분 더 채팅할 수 없습니다.{reason}',
     'chat.mutedOne': '채팅이 금지되어 {minutes}분 더 채팅할 수 없습니다.{reason}',
     'chat.muteReason': ' 사유: {reason}',
@@ -1511,6 +1614,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': '길드를 창설하려면 {amount} 골드가 필요합니다.',
     'guild.bankNotEmpty': '길드를 해산하려면 먼저 길드 은행을 비워야 합니다.',
     'guild.bankClosing': '길드 은행이 닫히는 중입니다. 잠시 후 다시 시도하세요.',
+    'guild.bankSettling':
+      '길드 은행이 아직 최근 변경 사항을 저장하는 중입니다. 잠시 후 다시 시도하세요.',
+    'guild.bankBusy': '지금은 바쁩니다. 잠시 후 다시 시도하세요.',
     'guild.onlyOfficersInvite': '장교와 길드장만 초대할 수 있습니다.',
     'guild.alreadyInThis': '이미 해당 길드에 가입되어 있습니다.',
     'guild.mustBeOnline': '{name}님을 초대하려면 접속 중이어야 합니다.',
@@ -1532,6 +1638,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': '길드장은 추방할 수 없습니다.',
     'guild.onlyGmRemoveOfficer': '길드장만 장교를 추방할 수 있습니다.',
     'guild.onlyGmChangeRanks': '길드장만 등급을 변경할 수 있습니다.',
+    'guild.belowRankOnly': '자신보다 낮은 등급의 길드원에게만 할 수 있습니다.',
+    'guild.titleNotAllowed': '허용되지 않는 등급 이름입니다.',
+    'guild.ladderUpdated': '길드 등급이 변경되었습니다.',
+    'guild.rankNumbered': '{n}등급',
     'guild.useTransfer': '길드 양도를 사용하여 길드장을 넘기십시오.',
     'guild.alreadyRank': '{name}님은 이미 {rank}입니다.',
     'guild.onlyOfficersChat': '장교와 길드장만 장교 대화를 사용할 수 있습니다.',
@@ -1542,6 +1652,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}>이(가) 해체되었습니다.',
     'guild.removedFrom': '<{name}>에서 추방되었습니다.',
     'guild.joined': '{name}님이 길드에 가입했습니다.',
+    'guild.bankGoldDeposited': '{name}님이 길드 은행에 {amount}을(를) 입금했습니다.',
+    'guild.bankGoldWithdrawn': '{name}님이 길드 은행에서 {amount}을(를) 인출했습니다.',
     'guild.memberLeft': '{name}님이 길드를 떠났습니다.',
     'guild.newMaster': '{name}님이 이제 <{guild}>의 길드장입니다.',
     'guild.removedBy': '{name}님이 {actor}님에 의해 길드에서 추방되었습니다.',
@@ -1579,6 +1691,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       '警告：その言葉はここでは使用できません。使い続けると発言禁止になります。',
     'pet.nameNotAllowed': 'そのペット名は使用できません。',
+    'legendary.nameNotAllowed': 'その名前は使用できません。',
     'chat.muted': '発言禁止中です。あと{minutes}分間チャットできません。{reason}',
     'chat.mutedOne': '発言禁止中です。あと{minutes}分間チャットできません。{reason}',
     'chat.muteReason': ' 理由：{reason}',
@@ -1647,6 +1760,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': 'ギルドを設立するには{amount}ゴールドが必要です。',
     'guild.bankNotEmpty': 'ギルドを解散するには、先にギルド銀行を空にする必要があります。',
     'guild.bankClosing': 'ギルド銀行は閉鎖中です。しばらくしてからもう一度お試しください。',
+    'guild.bankSettling':
+      'ギルド銀行は最近の変更をまだ保存中です。しばらくしてからもう一度お試しください。',
+    'guild.bankBusy': '現在は操作中です。しばらくしてからもう一度お試しください。',
     'guild.onlyOfficersInvite': '招待できるのはオフィサーとギルドマスターのみです。',
     'guild.alreadyInThis': 'あなたはすでにこのギルドに所属しています。',
     'guild.mustBeOnline': '{name}を招待するには、相手がオンラインである必要があります。',
@@ -1668,6 +1784,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'ギルドマスターを除名することはできません。',
     'guild.onlyGmRemoveOfficer': 'オフィサーを除名できるのはギルドマスターのみです。',
     'guild.onlyGmChangeRanks': 'ランクを変更できるのはギルドマスターのみです。',
+    'guild.belowRankOnly': 'それができるのは自分より下のランクのメンバーだけです。',
+    'guild.titleNotAllowed': 'そのランク名は使用できません。',
+    'guild.ladderUpdated': 'ギルドのランクが更新されました。',
+    'guild.rankNumbered': 'ランク{n}',
     'guild.useTransfer': 'リーダーシップを引き継ぐにはギルド移譲を使用してください。',
     'guild.alreadyRank': '{name}はすでに{rank}です。',
     'guild.onlyOfficersChat':
@@ -1679,6 +1799,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}>は解散しました。',
     'guild.removedFrom': 'あなたは<{name}>から除名されました。',
     'guild.joined': '{name}がギルドに加入しました。',
+    'guild.bankGoldDeposited': '{name}がギルド銀行に{amount}を預けました。',
+    'guild.bankGoldWithdrawn': '{name}がギルド銀行から{amount}を引き出しました。',
     'guild.memberLeft': '{name}がギルドを脱退しました。',
     'guild.newMaster': '{name}が<{guild}>の新しいギルドマスターになりました。',
     'guild.removedBy': '{name}が{actor}によってギルドから除名されました。',
@@ -1719,6 +1841,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Aviso: esse tipo de linguagem não é permitido aqui. Continuar fará com que você seja silenciado.',
     'pet.nameNotAllowed': 'Esse nome de mascote não é permitido.',
+    'legendary.nameNotAllowed': 'Esse nome não é permitido.',
     'chat.muted': 'Você está silenciado no chat por mais {minutes} minutos.{reason}',
     'chat.mutedOne': 'Você está silenciado no chat por mais {minutes} minuto.{reason}',
     'chat.muteReason': ' Motivo: {reason}',
@@ -1791,6 +1914,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.bankNotEmpty':
       'O banco da guilda deve ser esvaziado antes que a guilda possa ser dissolvida.',
     'guild.bankClosing': 'O banco da guilda está fechando. Tente novamente em um momento.',
+    'guild.bankSettling':
+      'O banco da guilda ainda está salvando uma alteração recente. Tente novamente em um momento.',
+    'guild.bankBusy': 'Você está ocupado. Tente novamente em um momento.',
     'guild.onlyOfficersInvite': 'Apenas oficiais e o Mestre da Guilda podem convidar.',
     'guild.alreadyInThis': 'Você já está na guilda.',
     'guild.mustBeOnline': '{name} precisa estar online para ser convidado.',
@@ -1812,6 +1938,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Você não pode remover o Mestre da Guilda.',
     'guild.onlyGmRemoveOfficer': 'Apenas o Mestre da Guilda pode remover um oficial.',
     'guild.onlyGmChangeRanks': 'Apenas o Mestre da Guilda pode alterar os cargos.',
+    'guild.belowRankOnly': 'Você só pode fazer isso com membros de cargo inferior ao seu.',
+    'guild.titleNotAllowed': 'Esse título de cargo não é permitido.',
+    'guild.ladderUpdated': 'Os cargos da guilda foram atualizados.',
+    'guild.rankNumbered': 'Cargo {n}',
     'guild.useTransfer': 'Use uma transferência de guilda para passar a liderança.',
     'guild.alreadyRank': '{name} já é {rank}.',
     'guild.onlyOfficersChat': 'Apenas oficiais e o Mestre da Guilda podem usar o chat de oficiais.',
@@ -1822,6 +1952,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': '<{name}> foi desfeita.',
     'guild.removedFrom': 'Você foi removido de <{name}>.',
     'guild.joined': '{name} entrou na guilda.',
+    'guild.bankGoldDeposited': '{name} depositou {amount} no banco da guilda.',
+    'guild.bankGoldWithdrawn': '{name} retirou {amount} do banco da guilda.',
     'guild.memberLeft': '{name} saiu da guilda.',
     'guild.newMaster': '{name} agora é o Mestre da Guilda de <{guild}>.',
     'guild.removedBy': '{name} foi removido da guilda por {actor}.',
@@ -1861,6 +1993,7 @@ export const DICT: Record<string, Record<string, string>> = {
     'chat.filterWarning':
       'Предупреждение: такие выражения здесь запрещены. Продолжение приведёт к мьюту.',
     'pet.nameNotAllowed': 'Такое имя питомца недопустимо.',
+    'legendary.nameNotAllowed': 'Такое имя недопустимо.',
     'chat.muted': 'Вам выдан мьют в чате ещё на {minutes} мин.{reason}',
     'chat.mutedOne': 'Вам выдан мьют в чате ещё на {minutes} мин.{reason}',
     'chat.muteReason': ' Причина: {reason}',
@@ -1931,6 +2064,9 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.createFee': 'Чтобы основать гильдию, вам нужно {amount} золота.',
     'guild.bankNotEmpty': 'Прежде чем распустить гильдию, необходимо опустошить гильдейский банк.',
     'guild.bankClosing': 'Гильдейский банк закрывается. Попробуйте ещё раз через мгновение.',
+    'guild.bankSettling':
+      'Гильдейский банк ещё сохраняет недавнее изменение. Попробуйте ещё раз через мгновение.',
+    'guild.bankBusy': 'Вы заняты. Попробуйте ещё раз через мгновение.',
     'guild.onlyOfficersInvite': 'Приглашать могут только офицеры и глава гильдии.',
     'guild.alreadyInThis': 'Вы уже состоите в этой гильдии.',
     'guild.mustBeOnline': '{name} должен(на) быть в сети, чтобы получить приглашение.',
@@ -1952,6 +2088,10 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.cannotRemoveGm': 'Вы не можете исключить главу гильдии.',
     'guild.onlyGmRemoveOfficer': 'Только глава гильдии может исключить офицера.',
     'guild.onlyGmChangeRanks': 'Только глава гильдии может изменять звания.',
+    'guild.belowRankOnly': 'Это можно сделать только с участниками ниже вашего звания.',
+    'guild.titleNotAllowed': 'Такое название звания недопустимо.',
+    'guild.ladderUpdated': 'Звания гильдии обновлены.',
+    'guild.rankNumbered': 'Звание {n}',
     'guild.useTransfer': 'Чтобы передать лидерство, воспользуйтесь передачей гильдии.',
     'guild.alreadyRank': '{name} уже {rank}.',
     'guild.onlyOfficersChat': 'Использовать чат офицеров могут только офицеры и глава гильдии.',
@@ -1962,6 +2102,8 @@ export const DICT: Record<string, Record<string, string>> = {
     'guild.disbanded': 'Гильдия <{name}> распущена.',
     'guild.removedFrom': 'Вы были исключены из <{name}>.',
     'guild.joined': '{name} присоединяется к гильдии.',
+    'guild.bankGoldDeposited': '{name} внёс(ла) {amount} в банк гильдии.',
+    'guild.bankGoldWithdrawn': '{name} снял(а) {amount} из банка гильдии.',
     'guild.memberLeft': '{name} покидает гильдию.',
     'guild.newMaster': '{name} становится главой гильдии <{guild}>.',
     'guild.removedBy': '{name} исключен(а) из гильдии игроком {actor}.',
@@ -2017,6 +2159,17 @@ export function tServer(
   return interpolate(tmpl, params);
 }
 
+/** Parse the server's English compact money ("5g 20s 3c", any subset of the
+ *  three units) back to copper so formatMoney can re-render it for the viewer's
+ *  locale. A unit that is absent counts as zero. */
+export function parseEnglishCompactMoney(text: string): number {
+  const unit = (suffix: string): number => {
+    const m = new RegExp(`(\\d+)${suffix}(?:\\b|$)`).exec(text);
+    return m ? Number(m[1]) : 0;
+  };
+  return unit('g') * 10000 + unit('s') * 100 + unit('c');
+}
+
 // English-content sub-values the server interpolates, mapped back to dictionary keys.
 const RANK_KEY: Record<string, string> = {
   'Guild Master': 'guild.rankLeader',
@@ -2034,6 +2187,13 @@ const LEAVE_REASON_KEY: Record<string, string> = {
 function localizeRank(r: string): string {
   const k = RANK_KEY[r];
   return k ? tServer(k) : r;
+}
+// A bracketed custom rank from a rank-change line (server/social.ts rankLabel):
+// an untitled custom rank's 'Rank N' re-localizes; a guild's own title is
+// player text and splices through verbatim, like a name.
+function localizeRankTitle(title: string): string {
+  const numbered = /^Rank (\d+)$/.exec(title);
+  return numbered ? tServer('guild.rankNumbered', { n: numbered[1] }) : title;
 }
 function localizeReason(r: string): string {
   const k = LEAVE_REASON_KEY[r];
@@ -2351,6 +2511,25 @@ const RULES: Rule[] = [
     build: (m) => tServer('guild.invited', { name: m[1] }),
   },
   { re: /^(.+) has joined the guild\.$/, build: (m) => tServer('guild.joined', { name: m[1] }) },
+  {
+    // Guild bank gold movement notices (server/guild_bank_gold_notice.ts). The
+    // amount arrives as English compact money ("5g 20s 3c"); it is parsed back
+    // to copper and re-rendered by formatMoney for the viewer's locale.
+    re: /^(.+) deposited ((?:\d+g)?(?: ?\d+s)?(?: ?\d+c)?) into the guild bank\.$/,
+    build: (m) =>
+      tServer('guild.bankGoldDeposited', {
+        name: m[1],
+        amount: formatMoney(parseEnglishCompactMoney(m[2])),
+      }),
+  },
+  {
+    re: /^(.+) withdrew ((?:\d+g)?(?: ?\d+s)?(?: ?\d+c)?) from the guild bank\.$/,
+    build: (m) =>
+      tServer('guild.bankGoldWithdrawn', {
+        name: m[1],
+        amount: formatMoney(parseEnglishCompactMoney(m[2])),
+      }),
+  },
   { re: /^(.+) has left the guild\.$/, build: (m) => tServer('guild.memberLeft', { name: m[1] }) },
   {
     re: /^A guild named '(.+)' already exists\.$/,
@@ -2383,6 +2562,16 @@ const RULES: Rule[] = [
   {
     re: /^(.+) is now (Guild Master|Officer|Member)\.$/,
     build: (m) => tServer('guild.nowRank', { name: m[1], rank: localizeRank(m[2]) }),
+  },
+  // Guild custom ranks (docs/prd/guild-custom-ranks.md): the same two lines
+  // naming a guild-titled or untitled custom rank, which the server brackets.
+  {
+    re: /^(.+) is already \[([^\]]+)\]\.$/,
+    build: (m) => tServer('guild.alreadyRank', { name: m[1], rank: localizeRankTitle(m[2]) }),
+  },
+  {
+    re: /^(.+) is now \[([^\]]+)\]\.$/,
+    build: (m) => tServer('guild.nowRank', { name: m[1], rank: localizeRankTitle(m[2]) }),
   },
   {
     re: /^No character named '(.+)' exists\.$/,

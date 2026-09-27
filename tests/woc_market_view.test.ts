@@ -19,6 +19,7 @@ import {
   type WocMarketViewModel,
   type WocSaleView,
   type WocSettlementView,
+  wocMarketScrollKeys,
   wocMarketViewSig,
   wocQuoteCountdownSig,
 } from '../src/ui/woc_market_view';
@@ -152,6 +153,27 @@ const makeActivity = (over: Partial<WocActivityView> = {}): WocActivityView => (
   ...over,
 });
 
+const makeHistory = (
+  over: Partial<WocMarketViewInput['history']> = {},
+): WocMarketViewInput['history'] => ({
+  sales: [],
+  hasMore: false,
+  page: 0,
+  loading: false,
+  failed: false,
+  ...over,
+});
+
+const makeSale = (over: Partial<WocSaleView> = {}): WocSaleView => ({
+  id: 1,
+  itemId: epicEquipId,
+  priceCents: 2500,
+  sellerName: 'Aurelia',
+  buyerName: 'Borin',
+  atMs: NOW - 60_000,
+  ...over,
+});
+
 const makeBid = (over: Partial<WocBidView> = {}): WocBidView => ({
   id: 11,
   listingId: 1,
@@ -189,6 +211,7 @@ const makeInput = (over: Partial<WocMarketViewInput> = {}): WocMarketViewInput =
   browse: makeBrowse(),
   inventory: [],
   activity: null,
+  history: makeHistory(),
   ...over,
 });
 
@@ -355,6 +378,19 @@ describe('sellableRows: the sell-tab pre-filter over real ITEMS', () => {
     ]);
   });
 
+  it('an unknown-tier rolled quality ranks as ITSELF under the floor, never as the def (the server twin)', () => {
+    // The sell pre-filter reads the sim's effectiveQuality, the same call
+    // server/woc_market_rules.ts makes: a legacy rolled 'mythic' on an epic
+    // def ranks 0 (QUALITY_RANK has no such tier) and is refused, exactly as
+    // the server refuses it. The tooltip's tier-narrowing wrapper read it as
+    // the def's epic and offered a listing the server rejects (the phase 13 QA
+    // fresh-reader finding on the first fix).
+    const instance = { rolled: { quality: 'mythic' as never } };
+    expect(sellableRows([{ itemId: epicEquipId, count: 1, instance }], 'epic', BOTH_ON)).toEqual(
+      [],
+    );
+  });
+
   it('lets a rolled epic quality lift a rare def over an epic floor', () => {
     const instance = { rolled: { quality: 'epic' } };
     expect(sellableRows([{ itemId: rareEquipId, count: 1, instance }], 'epic', BOTH_ON)).toEqual([
@@ -503,6 +539,65 @@ describe('detail resolution', () => {
       makeInput({ browse: makeBrowse({ listings: [makeListing({ id: 1 })], selectedId: null }) }),
     );
     expect(model.browse.detail).toBeNull();
+  });
+});
+
+describe('history mapping (the Sales History tab rows)', () => {
+  it('projects each sale to a row, server order preserved, with page/hasMore', () => {
+    const model = ready(
+      makeInput({
+        history: makeHistory({
+          sales: [makeSale({ id: 2 }), makeSale({ id: 1 })],
+          hasMore: true,
+          page: 3,
+        }),
+      }),
+    );
+    // Server order is already most-recent-first; the view never re-sorts.
+    expect(model.history.rows.map((r) => r.id)).toEqual([2, 1]);
+    expect(model.history.hasMore).toBe(true);
+    expect(model.history.page).toBe(3);
+    expect(model.history.rows[0]).toMatchObject({
+      id: 2,
+      itemId: epicEquipId,
+      sellerName: 'Aurelia',
+      buyerName: 'Borin',
+      atMs: NOW - 60_000,
+      priceCents: 2500,
+    });
+  });
+
+  it('resolves the display quality: the wire figure wins, else the def, else common', () => {
+    // The rolled figure the listing was stamped with, when the server sends it.
+    const wire = ready(
+      makeInput({ history: makeHistory({ sales: [makeSale({ quality: 'legendary' })] }) }),
+    );
+    expect(wire.history.rows[0].quality).toBe('legendary');
+    // A sale carries no instance, so with no wire quality the def frames it;
+    // epicEquipId is an epic def.
+    const def = ready(makeInput({ history: makeHistory({ sales: [makeSale()] }) }));
+    expect(def.history.rows[0].quality).toBe('epic');
+    // A pruned or renamed item id falls to common, never undefined.
+    const unknown = ready(
+      makeInput({ history: makeHistory({ sales: [makeSale({ itemId: '__gone__' })] }) }),
+    );
+    expect(unknown.history.rows[0].quality).toBe('common');
+  });
+
+  it('keeps saleType, defaulting a pre-feature (unstamped) sale to null', () => {
+    const stamped = ready(
+      makeInput({ history: makeHistory({ sales: [makeSale({ saleType: 'directed' })] }) }),
+    );
+    expect(stamped.history.rows[0].saleType).toBe('directed');
+    // A row from before the feature carries no saleType stamp.
+    const legacy = ready(makeInput({ history: makeHistory({ sales: [makeSale()] }) }));
+    expect(legacy.history.rows[0].saleType).toBeNull();
+  });
+
+  it('passes the loading and failed faces through untouched', () => {
+    const m = ready(makeInput({ history: makeHistory({ loading: true, failed: true }) }));
+    expect(m.history.loading).toBe(true);
+    expect(m.history.failed).toBe(true);
   });
 });
 
@@ -733,6 +828,34 @@ describe('wocMarketViewSig', () => {
   });
 });
 
+describe('wocMarketViewSig: the Sales History digest', () => {
+  const sigWith = (over: Partial<WocMarketViewInput['history']>): string =>
+    wocMarketViewSig(buildWocMarketView(makeInput({ tab: 'history', history: makeHistory(over) })));
+
+  it('moves when the sale row set changes', () => {
+    // Sale rows are immutable, so their ids alone digest the list.
+    const one = sigWith({ sales: [makeSale({ id: 1 })] });
+    const two = sigWith({ sales: [makeSale({ id: 1 }), makeSale({ id: 2 })] });
+    expect(two).not.toBe(one);
+  });
+
+  it('moves on a page turn, a hasMore flip, and each of the loading/failed faces', () => {
+    // A player-asked refresh (same page, a failure or the loading ring) must
+    // repaint even when the rows do not move.
+    const base = sigWith({});
+    expect(sigWith({ page: 1 }), 'page').not.toBe(base);
+    expect(sigWith({ hasMore: true }), 'hasMore').not.toBe(base);
+    expect(sigWith({ loading: true }), 'loading').not.toBe(base);
+    expect(sigWith({ failed: true }), 'failed').not.toBe(base);
+  });
+
+  it('moves when the tab switches to Sales History', () => {
+    const browse = wocMarketViewSig(buildWocMarketView(makeInput({ tab: 'browse' })));
+    const history = wocMarketViewSig(buildWocMarketView(makeInput({ tab: 'history' })));
+    expect(history).not.toBe(browse);
+  });
+});
+
 describe('determinism', () => {
   it('builds deeply equal models from the same input object', () => {
     const input = makeInput({
@@ -877,5 +1000,22 @@ describe('wocQuoteCountdownSig: the pending quote repaint key', () => {
     expect(wocQuoteCountdownSig(500, 1_000)).toBe('0');
     expect(wocQuoteCountdownSig(null, 1_000)).toBe('');
     expect(wocQuoteCountdownSig(undefined, 1_000)).toBe('');
+  });
+});
+
+describe('wocMarketScrollKeys: what a kept scroll offset refers to', () => {
+  it('keys the body on the tab and the detail on tab plus listing', () => {
+    expect(wocMarketScrollKeys('browse', undefined)).toEqual({
+      body: 'browse',
+      detail: 'browse:',
+    });
+    expect(wocMarketScrollKeys('browse', 7)).toEqual({ body: 'browse', detail: 'browse:7' });
+    // A tab change moves BOTH keys, so both panes honestly restart at the top;
+    // a listing change moves only the detail key, so the browse list holds.
+    expect(wocMarketScrollKeys('activity', 7).body).not.toBe(wocMarketScrollKeys('browse', 7).body);
+    expect(wocMarketScrollKeys('browse', 8).body).toBe(wocMarketScrollKeys('browse', 7).body);
+    expect(wocMarketScrollKeys('browse', 8).detail).not.toBe(
+      wocMarketScrollKeys('browse', 7).detail,
+    );
   });
 });

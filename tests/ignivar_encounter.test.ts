@@ -2328,6 +2328,34 @@ describe('Ignivar encounter', () => {
     expect(boss.wanderTarget).toBeNull();
   });
 
+  it('re-seats on the highest-threat raider, not the lowest entity id, when the tank leaves the claim', () => {
+    const { sim, boss } = claimedEncounter(994);
+    // The Wolf Form druid spawns first (lowest entity id after the tank) and
+    // sits low on the hate table; the rogue joined later and has far more.
+    const druid = addEncounterPlayer(sim, boss, 'Wolf Druid', 'druid');
+    const rogue = addEncounterPlayer(sim, boss, 'Rogue', 'rogue');
+    expect(druid.id).toBeLessThan(rogue.id);
+    boss.threat.set(sim.player.id, 9000);
+    boss.threat.set(druid.id, 120);
+    boss.threat.set(rogue.id, 4500);
+    boss.swingTimer = 999;
+    updateIgnivarEncounter(sim.ctx, boss);
+    expect(boss.aggroTargetId).toBe(sim.player.id);
+    if (!boss.ignivar) throw new Error('Ignivar state was not initialized');
+    boss.ignivar.brandTimer = 999;
+    boss.ignivar.frontalTimer = 999;
+    boss.ignivar.overlapTimer = 999;
+    boss.ignivar.forgeStrikeTimer = 999;
+
+    // A knockback carried the tank outside the arena claim: the encounter can
+    // no longer use it as the living target.
+    sim.player.pos = { x: boss.pos.x + 100000, y: boss.pos.y, z: boss.pos.z + 100000 };
+    sim.player.prevPos = { ...sim.player.pos };
+    updateIgnivarEncounter(sim.ctx, boss);
+
+    expect(boss.aggroTargetId).toBe(rogue.id);
+  });
+
   it('chases the tank between mechanics when the tank moves out of melee', () => {
     const { sim, boss } = claimedEncounter(991);
     const destination = {
@@ -2894,7 +2922,7 @@ describe('Ignivar encounter', () => {
     expect(ally.hp).toBe(separatedAllyHp);
   });
 
-  it('preserves the exact pull during combat-exit memory but cleans brands outside on reset', () => {
+  it('cleans brands, conduits, and the encounter state the moment the room empties', () => {
     const { sim, boss, conduit } = claimedEncounter();
     updateIgnivarEncounter(sim.ctx, boss);
     if (!boss.ignivar) throw new Error('Ignivar state was not initialized');
@@ -2911,17 +2939,13 @@ describe('Ignivar encounter', () => {
     });
     conduit.templateId = IGNIVAR_WATER_CONDUIT_TEMPLATES.active;
     boss.ignivar.conduitTimers.north_west = 7;
-    boss.combatExitHoldUntil = sim.ctx.time + 5;
     sim.player.pos = { x: 0, y: 0, z: 0 };
 
+    // Nothing defers the reset any more: the empty room resets the boss in the
+    // same call (home, idle, full health) and scrubs its encounter state.
     updateIgnivarEncounter(sim.ctx, boss);
-    expect(boss.aiState).toBe('evade');
-    expect(boss.ignivar).toBeDefined();
-    expect(conduit.templateId).toBe(IGNIVAR_WATER_CONDUIT_TEMPLATES.active);
-    expect(sim.player.auras.some((aura) => aura.id === IGNIVAR_BRAND_AURA_ID)).toBe(true);
-
-    boss.combatExitHoldUntil = sim.ctx.time;
-    updateIgnivarEncounter(sim.ctx, boss);
+    expect(boss.aiState).toBe('idle');
+    expect(boss.hp).toBe(boss.maxHp);
     expect(boss.ignivar).toBeUndefined();
     expect(conduit.templateId).toBe(IGNIVAR_WATER_CONDUIT_TEMPLATES.ready);
     expect(sim.player.auras.some((aura) => aura.id === IGNIVAR_BRAND_AURA_ID)).toBe(false);
@@ -3125,7 +3149,6 @@ describe('Ignivar encounter', () => {
 
     sim.ctx.handleDeath(sim.player, boss);
     sim.ctx.handleDeath(ally, boss);
-    boss.combatExitHoldUntil = sim.ctx.time;
     updateIgnivarEncounter(sim.ctx, boss);
 
     expect(boss.ignivar).toBeUndefined();

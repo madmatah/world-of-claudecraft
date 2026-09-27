@@ -275,7 +275,7 @@ export const TALENT_ABILITIES_V2_A = {
     requiresTarget: false,
     offGcd: true,
     effects: [{ type: 'clearCooldowns', abilities: ['sprint', 'evasion', 'vanish'] }],
-    description: 'Finishes the cooldown on Swift Heels, Ghostfoot, and Smokestep. (Rogue talent)',
+    description: 'Finishes the cooldown on Swift Heels, Ghostfoot, and Smokefade. (Rogue talent)',
   },
   ghostly_strike: {
     id: 'ghostly_strike',
@@ -400,7 +400,12 @@ export const TALENT_ABILITIES_V2_A = {
     learnLevel: 10,
     cost: 130,
     castTime: 3,
-    cooldown: 0,
+    // 12 sec, the same as the holy paladin's Radiant Chorus (the other 30 yd group
+    // heal). With no cooldown Choirmend was cast back to back (3.3 sec between casts
+    // on live raid kills, 67% of holy healing, 79% overheal); the cooldown makes it
+    // the group-recovery spell of the kit rather than the whole kit. Study and
+    // numbers: docs/balance/choirmend-cooldown.md.
+    cooldown: 12,
     range: 0,
     school: 'holy',
     requiresTarget: false,
@@ -520,7 +525,7 @@ export const TALENT_ABILITIES_V2_A = {
     requiresTarget: false,
     effects: [],
     description:
-      'For 12 sec, Thundercall Arc Bolt and Skybranch cast 50% faster, while Arc Bolt grants 2 Thunder; Warspirit triggers its cadence every 2 weapon hits; Spiritmend adds 50% more healing to Mending Current. (Shaman talent)',
+      'For 12 sec, Thundercall Arc Bolt and Skybranch cast 50% faster, while Arc Bolt grants 2 Thunder; Warspirit triggers its cadence every 2 weapon hits; Spiritcall adds 50% more healing to Mending Current. (Shaman talent)',
   },
   bloodlust: {
     id: 'bloodlust',

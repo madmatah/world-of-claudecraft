@@ -53,7 +53,7 @@ import { ARENA_WATER_NAVE_HALF_X, arenaWaterBands } from './arena_water_band_cor
 import { loadGltf, releaseGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { fitAuthoredWallSegment } from './authored_walls_core';
-import { DAIS_PLATFORM_HEIGHT } from './dais_lift';
+import { hash2, stackDaisBlocks } from './dais_blocks_core';
 import { buildDawnholdDressing, ensureDawnholdDressing } from './dawnhold_dressing';
 import {
   placeLitanyMarshDressing,
@@ -112,6 +112,7 @@ import { cloneMaterialWithHooks } from './material_clone_hooks';
 import { type OccluderFadeMat, occluderFadeMat } from './occluder_fade';
 import type { FireLightSink } from './point_light_budget';
 import { buildInfernalDecor, ensureInfernalDecorAssets } from './rift_decor';
+import { riftPlatformSlabs } from './rift_platform_core';
 import { markSharedGeometry, markSharedMaterial, markSharedTexture } from './shared_resource';
 import { radialGlowTexture } from './textures';
 import { addTorchGlowDecal } from './torch_glow_decal';
@@ -183,7 +184,7 @@ export function isArenaVariant(variant: DungeonInteriorVariant): boolean {
 export function dungeonDaisHasRaisedPlatform(variant: DungeonInteriorVariant): boolean {
   // Flat fighting floors: the arena pits, the Nythraxis raid, and the delve
   // trash rooms (their "dais" marker is only the exit threshold). The delve
-  // finale keeps a raised boss stage for Deacon Varric.
+  // finale keeps a raised boss stage for Deacon Vandric.
   if (isArenaVariant(variant) || variant === 'nythraxis' || variant === 'ignivar') return false;
   if (variant === 'delve_ossuary' || variant === 'delve_bell' || variant === 'delve_hall')
     return false;
@@ -456,12 +457,6 @@ if (typeof window !== 'undefined') registerDeferredPreload(() => ensureDungeonAs
 // Deterministic placement helpers
 // ---------------------------------------------------------------------------
 
-// stable per-position hash (same trick as the prop jitter elsewhere)
-function hash2(a: number, b: number): number {
-  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
-  return s - Math.floor(s);
-}
-
 // kinds that throw shadows from the outdoor sun shaft (point lights don't
 // cast); floors + dais receive
 const CASTER_KINDS = new Set([
@@ -665,7 +660,7 @@ export class DungeonInteriors {
       });
       group.position.set(ox, 0, oz);
       group.userData.renderCategory = 'dungeon';
-      this.scene.add(group);
+      await attachSceneGroupGated(this.scene, group, this.compileGate);
       return group;
     }
     // Delve modules pass an explicit per-module layout so render geometry matches
@@ -1232,29 +1227,20 @@ export class DungeonInteriors {
     layout: DungeonLayout,
     platform: { rampZ0: number; rampZ1: number; height: number },
   ): void {
-    const { rampZ0, rampZ1, height } = platform;
-    const halfW = Math.min((layout.wallX ?? 18) - 0.5, 22);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x4a4652, emissive: 0x0a0a12 });
-    // Raised rear deck: a solid riser from the floor up to the platform surface.
-    const deckDepth = Math.max(2, layout.zMax - rampZ1);
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2, height, deckDepth), mat);
-    deck.position.set(0, height / 2, rampZ1 + deckDepth / 2);
+    // Slab plan lives in rift_platform_core.ts (each slab out to the room's own wall
+    // face); one shared material, so the slabs merge into ONE geometry / draw call.
+    const parts = riftPlatformSlabs(layout, platform).map((s) =>
+      new THREE.BoxGeometry(s.halfW * 2, s.top, s.depth).translate(0, s.top / 2, s.z),
+    );
+    const merged = mergeGeometries(parts, false);
+    for (const g of parts) g.dispose();
+    if (!merged) return;
+    const deck = new THREE.Mesh(
+      merged,
+      new THREE.MeshLambertMaterial({ color: 0x4a4652, emissive: 0x0a0a12 }),
+    );
     deck.receiveShadow = true;
     group.add(deck);
-    // Full-width staircase rising 0 to height; each step's top approximates the
-    // linear lift at its centre (the tiny sub-step mismatch is imperceptible). Step
-    // count scales with the ramp length (~2yd tread) so both a short steep sanctum
-    // and a long gentle climb read as proper stairs, not a few giant blocks.
-    const rampLen = rampZ1 - rampZ0;
-    const steps = Math.max(5, Math.min(20, Math.round(rampLen / 2.2)));
-    const stepDepth = rampLen / steps;
-    for (let i = 0; i < steps; i++) {
-      const topY = (height * (i + 1)) / steps;
-      const step = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2, topY, stepDepth + 0.05), mat);
-      step.position.set(0, topY / 2, rampZ0 + (i + 0.5) * stepDepth);
-      step.receiveShadow = true;
-      group.add(step);
-    }
   }
 
   private placeAquaticDressing(group: THREE.Group, layout: DungeonLayout): void {
@@ -2090,6 +2076,13 @@ export class DungeonInteriors {
   ): void {
     const d = layout.dais;
     const glow = (torch ?? TORCH_COLORS[variant]).light;
+    // Flanking platforms (DungeonLayout.platforms, the Nythraxis sigil stages)
+    // are the raised dais object reused: always stacked, glow pooled on top,
+    // no rim decor. The sim lifts its floor to match (daisLiftAt).
+    for (const platform of layout.platforms ?? []) {
+      stackDaisBlocks(p, platform);
+      this.addTorchGlow(group, platform.x, platform.z, glow, 0.68, 1.6);
+    }
     // The arena and Nythraxis raid keep flat fighting floors: no raised platform
     // or rim clutter to visually disagree with the walkable sim collision. A rift
     // style can force either shape (daisRaisedOverride) independent of the kit.
@@ -2098,20 +2091,7 @@ export class DungeonInteriors {
       this.addTorchGlow(group, d.x, d.z, glow, 0.07, 2.4);
       return;
     }
-    const quarter = Math.PI / 2;
-    for (let x = -16; x <= 16; x += 4) {
-      for (let z = -16; z <= 16; z += 4) {
-        if (Math.hypot(x, z) > d.r) continue;
-        const rot = Math.floor(hash2(x, z) * 4) * quarter;
-        // y-scale = DAIS_PLATFORM_HEIGHT / 2 (2u blocks): ground cues (the
-        // death-zone danger ring) lift by the same shared constant.
-        p.add('floor_foundation_allsides', d.x + x, 0, d.z + z, rot, [
-          1.85,
-          DAIS_PLATFORM_HEIGHT / 2,
-          1.85,
-        ]);
-      }
-    }
+    stackDaisBlocks(p, d);
     // ritual glow pooled on the dais top so the boss stage never reads as a
     // black slab (torch pillars stop short of the back chamber)
     this.addTorchGlow(group, d.x, d.z, glow, 0.68, 1.6);
@@ -2165,7 +2145,7 @@ export class DungeonInteriors {
       p.add('skull_candle', d.x, DAIS_HEIGHT + 0.08, d.z, 0, 1.6); // the moon-idol at the altar's heart
     }
     if (variant === 'delve_finale' || variant === 'delve_marsh_apse') {
-      // Deacon Varric's bell-chamber: low ribcage trophies flanking the south
+      // Deacon Vandric's bell-chamber: low ribcage trophies flanking the south
       // (entrance-facing) edge of the stage. The reward chest is a gameplay
       // object the sim places centre-south, and the surface-exit stairs sit at
       // the north edge: keep both clear, so no idol, hoard, or back-corner chest.

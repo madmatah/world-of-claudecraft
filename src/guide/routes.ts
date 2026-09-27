@@ -145,6 +145,15 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     descKey: 'guide.questsPage.intro',
   },
   {
+    // Filed beside quests: standing is earned through world quests, and each faction is
+    // tied to a group of zones, so a reader comes here for "where they are".
+    id: 'factions',
+    sub: 'factions',
+    navKey: 'guide.nav.factions',
+    group: 'world',
+    descKey: 'guide.factionsPage.intro',
+  },
+  {
     id: 'dungeons',
     sub: 'dungeons',
     navKey: 'guide.nav.dungeons',
@@ -187,10 +196,17 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     descKey: 'guide.thornhollowPage.intro',
   },
   {
+    id: 'world-pvp',
+    sub: 'world-pvp',
+    navKey: 'guide.nav.worldPvp',
+    group: 'compete',
+    descKey: 'guide.worldPvpPage.introZones',
+  },
+  {
     id: 'realm-racers',
     sub: 'realm-racers',
     navKey: 'guide.nav.realmRacers',
-    // Filed with arena/vale-cup/thornhollow: the release's sidebar regroup
+    // Filed with arena/thornhollow/world-pvp: the release's sidebar regroup
     // retired the old catch-all 'compendium' this page was authored into, and a
     // rally is a competitive activity.
     group: 'compete',

@@ -27,7 +27,8 @@ describe('Eastbrook town grass exclusion', () => {
     // signpost (content/noticeboards.ts): the island board rides the same
     // canonical def, so it enters the built-in service list and earns its
     // own grass exclusion like any other civic prop.
-    expect(BUILTIN_NOTICEBOARDS).toHaveLength(15);
+    // Includes the glider rankings sign at the mountain wharf.
+    expect(BUILTIN_NOTICEBOARDS).toHaveLength(16);
     // Includes Eastbrook footprints plus Fenbridge rebuild aprons (see fenbridge_layout).
     // Re-pinned 2026-08: the harbor-move layout v3 retired the ring wall
     // (d19aa33f76, docs/design/eastbrook-revamp/site-plan.md), dropping the
@@ -51,7 +52,8 @@ describe('Eastbrook town grass exclusion', () => {
     // and reading-spot exclusions add two more on top.
     // The 13 town guild boards (content/noticeboards.ts, one per hub
     // settlement) each add a footprint and a reading-spot exclusion: 26 more.
-    expect(exclusions).toHaveLength(123);
+    // The glider sign adds its footprint and reading-spot exclusions too.
+    expect(exclusions).toHaveLength(125);
     expect(exclusions.some((item) => item.id.startsWith('eastbrook_grand_armoury'))).toBe(false);
     for (const building of [
       ...EASTBROOK_LAYOUT.preservedBuildings,
@@ -106,9 +108,12 @@ describe('Eastbrook town grass exclusion', () => {
       expect(byId.get(id)).toMatchObject({ kind: 'obb', halfWidth, halfDepth });
       expect(byId.get(`${id}:serviceApron`)).toMatchObject({ kind: 'circle', radius: 1.5 });
     }
-    expect(byId.get('eastbrook_civic_well_beacon')).toMatchObject({
+    // Round 7 replaced the well beacon with the Realm Builder monument on the
+    // same point, and round 8 doubled it: the exclusion is the sculpt's own
+    // tight cylinder at that size, not the beacon's looser 1.5.
+    expect(byId.get('eastbrook_realm_builder_monument')).toMatchObject({
       kind: 'circle',
-      radius: 1.5,
+      radius: 3.19,
     });
     expect(byId.get('eastbrook_noticeboard')).toMatchObject({
       kind: 'obb',
@@ -208,7 +213,7 @@ describe('Eastbrook town grass exclusion', () => {
 
   it('keeps grass out of the well and wall while preserving every exact gate opening', () => {
     const exclusions = eastbrookGrassExclusions(PROPS.buildings, true, BUILTIN_NOTICEBOARDS);
-    const well = EASTBROOK_LAYOUT.civic.wellBeacon;
+    const well = EASTBROOK_LAYOUT.civic.monument;
     expect(
       insideEastbrookGrassExclusion(exclusions, well.position.x, well.position.z, PADDING),
     ).toBe(true);

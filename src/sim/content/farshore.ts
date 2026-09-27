@@ -67,6 +67,10 @@ export const FARSHORE_ZONE: ZoneDef = {
     { x: 375, z: -5, label: 'The Watch Meadow', id: 'the_watch_meadow' },
     { x: 402, z: -72, label: 'The Sundered Cliffs', id: 'the_sundered_cliffs' },
     { x: 434, z: 58, label: 'The Riftfields', id: 'the_riftfields' },
+    // APPENDED, never inserted: poi labels resolve through positional locale
+    // rows. The broken hull on the strand north of Gullhaven, the salvage
+    // world quest's landmark (render/farshore_shipwreck.ts places the model).
+    { x: 306, z: 123.05, label: 'The Wreck', id: 'the_wreck' },
   ],
   welcome:
     "Cross the sandbar and Gullhaven's bell will find you before the town does. The breaks tear open without warning, and the redoubt holds its shore against whatever pours through. They have been waiting a long while for someone like you.",
@@ -193,6 +197,13 @@ export const FARSHORE_MOBS: Record<string, MobTemplate> = {
     loot: [{ copper: 35, chance: 1 }],
     scale: 1.45,
     color: 0x8a2f6a,
+    // Ogre stock like the Thornpeak ogres, so tusked (the game ships
+    // cracked_ogre_tusk). Phase 11m added the tag as the band-1 open-world tusk
+    // source in place of dune_troll, whose fang beside tusk would put two
+    // specimen-less families on one corpse (the capacity pre-gate premise,
+    // tests/corpse_harvest_sim.test.ts). A count-1 elite, so a hollow tusk
+    // floor member: the ledger records its density.
+    componentTags: ['tusk'],
   },
   // Nell's husband (q_fs_bram_come_home), thrown back by the sea at the
   // nets-break and holed up in his wrecked boat past the Landing's point.
@@ -295,6 +306,27 @@ export const FARSHORE_NPCS: Record<string, NpcDef> = {
     questIds: ['q_fs_bram_come_home'],
     greeting:
       'It opened right where the nets dry. Right there, where I stood every morning of my life. I do not go down to the shore anymore. I do not go much of anywhere anymore.',
+  },
+  // The Riftwright: the Rift Forge NPC (riftForge flag). Stands in the Watch
+  // Meadow a few yards south-west of Riftwatch Ollun, the one authored rift
+  // place in the world, so the ring a first clear mints is upgraded where the
+  // breaks are studied. The spot is deliberately off the meadow's road ends
+  // and clear of the Hilltop Spring's shore ring: every NPC gets a calm-anchor
+  // flatten pad (terrain_calm_anchors.ts), and at the original (377, 7) that
+  // pad deformed the spring's shoreline and two road edges by up to a yard
+  // (tests/terrain_height_parity.test.ts). Here it touches two open-meadow
+  // atlas points and nothing else.
+  riftwright_maelis: {
+    id: 'riftwright_maelis',
+    name: 'Riftwright Maelis',
+    title: 'Rift Forgemaster',
+    pos: { x: 366, z: 10 },
+    facing: Math.PI,
+    color: 0x7a3f8a,
+    questIds: [],
+    riftForge: true,
+    greeting:
+      'A Riftbound band remembers the break that made it, $C. Bring me the band, and the essence the breaks shed, and I will teach it to remember more.',
   },
 };
 

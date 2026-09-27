@@ -15,21 +15,36 @@
 // read, no repeating driver: the estimate debounce is a one-shot timeout).
 
 import type { WocQuoteView } from '../../../net/woc_market_sdk';
+import { stackSizeOf } from '../../../sim/bags';
 import { ITEMS } from '../../../sim/data';
+import type { MaterialComposition } from '../../../sim/material_sources';
 import type { InvSlot, ItemDef, ItemInstancePayload } from '../../../sim/types';
 import type { IWorld } from '../../../world_api';
 import { userFacingApiError } from '../../api_error_i18n';
-import { bagQualityKey } from '../../bags_view';
+import { showQuantityPrompt } from '../../bank_quantity_prompt';
 import { itemDisplayName } from '../../entity_i18n';
 import { esc } from '../../esc';
 import { captureFocusKey } from '../../focus_restore';
-import { formatDateTime, formatMoney as formatLocalizedMoney, t } from '../../i18n';
+import { formatDateTime, formatMoney as formatLocalizedMoney, formatNumber, t } from '../../i18n';
 import type { TranslationKey } from '../../i18n.catalog';
 import { itemNameColor } from '../../item_name_color';
 import { knownItemDef } from '../../known_item';
+import {
+  appendMaterialSourcesActionAfter,
+  attachMaterialSourcesContextMenu,
+  closeMaterialSourcesDialogForOwner,
+  type MaterialSourcesDialogOpener,
+} from '../../material_sources_dialog';
 
+import { dismissInstalledPrompt, installPromptDialog } from '../../prompt_dialog';
 import { termsUrlFor } from '../../terms_link';
-import { buildTradeItemRow, tradeRowTooltipTarget } from '../../trade_view';
+import {
+  buildTradeItemRow,
+  removeTradeOfferUnits,
+  resolveTradeOfferRemove,
+  tradeOfferRemoveOpensPrompt,
+  tradeRowTooltipTarget,
+} from '../../trade_view';
 import {
   refreshWocTradeArm,
   restoreWocTradeFocus,
@@ -57,6 +72,7 @@ import { WOC_LOG_BAD, WOC_LOG_GOOD, WOC_LOG_NOTE } from '../../woc_log_tones';
 import { wocPaymentPendingText } from '../../woc_market_reason_text';
 import type { WocMarketHooks } from '../../woc_market_window';
 import { wocTokensText } from '../../woc_tokens_text';
+import { wornItemCellParts } from '../../worn_item_cell_view';
 import {
   adoptedWocOffer,
   selectStandingWocOffer,
@@ -70,6 +86,20 @@ import {
 // windows use for a quality the wire did not rank.
 const QUALITY_DEFAULT_COLOR = 'var(--color-quality-default)';
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.querySelector(sel) as T;
+
+/** The remove prompt's own class: NOT in the bags window's teardown selector,
+ *  so a bags close or mobile cluster-close cannot sweep a modal that belongs
+ *  to the trade window (only the trade window is inert under it). */
+const TRADE_REMOVE_PROMPT_CLASS = 'trade-remove-prompt';
+
+/** Tear down every trade quantity prompt, this window's remove prompt AND the
+ *  bags' offer prompt (a trade that closes takes both with it), through each
+ *  one's own dismiss() so whichever root it made inert is cleared. */
+function dismissTradeOfferPrompts(): void {
+  for (const p of document.querySelectorAll(`.trade-offer-prompt, .${TRADE_REMOVE_PROMPT_CLASS}`)) {
+    dismissInstalledPrompt(p);
+  }
+}
 
 /** How often the trade window re-reads the standing $WOC offer. Slow on
  *  purpose: it is a REST read on a short-lived surface, and two seconds of lag
@@ -110,9 +140,15 @@ export interface WocTradeControllerDeps {
   /** Re-read the wallet footer balance after tokens moved on-chain. */
   refreshWocBalance(): void;
   log(text: string, color?: string): void;
-  itemIcon(item: ItemDef): string;
+  itemIcon(item: ItemDef, quality?: ItemDef['quality']): string;
   attachTooltip(el: HTMLElement, html: () => string): void;
-  itemTooltip(item: ItemDef, compare?: boolean, instance?: ItemInstancePayload): string;
+  openMaterialSources?: MaterialSourcesDialogOpener;
+  itemTooltip(
+    item: ItemDef,
+    compare?: boolean,
+    instance?: ItemInstancePayload,
+    materialSources?: MaterialComposition,
+  ): string;
   renderBags(): void;
 }
 
@@ -245,14 +281,19 @@ export class WocTradeController {
   private log(text: string, color?: string): void {
     this.deps.log(text, color);
   }
-  private itemIcon(item: ItemDef): string {
-    return this.deps.itemIcon(item);
+  private itemIcon(item: ItemDef, quality?: ItemDef['quality']): string {
+    return this.deps.itemIcon(item, quality);
   }
   private attachTooltip(el: HTMLElement, html: () => string): void {
     this.deps.attachTooltip(el, html);
   }
-  private itemTooltip(item: ItemDef, compare = true, instance?: ItemInstancePayload): string {
-    return this.deps.itemTooltip(item, compare, instance);
+  private itemTooltip(
+    item: ItemDef,
+    compare = true,
+    instance?: ItemInstancePayload,
+    materialSources?: MaterialComposition,
+  ): string {
+    return this.deps.itemTooltip(item, compare, instance, materialSources);
   }
   private renderBags(): void {
     this.deps.renderBags();
@@ -1204,6 +1245,64 @@ export class WocTradeController {
    *  before the shell's windows are wired. */
   private tradeWindowEl: HTMLElement | null = null;
 
+  /** A click on one of this side's offered rows: the same quantity prompt the
+   *  bags open (bank_quantity_prompt.ts), in REMOVE mode. The number is how
+   *  many units to take off the line (capped at the line's count, with the
+   *  vault's unit and whole-stack step pairs), Remove takes that many, Remove
+   *  all takes the whole line. A one-unit line has no quantity to choose and
+   *  unstages directly (tradeOfferRemoveOpensPrompt, the bags gate's twin).
+   *  The window is the inert root; the submit re-resolves the live line so a
+   *  prompt left open across a vanished line refuses. */
+  private showOfferRemovePrompt(itemId: string): void {
+    const line = this.stagedTrade.items.find((s) => s.itemId === itemId);
+    if (!line) return;
+    if (!tradeOfferRemoveOpensPrompt(line)) {
+      if (removeTradeOfferUnits(this.stagedTrade.items, itemId, 1)) this.pushTradeOffer();
+      return;
+    }
+    const el = this.tradeWindow();
+    const item = knownItemDef(ITEMS, itemId);
+    const itemName = item ? itemDisplayName(item) : itemId;
+    const stepSize = stackSizeOf(item);
+    const count = (n: number): string => formatNumber(n, { maximumFractionDigits: 0 });
+    showQuantityPrompt(
+      {
+        installPromptDialog: (prompt, opener, close) =>
+          installPromptDialog(prompt, opener, close, {
+            inertRoot: el,
+            idPrefix: 'trade-prompt-title',
+          }),
+        dismissSiblings: dismissTradeOfferPrompts,
+      },
+      {
+        className: TRADE_REMOVE_PROMPT_CLASS,
+        step: {
+          size: stepSize,
+          downAriaText: t('hudChrome.bank.quantityStepDownAria', { count: count(stepSize) }),
+          upAriaText: t('hudChrome.bank.quantityStepUpAria', { count: count(stepSize) }),
+          unitDownAriaText: t('hudChrome.bank.quantityStepDownAria', { count: count(1) }),
+          unitUpAriaText: t('hudChrome.bank.quantityStepUpAria', { count: count(1) }),
+        },
+        titleText: t('hudChrome.trade.offerRemoveTitle', { item: itemName }),
+        inputAriaText: t('hudChrome.trade.offerRemoveInput'),
+        confirmText: t('hudChrome.trade.offerRemove'),
+        confirmAllText: t('hudChrome.trade.offerRemoveAll'),
+        cancelText: t('itemUi.vendor.sellQuantityCancel'),
+        maxCount: Math.max(1, Math.floor(line.count)),
+        resolveCount: (requested) =>
+          resolveTradeOfferRemove(this.stagedTrade.items, itemId, requested),
+        send: (taken) => {
+          if (removeTradeOfferUnits(this.stagedTrade.items, itemId, taken)) this.pushTradeOffer();
+        },
+        afterClose: () => {
+          // The push repaints the window wholesale (the opener row is gone),
+          // so land on its always-present close button.
+          el.querySelector<HTMLElement>('[data-close]')?.focus();
+        },
+      },
+    );
+  }
+
   private tradeWindow(): HTMLElement {
     if (this.tradeWindowEl === null || !this.tradeWindowEl.isConnected) {
       this.tradeWindowEl = $('#trade-window');
@@ -1216,6 +1315,12 @@ export class WocTradeController {
     const info = this.sim.tradeInfo;
     if (!info) {
       if (this.tradeWasOpen) {
+        closeMaterialSourcesDialogForOwner(el);
+        // The adjust prompt cannot outlive its window: tear it down through
+        // its own dismiss() (inert cleared), and clear inert once more as the
+        // force-close backstop the prompt recipe asks every owner for.
+        dismissTradeOfferPrompts();
+        el.inert = false;
         el.style.display = 'none';
         this.tradeWasOpen = false;
         this.stagedTrade = { items: [], copper: 0 };
@@ -1422,38 +1527,54 @@ export class WocTradeController {
         // family: it carries border-color plus an epic and legendary glow and
         // never a text colour, so on a bare span it painted a stray halo and
         // left the name the inherited grey.
-        const qColor = item
-          ? itemNameColor({ kind: item.kind, quality: bagQualityKey(item) })
-          : QUALITY_DEFAULT_COLOR;
-        const inner = `${item ? this.itemIcon(item) : unknownItemIconHtml(s.itemId)}<span style="color:${qColor}">${esc(label)}</span>`;
+        // The staged COPY's own quality (a legacy legendary-rolled copy is
+        // tradable and reads legendary here, the all-surfaces item-cell rule;
+        // a promoted copy is bound and never reaches the table).
+        // One cell-authority read for the color AND the rim (the label keeps
+        // the def name plus count from buildTradeItemRow: a promoted copy is
+        // bound and never reaches the table, so only a persisted named-but-
+        // unbound payload, which the load arm admits but the live shape never
+        // mints, would show the def here beside the chosen name in its tooltip).
+        const parts = item ? wornItemCellParts(item, s.instance) : null;
+        const qColor =
+          item && parts
+            ? itemNameColor({ kind: item.kind, quality: parts.quality ?? 'common' })
+            : QUALITY_DEFAULT_COLOR;
+        const inner = `<span class="ui-socket ui-socket--bag">${item && parts ? this.itemIcon(item, parts.quality) : unknownItemIconHtml(s.itemId)}${parts?.qualityBadgeLabelled ?? ''}</span><span style="color:${qColor}">${esc(label)}</span>`;
         return mine
-          ? `<button type="button" class="trade-item mine" data-item="${esc(s.itemId)}">${inner}</button>`
-          : `<div class="trade-item">${inner}</div>`;
+          ? `<button type="button" class="trade-item mine ui-card" data-item="${esc(s.itemId)}">${inner}</button>`
+          : `<div class="trade-item ui-card">${inner}</div>`;
       };
+      const emptyRows = (count: number, label: string) =>
+        Array.from(
+          { length: Math.max(0, 4 - count) },
+          (_, index) =>
+            `<div class="trade-item trade-item-empty"><span class="ui-socket ui-socket--bag empty" aria-hidden="true"></span>${index === 0 && count === 0 ? `<span class="trade-empty">${esc(label)}</span>` : ''}</div>`,
+        ).join('');
       el.innerHTML = `
-        <div class="panel-title"><span>${esc(t('hud.trade.title', { name: info.otherName }))}</span><button type="button" class="x-btn" data-close aria-label="${esc(t('hud.trade.cancel'))}">${svgIcon('close')}</button></div>
+        <div class="panel-title ui-win-head"><span class="ui-win-title">${esc(t('hud.trade.title', { name: info.otherName }))}</span><button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hud.trade.cancel'))}">${svgIcon('close')}</button></div>
         <div class="trade-cols">
           <div class="trade-col ${info.myAccepted ? 'accepted' : ''}">
             <h4>${esc(t('hud.trade.yourOffer'))}</h4>
-            <div class="trade-items">${info.myOffer.items.map((s) => itemRow(s, true)).join('') || `<div class="trade-empty">${esc(t('hud.trade.emptyMine'))}</div>`}</div>
+            <div class="trade-items ui-well">${info.myOffer.items.map((s) => itemRow(s, true)).join('')}${emptyRows(info.myOffer.items.length, t('hud.trade.emptyMine'))}</div>
             <div class="trade-money"><span class="trade-money-label">${esc(t('hud.trade.money'))}:</span>${wocMoneyMine}
               <span class="trade-coins"${wocModel.wocDealStanding ? ' hidden' : ''}>
-                <input class="coininput" id="trade-g"${goldAttr} type="number" min="0" value="${Math.floor(this.stagedTrade.copper / 10000)}" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.goldShort'))}</span>
-                <input class="coininput" id="trade-s"${goldAttr} type="number" min="0" max="99" value="${Math.floor((this.stagedTrade.copper % 10000) / 100)}" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.silverShort'))}</span>
-                <input class="coininput" id="trade-c"${goldAttr} type="number" min="0" max="99" value="${this.stagedTrade.copper % 100}" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.copperShort'))}</span>
+                <input class="coininput ui-input" id="trade-g"${goldAttr} type="number" min="0" value="${Math.floor(this.stagedTrade.copper / 10000)}" aria-label="${esc(t('itemUi.money.gold'))}"><span class="coin g" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.goldShort'))}</span>
+                <input class="coininput ui-input" id="trade-s"${goldAttr} type="number" min="0" max="99" value="${Math.floor((this.stagedTrade.copper % 10000) / 100)}" aria-label="${esc(t('itemUi.money.silver'))}"><span class="coin s" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.silverShort'))}</span>
+                <input class="coininput ui-input" id="trade-c"${goldAttr} type="number" min="0" max="99" value="${this.stagedTrade.copper % 100}" aria-label="${esc(t('itemUi.money.copper'))}"><span class="coin c" aria-hidden="true"></span><span class="mkt-coin-tag">${esc(t('itemUi.money.copperShort'))}</span>
               </span>
             </div>
           </div>
           <div class="trade-col ${info.theirAccepted ? 'accepted' : ''}">
             <h4>${esc(t('hud.trade.theirOffer', { name: info.otherName }))}</h4>
-            <div class="trade-items">${info.theirOffer.items.map((s) => itemRow(s, false)).join('') || `<div class="trade-empty">${esc(t('hud.trade.emptyTheirs'))}</div>`}</div>
+            <div class="trade-items ui-well">${info.theirOffer.items.map((s) => itemRow(s, false)).join('')}${emptyRows(info.theirOffer.items.length, t('hud.trade.emptyTheirs'))}</div>
             <div class="trade-money">${esc(t('hud.trade.money'))}: ${wocMoneyTheirs || `<span class="gold">${formatLocalizedMoney(info.theirOffer.copper)}</span>`}</div>
           </div>
         </div>
         <div class="trade-hint">${esc(t('hud.trade.hint'))}</div>
         ${wocTradeArmHtml(wocModel, this.wocTradeUsdCents)}`;
       const acceptBtn = document.createElement('button');
-      acceptBtn.className = 'btn';
+      acceptBtn.className = 'btn ui-btn ui-btn--red';
       // With a $WOC offer standing, agreement lives on the OFFER, not on the sim
       // trade (which this deal never confirms). Reading myAccepted here left the
       // button saying "Accept" after the player had already accepted, and
@@ -1500,7 +1621,7 @@ export class WocTradeController {
         this.sim.tradeConfirm();
       });
       const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'btn';
+      cancelBtn.className = 'btn ui-btn';
       cancelBtn.textContent = t('hud.trade.cancel');
       cancelBtn.addEventListener('click', () => this.sim.tradeCancel());
       // The two window actions in one row (the sheet pins it to the bottom
@@ -1515,13 +1636,7 @@ export class WocTradeController {
       restoreWocTradeFocus(el, keptFocusKey);
       el.querySelectorAll('.trade-item.mine').forEach((row) => {
         row.addEventListener('click', () => {
-          const itemId = (row as HTMLElement).dataset.item ?? '';
-          const idx = this.stagedTrade.items.findIndex((s) => s.itemId === itemId);
-          if (idx >= 0) {
-            this.stagedTrade.items[idx].count--;
-            if (this.stagedTrade.items[idx].count <= 0) this.stagedTrade.items.splice(idx, 1);
-            this.pushTradeOffer();
-          }
+          this.showOfferRemovePrompt((row as HTMLElement).dataset.item ?? '');
         });
       });
       // Wire the same stat tooltip bag/vendor/bank slots use onto both offer
@@ -1535,8 +1650,22 @@ export class WocTradeController {
         rows.forEach((row, i) => {
           const target = tradeRowTooltipTarget(slots, i);
           if (!target) return;
-          this.attachTooltip(row as HTMLElement, () =>
-            this.itemTooltip(target.item, true, target.instance),
+          const rowElement = row as HTMLElement;
+          this.attachTooltip(rowElement, () =>
+            this.itemTooltip(target.item, true, target.instance, target.materialSources),
+          );
+          const itemName = itemDisplayName(target.item);
+          attachMaterialSourcesContextMenu(
+            rowElement,
+            itemName,
+            target.materialSources,
+            this.deps.openMaterialSources,
+          );
+          appendMaterialSourcesActionAfter(
+            rowElement,
+            itemName,
+            target.materialSources,
+            this.deps.openMaterialSources,
           );
         });
       };

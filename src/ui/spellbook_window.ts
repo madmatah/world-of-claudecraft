@@ -55,6 +55,7 @@ import { ABILITIES, CLASSES } from '../sim/data';
 import type { ResolvedAbility } from '../sim/sim';
 import type { AbilityDef } from '../sim/types';
 import type { IWorld } from '../world_api';
+import { DeferredDragRender } from './deferred_drag_render';
 import { markDialogRoot } from './dialog_root';
 import { classDisplayName, tEntity } from './entity_i18n';
 import { esc } from './esc';
@@ -181,6 +182,17 @@ export class SpellbookWindow {
   private lastAttackOnBar = false;
   private lastHasFree = false;
   private readonly lastSlotIds: (string | null)[] = [];
+  // True while a native drag started on this window's own Attack row or an
+  // ability row is in flight. A browser never fires dragend on a source
+  // element that has already left the document, so render()'s innerHTML
+  // rebuild (driven by tickOpen's per-frame cooldown watch, which fires on
+  // almost every tick some known ability is cooling down) must defer while
+  // one of these rows is the live drag source, or the row is destroyed
+  // before its own dragend fires and the shared drag state it feeds gets
+  // stuck for the rest of the session (see deferred_drag_render.ts;
+  // bags_window.ts hit this hazard first).
+  private dragActive = false;
+  private readonly dragRenderGate = new DeferredDragRender();
 
   constructor(private readonly deps: SpellbookWindowDeps) {}
 
@@ -318,6 +330,15 @@ export class SpellbookWindow {
   }
 
   render(): void {
+    // A native drag's source row dies with the rest of the list on an innerHTML
+    // rebuild, and a browser never fires dragend on a row that already left the
+    // document: the shared hotbar-eligible dragAction it feeds would then stay
+    // stuck on the stale drag for the rest of the session, silently failing every
+    // later drop on the action bar. Defer the rebuild instead of tearing the
+    // dragged row out from under it; the row's own dragend flushes it once the
+    // drag actually concludes (deferred_drag_render.ts; the same hazard
+    // bags_window.ts guards against for bag-item drags).
+    if (this.dragRenderGate.shouldDefer(this.dragActive)) return;
     const el = this.deps.root();
     const world = this.deps.world();
     this.captureKnown(world.known);
@@ -359,9 +380,9 @@ export class SpellbookWindow {
     // "Reset bar" only applies to classes with per-form bars (druid); other classes
     // have a single bar, so the button is omitted for them.
     const resetBtnHtml = view.hasFormBars
-      ? `<button type="button" class="x-btn spellbook-reset" data-reset-bar aria-label="${esc(t('abilityUi.spellbook.resetBarAria'))}">${esc(t('abilityUi.spellbook.resetBar'))}</button>`
+      ? `<button type="button" class="spellbook-reset ui-btn" data-reset-bar aria-label="${esc(t('abilityUi.spellbook.resetBarAria'))}">${esc(t('abilityUi.spellbook.resetBar'))}</button>`
       : '';
-    el.innerHTML = `<div class="panel-title"><span>${esc(t('abilityUi.spellbook.title'))} <span class="spellbook-class">${esc(t('abilityUi.spellbook.classSubtitle', { className }))}</span></span><div class="panel-title-actions">${resetBtnHtml}<button type="button" class="x-btn" data-close aria-label="${esc(t('abilityUi.spellbook.close'))}">${svgIcon('close')}</button></div></div>`;
+    el.innerHTML = `<div class="panel-title ui-win-head"><img class="ui-win-art" src="/ui/chrome/spellbook.webp" alt="" draggable="false"><span class="ui-win-title">${esc(t('abilityUi.spellbook.title'))}<span class="spellbook-class ui-win-sub">${esc(t('abilityUi.spellbook.classSubtitle', { className }))}</span></span><div class="panel-title-actions ui-win-actions">${resetBtnHtml}<button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('abilityUi.spellbook.close'))}">${svgIcon('close')}</button></div></div>`;
     const list = document.createElement('div');
     list.className = 'spell-list';
     list.setAttribute('role', 'list');
@@ -383,6 +404,13 @@ export class SpellbookWindow {
       this.deps.resetFormBar();
       audio.click();
     });
+  }
+
+  /** Catch up a rebuild render() deferred (see its own comment) because the Attack
+   *  row or an ability row was mid-drag. Called from that row's own dragend, after
+   *  dragActive has already cleared. */
+  private flushDeferredRender(): void {
+    this.dragRenderGate.flush(() => this.render());
   }
 
   // Force the +/- toggles to match the bar as it stands right now.
@@ -533,17 +561,17 @@ export class SpellbookWindow {
     const name = t('abilityUi.actionBar.attackName');
     const summary = t('abilityUi.actionBar.attackTooltip');
     const el = document.createElement('div');
-    el.className = 'spell-row';
+    el.className = 'spell-row ui-card';
     el.tabIndex = 0;
     el.setAttribute('role', 'listitem');
     // No aria-label override: the row's own localized text (name + summary) is
     // the accessible content, unlike ability rows whose label folds in rank.
-    el.innerHTML = `<div class="spell-icon" style="background-image:url(${iconDataUrl('ability', 'attack')})"></div>
+    el.innerHTML = `<div class="spell-icon ui-socket ui-socket--bag" style="background-image:url(${iconDataUrl('ability', 'attack')})"></div>
         <div class="spell-text"><div class="spell-name">${esc(name)}</div>
         <div class="spell-sub">${esc(summary)}</div></div>`;
     const toggle = document.createElement('button');
     toggle.type = 'button';
-    toggle.className = `spell-hotbar-toggle${onBar ? ' remove' : ''}`;
+    toggle.className = `spell-hotbar-toggle ui-btn${onBar ? ' remove' : ''}`;
     toggle.dataset.attackToggle = '1';
     toggle.textContent = onBar ? '-' : '+';
     toggle.setAttribute(
@@ -571,6 +599,7 @@ export class SpellbookWindow {
     // on (restoring Attack to slot 0). The +/- toggle above stays for touch/keyboard.
     el.draggable = true;
     el.addEventListener('dragstart', (e) => {
+      this.dragActive = true;
       if (e.dataTransfer) {
         e.dataTransfer.setData(HOTBAR_ATTACK_MIME, '1');
         e.dataTransfer.effectAllowed = 'move';
@@ -578,7 +607,9 @@ export class SpellbookWindow {
       this.deps.hideTooltip();
     });
     el.addEventListener('dragend', () => {
+      this.dragActive = false;
       this.deps.clearActionDropTargets();
+      this.flushDeferredRender();
     });
     this.deps.attachTooltip(
       el,
@@ -588,11 +619,28 @@ export class SpellbookWindow {
     list.appendChild(el);
   }
 
+  // The spellbook lists every LEARNED spell under its own base identity, never
+  // the live action-bar transform (Redharvest/Overbloom/Venomrend/Pack Rally):
+  // a row is an index entry, not a cast preview. world.resolvedAbility(id) runs
+  // the full display chain and can swap def.id when an action-replacement
+  // engine is currently active, so this keeps only the id-PRESERVING part of
+  // that resolve (the Coldsight window tweaks, Vespers Dirge/Mindfracture) by
+  // falling back to the raw `known` the instant the id would change.
+  private resolvedForDisplay(known: ResolvedAbility): ResolvedAbility {
+    const resolved = this.deps.world().resolvedAbility(known.def.id);
+    return resolved && resolved.def.id === known.def.id ? resolved : known;
+  }
+
   private appendRow(list: HTMLElement, row: SpellbookRow): void {
     const def = ABILITIES[row.abilityId];
+    // The STATIC row summary/rank stay on the raw row.known: tickOpen's
+    // knownChanged gate only diffs raw known (rank/cost/castTime/cooldown),
+    // never an aura-driven resolve, so a build-time live resolve here would
+    // stick after the aura expires with nothing left to trigger a rebuild.
+    // Only the hover tooltip below resolves live, on every open.
     const known = row.known;
     const el = document.createElement('div');
-    el.className = `spell-row${known ? '' : ' locked'}`;
+    el.className = `spell-row ui-card${known ? '' : ' locked'}`;
     el.tabIndex = 0;
     el.setAttribute('role', 'listitem');
     // Ability id on the row so a talent-driven rerenderPreservingView() can restore
@@ -612,13 +660,13 @@ export class SpellbookWindow {
           })
         : t('abilityUi.spellbook.unlearnedAbilityAria', { name, level: learnLevel }),
     );
-    el.innerHTML = `<div class="spell-icon" style="background-image:url(${iconDataUrl('ability', row.abilityId)})"></div>
+    el.innerHTML = `<div class="spell-icon ui-socket ui-socket--bag" style="background-image:url(${iconDataUrl('ability', row.abilityId)})"></div>
         <div class="spell-text"><div class="spell-name">${esc(name)}${known && known.rank > 1 ? ` <span class="spell-rank">${esc(t('abilityUi.tooltip.rank', { rank: this.formatAbilityNumber(known.rank) }))}</span>` : ''}</div>
         <div class="spell-sub">${locked ? esc(t('abilityUi.spellbook.trainableAtLevel', { level: learnLevel })) : esc(summary)}</div></div>`;
     if (known && isAbilityActionBarEligible(def)) {
       const toggle = document.createElement('button');
       toggle.type = 'button';
-      toggle.className = `spell-hotbar-toggle${row.onBar ? ' remove' : ''}`;
+      toggle.className = `spell-hotbar-toggle ui-btn${row.onBar ? ' remove' : ''}`;
       toggle.dataset.abilityId = known.def.id;
       toggle.textContent = row.onBar ? '-' : '+';
       toggle.setAttribute(
@@ -686,6 +734,7 @@ export class SpellbookWindow {
       el.appendChild(toggle);
       el.draggable = true;
       el.addEventListener('dragstart', (e) => {
+        this.dragActive = true;
         const action = { type: 'ability' as const, id: known.def.id };
         this.deps.setDragAction(action);
         this.writeDraggedAction(e.dataTransfer, action);
@@ -693,8 +742,10 @@ export class SpellbookWindow {
         this.deps.hideTooltip();
       });
       el.addEventListener('dragend', () => {
+        this.dragActive = false;
         this.deps.setDragAction(null);
         this.deps.clearActionDropTargets();
+        this.flushDeferredRender();
       });
     }
     if (known) {
@@ -702,7 +753,7 @@ export class SpellbookWindow {
       // passive rows that deliberately have no action-bar controls.
       this.deps.attachTooltip(el, () => {
         const live = this.deps.world().known.find((k) => k.def.id === known.def.id) ?? known;
-        return this.deps.abilityTooltip(live);
+        return this.deps.abilityTooltip(this.resolvedForDisplay(live));
       });
     } else {
       this.deps.attachTooltip(

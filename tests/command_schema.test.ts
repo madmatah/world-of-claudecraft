@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -7,8 +7,9 @@ import { COMMAND_NAMES, type CommandName, DISPATCH_ONLY_COMMANDS } from '../src/
 
 // W0b boundary gate: the command-schema lockstep invariant (00-SHARED-CONVENTIONS
 // #2). Every command ClientWorld sends (`cmd:'X'` through the private cmd()
-// helper in src/net/online.ts) MUST have a matching `case 'X':` in the
-// server/game.ts dispatchMessage switch. This test pins the CURRENT contract by
+// helper, from src/net/online.ts or from a src/net sibling module that composes
+// that sender, the online.ts extraction seam) MUST have a matching `case 'X':`
+// in the server/game.ts dispatchMessage switch. This test pins the CURRENT contract by
 // re-deriving both sets directly from source (not from the brief's numbers) and
 // proving:
 //   - the send-set is a SUBSET of the dispatch-set: zero send-only,
@@ -71,18 +72,129 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // auto-merged identical numbers before while the real total was higher; the
 // merged tree carries BOTH sides' pairs. Only the suite says what they really
 // are, and the numbers below were set from a run, not from this narrative.
+// Masterwrought phase 04 adds the extract_essence command (client-sent, so
+// both counts move together); this merge composed it with deed_set_border,
+// the exact silent-off-by-one the NOTE above warns about (both sides read
+// 196/209 pre-merge, the merged tree carries both pairs). The v0.37.0 sync
+// then repeated the same composition with the release's tabPrev pair: both
+// sides read 197/210 pre-merge, and the merged tree carries both. The
+// v0.38.0 sync repeated it a THIRD time with the release's lock_item pair
+// (the issue #3042 player item lock; the IWorld member is setItemLocked but
+// the wire token both surfaces carry is lock_item): both sides read 198/211
+// pre-merge, and the merged tree carries both extract_essence and lock_item.
+// The final v0.38.0 sync repeated it a FOURTH time with the release's market
+// price-reference pair (marketSellPriceCheck on IWorld): both sides read
+// 199/212 pre-merge, the constants auto-merged as identical, and the merged
+// tree carries both pairs; the numbers below were re-set from a suite run.
+// The farming absorb (masterwrought Phase 11d) composes a FIFTH time, at
+// scale: farming's five client-sent pairs (plant_crop, harvest_crop,
+// convert_husks from the growth phases, then the shared-feast place_feast +
+// consume_feast) land beside extract_essence, so the merged universe is
+// ours' 200/213 plus farming's five on each axis.
+
+// The Phase 11k QA release sync composes a SIXTH time, and the trap held:
+// both sides' constants differ, so this one CONFLICTED rather than
+// auto-merging, and the numbers below were re-set from a suite run on the
+// merged tree, never by adding the two sides' deltas on paper. They compose
+// exactly: base 199/212, ours +6 (extract_essence plus farming's five),
+// theirs +1 (the release's own pair), merged 206/219.
+// The release side (v0.41.0): the New Eastbrook program then retires the
+// Vale Cup minigame, removing its six vcup_* send + dispatch pairs
+// (docs/design/eastbrook-revamp/master-plan.md); the Proving Shore tutorial
+// added its now-retired ferry command pair on top, and the v0.40.0 sync merge
+// brings the release side's one new pair with it, so the release read
+// 199/212 on its own.
+// The v0.41.0 sync composes a SEVENTH time, and again CONFLICTED: off the
+// shared base 200/213, ours +6 (extract_essence plus farming's five), theirs
+// -1 (six vcup_* pairs out, one now-retired ferry pair in), merged 205/218. The
+// numbers below were re-set from a suite run on the merged tree, never by
+// adding the two sides' deltas on paper.
+// Masterwrought phase 12 (the Perfecting stage) adds the perfect_item command
+// (client-sent, so both counts move together): 206/219, dispatch-only
+// unchanged at 13. PREDICTED by the phase's contract before the token landed,
+// then set from a suite run.
+// Masterwrought phase 13 (the orange promotion) adds NO command: the optional
+// legendary name rides the existing perfect_item frame as a new FIELD
+// (parsePerfectItemName in server/perfect_item_ref.ts), so all three counts
+// stay 206/219/13. Stated so the next sync does not misread the phase as a
+// missing pair.
+// The release side (v0.41.0 final): the Bank Storage branch adds the Materials
+// Vault quartet (vault_deposit, vault_withdraw, vault_buy_upgrade,
+// vault_deposit_all) plus the bag-socket trio (bank_unlock_socket,
+// bank_socket_bag, bank_unsocket_bag), seven send + dispatch pairs, so the
+// release also read 206/219 on its own.
+// The final v0.41.0 sync composes an EIGHTH time, and the trap fired in its
+// original form: both sides read 206/219 pre-merge, identical constants git
+// would have auto-merged while the real totals are higher. Off the shared base
+// 199/212, ours +7 (extract_essence, perfect_item, plus farming's five),
+// theirs +7 (the vault quartet plus the bag-socket trio), merged 213/226,
+// dispatch-only unchanged at 13. The numbers below were re-derived by
+// replaying this suite's own scans over the three-way union of both sides'
+// sources, never by trusting either side's constant.
+// The release side (v0.41.0, the Crucible raid loot landing): the raid's
+// Quartermaster sigil-redemption vendor adds its one crucible_buy send +
+// dispatch pair, so the release read 207/220 on its own (its own narrative
+// still spoke of the Vale Cup retirement and the now-retired ferry pair).
+// The 2026-08-30 v0.41.0 sync composes a NINTH time and CONFLICTED (ours
+// 213/226 against the release's 207/220): the merged tree carries both arms,
+// ours' seven plus the release's one new pair, so the send and dispatch
+// counts each move by one over the eighth composition; dispatch-only stays
+// 13. Set from a suite run on the merged tree, never by arithmetic in the
+// diff.
+// Intentional Gathering PR3 adds the set_harvest_preference command (a
+// client-sent, dispatched pair, so both counts move together by one);
+// dispatch-only stays 13.
+// Intentional Gathering PR3 adds a second command, inspectCorpseHarvest (the
+// selected-corpse status query, also a client-sent + dispatched pair):
+// 217/230, dispatch-only stays 13.
+// Intentional Gathering PR4 adds three more client-sent + dispatched pairs
+// (track_gathering_recipe, track_gathering_commission, clear_gathering_goal):
+// 220/233, dispatch-only stays 13.
+// Masterwrought Perfecting rank exchange adds swap_perfecting_ranks (one more
+// client-sent + dispatched pair): 221/234, dispatch-only stays 13.
 // The New Eastbrook program then retires the Vale Cup minigame, removing its
 // six vcup_* send + dispatch pairs (docs/design/eastbrook-revamp/master-plan.md);
 // the Proving Shore tutorial adds its one start_tutorial pair back on top, and
-// the v0.40.0 sync merge brings the release side's one new pair with it.
+// the v0.40.0 sync merge brings the release side's one new pair with it: base
+// 207/220/13 for this merge.
+//
+// RE-PINNED at this merge of release/v0.42.0 into feature/masterwrought.
+// BOTH parent pins for the record: ours 221/234/13 (the professions-merge
+// chain above), the release 207/221/14 (its own dispatch-only addition: one
+// dispatch handler with no matching client send). Arithmetic reconciliation
+// per axis (base + ours' delta + theirs' delta: send 207+14+0=221, dispatch
+// 220+14+1=235, dispatch-only 13+0+1=14), NOT a suite run, which the NOTE
+// above explicitly warns against trusting: confirm with
+// `npx vitest run tests/command_schema.test.ts` before merge lands.
+// +1 send / +1 dispatch for the Social window's Who tab (`who`: a structured
+// realm roster answered by the `who` frame; the chat /who stays as it was).
+// Market Sweep composes on top of it with `market_sweep_quote` and
+// `market_sweep`, both client-sent and server-dispatched.
+// RE-PINNED at the third release/v0.43.0 merge into feature/world-quests:
+// the release's 225/239 plus the branch's eleven world-quest and vehicle
+// commands, plus world_quest_reroll: 237/251/14. Plus the weekly emissary's
+// pick and commendation (world_quest_weekly_choose, world_quest_weekly_commend):
+// 239/253/14.
+// +1 send / +1 dispatch for the Clue Scrolls tracker abandon
+// (`clue_hunt_abandon`, sent by QuestWorldWireState.abandonClueHunt and
+// routed through the delegated world-quest switch); on the quests
+// integration branch (weekly + clue scrolls together): 240/254/14.
+// +2 send / +2 dispatch for the Weekly Vault (weekly_reward_claim,
+// weekly_reward_open; PR 4052) on the quests integration branch: 242/256/14.
+// World PvP adds pvp_flag to both sets (sent by ClientWorld.setWorldPvpFlag,
+// dispatched beside bg_flag), at the second release/v0.44.0 base merge: 243/257/14.
+// The third release/v0.44.0 base merge adds the market buy orders (three
+// commands) and guild custom ranks (guild_set_ranks): 247/261/14.
 // The Realm Racers minigame adds five more on both sides, appended AFTER the
 // release's own tokens because a released index never moves: the queue pair
 // (realm_racers_join / realm_racers_leave), the forfeit, realm_racers_practice
 // (races a house pilot immediately, no queue and no wait) and the race-feel
-// pass's recovery command realm_racers_reset.
-const EXPECTED_SEND_COUNT = 212;
-const EXPECTED_DISPATCH_COUNT = 225;
-const EXPECTED_DISPATCH_ONLY_COUNT = 13;
+// pass's recovery command realm_racers_reset. RE-PINNED from a suite run at
+// the release/v0.44.0 merge into feature/realm-racers (ours 212/225/13, the
+// release 247/261/14): 252/266/14.
+const EXPECTED_SEND_COUNT = 252;
+const EXPECTED_DISPATCH_COUNT = 266;
+const EXPECTED_DISPATCH_ONLY_COUNT = 14;
 
 // The chat sub-channel routing switch (server/game.ts `switch
 // (session.rememberedChat.channel)`) is NOT a msg.cmd dispatch; its labels must
@@ -112,13 +224,35 @@ function readSource(relPath: string): string {
   return stripComments(readFileSync(join(repoRoot, relPath), 'utf8'));
 }
 
-// Distinct `cmd:'X'` literals ClientWorld sends. Every send funnels through the
-// single private cmd() helper as an object literal, including the handshake send
-// (`challengeResponse`) outside the IWorld-commands block, so a whole-file scan
-// captures the complete send-set. There is no dynamic/computed cmd value.
+// Distinct `cmd:'X'` literals ClientWorld sends. Commands are authored as object
+// literals in online.ts and its wire-state bases; there is no dynamic cmd value.
 function scanSendSet(src: string): Set<string> {
   const tokens = new Set<string>();
   for (const m of src.matchAll(/cmd:\s*'([^']+)'/g)) tokens.add(m[1]);
+  return tokens;
+}
+
+// Every module under src/net (recursively): online.ts plus the sibling modules
+// extracted from it that build a command payload for ClientWorld's cmd() seam
+// (src/net/action_bar_upload.ts is the first). Scanning the directory rather
+// than the one file keeps the gate honest across future extractions: a send
+// moved into a sibling still needs its server handler, and a sibling that
+// invents a token with no handler still reddens the subset check.
+function listNetSources(dir = 'src/net'): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(join(repoRoot, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...listNetSources(rel));
+    else if (entry.name.endsWith('.ts')) out.push(rel);
+  }
+  return out.sort();
+}
+
+function scanNetSendSet(): Set<string> {
+  const tokens = new Set<string>();
+  for (const rel of listNetSources()) {
+    for (const token of scanSendSet(readSource(rel))) tokens.add(token);
+  }
   return tokens;
 }
 
@@ -140,20 +274,43 @@ function scanDispatchSet(src: string): Set<string> {
   return labels;
 }
 
+// The world-quest-only command family is routed out of dispatchMessage before
+// its switch (`if (questWire.isWorldQuestWireCommand(command)) return void
+// questWire.dispatchWorldQuestWire(...)`), so its `case 'X':` labels live in
+// server/quest_command_wire.ts. Scan that one delegated switch, bounded by the
+// dispatcher's own body, and require the guard in game.ts so the family cannot
+// be counted as dispatched after the route is removed.
+function scanDelegatedWorldQuestDispatchSet(gameSrc: string, wireSrc: string): Set<string> {
+  if (!gameSrc.includes('questWire.dispatchWorldQuestWire(')) {
+    throw new Error('dispatchMessage no longer routes the world-quest wire family');
+  }
+  const start = wireSrc.indexOf('export function dispatchWorldQuestWire(');
+  if (start === -1) throw new Error('dispatchWorldQuestWire not found');
+  const end = wireSrc.indexOf('\n}\n', start);
+  if (end === -1) throw new Error('dispatchWorldQuestWire body end not found');
+  const labels = new Set<string>();
+  for (const m of wireSrc.slice(start, end).matchAll(/\bcase\s+'([^']+)'\s*:/g)) labels.add(m[1]);
+  return labels;
+}
+
 function difference<T>(a: Set<T>, b: Set<T>): Set<T> {
   const out = new Set<T>();
   for (const v of a) if (!b.has(v)) out.add(v);
   return out;
 }
 
-const sendSet = scanSendSet(readSource('src/net/online.ts'));
-const dispatchSet = scanDispatchSet(readSource('server/game.ts'));
+const sendSet = scanNetSendSet();
+const gameSource = readSource('server/game.ts');
+const dispatchSet = new Set([
+  ...scanDispatchSet(gameSource),
+  ...scanDelegatedWorldQuestDispatchSet(gameSource, readSource('server/quest_command_wire.ts')),
+]);
 const tableSet = new Set<CommandName>(COMMAND_NAMES);
 const allowlistSet = new Set<CommandName>(DISPATCH_ONLY_COMMANDS);
 
 describe('command schema parity (W0b)', () => {
   it('re-derives the verified set sizes from source', () => {
-    expect(sendSet.size, 'distinct cmd:X sends in online.ts').toBe(EXPECTED_SEND_COUNT);
+    expect(sendSet.size, 'distinct cmd:X sends across src/net').toBe(EXPECTED_SEND_COUNT);
     expect(dispatchSet.size, 'distinct case labels in dispatchMessage').toBe(
       EXPECTED_DISPATCH_COUNT,
     );

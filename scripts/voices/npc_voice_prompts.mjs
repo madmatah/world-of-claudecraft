@@ -225,7 +225,7 @@ export const VOICE_PROMPTS = [
       'chest. By ember, stone, and anvil, I will unmake you. Master... I have failed you.',
   },
 
-  // -- Eldergleam, the Veiled Hollow (src/sim/content/realm.ts) -------------
+  // -- Eldershine, the Veiled Hollow (src/sim/content/realm.ts) -------------
   {
     npcId: 'keeper_saelwyn',
     name: 'Keeper Saelwyn',
@@ -576,7 +576,7 @@ export const VOICE_PROMPTS = [
       'war-banners in front of it, and you will understand why I stopped writing things down.',
   },
 
-  // -- The Wraithwood, Gallowmere (src/sim/content/wraithwood.ts) -----------
+  // -- The Wraithwood, Gibbetmere (src/sim/content/wraithwood.ts) -----------
   {
     npcId: 'sexton_marrow',
     name: 'Sexton Marrow',
@@ -585,7 +585,7 @@ export const VOICE_PROMPTS = [
       'sepulchral bass, patient as a tolling bell, kindly in a way that never stops sounding ' +
       'like a funeral. Takes duty to the buried and the living as one job. Age 50s to 60s. Male.',
     sampleText:
-      'We bury them deep here, and we ring the bells so they remember to stay down. Gallowmere ' +
+      'We bury them deep here, and we ring the bells so they remember to stay down. Gibbetmere ' +
       'keeps its people, that is the whole of our law. Mind the bells.',
   },
   {
@@ -858,7 +858,7 @@ export const VOICE_PROMPTS = [
   },
   {
     npcId: 'hermit_okku',
-    name: 'Okku',
+    name: 'Okrim',
     voiceDescription:
       'Hermit camped alone under jungle banyans within earshot of drums, deep green: a hushed, ' +
       'cracked male voice, whisper-taut and hyper-attentive, breaking off to count a sound. The ' +
@@ -1073,6 +1073,67 @@ export const VOICE_PROMPTS = [
 // Recurring NPC records → the base voice that speaks for them. gen_npc_lines.mjs
 // consults this so every Aldric/Maren/Halven zone variant reuses one designed voice.
 export const VOICE_ALIAS = {
+  glider_instructor: 'trader_wilkes',
+  glider_apprentice: 'apprentice_wren',
+  // Valerie borrows the existing scout performance for this covert operation.
+  shadow_cloak_scout: 'scout_maren',
+  // The shadow infiltration's own watch, cast by ROLE the way the tutorial cast
+  // below is (docs/design/npc_voices.md): the four Dispatch Guards carry sealed
+  // orders and warn you off in clipped soldier's lines, so they borrow the
+  // Marshal's weathered parade register; the four lantern sentries and watchmen
+  // keep a light against what the eye misses, which is the lamplighter's own
+  // trade and his lantern gold. Promote either group to its own VOICE_PROMPTS
+  // entry once an ElevenLabs key is available to design and render it.
+  shadow_guard_north: 'marshal_redbrook',
+  shadow_guard_south: 'marshal_redbrook',
+  shadow_guard_east: 'marshal_redbrook',
+  shadow_guard_west: 'marshal_redbrook',
+  shadow_sentry_north: 'lampman_cobb',
+  shadow_sentry_south: 'lampman_cobb',
+  shadow_watch_east: 'lampman_cobb',
+  shadow_watch_west: 'lampman_cobb',
+  // Keeper Liora wardens a hedge maze of wisps and speaks her instructions with
+  // the same unhurried, luminous calm as the keeper of the sealed hollow.
+  wisp_maze_keeper: 'keeper_saelwyn',
+  // World-quest role casting, following the tutorial cast below. These are
+  // distinct people borrowing established performances, not recurring identities.
+  // The scholar teaches calmly; his adult apprentices sound tentative and eager.
+  calligraphy_instructor: 'loremaster_caddis',
+  calligraphy_apprentice_1: 'apprentice_wren',
+  calligraphy_apprentice_2: 'trader_wilkes',
+  // A working forgemistress.
+  forge_instructor: 'forgemistress_darva',
+  // Keep suspects vocally distinct without making any voice signal guilt.
+  infiltrator_captain: 'warden_fenwick',
+  infiltrator_nella: 'scout_maren',
+  infiltrator_orin: 'marshal_redbrook',
+  infiltrator_bram: 'gatecaptain_brannoc',
+  infiltrator_tessa: 'watcher_maren',
+  // Tobin keeps a promise to a lost friend; Mira carries remedies; Orin keeps
+  // the snowbound settlements supplied. Each uses the matching human register.
+  eastbrook_freight_caravan: 'mender_saul',
+  willowfen_remedy_caravan: 'apothecary_lin',
+  frostveil_supply_caravan: 'lampman_cobb',
+  // Riftwright Maelis, the Rift Forgemaster in the Watch Meadow on the Farshore, borrows Quartermaster
+  // Edda's steel-and-salt Redoubt register (the same forge-and-anvil trade, the
+  // same shore) until the forge receives its own designed voice.
+  riftwright_maelis: 'quartermaster_edda',
+  // The faction quartermasters and the World Quest taskmaster, cast by ROLE
+  // until an ElevenLabs key designs their own voices: Vaelen keeps stores for
+  // the same Rift Watch Ollun serves; Templar Althea speaks with the aurorist's
+  // hushed, luminous calm; Artificer Tobrin is another smith of exacting work;
+  // Taskmaster Kaelen hands out the day's work the way the foreman does.
+  npc_rift_watch_quartermaster: 'riftwatch_ollun',
+  npc_church_order_quartermaster: 'aurorist_veyla',
+  npc_automaton_quartermaster: 'wardsmith_orun',
+  npc_wq_taskmaster: 'foreman_odell',
+  // The weekly emissary keeps the Vale's ledger of deeds: the same civic,
+  // matter-of-fact register as the foreman until a voice of his own is cast.
+  weekly_emissary: 'foreman_odell',
+  // The Weekly Vault keeper (PR 4052) guards a bank-gold strongroom by the
+  // harbour road: the Gilded Strongbox bursar's discreet baritone is the
+  // register, until a voice of his own is cast.
+  eastbrook_vault_keeper: 'bursar_fernando',
   brother_aldric_fen: 'brother_aldric',
   brother_aldric_highwatch: 'brother_aldric',
   brother_aldric_raid: 'brother_aldric',
@@ -1090,12 +1151,32 @@ export const VOICE_ALIAS = {
   // own VOICE_PROMPTS entry, with the rank and the cold Highwatch authority the
   // greeting carries, once an ElevenLabs key is available to design and render it.
   warmarshal_draven_kole: 'fury',
+  // The four farmer NPCs (the farming go-live) borrow ROLE-MATCHED designed
+  // voices for now, the Draven Kole precedent: each has its own description
+  // in docs/design/npc_voices.md and is promoted to its own VOICE_PROMPTS
+  // entry once an ElevenLabs key is available to design and render it.
+  farmer_jessica: 'provisioner_fenna',
+  farmer_teasel: 'trapper_brosk',
+  // farmer_hollis borrowed Groundskeeper Bram's country baritone until the
+  // release retired Bram (and his VOICE_PROMPTS entry) with the Sowfield and
+  // the Vale Cup. Re-pointed at the v0.41.0 merge to the nearest surviving
+  // role match: the herd-warden's weathered, steady, rural male register
+  // (docs/design/npc_voices.md carries Hollis's own brief; promote him to
+  // his own VOICE_PROMPTS entry once an ElevenLabs key is available).
+  farmer_hollis: 'huntsman_deral',
+  farmer_verbena: 'orchardist_pomeline',
   // Quartermaster Bronn Emberward, the Crucible sigil broker: a quartermaster
   // at a counter selling proof of hard content, the same register Vex's
   // designed voice carries, so he borrows it as a ROLE match (the Draven Kole
   // precedent above). Promote him to his own VOICE_PROMPTS entry, with the
   // forge-warden weight his greeting carries, when a key is available.
   crucible_quartermaster: 'heroic_quartermaster',
+  // Harbormaster Tamsin, who keeps the Harbormaster's House at the Wyrmwatch cliff
+  // harbor: the same trade as Harbormaster Odile at the far end of her route, so she
+  // borrows Odile's designed voice as a ROLE match (the Draven Kole precedent above).
+  // Promote her to her own VOICE_PROMPTS entry, warmer and more weathered than
+  // Odile's, once an ElevenLabs key is available to design and render it.
+  harbormaster_tamsin: 'harbormaster_odile',
   // The Proving Shore four (src/sim/content/proving_shore.ts, the tutorial
   // island). Like Warmarshal Draven Kole above, these are ROLE matches rather
   // than the same character recurring under a suffixed id: each borrows the
@@ -1128,6 +1209,9 @@ export const VOICE_ALIAS = {
   // Keeper of the Strand tallying shells and salvage: the harbor captain's
   // weathered, water-wise authority.
   tidewarden_nel: 'captain_thessaly',
+  // Quay Sparring Master introducing the hub dummy and the meters: the same
+  // parade-ground bark the island's Yard Master borrows.
+  drillmaster_hale: 'marshal_redbrook',
 };
 
 /** Resolve any NPC content id to the id of the voice that should speak for it. */
