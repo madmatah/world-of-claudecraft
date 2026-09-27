@@ -9967,8 +9967,8 @@ export class Sim {
     realmRacersMod.realmRacersQueueLeave(this.ctx, pid);
   }
 
-  realmRacersForfeit(pid?: number): void {
-    realmRacersMod.realmRacersForfeit(this.ctx, pid);
+  realmRacersForfeit(pid?: number, restoreImmediately = false): void {
+    realmRacersMod.realmRacersForfeit(this.ctx, pid, restoreImmediately);
   }
 
   realmRacersResetPosition(pid?: number): void {

@@ -44,7 +44,14 @@ import { saveCharacterState } from '../server/db';
 import { type ClientSession, GameServer } from '../server/game';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { isInJailCage, JAIL_GATE, JAIL_VISITOR_POS, jailGateTeleport } from '../src/sim/jail';
+import { REALM_RACERS_LOITER_TICKS } from '../src/sim/realm_racers_track_limits';
 import { ARENA_MIN_LEVEL } from '../src/sim/social/arena';
+import {
+  REALM_RACERS_MOUNT_KEY,
+  REALM_RACERS_RETURN_TICKS,
+  REALM_RACERS_STUCK_TICKS,
+  type RealmRacersMatch,
+} from '../src/sim/social/realm_racers';
 
 // Moderation acts on player sessions and the fixed jail cage; ambient camps,
 // world npcs and quest objects never take part, and every test here boots one
@@ -1001,5 +1008,173 @@ describe('server-side teleports end a live profession session', () => {
       if (saved === undefined) delete process.env.ALLOW_DEV_COMMANDS;
       else process.env.ALLOW_DEV_COMMANDS = saved;
     }
+  });
+});
+
+// A seated racer is the Society's until it returns them: the rally re-forces its
+// mount and drive every tick and recovers a machine left off the road. Jailing
+// one without forfeiting first handed the body to two owners, and the release
+// then put the prisoner back on a circuit with no race.
+describe('jailing a Realm Racers pilot', () => {
+  function practiceRig(): {
+    server: GameServer;
+    moderator: ClientSession;
+    pilot: ClientSession;
+    pilotWs: FakeWs;
+    original: { x: number; z: number };
+    match(): RealmRacersMatch | null;
+    tickMs(ticks: number): { outOfCage: number; resets: number };
+  } {
+    const server = new GameServer();
+    const moderator = joined(
+      server.join(fakeWs(), 70, 170, 'Warden', 'warrior', null, false, {
+        isAdmin: true,
+        adminPermissions: MOD_PERMS,
+      }),
+    );
+    const pilotWs = fakeWs();
+    const pilot = joined(server.join(pilotWs, 71, 171, 'Speedster', 'rogue', null));
+    const at = entity(server, pilot.pid).pos;
+    const original = { x: at.x, z: at.z };
+    const match = () =>
+      server.sim.realmRacers.practices.find((m) => m.pids.includes(pilot.pid)) ?? null;
+    return {
+      server,
+      moderator,
+      pilot,
+      pilotWs,
+      original,
+      match,
+      tickMs(ticks) {
+        let outOfCage = 0;
+        let resets = 0;
+        for (let i = 0; i < ticks; i++) {
+          const events = server.sim.tick();
+          internals(server).enforceJailStates();
+          resets += events.filter(
+            (ev) => ev.type === 'realmRacersReset' && 'pid' in ev && ev.pid === pilot.pid,
+          ).length;
+          if (!isInJailCage(entity(server, pilot.pid).pos)) outOfCage++;
+        }
+        return { outOfCage, resets };
+      },
+    };
+  }
+
+  function cmd(server: GameServer, session: ClientSession, payload: Record<string, unknown>) {
+    server.handleMessage(session, JSON.stringify({ t: 'cmd', ...payload }));
+  }
+
+  function seat(rig: ReturnType<typeof practiceRig>): RealmRacersMatch {
+    cmd(rig.server, rig.pilot, { cmd: 'realm_racers_practice', tier: 'rookie' });
+    const match = rig.match();
+    if (!match) throw new Error('practice did not seat');
+    return match;
+  }
+
+  function toRacing(rig: ReturnType<typeof practiceRig>, match: RealmRacersMatch): void {
+    cmd(rig.server, rig.pilot, { cmd: 'realm_racers_ready' });
+    for (let i = 0; i < 40 && match.phase === 'loading'; i++) rig.server.sim.tick();
+    expect(match.phase).toBe('countdown');
+    match.goTick = rig.server.sim.tickCount + 1;
+    for (let i = 0; i < 5 && match.phase !== 'racing'; i++) rig.server.sim.tick();
+    expect(match.phase).toBe('racing');
+    Object.assign(rig.server.sim.meta(rig.pilot.pid)!.moveInput, { forward: true });
+    for (let i = 0; i < 20; i++) rig.server.sim.tick();
+  }
+
+  it('forfeits a pilot jailed mid-race, holds them in the cage, and releases them home', async () => {
+    const rig = practiceRig();
+    const { server, moderator, pilot, original } = rig;
+    const match = seat(rig);
+    toRacing(rig, match);
+    const racer = entity(server, pilot.pid);
+    expect(racer.drive).not.toBeNull();
+    expect(Math.hypot(racer.pos.x - original.x, racer.pos.z - original.z)).toBeGreaterThan(50);
+
+    command(server, moderator, '/jail "Speedster" 60');
+    await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
+    // The forfeit's own return runs before returnPos is read.
+    expect(pilot.jailed?.returnPos).toEqual(original);
+    expect(racer.drive).toBeNull();
+    expect(racer.mountKey).not.toBe(REALM_RACERS_MOUNT_KEY);
+    expect(server.sim.meta(pilot.pid)?.realmRacersMatchId).toBeNull();
+    expect(match.progress.get(pilot.pid)).toMatchObject({ returned: true });
+    expect(match.progress.get(pilot.pid)?.retiredTick).not.toBeNull();
+    // The house pilots alone decide nothing, so the race closes, and it counts:
+    // it was already running.
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(false);
+    expect(isInJailCage(racer.pos)).toBe(true);
+
+    // Past the stuck arm, the loiter arm and the tableau's return: no recovery,
+    // no seat and no return ever moves the prisoner out of the cage.
+    const held = rig.tickMs(
+      Math.max(REALM_RACERS_STUCK_TICKS, REALM_RACERS_LOITER_TICKS, REALM_RACERS_RETURN_TICKS) + 40,
+    );
+    expect(held).toEqual({ outOfCage: 0, resets: 0 });
+    expect(rig.match()).toBeNull();
+    expect(racer.drive).toBeNull();
+
+    command(server, moderator, '/unjail "Speedster"');
+    await vi.waitFor(() => expect(pilot.jailed).toBeNull());
+    expect(entity(server, pilot.pid).pos.x).toBeCloseTo(original.x);
+    expect(entity(server, pilot.pid).pos.z).toBeCloseTo(original.z);
+  });
+
+  it('voids a practice whose only human is jailed on the grid before GO', async () => {
+    const rig = practiceRig();
+    const { server, moderator, pilot, original } = rig;
+    const match = seat(rig);
+    expect(match.phase).toBe('loading');
+    command(server, moderator, '/jail "Speedster" 60');
+    await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(true);
+    expect(entity(server, pilot.pid).drive).toBeNull();
+    expect(pilot.jailed?.returnPos).toEqual(original);
+    expect(rig.tickMs(REALM_RACERS_RETURN_TICKS + 40)).toEqual({ outOfCage: 0, resets: 0 });
+  });
+
+  it('drops a queued pilot from the queue and refuses queue and Practice while jailed', async () => {
+    const rig = practiceRig();
+    const { server, moderator, pilot, pilotWs } = rig;
+    cmd(server, pilot, { cmd: 'realm_racers_join' });
+    expect(server.sim.realmRacers.queue).toContain(pilot.pid);
+    command(server, moderator, '/jail "Speedster" 60');
+    await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
+    expect(server.sim.realmRacers.queue).not.toContain(pilot.pid);
+
+    cmd(server, pilot, { cmd: 'realm_racers_join' });
+    cmd(server, pilot, { cmd: 'realm_racers_practice', tier: 'rookie' });
+    expect(eventTexts(pilotWs)).toContain('You cannot do that while jailed.');
+    // The sim refuses on its own too, whichever host asks.
+    server.sim.realmRacersQueueJoin(pilot.pid);
+    server.sim.realmRacersPracticeStart('rookie', pilot.pid);
+    expect(server.sim.realmRacers.queue).not.toContain(pilot.pid);
+    expect(rig.match()).toBeNull();
+    expect(rig.tickMs(40).outOfCage).toBe(0);
+
+    command(server, moderator, '/unjail "Speedster"');
+    await vi.waitFor(() => expect(pilot.jailed).toBeNull());
+    server.sim.realmRacersQueueJoin(pilot.pid);
+    expect(server.sim.realmRacers.queue).toContain(pilot.pid);
+  });
+
+  it('forfeits a moderator who visits the jail from a race', () => {
+    const rig = practiceRig();
+    const { server, moderator } = rig;
+    cmd(server, moderator, { cmd: 'realm_racers_practice', tier: 'rookie' });
+    const match = server.sim.realmRacers.practices.find((m) => m.pids.includes(moderator.pid));
+    expect(match).toBeDefined();
+    command(server, moderator, '/jail');
+    expect(moderator.jailVisit).not.toBeNull();
+    expect(entity(server, moderator.pid).drive).toBeNull();
+    expect(server.sim.meta(moderator.pid)?.realmRacersMatchId).toBeNull();
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 40; i++) {
+      server.sim.tick();
+      internals(server).enforceJailStates();
+    }
+    expect(moderator.jailVisit).not.toBeNull();
   });
 });

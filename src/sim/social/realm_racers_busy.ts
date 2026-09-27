@@ -20,6 +20,8 @@ import { bgGroupContaining } from './battleground';
 import { bgProposalFor } from './battleground_proposal';
 
 export function realmRacersHeldElsewhere(ctx: SimContext, meta: PlayerMeta, e: Entity): boolean {
+  // A moderation prisoner stays in the cage: a seat would teleport them out.
+  if (e.jailed) return true;
   const log = meta.worldQuestLog;
   if (meta.vehicle || wispMazeActionsLocked(log) || shadowActionsLocked(log)) return true;
   if (gliderActionsLocked(log) || hasWorldQuestDeliveryCargo(e)) return true;

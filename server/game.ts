@@ -2146,15 +2146,14 @@ export class GameServer {
     const sentencedAtMs = Date.now();
     const targetEntity = this.sim.entities.get(target.pid);
     if (!targetEntity) return;
+    // Out of the rally first, so returnPos is where the race found them; every
+    // other queue and match follows (JAILED_BLOCKED_COMMANDS refuses a new one).
+    this.sim.realmRacersForfeit(target.pid, true);
     target.jailed = {
       returnPos: { x: targetEntity.pos.x, z: targetEntity.pos.z },
       returnFacing: targetEntity.facing,
       until: sentencedAtMs + minutes * 60_000,
     };
-    // Drop the target out of any match queues (a match popping later would
-    // teleport them out of the cage; queueing anew is blocked by
-    // JAILED_BLOCKED_COMMANDS). A live Vale Cup match resolves as a desertion,
-    // same as leave(); idempotent when they are in neither.
     this.sim.arenaQueueLeave(target.pid);
     // A live arena/fiesta match resolves as a desertion too: leaving the
     // arenaMatches entry behind silently gated releaseSpirit for the rest of
@@ -2233,6 +2232,7 @@ export class GameServer {
     const entity = this.sim.entities.get(moderator.pid);
     if (!entity) return;
     if (!moderator.jailVisit) {
+      this.sim.realmRacersForfeit(moderator.pid, true);
       moderator.jailVisit = {
         savedPos: { ...entity.pos },
         savedFacing: entity.facing,
