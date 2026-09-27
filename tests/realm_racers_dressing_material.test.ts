@@ -49,18 +49,23 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => ({
   ),
 }));
 
+import { attachBiomeHaze } from '../src/render/biome_haze_field';
 import { GFX_TIER_RANK, type GfxSettings, type GfxTier } from '../src/render/gfx';
 import { materialProgramSignature } from '../src/render/prewarm_policy';
 import {
   PROP_ASSET_DEFS,
   preparePropProfileAssets,
   propMaterialInternalsForTest,
+  propPreloadInternalsForTest,
+  worldPropKey,
 } from '../src/render/props';
+import { REALM_RACERS_BARRIER_VISUALS } from '../src/render/realm_racers_barrier_visuals';
 import {
   realmRacersDressingPart,
   realmRacersDressingRoute,
 } from '../src/render/realm_racers_dressing_material';
 import { realmRacersFills } from '../src/render/realm_racers_fills';
+import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
 import { buildRealmRacersTrack, buildRealmRacersTracks } from '../src/render/realm_racers_track';
 import { disposeRealmRacersTrackGroup } from '../src/render/realm_racers_track_dispose_core';
 import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
@@ -77,6 +82,52 @@ afterEach(() => {
 });
 
 const PREFIX = 'realm-racers-dressing:';
+
+/** Every model url a circuit record can place, shipped or not. */
+const PLACEABLE_URLS = [
+  ...new Set([
+    ...Object.values(REALM_RACERS_PROP_VISUALS).flatMap((visual) =>
+      visual.kind === 'gltf' ? [visual.url] : [],
+    ),
+    ...Object.values(REALM_RACERS_BARRIER_VISUALS).flatMap((visual) => [
+      visual.panelUrl,
+      ...(visual.corner === 'none' ? [] : [visual.corner.url]),
+    ]),
+  ]),
+].sort();
+
+/** The models the world splits per UV family: no single world material to share. */
+const SURFACE_SPLIT_URLS = ['hexShipBlue', 'hexShipRed', 'hexShipGreen', 'hexBoat', 'hexWatchtower']
+  .map((key) => PROP_ASSET_DEFS[key].url)
+  .sort();
+
+/** The world props the shipped circuits place that the world leaves out on low
+ *  (`LOW_TIER_PROP_KEYS`): their Lambert programs are the circuit's to link there. */
+const OUTSIDE_LOW_TIER_URLS = [
+  '/models/biome/hex_flag.glb',
+  '/models/biome/hex_tower.glb',
+  '/models/biome/kcas_bench.glb',
+  '/models/biome/kcas_torch.glb',
+  '/models/dungeon/pillar.glb',
+  '/models/foliage/oak_4.glb',
+  '/models/props/crystal_amethyst_cluster.glb',
+  '/models/props/crystal_mound_cave.glb',
+  '/models/props/fen_lilies.glb',
+  '/models/props/flower_bed_square_a.glb',
+  '/models/props/flower_glow.glb',
+  '/models/props/garden_arch.glb',
+  '/models/props/kmed_church_hollow.glb',
+  '/models/props/kmed_home_A_hollow.glb',
+  '/models/props/kmed_home_B_hollow.glb',
+  '/models/props/kmed_tavern_hollow.glb',
+  '/models/props/leafy_fox_statue.glb',
+  '/models/props/mushroom_giant_purple.glb',
+  '/models/props/mushroom_glow_cluster.glb',
+  '/models/props/mushroom_tan.glb',
+  '/models/props/pixie_mushroom_house.glb',
+  '/models/props/shrub_flowering.glb',
+  '/models/props/star_heart_crystal.glb',
+];
 
 /** The models the shipped circuits place that nothing in the world draws. */
 const RACE_ONLY_URLS = [
@@ -144,6 +195,7 @@ it('names one kit per world prop url, the key the converter is looked up by', ()
 it('leaves out a part the world strips from the same model', () => {
   const url = PROP_ASSET_DEFS.cart.url;
   const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
   const part = (name: string) =>
     realmRacersDressingPart(
       url,
@@ -153,6 +205,54 @@ it('leaves out a part the world strips from the same model', () => {
   expect(PROP_ASSET_DEFS.cart.strip?.test('Red')).toBe(true);
   expect(part('Red')).toBeNull();
   expect(part('Wood')?.material.name).toBe(`${PROP_ASSET_DEFS.cart.kit}:Wood`);
+});
+
+it('names a race-only material through the hook-preserving clone', () => {
+  const source = new THREE.MeshStandardMaterial();
+  source.name = 'MI_WoodTrim';
+  attachBiomeHaze(source);
+  const geometry = new THREE.BufferGeometry();
+  const part = realmRacersDressingPart(RACE_ONLY_URLS[0], geometry, source);
+  expect(part?.material).not.toBe(source);
+  expect(part?.material.name).toBe('realmRacersRaceOnly:city_fence_wood:MI_WoodTrim');
+  expect(part?.material.customProgramCacheKey()).toBe(source.customProgramCacheKey());
+});
+
+it('sends a model the world splits per UV family to the race-only route', () => {
+  const placeable = PLACEABLE_URLS.filter((url) => SURFACE_SPLIT_URLS.includes(url));
+  expect(placeable).toEqual(SURFACE_SPLIT_URLS);
+  for (const url of SURFACE_SPLIT_URLS) expect(realmRacersDressingRoute(url), url).toBe('raceOnly');
+  expect(realmRacersDressingRoute(PROP_ASSET_DEFS.hexBoatrack.url)).toBe('worldProp');
+});
+
+it('places every world prop at the world orientation: no placeable key bakes a yaw', () => {
+  for (const url of PLACEABLE_URLS) {
+    const key = worldPropKey(url);
+    if (key !== undefined) expect(PROP_ASSET_DEFS[key].yaw, url).toBeUndefined();
+  }
+});
+
+it('shapes a world prop part as the extraction does: normals, and the atlas cell fix', () => {
+  const url = PROP_ASSET_DEFS.seaBoatFishing.url;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), 3),
+  );
+  const authored = [0.71868, 0.8, 0.1, 0.1, 0.71868, 0.5];
+  geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(authored), 2));
+  const part = realmRacersDressingPart(url, geometry, new THREE.MeshStandardMaterial());
+  if (!part) throw new Error('the part was stripped');
+  expect(part.geometry).not.toBe(geometry);
+  expect(part.geometry.getAttribute('normal').getY(0)).toBeCloseTo(-1);
+  const uv = Array.from(part.geometry.getAttribute('uv').array as Float32Array);
+  expect(uv[0]).toBeCloseTo(0.71868 + 0.125, 5);
+  expect(uv.slice(1)).toEqual(Array.from(new Float32Array(authored)).slice(1));
+  // The loader's own geometry is never touched.
+  expect(geometry.getAttribute('normal')).toBeUndefined();
+  expect(Array.from(geometry.getAttribute('uv').array)).toEqual(
+    Array.from(new Float32Array(authored)),
+  );
 });
 
 describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on %s', (tier) => {
@@ -180,6 +280,34 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
       expect(keysOf(rally), url).toEqual(keysOf(world));
       expect(signaturesOf(rally), url).toEqual(signaturesOf(world));
     }
+  });
+
+  it('gives every placeable world prop part a material the world extraction makes', () => {
+    for (const url of PLACEABLE_URLS) {
+      const route = realmRacersDressingRoute(url);
+      if (route !== 'worldProp') continue;
+      const world = worldPropDraws(url);
+      const materials = new Set(world.map(({ material }) => material));
+      const keys = keysOf(world);
+      mirrorGltfScene(url, 'public').traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const part = realmRacersDressingPart(url, mesh.geometry, mesh.material as THREE.Material);
+        if (!part) return;
+        expect(materials.has(part.material), `${url} ${part.material.name}`).toBe(true);
+        const object = new THREE.InstancedMesh(part.geometry, part.material, 1);
+        expect(keys.has(threeProgramKeys(part.material, object)), url).toBe(true);
+      });
+    }
+  });
+
+  it('lists the placed world props the world itself leaves out on low', async () => {
+    const low = new Set<string>(propPreloadInternalsForTest.lowTierPropKeys);
+    const placed = [...(await rallyDrawsByUrl()).keys()].filter(
+      (url) => realmRacersDressingRoute(url) === 'worldProp',
+    );
+    const outside = placed.filter((url) => !low.has(worldPropKey(url) as string)).sort();
+    expect(outside).toEqual(OUTSIDE_LOW_TIER_URLS);
   });
 
   it('keeps the maze hedge raw as the world draws it, and names every race-only model', async () => {

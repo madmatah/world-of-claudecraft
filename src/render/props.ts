@@ -459,7 +459,7 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   hexrTowerBase2: { url: '/models/biome/hexr_tower_base.glb', kit: 'khex' },
 };
 
-type PropKey = keyof typeof PROP_ASSET_DEFS;
+export type PropKey = keyof typeof PROP_ASSET_DEFS;
 
 const loadedProps = new Map<string, GLTF>();
 const propLoadTasks = new Map<string, Promise<void>>();
@@ -821,29 +821,43 @@ function convertMaterial(
   return mat;
 }
 
-let propDefsByUrl: Map<string, PropAssetDef> | null = null;
+let propKeysByUrl: Map<string, PropKey> | null = null;
 
-/**
- * The world's converted material for one part of the prop model at `url`, out
- * of the same cache the world's props draw from, for a caller drawing that
- * model's own geometry (a Realm Racers circuit). `null` for a part the world
- * strips, `undefined` for a url `PROP_ASSET_DEFS` does not list. The per-UV
- * family split of `UV_SURFACE_SPLIT_KEYS` needs the extracted geometry, so
- * those models take their material's normal routing here.
- */
-export function worldPropMaterial(
-  url: string,
-  src: THREE.Material,
-  hasVertexColors: boolean,
-): THREE.Material | null | undefined {
-  if (!propDefsByUrl) {
-    propDefsByUrl = new Map();
-    for (const def of Object.values(PROP_ASSET_DEFS)) {
-      if (!propDefsByUrl.has(def.url)) propDefsByUrl.set(def.url, def);
+/** The `PROP_ASSET_DEFS` key the world draws `url` under (the first listed),
+ *  or undefined for a url the world's props never draw. */
+export function worldPropKey(url: string): PropKey | undefined {
+  if (!propKeysByUrl) {
+    propKeysByUrl = new Map();
+    for (const [key, def] of Object.entries(PROP_ASSET_DEFS)) {
+      if (!propKeysByUrl.has(def.url)) propKeysByUrl.set(def.url, key as PropKey);
     }
   }
-  const def = propDefsByUrl.get(url);
-  if (!def) return undefined;
+  return propKeysByUrl.get(url);
+}
+
+/** Whether the world splits this prop's parts per UV family, which needs its
+ *  extracted geometry (`UV_SURFACE_SPLIT_KEYS`). */
+export function worldPropSplitsBySurface(key: PropKey): boolean {
+  return UV_SURFACE_SPLIT_KEYS.has(key);
+}
+
+/** Whether the world retargets an atlas cell on this prop (`applyUvCellFix`). */
+export function worldPropHasUvCellFix(key: PropKey): boolean {
+  return UV_CELL_FIXES[key] !== undefined;
+}
+
+/**
+ * The world's converted material for one part of the prop `key`, out of the
+ * same cache the world's props draw from, for a caller drawing that model's own
+ * geometry (a Realm Racers circuit), or null for a part the world strips. A
+ * `worldPropSplitsBySurface` key has no such single material.
+ */
+export function worldPropMaterial(
+  key: PropKey,
+  src: THREE.Material,
+  hasVertexColors: boolean,
+): THREE.Material | null {
+  const def = PROP_ASSET_DEFS[key];
   if (def.strip?.test(src.name)) return null;
   return convertMaterial(src, def.kit, hasVertexColors);
 }
@@ -928,7 +942,7 @@ const UV_CELL_FIXES: Readonly<
 });
 
 /** Apply the atlas-cell correction for a key, in place, if it has one. */
-function applyUvCellFix(geo: THREE.BufferGeometry, key: PropKey): void {
+export function applyUvCellFix(geo: THREE.BufferGeometry, key: PropKey): void {
   const fix = UV_CELL_FIXES[key];
   const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
   if (!fix || !uv) return;

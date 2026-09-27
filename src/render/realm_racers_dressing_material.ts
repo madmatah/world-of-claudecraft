@@ -5,35 +5,44 @@
 //
 //  - `worldProp`: the url is one of the world's props (`PROP_ASSET_DEFS`), so
 //    the part wears the world's converted material for it (`worldPropMaterial`
-//    in props.ts): the same cached object, hence the same programs the world
-//    links, with the tier's Lambert substitution, the kit overrides and the
-//    worn-detail layer. Its geometry keeps only the attributes the world's
-//    extraction keeps, since three keys a program on some of the rest (a
-//    four-component colour, tangents, a second uv set). A part the world strips
-//    is not drawn.
+//    in props.ts), the same cached object, with the tier's Lambert
+//    substitution, the kit overrides and the worn-detail layer. Its geometry is
+//    shaped as the world's extraction shapes it (the attribute set three keys a
+//    program on, normals where the file has none, the atlas cell fix). That
+//    shares the world's programs only where the world draws the key at the
+//    current tier: on low it draws, and prewarms, `LOW_TIER_PROP_KEYS` alone.
+//    A part the world strips is not drawn.
 //  - `worldRaw`: the world draws the model with its raw glTF material too (the
 //    garden maze's hedge pieces, garden_features.ts), so the circuit does the
 //    same and shares those programs.
-//  - `raceOnly`: nothing in the world draws the model. It keeps its raw
-//    material, under a name that says it is the circuit's alone, so a live
-//    program report can tell it from the world's.
+//  - `raceOnly`: nothing in the world draws the model as a circuit can, either
+//    because no world module draws it or because the world splits its parts per
+//    UV family (`worldPropSplitsBySurface`). It keeps its raw material, under a
+//    name that says it is the circuit's alone, so a live program report can
+//    tell it from the world's.
 //
 // Everything handed out belongs to a shared cache, never disposed by a caller:
 // the dispose core frees neither an instanced geometry nor a material.
 
 import * as THREE from 'three';
 import { GARDEN_MAZE_ARCH_URL, GARDEN_MAZE_WALL_URL } from './garden_maze_core';
-import { PROP_ASSET_DEFS, worldPropMaterial } from './props';
+import { cloneMaterialWithHooks } from './material_clone_hooks';
+import {
+  applyUvCellFix,
+  type PropKey,
+  worldPropHasUvCellFix,
+  worldPropKey,
+  worldPropMaterial,
+  worldPropSplitsBySurface,
+} from './props';
 
 export type RealmRacersDressingRoute = 'worldProp' | 'worldRaw' | 'raceOnly';
 
 const WORLD_RAW_URLS: ReadonlySet<string> = new Set([GARDEN_MAZE_WALL_URL, GARDEN_MAZE_ARCH_URL]);
 
-let worldPropUrls: ReadonlySet<string> | null = null;
-
 export function realmRacersDressingRoute(url: string): RealmRacersDressingRoute {
-  worldPropUrls ??= new Set(Object.values(PROP_ASSET_DEFS).map((def) => def.url));
-  if (worldPropUrls.has(url)) return 'worldProp';
+  const key = worldPropKey(url);
+  if (key !== undefined && !worldPropSplitsBySurface(key)) return 'worldProp';
   if (WORLD_RAW_URLS.has(url)) return 'worldRaw';
   return 'raceOnly';
 }
@@ -43,15 +52,17 @@ const raceOnlyMaterials = new WeakMap<THREE.Material, THREE.Material>();
 function raceOnlyMaterial(url: string, src: THREE.Material): THREE.Material {
   const known = raceOnlyMaterials.get(src);
   if (known) return known;
-  const named = src.clone();
+  const named = cloneMaterialWithHooks(src);
   const file = url.slice(url.lastIndexOf('/') + 1).replace(/\.glb$/, '');
   named.name = `realmRacersRaceOnly:${file}:${src.name}`;
   raceOnlyMaterials.set(src, named);
   return named;
 }
 
-/** The attribute set the world's prop extraction keeps (props.ts `propAsset`). */
-function worldShaped(geometry: THREE.BufferGeometry): boolean {
+/** Already the shape the world's extraction would give (props.ts `propAsset`). */
+function worldShaped(geometry: THREE.BufferGeometry, key: PropKey): boolean {
+  if (worldPropHasUvCellFix(key)) return false;
+  if (!geometry.getAttribute('normal') || !geometry.getAttribute('uv')) return false;
   const color = geometry.getAttribute('color');
   if (color && color.itemSize !== 3) return false;
   if (Object.keys(geometry.morphAttributes).length > 0) return false;
@@ -60,31 +71,45 @@ function worldShaped(geometry: THREE.BufferGeometry): boolean {
   );
 }
 
+function floatCopy(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  itemSize: number,
+): THREE.BufferAttribute {
+  const out = new Float32Array(attribute.count * itemSize);
+  for (let i = 0; i < attribute.count; i++) {
+    out[i * itemSize] = attribute.getX(i);
+    if (itemSize > 1) out[i * itemSize + 1] = attribute.getY(i);
+    if (itemSize > 2) out[i * itemSize + 2] = attribute.getZ(i);
+  }
+  return new THREE.BufferAttribute(out, itemSize);
+}
+
 const worldShapedGeometries = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 
-function worldShapedGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
-  if (worldShaped(src)) return src;
+function worldShapedGeometry(src: THREE.BufferGeometry, key: PropKey): THREE.BufferGeometry {
+  if (worldShaped(src, key)) return src;
   const known = worldShapedGeometries.get(src);
   if (known) return known;
   const out = new THREE.BufferGeometry();
-  for (const name of ['position', 'normal', 'uv']) {
-    const attribute = src.getAttribute(name);
-    if (attribute) out.setAttribute(name, attribute);
-  }
+  const position = src.getAttribute('position');
+  out.setAttribute('position', position);
+  const normal = src.getAttribute('normal');
+  if (normal) out.setAttribute('normal', normal);
+  const uv = src.getAttribute('uv');
+  if (uv && !worldPropHasUvCellFix(key)) out.setAttribute('uv', uv);
+  else
+    out.setAttribute(
+      'uv',
+      uv ? floatCopy(uv, 2) : new THREE.BufferAttribute(new Float32Array(position.count * 2), 2),
+    );
   const color = src.getAttribute('color');
-  if (color) {
-    const rgb = new Float32Array(color.count * 3);
-    for (let i = 0; i < color.count; i++) {
-      rgb[i * 3] = color.getX(i);
-      rgb[i * 3 + 1] = color.getY(i);
-      rgb[i * 3 + 2] = color.getZ(i);
-    }
-    out.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
-  }
+  if (color) out.setAttribute('color', floatCopy(color, 3));
   out.setIndex(src.getIndex());
   for (const group of src.groups) out.addGroup(group.start, group.count, group.materialIndex);
-  out.boundingBox = src.boundingBox;
-  out.boundingSphere = src.boundingSphere;
+  applyUvCellFix(out, key);
+  if (!normal) out.computeVertexNormals();
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
   worldShapedGeometries.set(src, out);
   return out;
 }
@@ -101,6 +126,7 @@ export function realmRacersDressingPart(
   const route = realmRacersDressingRoute(url);
   if (route === 'worldRaw') return { geometry, material };
   if (route === 'raceOnly') return { geometry, material: raceOnlyMaterial(url, material) };
-  const converted = worldPropMaterial(url, material, geometry.getAttribute('color') !== undefined);
-  return converted ? { geometry: worldShapedGeometry(geometry), material: converted } : null;
+  const key = worldPropKey(url) as PropKey;
+  const converted = worldPropMaterial(key, material, geometry.getAttribute('color') !== undefined);
+  return converted ? { geometry: worldShapedGeometry(geometry, key), material: converted } : null;
 }
