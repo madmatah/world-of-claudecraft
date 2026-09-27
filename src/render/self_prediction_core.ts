@@ -1,4 +1,4 @@
-import type { Entity, MoveInput } from '../sim/types';
+import { type Aura, type Entity, type MoveInput, normAngle, type VehicleDrive } from '../sim/types';
 
 export const SELF_PREDICTION_RING_CAPACITY = 128;
 
@@ -9,20 +9,38 @@ export interface PredictionPose {
   facing: number;
   /** The frame the pose is in: a sailing ship's route index, or world. */
   deck?: number | null;
+  /** A seated pilot's acknowledgement: the drive at the acked tick, or null
+   *  once the wheel is gone (race end). Undefined on a runner's. */
+  drive?: VehicleDrive | null;
+  vy?: number;
+  onGround?: boolean;
+  /** The auras of the snapshot that carried the acknowledgement. */
+  auras?: readonly Aura[];
 }
 
-export type PredictionResidual = Pick<PredictionPose, 'x' | 'y' | 'z'>;
+/** `yaw` rides only when the replayed head drives: the kernel owns a
+ *  driver's facing, so a replay can move it. */
+export type PredictionResidual = Pick<PredictionPose, 'x' | 'y' | 'z'> & { yaw?: number };
 
 export interface PredictionFrame {
   ct: number;
   mi: MoveInput;
   facing: number | null;
+  /** The server holds the body this tick (its override is active): the
+   *  kernel does not run. */
+  held?: boolean;
 }
 
 /** The predicted body. `deck` set (a route index) means the pose is kept in
  *  that sailing ship's frame (render/deck_prediction.ts): position x port and
  *  z bow (height stays world yards); heading and velocity off the bow. */
-export type MotionState = { deck?: number | null } & Pick<
+export type MotionState = {
+  deck?: number | null;
+  /** Set while seated behind a wheel: the vehicle kernel's state. */
+  drive?: VehicleDrive | null;
+  /** A driver's facing at the tick start, for the display's yaw lerp. */
+  prevFacing?: number;
+} & Pick<
   Entity,
   | 'id'
   | 'pos'
@@ -50,6 +68,7 @@ export interface PredictionEntry {
   ct: number;
   mi: MoveInput;
   facing: number | null;
+  held?: boolean;
   pose: MotionState;
 }
 
@@ -63,16 +82,18 @@ export type ReconciliationResult =
   | { mode: 'suspend' };
 
 export function copyMotionState(state: MotionState): MotionState {
-  return {
+  const copy: MotionState = {
     ...state,
     pos: { ...state.pos },
     prevPos: { ...state.prevPos },
     auras: state.auras.slice(),
   };
+  if (state.drive) copy.drive = { ...state.drive };
+  return copy;
 }
 
 function entryFrame(entry: PredictionEntry): PredictionFrame {
-  return { ct: entry.ct, mi: entry.mi, facing: entry.facing };
+  return { ct: entry.ct, mi: entry.mi, facing: entry.facing, held: entry.held };
 }
 
 function stepFrom(state: MotionState, frame: PredictionFrame, stepFn: PredictionStep): MotionState {
@@ -80,9 +101,66 @@ function stepFrom(state: MotionState, frame: PredictionFrame, stepFn: Prediction
   next.prevPos.x = next.pos.x;
   next.prevPos.y = next.pos.y;
   next.prevPos.z = next.pos.z;
-  if (frame.facing !== null) next.facing = frame.facing;
+  const drive = next.drive ?? null;
+  if (drive) next.prevFacing = next.facing;
+  // the server writes a runner's streamed facing even on a tick it holds
+  if (frame.facing !== null && !drive) next.facing = frame.facing;
+  // the server's movement pass returns before the kernel on a race lock
+  if (frame.held === true || drive?.controlsLocked === true) return next;
   stepFn(next, frame);
   return next;
+}
+
+/** Every drive field the vehicle kernel reads back: a driver's match compares
+ *  them exactly. */
+export const DRIVE_MATCH_FIELDS = [
+  'profileKey',
+  'speed',
+  'slip',
+  'steerAngle',
+  'yawRate',
+  'spin',
+  'gripMult',
+  'dragMult',
+  'speedCap',
+  'slipCap',
+  'controlsLocked',
+] as const satisfies readonly (keyof VehicleDrive)[];
+
+/** Adopted but never compared: the handbrake's own presentation ramp and the
+ *  scrape reading never shape a pose. */
+export const DRIVE_PRESENTATION_FIELDS = [
+  'handbrake',
+  'collisionImpact',
+] as const satisfies readonly (keyof VehicleDrive)[];
+
+function sameDrive(
+  a: VehicleDrive | null | undefined,
+  b: VehicleDrive | null | undefined,
+): boolean {
+  if (!a || !b) return !a && !b;
+  for (const field of DRIVE_MATCH_FIELDS) if (a[field] !== b[field]) return false;
+  return true;
+}
+
+// Exact on every field: the kernel is IEEE arithmetic over full-precision wire
+// numbers, so the same inputs land on the same bits. `===` folds -0 into +0.
+function matchesAuthoritative(pose: MotionState, authoritative: PredictionPose): boolean {
+  if (
+    (pose.deck ?? null) !== (authoritative.deck ?? null) ||
+    pose.pos.x !== authoritative.x ||
+    pose.pos.y !== authoritative.y ||
+    pose.pos.z !== authoritative.z
+  ) {
+    return false;
+  }
+  if (!pose.drive && !authoritative.drive) return true;
+  return (
+    pose.facing === authoritative.facing &&
+    pose.vy === authoritative.vy &&
+    pose.onGround === authoritative.onGround &&
+    sameDrive(pose.drive, authoritative.drive)
+  );
 }
 
 function applyAuthoritativePose(state: MotionState, authoritative: PredictionPose): void {
@@ -94,6 +172,20 @@ function applyAuthoritativePose(state: MotionState, authoritative: PredictionPos
   state.prevPos.y = authoritative.y;
   state.prevPos.z = authoritative.z;
   state.facing = authoritative.facing;
+  if (authoritative.drive === undefined && !state.drive) return;
+  state.drive = authoritative.drive ? { ...authoritative.drive } : null;
+  if (state.drive) {
+    state.prevFacing = authoritative.facing;
+    if (authoritative.vy !== undefined) state.vy = authoritative.vy;
+    if (authoritative.onGround !== undefined) state.onGround = authoritative.onGround;
+  } else {
+    // a runner's recon carries no vertical state, and the race puts a finished
+    // pilot back on the ground: an airborne kart's vy must not fall a runner
+    delete state.prevFacing;
+    state.vy = authoritative.vy ?? 0;
+    state.onGround = authoritative.onGround ?? true;
+  }
+  if (authoritative.auras) state.auras = authoritative.auras.slice();
 }
 
 export class PredictionRing {
@@ -129,12 +221,14 @@ export class PredictionRing {
 
   push(entry: PredictionEntry): void {
     if (this.anchorCt === null) this.anchorCt = entry.ct;
-    this.entries.push({
+    const stored: PredictionEntry = {
       ct: entry.ct,
       mi: { ...entry.mi },
       facing: entry.facing,
       pose: copyMotionState(entry.pose),
-    });
+    };
+    if (entry.held) stored.held = true;
+    this.entries.push(stored);
     if (this.entries.length > this.capacity) this.entries.shift();
   }
 
@@ -160,7 +254,13 @@ export function predictTick(
   stepFn: PredictionStep,
 ): MotionState {
   const predicted = stepFrom(state, frame, stepFn);
-  ring.push({ ct: frame.ct, mi: frame.mi, facing: frame.facing, pose: predicted });
+  ring.push({
+    ct: frame.ct,
+    mi: frame.mi,
+    facing: frame.facing,
+    held: frame.held,
+    pose: predicted,
+  });
   return predicted;
 }
 
@@ -182,12 +282,7 @@ export function reconcile(
   const acknowledged = ring.find(ackCt);
   if (!acknowledged) return { mode: 'stale' };
 
-  if (
-    (acknowledged.pose.deck ?? null) === (authoritative.deck ?? null) &&
-    acknowledged.pose.pos.x === authoritative.x &&
-    acknowledged.pose.pos.y === authoritative.y &&
-    acknowledged.pose.pos.z === authoritative.z
-  ) {
+  if (matchesAuthoritative(acknowledged.pose, authoritative)) {
     ring.dropThrough(ackCt);
     return { mode: 'match' };
   }
@@ -208,12 +303,14 @@ export function reconcile(
   if (oldHead && (oldHead.deck ?? null) !== (newHead.deck ?? null)) {
     return { mode: 'replayed', residual: { x: 0, y: 0, z: 0 } };
   }
-  return {
-    mode: 'replayed',
-    residual: {
-      x: (oldHead?.pos.x ?? authoritative.x) - newHead.pos.x,
-      y: (oldHead?.pos.y ?? authoritative.y) - newHead.pos.y,
-      z: (oldHead?.pos.z ?? authoritative.z) - newHead.pos.z,
-    },
+  const residual: PredictionResidual = {
+    x: (oldHead?.pos.x ?? authoritative.x) - newHead.pos.x,
+    y: (oldHead?.pos.y ?? authoritative.y) - newHead.pos.y,
+    z: (oldHead?.pos.z ?? authoritative.z) - newHead.pos.z,
   };
+  // a runner head's facing is the camera's, so kart minus camera is no glide
+  if (newHead.drive) {
+    residual.yaw = normAngle((oldHead?.facing ?? authoritative.facing) - newHead.facing);
+  }
+  return { mode: 'replayed', residual };
 }

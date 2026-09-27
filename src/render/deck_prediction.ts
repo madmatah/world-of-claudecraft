@@ -119,6 +119,20 @@ export function createDeckAwareStep(
   let platform: readonly Collider[] | null = null;
   const stepDeps: PlayerMotionDeps = { ...deps, platform: () => platform };
   return (state: MotionState, frame: PredictionFrame): void => {
+    // a racer cannot board, so no ship is posed for one
+    if (state.drive) {
+      const route = state.deck ?? null;
+      const onDeck = route === null ? null : (slots[route] ?? null);
+      // unreachable in play; converted so a deck-frame pose never reads as world
+      if (onDeck && route !== null) {
+        transportShipPoseAt(TRANSPORT_ROUTES[route], clockFor(frame.ct), onDeck.now, phase);
+        toWorld(state, onDeck.now, false);
+      }
+      state.deck = null;
+      platform = null;
+      stepPlayerMotion(stepDeps, state as Entity, frame.mi);
+      return;
+    }
     const clock = clockFor(frame.ct);
     for (let i = 0; i < slots.length; i++) {
       const slot = slots[i];

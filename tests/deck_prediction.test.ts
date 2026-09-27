@@ -7,12 +7,14 @@ import {
   EASTBROOK_FERRY_HULL,
   EASTBROOK_NIGHTBLOOM_FERRY,
 } from '../src/sim/content/transport_ships';
+import { stepPlayerMotion } from '../src/sim/player_motion';
 import { Sim } from '../src/sim/sim';
 import { deckToWorld, worldToDeck } from '../src/sim/transport_deck';
 import { transportClock } from '../src/sim/transport_ferry';
 import { syncTransportGates } from '../src/sim/transport_gates';
 import { type TransportPose, transportShipPoseAt } from '../src/sim/transport_schedule';
-import { DT, emptyMoveInput, type MoveInput } from '../src/sim/types';
+import { DT, type Entity, emptyMoveInput, type MoveInput, normAngle } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { WATER_LEVEL } from '../src/sim/world';
 import { WORLD_SEED } from '../src/sim/world_seed';
 
@@ -155,5 +157,107 @@ describe('the deck-aware prediction step', () => {
     for (let ct = 31; ct <= 80; ct++) tick(ct, mi({ forward: true }));
     expect(state.deck).toBeNull();
     expect(state.pos.y).toBeLessThan(WATER_LEVEL);
+  });
+
+  it('poses no ship for a seated driver: the kernel steps it straight, even on a deck that casts off', () => {
+    const berth = ROUTE.berths[0];
+    const depart = ROUTE.timings.docked;
+    const at = deckToWorld(berth, 1, 0.8, { x: 0, z: 0 });
+    const driver = (): MotionState => ({
+      deck: null,
+      id: 1,
+      pos: { x: at.x, y: DECK, z: at.z },
+      prevPos: { x: at.x, y: DECK, z: at.z },
+      facing: berth.rot + Math.PI / 2,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      onGround: true,
+      jumping: false,
+      fallStartY: DECK,
+      swimStroke: 0,
+      swimDiving: false,
+      auras: [],
+      ghost: false,
+      sitting: false,
+      castingAbility: null,
+      maxHp: 100,
+      mountKey: '',
+      mountCastRemaining: 0,
+      mountCastKey: '',
+      drive: createVehicleDrive('rally_loaner'),
+    });
+    let clockReads = 0;
+    const clockFor = (ct: number) => {
+      clockReads++;
+      return depart - 0.2 + ct * DT;
+    };
+    const deps = createClientPlayerMotionDeps(WORLD_SEED);
+    const step = createDeckAwareStep(deps, clockFor);
+    const ring = new PredictionRing();
+    let state = driver();
+    const direct = driver();
+    for (let ct = 1; ct <= 30; ct++) {
+      const input = mi({ forward: ct > 10 });
+      state = predictTick(ring, state, { ct, mi: input, facing: null }, step);
+      direct.prevPos = { ...direct.pos };
+      stepPlayerMotion(deps, direct as Entity, input);
+      expect(state.deck).toBeNull();
+      expect(state.pos).toEqual(direct.pos);
+      expect(state.facing).toBe(direct.facing);
+      expect(state.drive).toEqual(direct.drive);
+    }
+    expect(clockReads).toBe(0);
+  });
+
+  it('puts a driver handed a deck-frame pose back into world coordinates before stepping it', () => {
+    const clock = ROUTE.timings.docked + 16;
+    const pose = poseAt(clock);
+    const deps = createClientPlayerMotionDeps(WORLD_SEED);
+    const step = createDeckAwareStep(deps, () => clock);
+    const onDeck: MotionState = {
+      deck: 0,
+      id: 1,
+      pos: { x: -1.8, y: DECK, z: 4 },
+      prevPos: { x: -1.8, y: DECK, z: 4 },
+      facing: 0.3,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      onGround: true,
+      jumping: false,
+      fallStartY: DECK,
+      swimStroke: 0,
+      swimDiving: false,
+      auras: [],
+      ghost: false,
+      sitting: false,
+      castingAbility: null,
+      maxHp: 100,
+      mountKey: '',
+      mountCastRemaining: 0,
+      mountCastKey: '',
+      drive: createVehicleDrive('rally_loaner'),
+    };
+    const at = deckToWorld(pose, -1.8, 4, { x: 0, z: 0 });
+    const direct: MotionState = {
+      ...onDeck,
+      deck: null,
+      pos: { x: at.x, y: DECK, z: at.z },
+      prevPos: { x: at.x, y: DECK, z: at.z },
+      facing: normAngle(0.3 + pose.rot),
+      drive: createVehicleDrive('rally_loaner'),
+    };
+    const input = mi({ forward: true });
+    stepPlayerMotion(deps, direct as Entity, input);
+    const state = predictTick(
+      new PredictionRing(),
+      onDeck,
+      { ct: 1, mi: input, facing: null },
+      step,
+    );
+    expect(state.deck).toBeNull();
+    expect(state.pos).toEqual(direct.pos);
+    expect(state.facing).toBe(direct.facing);
   });
 });
