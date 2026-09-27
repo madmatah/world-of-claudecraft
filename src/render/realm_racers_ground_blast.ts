@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
+import { excludeFromParentCompile } from './compile_exclusion';
 import { floorVfxRenderOrder } from './floor_vfx_layer';
 import { tagVfxSubtree } from './renderer_diagnostics';
 import { rallyGroundBlastMarkerTexture } from './textures';
@@ -201,6 +202,9 @@ export class RealmRacersGroundBlastVisuals {
   constructor() {
     this.group.name = 'realmRacersGroundBlast';
     tagVfxSubtree(this.group);
+    // The prepared pool is linked by the race preparation seam alone, never by
+    // a whole-scene compile it happens to sit under (compile_exclusion.ts).
+    excludeFromParentCompile(this.group, 'realm-racers-prepare');
   }
 
   /**

@@ -15,6 +15,10 @@ import {
   setCompileArmObserver,
   underRenderTarget,
 } from '../src/render/compile_arms';
+import {
+  excludeFromParentCompile,
+  withParentCompileExclusions,
+} from '../src/render/compile_exclusion';
 
 interface Stub {
   host: CompileArmHost;
@@ -329,5 +333,88 @@ describe('compile arm observer', () => {
     await linkShadowPrograms(live.host, root);
     expect(seen).toEqual(['shadow']);
     expect(live.compileAsync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a subtree excluded from its parent's compile", () => {
+  /** What three's compile walks: `traverse`, hidden children included. */
+  function walkingStub(options: { shadowArm?: boolean } = {}) {
+    const s = stub(options);
+    const walked: THREE.Object3D[] = [];
+    s.compileAsync.mockImplementation((root: THREE.Object3D) => {
+      root.traverse((object) => {
+        if ((object as THREE.Mesh).material) walked.push(object);
+      });
+      return Promise.resolve(root);
+    });
+    return { ...s, walked };
+  }
+
+  function sceneWithOwned() {
+    const scene = new THREE.Scene();
+    const world = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial());
+    const hidden = new THREE.Group();
+    hidden.visible = false;
+    const hiddenMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial());
+    hidden.add(hiddenMesh);
+    const owned = new THREE.Group();
+    const inner = new THREE.Group();
+    inner.visible = false;
+    const ownedMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+    inner.add(ownedMesh);
+    owned.add(inner);
+    excludeFromParentCompile(owned, 'probe');
+    scene.add(world, owned, hidden);
+    return { scene, world, hidden, hiddenMesh, owned, inner, ownedMesh };
+  }
+
+  it('is skipped by a colour link of its parent, while other hidden content still links', async () => {
+    const s = walkingStub();
+    const { scene, world, hiddenMesh, owned, inner, ownedMesh } = sceneWithOwned();
+    const before = owned.children;
+    const order = [...scene.children];
+    await linkColorPrograms(s.host, scene, false);
+    expect(s.walked).toEqual([world, hiddenMesh]);
+    expect(s.walked).not.toContain(ownedMesh);
+    // Put back as it was: the same array, parent links and scene order.
+    expect(owned.children).toBe(before);
+    expect(inner.parent).toBe(owned);
+    expect(scene.children).toEqual(order);
+  });
+
+  it('is skipped by the shadow arm and the dry colour pass of its parent too', async () => {
+    const s = walkingStub({ shadowArm: true });
+    const { scene, ownedMesh } = sceneWithOwned();
+    await linkShadowPrograms(s.host, scene);
+    expect(s.walked.length).toBeGreaterThan(0);
+    expect(s.walked).not.toContain(ownedMesh);
+    const dry: THREE.Object3D[] = [];
+    runColorArm(s.host, scene, false, (root) =>
+      root.traverse((object) => {
+        if ((object as THREE.Mesh).material) dry.push(object);
+      }),
+    );
+    expect(dry.length).toBeGreaterThan(0);
+    expect(dry).not.toContain(ownedMesh);
+  });
+
+  it('still links when it is the root, or inside the root, its owner compiles', async () => {
+    const s = walkingStub();
+    const { owned, inner, ownedMesh } = sceneWithOwned();
+    await linkColorPrograms(s.host, owned, false);
+    await linkColorPrograms(s.host, inner, false);
+    expect(s.walked).toEqual([ownedMesh, ownedMesh]);
+  });
+
+  it('restores the subtree when the operation throws', () => {
+    const { scene, owned } = sceneWithOwned();
+    const before = owned.children;
+    expect(() =>
+      withParentCompileExclusions(scene, () => {
+        expect(owned.children).toEqual([]);
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+    expect(owned.children).toBe(before);
   });
 });

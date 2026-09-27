@@ -1325,9 +1325,11 @@ describe('Realm Racers procedural render', () => {
         'utf8',
       );
       const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort();
-      // The floor ladder and the diagnostics tag read no tier either.
+      // The floor ladder, the diagnostics tag and the compile exclusion read
+      // no tier either.
       expect(imports).toEqual([
         '../sim/realm_racers_ground_blast',
+        './compile_exclusion',
         './floor_vfx_layer',
         './renderer_diagnostics',
         './textures',

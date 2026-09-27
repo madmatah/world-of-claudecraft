@@ -304,6 +304,15 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   reveal follows the gate's colour, shadow, settle, upload and touch arms, so
   it draws linked programs only; restoring the captured "hidden" over it left
   a lazily built feature invisible for good (the Willowfen dressing).
+- **Hiding does not keep a group out of a whole-scene compile** (three's
+  compile walks `traverse`, hidden children included; the blocking arrival's
+  zone prewarm compiles `this.scene`). A scene-level group whose programs have
+  their own preparation owner declares `excludeFromParentCompile`
+  (`compile_exclusion.ts`), and both compile arms skip it when its PARENT is
+  the compiled root; a compile of the group itself (its owner's gate) is
+  unaffected. The Realm Racers tracks and Ground Blast pool use it, since the
+  race preparation seam is their one owner. Pinned by
+  `tests/compile_arms.test.ts` and `tests/realm_racers_boot_compile.test.ts`.
 - Shared machinery: `compile_gate.ts` (fail-soft async shader-compile gating
   that also BOUNDS in-flight driver links during snapshot bursts, plus the
   `SerialGateLane` for gates that arrive in a burst), `linked_program_touch.ts`

@@ -36,6 +36,7 @@ import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
+import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
@@ -1272,6 +1273,11 @@ export function buildRealmRacersTrack(
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();
+  // Every circuit sits hidden under this group from boot, and three's compile
+  // walks hidden children: a whole-scene compile (the blocking arrival's zone
+  // prewarm) would link every circuit's programs for a player who never races.
+  // The race preparation seam (realm_racers_prepare.ts) is their one owner.
+  excludeFromParentCompile(group, 'realm-racers-prepare');
   const reveal: RevealHold = { held: NEVER_HELD.held };
   let fillGate: () => FillGate | undefined = () => undefined;
   const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit, reveal));

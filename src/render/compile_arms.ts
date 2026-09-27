@@ -7,9 +7,12 @@
 // the sources that link would use (the dry compile the pnpm three patch adds,
 // consumed by program_sources.ts). Same state by construction: a dry pass
 // that set the state differently would describe programs the link never
-// asks for.
+// asks for. Both arms, link and dry alike, skip a direct child of their root
+// that declared `excludeFromParentCompile` (compile_exclusion.ts): its
+// programs belong to its own preparation, never to a wider compile.
 
 import type * as THREE from 'three';
+import { withParentCompileExclusions } from './compile_exclusion';
 import { prewarmDepthMaterial } from './prewarm_depth_material';
 
 /** The renderer surface both arms drive. `compileAsync` is the link; the
@@ -123,7 +126,9 @@ export async function linkColorPrograms(
   armObserver?.(root, 'color');
   for (const target of colorArmTargets(host, includeOffscreenVariant)) {
     await underRenderTarget(host, target, () =>
-      host.webgl().compileAsync(root, host.camera(), host.scene()),
+      withParentCompileExclusions(root, () =>
+        host.webgl().compileAsync(root, host.camera(), host.scene()),
+      ),
     );
   }
 }
@@ -137,7 +142,9 @@ export function runColorArm<T>(
   op: CompileArmOp<T>,
 ): T[] {
   return colorArmTargets(host, includeOffscreenVariant).map((target) =>
-    underRenderTarget(host, target, () => op(root, host.camera(), host.scene())),
+    underRenderTarget(host, target, () =>
+      withParentCompileExclusions(root, () => op(root, host.camera(), host.scene())),
+    ),
   );
 }
 
@@ -174,6 +181,14 @@ export function runShadowArm<T>(
   op: CompileArmOp<T>,
 ): T | null {
   if (!host.shadowArm()) return null;
+  return withParentCompileExclusions(root, () => shadowArmSection(host, root, op));
+}
+
+function shadowArmSection<T>(
+  host: CompileArmHost,
+  root: THREE.Object3D,
+  op: CompileArmOp<T>,
+): T | null {
   const depthMaterials = host.depthMaterials();
   const swaps: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }[] = [];
   // Walked inside the try below so a throw mid-walk still restores every swap.

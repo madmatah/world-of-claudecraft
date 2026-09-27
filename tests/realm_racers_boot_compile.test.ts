@@ -10,6 +10,12 @@
 // the boot units built over a scene holding the rally groups the way the
 // renderer holds them compile nothing under them, on every tier, and a
 // session that never commits never calls the world gate at all.
+//
+// The blocking arrival's zone prewarm is the one compile that hands three the
+// whole scene, whose walk takes hidden children too. The rally groups declare
+// `excludeFromParentCompile` (compile_exclusion.ts), so that compile links none
+// of their programs while every other hidden group still links as before, and
+// the seam's own gates, rooted at a circuit or at the pool, still link it all.
 
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
@@ -17,7 +23,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { activateTier, gfxProfileRestorer } from './helpers/gfx_tier';
 import { mirrorGltfScene } from './helpers/gltf_material_mirror';
 import { stripComments } from './helpers/strip_comments';
-import { drawsUnder } from './helpers/three_program_keys';
+import { drawsUnder, threeProgramKeys } from './helpers/three_program_keys';
 
 vi.mock('../src/render/textures', () => {
   const texture = (): THREE.DataTexture => {
@@ -54,6 +60,11 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => ({
 }));
 
 import { resetArrivalCoverForTest } from '../src/render/arrival_cover';
+import {
+  type CompileArmHost,
+  linkColorPrograms,
+  linkShadowPrograms,
+} from '../src/render/compile_arms';
 import { GFX_TIER_RANK, type GfxTier } from '../src/render/gfx';
 import { buildInitialSceneCompileUnits } from '../src/render/initial_scene_compile_units';
 import { prepareRealmRacersCircuits } from '../src/render/realm_racers_circuit_prepare';
@@ -195,6 +206,91 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
     expect(blasts.group.children).toEqual([]);
   });
 });
+
+/** The compile arms over a renderer whose link walks what three's compile
+ *  walks: the root handed over, with `traverse`, hidden children included. */
+function walkingArms(scene: THREE.Scene) {
+  const walked: THREE.Object3D[] = [];
+  const host: CompileArmHost = {
+    webgl: () => ({
+      getRenderTarget: () => null,
+      setRenderTarget: () => undefined,
+      compileAsync: (root: THREE.Object3D) => {
+        root.traverse((object) => {
+          if ((object as THREE.Mesh).material) walked.push(object);
+        });
+        return Promise.resolve(root);
+      },
+    }),
+    camera: () => new THREE.PerspectiveCamera(),
+    scene: () => scene,
+    shadowCamera: () => new THREE.OrthographicCamera(),
+    offscreen: () => true,
+    offscreenTarget: () => ({}) as THREE.WebGLRenderTarget,
+    depthMaterials: () => new Map(),
+    shadowArm: () => true,
+  };
+  return { host, walked };
+}
+
+function programsOf(objects: readonly THREE.Object3D[]): Set<string> {
+  const keys = new Set<string>();
+  for (const object of objects) {
+    const material = (object as THREE.Mesh).material;
+    for (const entry of Array.isArray(material) ? material : [material]) {
+      if (entry) keys.add(threeProgramKeys(entry, object));
+    }
+  }
+  return keys;
+}
+
+describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
+  "a blocking arrival's whole-scene compile on %s",
+  (tier) => {
+    beforeEach(() => {
+      activateTier(tier);
+    });
+
+    // renderer.ts prewarmZoneAt, the covered arm: compilePrewarmColorPrograms
+    // over this.scene, which the colour arm hands to three's compile as is.
+    it('links no rally program, and still links the hidden world content beside it', async () => {
+      const { scene, world, staged, tracks, blasts } = await bootScene();
+      // A racer's prepared pool sits in the scene too: skipped all the same.
+      blasts.prepare();
+      const rallyRoots = [tracks.group, blasts.group];
+      const rally = programsOf(drawsUnder(tracks.group).map((draw) => draw.object));
+      expect(rally.size).toBeGreaterThan(0);
+      const arms = walkingArms(scene);
+      await linkColorPrograms(arms.host, scene, false);
+      await linkShadowPrograms(arms.host, scene);
+      expect(arms.walked).toContain(world);
+      // The hidden staged catalog links exactly as before.
+      expect(arms.walked).toContain(staged);
+      for (const object of arms.walked) {
+        expect(under(object, rallyRoots), object.name || object.type).toBe(false);
+      }
+      // Every circuit is whole again once the compile returned.
+      for (const view of tracks.circuits) {
+        expect(view.group.parent).toBe(tracks.group);
+        expect(drawsUnder(view.group).length, view.circuitId).toBeGreaterThan(0);
+      }
+      expect(blasts.group.children.length).toBeGreaterThan(0);
+    });
+
+    it("leaves the race preparation's own gates linking the whole circuit and pool", async () => {
+      const { scene, tracks, blasts } = await bootScene();
+      blasts.prepare();
+      const arms = walkingArms(scene);
+      for (const view of tracks.circuits) await linkColorPrograms(arms.host, view.group, false);
+      await linkColorPrograms(arms.host, blasts.group, false);
+      const expected = [
+        ...tracks.circuits.flatMap((view) => drawsUnder(view.group).map((draw) => draw.object)),
+        ...drawsUnder(blasts.group).map((draw) => draw.object),
+      ];
+      expect(new Set(arms.walked)).toEqual(new Set(expected));
+    });
+  },
+);
 
 describe('renderer wiring of the rally groups', () => {
   const renderer = stripComments(readFileSync('src/render/renderer.ts', 'utf8'));
