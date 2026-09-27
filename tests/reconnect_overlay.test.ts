@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeBackoffDelay } from '../src/net/backoff';
 import { RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS } from '../src/net/online';
 import {
+  connectionDropActive,
   hideReconnectOverlay,
   RECONNECT_OVERLAY_SHOW_GRACE_MS,
   showReconnectOverlay,
@@ -26,6 +27,20 @@ describe('reconnect overlay stateful half (show/show/hide)', () => {
     hideReconnectOverlay();
     vi.useRealTimers();
     document.body.replaceChildren();
+  });
+
+  it('reports the drop from its first report, before the grace, until the resume', () => {
+    expect(connectionDropActive()).toBe(false);
+    showReconnectOverlay(1, 40, Date.now() + 1_000);
+    expect(document.getElementById(OVERLAY_ID)).toBeNull();
+    expect(connectionDropActive()).toBe(true);
+    hideReconnectOverlay();
+    expect(connectionDropActive()).toBe(false);
+    // The fatal disconnect overlay is terminal: it reads as dropped for good.
+    const fatal = document.createElement('div');
+    fatal.id = 'disconnect-overlay';
+    document.body.appendChild(fatal);
+    expect(connectionDropActive()).toBe(true);
   });
 
   it('a drop that resumes inside the show grace never paints the overlay', () => {

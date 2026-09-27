@@ -2977,6 +2977,11 @@
     display: none;
     z-index: 24;
   }
+  /* The touch chat frame carries its own stacking (the composer moves inside
+     it), so its lift over the Realm Racers lobby curtain is restated here. */
+  body.mobile-touch #realm-racers-lobby.shown ~ #chatlog-wrap {
+    z-index: 151;
+  }
   /* New model: tapping the Chat icon opens a centered READ panel; the composer is a
      desktop-style bar at the TOP of that panel (main.ts moves #chat-input into
      #chatlog-wrap as its first child on mobile), sitting above the tabs + log. Tapping

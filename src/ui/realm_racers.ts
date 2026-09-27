@@ -2,14 +2,16 @@
 // and the race HUD. The pure view module owns state decisions; this class only
 // renders, wires actions, and maintains dialog focus.
 
-import {
-  type RealmRacersPrepareProgress,
-  realmRacersPrepareProgress,
-} from '../render/realm_racers_prepare';
-import type { IWorld, RallyDriverTier } from '../world_api';
+import type { RealmRacersPrepareProgress } from '../render/realm_racers_prepare';
+import type { IWorld, RallyDriverTier, RealmRacersInfo } from '../world_api';
 import { markDialogRoot } from './dialog_root';
 import { esc } from './esc';
-import { buildRealmRacersLobbyView, RealmRacersLobby } from './hud/realm_racers';
+import {
+  buildRealmRacersLobbyView,
+  createRealmRacersLobbyFailsafe,
+  RealmRacersLobby,
+  stepRealmRacersLobbyFailsafe,
+} from './hud/realm_racers';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
@@ -31,6 +33,7 @@ import {
   type RealmRacersSetupView,
   type RealmRacersWindowView,
 } from './realm_racers_view';
+import { connectionDropActive } from './reconnect_overlay';
 import { svgIcon } from './ui_icons';
 
 const num = (value: number): string => formatNumber(value, { maximumFractionDigits: 0 });
@@ -104,9 +107,17 @@ export interface RealmRacersDeps {
    */
   clearPickupSplash(): void;
   writers: PainterHostWriters;
-  /** This machine's race preparation; the renderer's seam by default. */
-  prepareProgress?(): RealmRacersPrepareProgress;
+  /** This machine's race preparation, read from the HUD's current renderer so
+   *  a graphics rebuild hands over the new seam. Asked only in the lobby. */
+  prepareProgress(out: RealmRacersPrepareProgress): RealmRacersPrepareProgress;
+  /** A lost connection, which takes the lobby curtain down at once; the
+   *  reconnect overlay's readout by default. */
+  connectionDropped?(): boolean;
+  /** The client clock the lobby failsafe runs on; performance.now by default. */
+  now?(): number;
 }
+
+const NOT_PREPARED: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
 
 export class RealmRacersUi {
   private lastWindowSig = '';
@@ -118,6 +129,8 @@ export class RealmRacersUi {
   private readonly lobby: RealmRacersLobby;
   /** The circuit banner waits for the lobby curtain to lift. */
   private bannerPending = false;
+  private readonly prepared: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
+  private readonly lobbyFailsafe = createRealmRacersLobbyFailsafe();
   /** The off-screen live region that SPEAKS the drawn circuit. Kept outside the
    *  strip's rebuilt subtree so a rebuild cannot re-announce. */
   private announceEl: HTMLElement | null = null;
@@ -200,12 +213,41 @@ export class RealmRacersUi {
     if (this.isOpen) this.renderWindow();
   }
 
+  /**
+   * The lobby's ready send. It paints nothing, so the HUD calls it above its
+   * paint cut: a hidden window still says it is ready.
+   */
+  sendReady(): void {
+    const world = this.deps.world();
+    const info = world.realmRacersInfo;
+    stepRealmRacersReady(this.readySender, info, this.preparedFor(info.match), () =>
+      world.readyRealmRacers(),
+    );
+  }
+
+  /** Drop the lobby curtain's cover depth and key hold, and unmount it. */
+  dispose(): void {
+    this.lobby.dispose();
+  }
+
+  private preparedFor(match: RealmRacersInfo['match']): RealmRacersPrepareProgress {
+    return match?.phase === 'loading' ? this.deps.prepareProgress(this.prepared) : NOT_PREPARED;
+  }
+
+  /** The lobby curtain stands for the server's lobby, unless the connection
+   *  dropped or the client failsafe ran out. */
+  private lobbyCurtainStands(match: RealmRacersInfo['match']): boolean {
+    const now = this.deps.now?.() ?? performance.now();
+    if (!stepRealmRacersLobbyFailsafe(this.lobbyFailsafe, match, now)) return false;
+    return !(this.deps.connectionDropped ?? connectionDropActive)();
+  }
+
   update(): void {
     const world = this.deps.world();
     const info = world.realmRacersInfo;
-    const prepared = (this.deps.prepareProgress ?? realmRacersPrepareProgress)();
-    stepRealmRacersReady(this.readySender, info, prepared, () => world.readyRealmRacers());
-    this.lobby.update(buildRealmRacersLobbyView(info.match, prepared));
+    const prepared = this.preparedFor(info.match);
+    const curtain = this.lobbyCurtainStands(info.match);
+    this.lobby.update(buildRealmRacersLobbyView(curtain ? info.match : null, prepared));
     // Auto-close on the false -> true match edge only. The window is centered
     // over the viewport, so leaving it up would hide the circuit for the whole
     // countdown and race. An edge rather than a level check, so a player who

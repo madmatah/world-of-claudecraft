@@ -291,6 +291,13 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the need/greed roll popups',
   },
   {
+    call: 'this.realmRacersUi.sendReady',
+    band: 'frame',
+    gate: '',
+    surface: 'none',
+    why: 'the race lobby ready send, above the paint cut so a hidden window still readies; no DOM',
+  },
+  {
     call: 'this.updateRaidLockoutBadge',
     band: 'slow',
     gate: '',
@@ -1709,6 +1716,9 @@ describe('the hidden-frame paint cut', () => {
       'this.chatAnnouncer.flush',
       'this.questDialog.updateVoice',
       'this.lootRolls.update',
+      // The lobby ready is a command, not a paint: a hidden window must still
+      // tell the server it has prepared, or it waits out the whole cap.
+      'this.realmRacersUi.sendReady',
       'syncMinigameMusic',
       // Music keeps playing on hidden frames, so its state machine must keep
       // transitioning there too (phase 4 QA F1: a minimized player heard the
@@ -1890,7 +1900,8 @@ describe('Hud.update() drives exactly the registered set, on the registered band
       // fourth release/v0.44.0 base merge (97 measured on the merged tree).
       // window 51 -> 52 on this branch: the Realm Racers window row
       // (realm_racers.ts, module-guarded). Counted off the merged table.
-    ).toEqual({ window: 52, chrome: 97, none: 18 });
+      // none 18 -> 19: the Realm Racers lobby ready send above the paint cut.
+    ).toEqual({ window: 52, chrome: 97, none: 19 });
     const windows = HUD_UPDATE_DRIVES.filter((r) => r.surface === 'window');
     expect(windows.map((r) => r.call)).toContain('this.spellbookWindow.tickOpen');
     expect(windows.map((r) => r.call)).toContain('this.refreshOpenTownFocusIfChanged');

@@ -5633,6 +5633,7 @@ export class Hud {
     // class's, so the teardown is injected like the banner and the audio cues.
     clearPickupSplash: () => this.realmRacersSplash.clear(),
     writers: this.writerFacet,
+    prepareProgress: (out) => this.renderer.realmRacersPrepare.progress(out),
     ...this.windowFocus('#realm-racers-window'),
   });
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
@@ -8858,6 +8859,7 @@ export class Hud {
     // Self-contained timer controller: a roll must keep expiring on schedule
     // whether or not this frame paints.
     this.lootRolls.update(now);
+    this.realmRacersUi.sendReady();
     // The zone/combat/boss music state machine, hoisted above the cut (phase 4
     // QA F1): music keeps PLAYING on hidden frames, so its transitions (combat
     // over, zone change, boss engage) must keep executing or a
@@ -8893,9 +8895,7 @@ export class Hud {
     this.mountRaceStrip.repaintIfChanged();
     this.mountRaceControls.update();
     this.vehicleControls.update();
-    // The live race strip and countdown audio follow authoritative state every
-    // frame. Its writer facets elide unchanged DOM; the queue/setup window
-    // still rebuilds only on its structural signature.
+    // The race strip, lobby curtain and countdown audio, every frame (elided writers).
     this.realmRacersUi.update();
     this.lockpickController.repaintIfChanged();
     this.tutorial.update(sim, this.renderer, this.keybinds);

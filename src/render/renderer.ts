@@ -2053,7 +2053,7 @@ export class Renderer {
   private realmRacersSkyReady: RallySkyKey | null = null;
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
-  private realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
+  readonly realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
   // seed-bound ground sampler, built once so per-frame drape updates
   // allocate no closure.
   private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);

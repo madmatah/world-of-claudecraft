@@ -114,3 +114,50 @@ export function buildRealmRacersLobbyView(
   LIVE.settled = progress.settled;
   return LIVE;
 }
+
+/**
+ * How long past the lobby deadline the server last announced the curtain may
+ * outlive it: a snapshot's latency plus the rounding up of `secondsLeft`.
+ */
+export const REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS = 2_000;
+
+export interface RealmRacersLobbyFailsafe {
+  matchId: number | null;
+  secondsLeft: number;
+  deadlineMs: number;
+  expired: boolean;
+}
+
+export function createRealmRacersLobbyFailsafe(): RealmRacersLobbyFailsafe {
+  return { matchId: null, secondsLeft: -1, deadlineMs: 0, expired: false };
+}
+
+/**
+ * Whether the curtain may still stand on this client clock. Each newly received
+ * `secondsLeft` becomes a client deadline when it arrives; once that deadline
+ * plus the grace has passed, the curtain stays down for the rest of this match.
+ * A presentation failsafe only: it never sends ready and never touches readiness.
+ */
+export function stepRealmRacersLobbyFailsafe(
+  state: RealmRacersLobbyFailsafe,
+  match: RealmRacersMatchInfo | null,
+  nowMs: number,
+): boolean {
+  if (match?.phase !== 'loading') {
+    state.matchId = null;
+    return false;
+  }
+  if (match.id !== state.matchId) {
+    state.matchId = match.id;
+    state.secondsLeft = -1;
+    state.expired = false;
+  }
+  if (state.expired) return false;
+  const secondsLeft = Math.max(0, match.loading?.secondsLeft ?? 0);
+  if (secondsLeft !== state.secondsLeft) {
+    state.secondsLeft = secondsLeft;
+    state.deadlineMs = nowMs + secondsLeft * 1000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
+  }
+  if (nowMs > state.deadlineMs) state.expired = true;
+  return !state.expired;
+}

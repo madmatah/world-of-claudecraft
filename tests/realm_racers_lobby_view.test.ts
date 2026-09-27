@@ -2,11 +2,15 @@
 // are ready, this machine's preparation bar, and when the curtain exists at all.
 
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersReady } from '../src/sim/social/realm_racers';
 import {
   buildRealmRacersLobbyView,
+  createRealmRacersLobbyFailsafe,
+  REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS,
   type RealmRacersLobbyLive,
   realmRacersLobbyPercent,
+  stepRealmRacersLobbyFailsafe,
 } from '../src/ui/hud/realm_racers';
 import type { RealmRacersMatchInfo, RealmRacersRacerInfo } from '../src/world_api';
 import { addAt, makeWorld } from './realm_racers_util';
@@ -182,7 +186,35 @@ describe('the lobby view over both hosts', () => {
     const me = view.pilots.find((pilot) => pilot.isMe);
     const house = view.pilots.filter((pilot) => !pilot.isMe);
     expect(me).toMatchObject({ pid: human, bot: false, status: 'waiting' });
-    expect(house.length).toBeGreaterThan(0);
+    expect(house).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
     expect(house.every((pilot) => pilot.bot && pilot.status === 'ready')).toBe(true);
+  });
+});
+
+describe('stepRealmRacersLobbyFailsafe', () => {
+  it('turns each received secondsLeft into a client deadline and stays down once it passes', () => {
+    const state = createRealmRacersLobbyFailsafe();
+    const at = (secondsLeft: number) => lobby({ loading: { secondsLeft, readyIds: [] } });
+    expect(stepRealmRacersLobbyFailsafe(state, at(12), 1_000)).toBe(true);
+    // A frozen snapshot (a dead socket, a stalled server) keeps its first receipt.
+    const deadline = 1_000 + 12_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
+    expect(stepRealmRacersLobbyFailsafe(state, at(12), deadline)).toBe(true);
+    expect(stepRealmRacersLobbyFailsafe(state, at(12), deadline + 1)).toBe(false);
+    // A late snapshot of the same lobby cannot raise it again.
+    expect(stepRealmRacersLobbyFailsafe(state, at(3), deadline + 2)).toBe(false);
+  });
+
+  it('moves the deadline with each new second, and re-arms for the next match', () => {
+    const state = createRealmRacersLobbyFailsafe();
+    const at = (secondsLeft: number, id = 7) =>
+      lobby({ id, loading: { secondsLeft, readyIds: [] } });
+    stepRealmRacersLobbyFailsafe(state, at(12), 0);
+    expect(stepRealmRacersLobbyFailsafe(state, at(11), 1_000)).toBe(true);
+    expect(
+      stepRealmRacersLobbyFailsafe(state, at(11), 12_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS),
+    ).toBe(true);
+    expect(stepRealmRacersLobbyFailsafe(state, lobby({ phase: 'countdown' }), 90_000)).toBe(false);
+    expect(stepRealmRacersLobbyFailsafe(state, at(15, 8), 90_000)).toBe(true);
+    expect(stepRealmRacersLobbyFailsafe(state, null, 90_001)).toBe(false);
   });
 });

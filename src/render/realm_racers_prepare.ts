@@ -21,10 +21,9 @@
 // Clients root only what they build at `prepare()`: an object added under a
 // root after its gate ran is not covered by that gate.
 //
-// The race lobby reads the newest seam through `realmRacersPrepareProgress()`,
-// so the rally UI needs no renderer handle: its progress bar is the unit
-// tally, and its ready is sent once every client has a verdict, never on a
-// clock.
+// The race lobby reads `progress()` through the HUD's current renderer (so a
+// graphics rebuild hands it the new seam): its progress bar is the unit tally,
+// and its ready is sent once every client has a verdict, never on a clock.
 
 import type * as THREE from 'three';
 import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
@@ -77,22 +76,6 @@ export type { RealmRacersPrepareProgress, RealmRacersPrepareState, RealmRacersPr
 
 export const REALM_RACERS_PREPARE_EVENT_PREFIX = 'realm-racers-prepare';
 
-// Weak for the arrival registry's reason: a graphics rebuild mints a fresh
-// renderer whose seam replaces this one, and the old one must not stay alive
-// through the readout.
-let newestSeam: WeakRef<RealmRacersPrepare> | null = null;
-const sharedProgress: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
-
-/** The newest seam's progress, in a reused record. Without a seam nothing is
- *  prepared and nothing is settled. */
-export function realmRacersPrepareProgress(
-  out: RealmRacersPrepareProgress = sharedProgress,
-): RealmRacersPrepareProgress {
-  const seam = newestSeam?.deref();
-  if (!seam) return beginRealmRacersPrepareTally(out, false);
-  return seam.progress(out);
-}
-
 export class RealmRacersPrepare {
   private readonly latch = createRealmRacersPrepareLatch();
   private readonly commitment: RealmRacersCommitment = {
@@ -110,7 +93,6 @@ export class RealmRacersPrepare {
   constructor(clients: readonly RealmRacersPrepareClient[] = []) {
     for (const client of clients) this.addClient(client);
     registerRevealGateForArrival(this);
-    newestSeam = new WeakRef(this);
   }
 
   /** Register a producer. Once the seam has started, it starts at once. */

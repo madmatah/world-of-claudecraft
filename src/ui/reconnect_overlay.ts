@@ -38,12 +38,23 @@ export const RECONNECT_OVERLAY_SHOW_GRACE_MS = 2500;
 let tickTimer: number | null = null;
 let graceTimer: number | null = null;
 let pendingShow: { attempt: number; maxAttempts: number; nextRetryAtMs: number } | null = null;
+let dropped = false;
+
+/**
+ * True from the first report of a dropped socket (before the show grace) until
+ * the world resumes, and for good once the fatal disconnect overlay is up. The
+ * race lobby curtain reads it to step aside for whichever overlay takes over.
+ */
+export function connectionDropActive(): boolean {
+  return dropped || document.getElementById('disconnect-overlay') !== null;
+}
 
 export function showReconnectOverlay(
   attempt: number,
   maxAttempts: number,
   nextRetryAtMs: number,
 ): void {
+  dropped = true;
   // Already mounted (the drop outlived the grace): update in place, no re-grace.
   if (document.getElementById(OVERLAY_ID)) {
     mountOrUpdateOverlay(attempt, maxAttempts, nextRetryAtMs);
@@ -93,6 +104,7 @@ function mountOrUpdateOverlay(attempt: number, maxAttempts: number, nextRetryAtM
 }
 
 export function hideReconnectOverlay(): void {
+  dropped = false;
   if (graceTimer !== null) {
     window.clearTimeout(graceTimer);
     graceTimer = null;

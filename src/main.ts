@@ -1,7 +1,7 @@
 import { applyFrameGeometrySetting } from './game/frame_geometry_settings';
 import { formatAbilityImbueDamage } from './ui/ability_imbue_text';
 import { bindChatComposerFocusState, resetChatComposer } from './ui/chat_composer_focus_controller';
-import { dispatchCollectionAction } from './ui/collection_actions_core';
+import { dispatchCollectionAction, rallyLobbyHoldsAction } from './ui/collection_actions_core';
 import { createInterfaceVisibility } from './ui/interface_visibility';
 import { dispatchInterfaceVisibilityAction } from './ui/interface_visibility_core';
 import { MOBILE_CHAT_REPLY_CLASS, START_SCREEN_OPEN_CLASS } from './ui/root_state_classes';
@@ -2103,9 +2103,9 @@ async function startGame(
   const crossHotbar = createCrossHotbar(() => hud, keybindScope, gamepadBindings);
   const canUseGameKeysNow = () => !gameplayInputBlocked();
   function dispatchGamepadAction(id: string): void {
-    // Cancel backs out one step at a time: the top window, then the target. Only
-    // once there is nothing left to leave does the game menu come up, which is
-    // what keeps this distinct from the menu button rather than a second copy.
+    if (rallyLobbyHoldsAction(id)) return;
+    // Cancel backs out one step (the top window, then the target) and only then
+    // opens the game menu, which keeps it distinct from the menu button.
     if (id === GAMEPAD_CANCEL) {
       if (dismissCameraPrompt() || hud.cancelGroundAim() || hud.closeAll()) return;
       world.targetEntity(null);

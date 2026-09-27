@@ -150,6 +150,38 @@ describe('RealmRacersLobby painter', () => {
     expect(root.classList.contains('shown')).toBe(true);
   });
 
+  it('drops the cover once this machine settles, and holds the keys for as long as it is shown', () => {
+    const r = rig();
+    r.innerHtml.mockRestore();
+    const setHold = vi.fn();
+    const painter = new RealmRacersLobby({
+      layer: () => r.layer,
+      writers: makeWriterFacet(
+        new Map(),
+        new WeakMap(),
+        new WeakMap(),
+        new WeakMap(),
+        () => {},
+        () => {},
+      ),
+      setCover: r.setCover,
+      setHold,
+    });
+    painter.update(buildRealmRacersLobbyView(lobby(), PREPARING));
+    painter.update(buildRealmRacersLobbyView(lobby(), { done: 2, total: 2, settled: true }));
+    expect(r.setCover.mock.calls).toEqual([[true], [false]]);
+    expect(setHold.mock.calls).toEqual([[true]]);
+    expect(painter.shown).toBe(true);
+    painter.update(buildRealmRacersLobbyView(lobby({ phase: 'countdown' }), PREPARING));
+    expect(setHold.mock.calls).toEqual([[true], [false]]);
+    expect(r.setCover.mock.calls).toEqual([[true], [false]]);
+    painter.update(buildRealmRacersLobbyView(lobby({ id: 9 }), PREPARING));
+    painter.dispose();
+    expect(setHold.mock.calls.at(-1)).toEqual([false]);
+    expect(r.setCover.mock.calls.at(-1)).toEqual([false]);
+    expect(r.layer.querySelector('#realm-racers-lobby')).toBeNull();
+  });
+
   it('raises no cover before it has a layer to mount in', () => {
     const r = rig();
     r.innerHtml.mockRestore();

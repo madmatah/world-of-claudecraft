@@ -206,6 +206,11 @@ export function noteArrivalIfTeleported(x: number, z: number, missingViews: numb
   if (arrivalDetector.observe(x, z)) noteArrivalEvent(missingViews);
 }
 
+/** The raw cover depth, for tests that pin how many owners hold it. */
+export function arrivalCoverDepthForTest(): number {
+  return coverDepth;
+}
+
 export function resetArrivalCoverForTest(): void {
   coverDepth = 0;
   establishingShot = false;

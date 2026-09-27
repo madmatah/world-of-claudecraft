@@ -27280,9 +27280,10 @@
      appears at once (it often takes over from a fading loading screen, and a
      cross-fade would flash the world between them) and lifts with the loading
      screen's fade. Its 150 ranks inside #ui, like the loading screen's does in
-     the body: it covers every HUD surface (the Esc menu included, as a loading
-     screen would) and takes the pointer off them for the lobby's bounded wait,
-     while tooltips and body-level overlays above #ui still draw over it. */
+     the body: it covers every HUD surface and takes the pointer off them for
+     the lobby's bounded wait, while body-level overlays above #ui (the
+     reconnect and disconnect notices) still draw over it. The one HUD surface
+     kept above it is the chat frame, so the grid can talk while it waits. */
   #realm-racers-lobby {
     position: absolute;
     inset: 0;
@@ -27292,7 +27293,8 @@
     justify-content: center;
     box-sizing: border-box;
     padding: 16px;
-    background: radial-gradient(
+    background-color: var(--color-ink-deep);
+    background-image: radial-gradient(
       ellipse at center,
       var(--rally-hero-bg-mid) 0%,
       var(--rally-hero-bg) 55%,
@@ -27308,6 +27310,12 @@
     opacity: 1;
     visibility: visible;
     transition: none;
+  }
+  /* The curtain is mounted first in #ui, so the chat frame (with the mobile
+     composer it hosts) is a later sibling this can lift above it; the desktop
+     composer is a body-level layer over #ui already. */
+  #realm-racers-lobby.shown ~ #chatlog-wrap {
+    z-index: 151;
   }
   .rally-lobby-panel {
     display: flex;

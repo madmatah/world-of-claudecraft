@@ -14,7 +14,6 @@ import {
   RealmRacersPrepare,
   type RealmRacersPrepareClient,
   type RealmRacersPrepareHost,
-  realmRacersPrepareProgress,
 } from '../src/render/realm_racers_prepare';
 import {
   addRealmRacersPrepareTally,
@@ -350,31 +349,33 @@ describe('race preparation progress (the lobby readout)', () => {
     expect(out).toEqual({ done: 4, total: 6, settled: false });
   });
 
-  it('reads the newest seam: unsettled until every client has its verdict', async () => {
+  it('reads unsettled until every client has its verdict', async () => {
     const host = fakeHost();
     const road = countingClient('road');
     const kerb = countingClient('kerb');
     const seam = new RealmRacersPrepare([road, kerb]);
-    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 2, settled: false });
+    const read = () => seam.progress({ done: 9, total: 9, settled: true });
+    expect(read()).toEqual({ done: 0, total: 2, settled: false });
     // A race opening in its lobby is a seat: the lobby needs no trigger of its own.
     seam.frame(host, { queued: false, match: { practice: false } }, BAND.x, BAND.z);
     expect(seam.reason).toBe('seated');
-    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 2, settled: false });
+    expect(read()).toEqual({ done: 0, total: 2, settled: false });
     host.settle(road.root);
     host.release();
     await flush();
-    expect(realmRacersPrepareProgress()).toEqual({ done: 1, total: 2, settled: false });
+    expect(read()).toEqual({ done: 1, total: 2, settled: false });
     host.release(false);
     await flush();
-    expect(realmRacersPrepareProgress()).toEqual({ done: 2, total: 2, settled: true });
+    expect(read()).toEqual({ done: 2, total: 2, settled: true });
     expect(seam.stateOf('kerb')).toBe('unproven');
-    // A rebuilt renderer's seam starts over, and the readout follows it.
-    const rebuilt = new RealmRacersPrepare([countingClient('road')]);
-    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 1, settled: false });
-    rebuilt.frame(host, SEATED, BAND.x, BAND.z);
-    host.release();
-    await flush();
-    expect(realmRacersPrepareProgress().settled).toBe(true);
+  });
+
+  it('settles a seam with no clients on its first committed frame, never before', () => {
+    const seam = new RealmRacersPrepare();
+    const out: RealmRacersPrepareProgress = { done: 9, total: 9, settled: true };
+    expect(seam.progress(out)).toEqual({ done: 0, total: 0, settled: false });
+    seam.frame(fakeHost(), SEATED, BAND.x, BAND.z);
+    expect(seam.progress(out)).toEqual({ done: 0, total: 0, settled: true });
   });
 
   it('counts a client that reports its own steps, and settles at once without a parallel compile', () => {
@@ -402,7 +403,7 @@ describe('race preparation seam (renderer wiring)', () => {
     const occurrences = (needle: string) => renderer.split(needle).length - 1;
     expect(
       occurrences(
-        'private realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);',
+        'readonly realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);',
       ),
     ).toBe(1);
     expect(

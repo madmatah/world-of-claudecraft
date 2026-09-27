@@ -1397,7 +1397,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
-  '637c0f5fb94e40b1a1be2e6dc90c4a7f605c29aaaa461db58af959a75cf501af';
+  // Re-minted for the Realm Racers lobby seam readout (renderer leaf).
+  '5e2360f3fbe5a1fa8456d07bd4f92ac78e0a48495c66ef56374c34bb268882cd';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1423,7 +1424,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
-  '2e10a05c25cfa59030597e01c505fcc12739fa09dd0175601e81f9ca6d345e51';
+  // Re-minted for the Realm Racers lobby seam readout (renderer leaf).
+  'b0f9bd5c29d4f3de2014530ed94e107df37c5f7e8313f2ece2b53ac05128d3a6';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2808,7 +2810,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // re-swept evidence. No capture was retaken.
       // Re-minted for the Realm Racers mount-skin presentation fix.
       // Re-minted for the Realm Racers Ground Blast preparation seam.
-    ).toBe('0c2503c1ed86993bb31a538dc3ab36d4381f2bc9ebf9f7bb9d7888a2faef4380');
+      // Re-minted for the Realm Racers lobby seam readout.
+    ).toBe('43e74a29c7a845c014dc841f08c9bfc2c52c04e7790487a9728efa15e76e7822');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

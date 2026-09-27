@@ -17,8 +17,24 @@ vi.mock('../src/ui/icons', async (importOriginal) => ({
   iconDataUrl: iconDataUrlSpy,
 }));
 
-import { arrivalCoverActive, resetArrivalCoverForTest } from '../src/render/arrival_cover';
+import * as THREE from 'three';
+import {
+  arrivalCoverActive,
+  arrivalCoverDepthForTest,
+  resetArrivalCoverForTest,
+} from '../src/render/arrival_cover';
+import {
+  RealmRacersPrepare,
+  type RealmRacersPrepareClient,
+} from '../src/render/realm_racers_prepare';
 import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../src/sim/content/realm_racers_circuits';
+import { dispatchCollectionAction } from '../src/ui/collection_actions_core';
+import { durationText } from '../src/ui/duration_text';
+import {
+  REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS,
+  rallyLobbyHoldsAction,
+  setRealmRacersLobbyHold,
+} from '../src/ui/hud/realm_racers';
 import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
@@ -27,6 +43,11 @@ import type { IWorld, RealmRacersInfo } from '../src/world_api';
 
 type RallyMatch = NonNullable<RealmRacersInfo['match']>;
 type RallyRacer = RallyMatch['standings'][number];
+
+beforeEach(() => {
+  resetArrivalCoverForTest();
+  setRealmRacersLobbyHold(false);
+});
 
 function racer(over: Partial<RallyRacer> = {}): RallyRacer {
   return {
@@ -105,6 +126,14 @@ function harness() {
   const clearPickupSplash = vi.fn();
   const touch = { value: false };
   const prepared = { done: 1, total: 1, settled: true };
+  // Hud's production wiring reads `this.renderer.realmRacersPrepare.progress`;
+  // a test swaps the source the way replaceRenderer swaps the renderer.
+  const source = {
+    progress: (out: { done: number; total: number; settled: boolean }) =>
+      Object.assign(out, prepared),
+  };
+  const clock = { now: 0 };
+  const link = { dropped: false };
   const restoreFocus = vi.fn();
   const world = {
     realmRacersInfo: info,
@@ -129,8 +158,15 @@ function harness() {
     showBanner,
     clearPickupSplash,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
-    prepareProgress: () => prepared,
+    prepareProgress: (out) => source.progress(out),
+    connectionDropped: () => link.dropped,
+    now: () => clock.now,
   });
+  /** One HUD frame: the ready send above the paint cut, then the paint. */
+  const frame = (): void => {
+    ui.sendReady();
+    ui.update();
+  };
   const forfeitButton = (): HTMLButtonElement | null =>
     layer.querySelector('.rallyhud-forfeit') as HTMLButtonElement | null;
   return {
@@ -150,6 +186,10 @@ function harness() {
     forfeitButton,
     touch,
     prepared,
+    source,
+    clock,
+    link,
+    frame,
   };
 }
 
@@ -1053,35 +1093,146 @@ describe('Realm Racers loading lobby ready', () => {
   it('tells the lobby it is ready once per due key, and again after the server drops it', () => {
     const h = harness();
     h.info.match = lobby(15, [2, 3, 4]);
-    h.ui.update();
-    h.ui.update();
+    h.frame();
+    h.frame();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
     h.info.match = lobby(15, [1, 2, 3, 4]);
-    h.ui.update();
+    h.frame();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
     // A linkdead resume: the server cleared the flag, so the same second sends again.
     h.info.match = lobby(15, [2, 3, 4]);
-    h.ui.update();
+    h.frame();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(2);
     h.info.match = match({ phase: 'countdown' });
-    h.ui.update();
+    h.frame();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(2);
   });
 
-  it('waits for the preparation proof before it says ready', () => {
+  it('sends ready from the non-paint half alone, so a hidden window still readies', () => {
     const h = harness();
-    h.prepared.done = 0;
-    h.prepared.settled = false;
-    for (const seconds of [15, 14, 13]) {
-      h.info.match = lobby(seconds, [2, 3, 4]);
-      h.ui.update();
-      h.ui.update();
-    }
-    expect(h.readyRealmRacers).not.toHaveBeenCalled();
-    h.prepared.done = 1;
-    h.prepared.settled = true;
+    h.info.match = lobby(15, [2, 3, 4]);
+    h.ui.sendReady();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    expect(h.layer.querySelector('#realm-racers-lobby')).toBeNull();
     h.ui.update();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+  });
+
+  it('never reads the preparation outside the lobby', () => {
+    const h = harness();
+    const progress = vi.spyOn(h.source, 'progress');
+    for (const phase of ['countdown', 'racing', 'finished'] as const) {
+      h.info.match = match({ phase });
+      h.frame();
+    }
+    h.info.match = null;
+    h.frame();
+    expect(progress).not.toHaveBeenCalled();
+    h.info.match = lobby(15, [2, 3, 4]);
+    h.frame();
+    expect(progress).toHaveBeenCalled();
+  });
+});
+
+/** A race preparation client whose gate the test settles by hand. */
+function gatedSeam() {
+  const pending: (() => void)[] = [];
+  const host = {
+    worldCompileGate: () => () =>
+      new Promise<void>((resolve) => {
+        pending.push(resolve);
+      }),
+    webgl: { properties: { get: () => undefined } },
+  };
+  const client: RealmRacersPrepareClient = {
+    prepareId: 'probe',
+    built: false,
+    prepare: () => new THREE.Group(),
+  };
+  const seam = new RealmRacersPrepare([client]);
+  return {
+    seam,
+    start: () => seam.frame(host, { queued: false, match: { practice: false } }, 0, 0),
+    settle: async () => {
+      for (const resolve of pending.splice(0)) resolve();
+      await new Promise((done) => setTimeout(done, 0));
+    },
+  };
+}
+
+describe('Realm Racers lobby ready through the renderer seam', () => {
+  const lobby = (secondsLeft: number) =>
+    match({
+      phase: 'loading',
+      countdown: 0,
+      countdownTicks: 0,
+      loading: { secondsLeft, readyIds: [2, 3, 4] },
+    });
+
+  it('says nothing while the seam prepares and exactly once after it settles', async () => {
+    const h = harness();
+    const a = gatedSeam();
+    h.source.progress = (out) => a.seam.progress(out);
+    h.info.match = lobby(15);
+    h.frame();
+    a.start();
+    for (let i = 0; i < 10; i++) h.frame();
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    expect(arrivalCoverDepthForTest()).toBe(1);
+    await a.settle();
+    for (let i = 0; i < 10; i++) h.frame();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    expect(arrivalCoverDepthForTest()).toBe(0);
+  });
+
+  it('waits for a rebuilt renderer seam, and never stacks the cover', async () => {
+    const h = harness();
+    const a = gatedSeam();
+    h.source.progress = (out) => a.seam.progress(out);
+    h.info.match = lobby(15);
+    a.start();
+    h.frame();
+    await a.settle();
+    h.frame();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    // A graphics rebuild mid-lobby: Hud now reads the new renderer's seam.
+    const b = gatedSeam();
+    h.source.progress = (out) => b.seam.progress(out);
+    // The server has not answered yet, so the viewer is still unlisted.
+    h.info.match = lobby(14);
+    const depths: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      h.frame();
+      depths.push(arrivalCoverDepthForTest());
+      if (i === 2) b.start();
+    }
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    await b.settle();
+    h.frame();
+    depths.push(arrivalCoverDepthForTest());
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(2);
+    expect(Math.max(...depths)).toBe(1);
+    expect(depths.at(-1)).toBe(0);
+  });
+
+  it('keeps a pilot whose gate never settles unready: only the server cap moves them on', () => {
+    const h = harness();
+    const stuck = gatedSeam();
+    h.source.progress = (out) => stuck.seam.progress(out);
+    stuck.start();
+    for (let seconds = 15; seconds >= 1; seconds--) {
+      h.info.match = lobby(seconds);
+      h.clock.now += 1_000;
+      h.frame();
+    }
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    const status = h.layer.querySelector('.rally-lobby-status');
+    expect(status?.textContent).toBe(t('hudChrome.rally.lobbyWaiting'));
+    h.info.match = match({ phase: 'countdown' });
+    h.frame();
+    expect(h.layer.querySelector('#realm-racers-lobby')?.classList.contains('shown')).toBe(false);
+    expect(arrivalCoverActive()).toBe(false);
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
   });
 });
 
@@ -1096,21 +1247,37 @@ describe('Realm Racers loading lobby curtain', () => {
     });
   const curtain = (h: ReturnType<typeof harness>): HTMLElement | null =>
     h.layer.querySelector('#realm-racers-lobby');
+  const shown = (h: ReturnType<typeof harness>): boolean =>
+    curtain(h)?.classList.contains('shown') ?? false;
   const statuses = (h: ReturnType<typeof harness>): string[] =>
     [...h.layer.querySelectorAll('.rally-lobby-status')].map((el) => el.textContent ?? '');
+  const toggleDeeds = vi.fn();
+  const collections = {
+    toggleDeeds,
+    toggleProfessions: vi.fn(),
+    toggleReliquary: vi.fn(),
+    toggleCosmetics: vi.fn(),
+    toggleHarvestJournal: vi.fn(),
+    togglePerfecting: vi.fn(),
+    toggleLootExplorer: vi.fn(),
+  };
 
-  beforeEach(() => resetArrivalCoverForTest());
-  afterEach(() => resetArrivalCoverForTest());
+  afterEach(async () => {
+    setLanguage('en');
+  });
 
   it('covers the world through the lobby and lifts on the countdown, for every pilot', () => {
     const h = harness();
     h.prepared.done = 0;
     h.prepared.settled = false;
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
+    h.frame();
     const el = curtain(h);
-    expect(el?.classList.contains('shown')).toBe(true);
-    expect(arrivalCoverActive()).toBe(true);
+    expect(shown(h)).toBe(true);
+    expect(el).toBe(h.layer.firstElementChild);
+    expect(el?.getAttribute('role')).toBe('dialog');
+    expect(el?.getAttribute('aria-modal')).toBe('true');
+    expect(el?.getAttribute('aria-labelledby')).toBe('rally-lobby-circuit');
     expect(el?.querySelector('.rally-lobby-circuit')?.textContent).toBe('Evergarden Express Tour');
     expect(statuses(h)).toEqual([
       t('hudChrome.rally.lobbyWaiting'),
@@ -1122,14 +1289,46 @@ describe('Realm Racers loading lobby curtain', () => {
     h.prepared.done = 1;
     h.prepared.settled = true;
     h.info.match = lobby([1, 2, 3, 4]);
-    h.ui.update();
-    expect(curtain(h)?.classList.contains('shown')).toBe(true);
-    expect(arrivalCoverActive()).toBe(true);
+    h.frame();
+    expect(shown(h)).toBe(true);
     expect(statuses(h)[0]).toBe(t('hudChrome.rally.lobbyReady'));
     h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
-    h.ui.update();
-    expect(curtain(h)?.classList.contains('shown')).toBe(false);
-    expect(arrivalCoverActive()).toBe(false);
+    h.frame();
+    expect(shown(h)).toBe(false);
+  });
+
+  it('holds the arrival cover only while this machine prepares', () => {
+    const h = harness();
+    h.prepared.done = 0;
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
+    h.frame();
+    expect(arrivalCoverDepthForTest()).toBe(1);
+    // Settled: the depth goes while the curtain stays, so the background
+    // lanes the cover refuses run behind it rather than in the countdown.
+    h.prepared.done = 1;
+    h.prepared.settled = true;
+    h.frame();
+    expect(shown(h)).toBe(true);
+    expect(arrivalCoverDepthForTest()).toBe(0);
+    h.info.match = match({ phase: 'countdown' });
+    h.frame();
+    expect(arrivalCoverDepthForTest()).toBe(0);
+  });
+
+  it('keeps one depth through a repeated lobby snapshot and drops it on the countdown', () => {
+    const h = harness();
+    h.prepared.done = 0;
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4]);
+    for (let i = 0; i < 20; i++) {
+      h.frame();
+      expect(arrivalCoverDepthForTest()).toBe(1);
+    }
+    h.info.match = match({ phase: 'countdown' });
+    h.frame();
+    expect(arrivalCoverDepthForTest()).toBe(0);
   });
 
   it("paints this machine's preparation as an accessible bar", () => {
@@ -1138,7 +1337,7 @@ describe('Realm Racers loading lobby curtain', () => {
     h.prepared.total = 4;
     h.prepared.settled = false;
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
+    h.frame();
     const bar = h.layer.querySelector('.rally-lobby-bar') as HTMLElement;
     const fill = h.layer.querySelector('.rally-lobby-fill') as HTMLElement;
     expect(bar.getAttribute('role')).toBe('progressbar');
@@ -1148,54 +1347,154 @@ describe('Realm Racers loading lobby curtain', () => {
     expect(fill.style.width).toBe('25%');
     h.prepared.done = 4;
     h.prepared.settled = true;
-    h.ui.update();
+    h.frame();
     expect(bar.getAttribute('aria-valuenow')).toBe('100');
     expect(label?.textContent).toBe(t('hudChrome.rally.lobbyPrepared'));
+  });
+
+  it('spells the lobby deadline and moves it with the server second', () => {
+    const h = harness();
+    h.info.match = lobby([2, 3, 4], 12);
+    h.frame();
+    const deadline = h.layer.querySelector('.rally-lobby-deadline') as HTMLElement;
+    const at12 = deadline.textContent;
+    expect(at12).toBe(t('hudChrome.rally.lobbyStartsBy', { time: durationText(12) }));
+    h.info.match = lobby([2, 3, 4], 11);
+    h.frame();
+    expect(deadline.textContent).toBe(
+      t('hudChrome.rally.lobbyStartsBy', { time: durationText(11) }),
+    );
+    expect(deadline.textContent).not.toBe(at12);
+  });
+
+  it('repaints its statuses in the new language after a switch', async () => {
+    const h = harness();
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
+    const english = statuses(h)[0];
+    await ensureLocaleLoaded('ja_JP');
+    setLanguage('ja_JP');
+    h.ui.relocalize();
+    h.ui.update();
+    expect(statuses(h)[0]).toBe(t('hudChrome.rally.lobbyWaiting'));
+    expect(statuses(h)[0]).not.toBe(english);
   });
 
   it('never raises for a reconnect into a race already under way', () => {
     const h = harness();
     for (const phase of ['countdown', 'racing', 'finished'] as const) {
       h.info.match = match({ phase });
-      h.ui.update();
-      expect(curtain(h)?.classList.contains('shown') ?? false, phase).toBe(false);
+      h.frame();
+      expect(shown(h), phase).toBe(false);
       expect(arrivalCoverActive(), phase).toBe(false);
+      expect(rallyLobbyHoldsAction('bags'), phase).toBe(false);
     }
   });
 
-  it('drops its cover when the match goes away under it', () => {
+  it('holds the window and menu keys while shown, except chat, and releases them on the lift', () => {
     const h = harness();
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
-    h.ui.update();
+    h.frame();
+    for (const key of ['bags', 'char', 'spellbook', 'map', 'social', 'escape', 'interact']) {
+      expect(rallyLobbyHoldsAction(key), key).toBe(true);
+    }
+    expect(rallyLobbyHoldsAction('chat')).toBe(false);
+    expect(dispatchCollectionAction('deeds', collections)).toBe(true);
+    expect(dispatchCollectionAction('bags', collections)).toBe(true);
+    expect(dispatchCollectionAction('chat', collections)).toBe(false);
+    expect(toggleDeeds).not.toHaveBeenCalled();
+    h.info.match = match({ phase: 'countdown' });
+    h.frame();
+    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(dispatchCollectionAction('bags', collections)).toBe(false);
+    expect(dispatchCollectionAction('deeds', collections)).toBe(true);
+    expect(toggleDeeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('steps aside the moment the connection drops, keys and cover included', () => {
+    const h = harness();
+    h.prepared.done = 0;
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
+    expect(rallyLobbyHoldsAction('bags')).toBe(true);
+    h.link.dropped = true;
+    h.frame();
+    expect(shown(h)).toBe(false);
+    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(arrivalCoverDepthForTest()).toBe(0);
+    // A resume inside the lobby brings the curtain back for the time left.
+    h.link.dropped = false;
+    h.frame();
+    expect(shown(h)).toBe(true);
+  });
+
+  it('drops a curtain whose server phase never changes once the announced deadline passes', () => {
+    const h = harness();
+    h.prepared.done = 0;
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4], 12);
+    h.frame();
+    expect(shown(h)).toBe(true);
+    h.clock.now += 12_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
+    h.frame();
+    expect(shown(h)).toBe(true);
+    h.clock.now += 1;
+    h.frame();
+    expect(shown(h)).toBe(false);
+    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(arrivalCoverDepthForTest()).toBe(0);
+    for (let i = 0; i < 5; i++) h.frame();
+    expect(shown(h)).toBe(false);
+    // Presentation only: the failsafe never readies anyone.
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+  });
+
+  it('drops its cover and hold when the match goes away under it', () => {
+    const h = harness();
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
     expect(arrivalCoverActive()).toBe(true);
     h.info.match = null;
-    h.ui.update();
+    h.frame();
     expect(arrivalCoverActive()).toBe(false);
+    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+  });
+
+  it('releases everything on dispose', () => {
+    const h = harness();
+    h.prepared.settled = false;
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
+    h.ui.dispose();
+    expect(arrivalCoverDepthForTest()).toBe(0);
+    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(curtain(h)).toBeNull();
   });
 
   it('holds the circuit banner for the lift instead of firing it under the curtain', () => {
     const h = harness();
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
-    h.ui.update();
+    h.frame();
+    h.frame();
     expect(h.showBanner).not.toHaveBeenCalled();
     h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
-    h.ui.update();
-    h.ui.update();
+    h.frame();
+    h.frame();
     expect(h.showBanner.mock.calls).toEqual([['Evergarden Express Tour']]);
   });
 
   it('drops a held banner for a lobby that never reached its countdown', () => {
     const h = harness();
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
+    h.frame();
     h.info.match = null;
-    h.ui.update();
+    h.frame();
     h.info.match = lobby([2, 3, 4]);
-    h.ui.update();
+    h.frame();
     h.info.match = match({ phase: 'racing', circuitId: 'evergarden_express_tour' });
-    h.ui.update();
+    h.frame();
     expect(h.showBanner).not.toHaveBeenCalled();
     expect(arrivalCoverActive()).toBe(false);
   });
