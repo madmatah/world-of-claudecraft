@@ -65,8 +65,11 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => ({
   }),
 }));
 
+import { arrivalRevealSettleMaxMs } from '../src/game/arrival_warmup';
 import {
+  arrivalCoverActive,
   arrivalHeldImminentKeys,
+  awaitArrivalReveals,
   resetArrivalCoverForTest,
   setArrivalCover,
 } from '../src/render/arrival_cover';
@@ -965,6 +968,73 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
     await flush();
     expect(seam.stateOf(id)).toBe('unproven');
     expect(seam.progress({ done: 0, total: 0, settled: false }, CIRCUIT.id).settled).toBe(true);
+  });
+
+  // A blocking arrival (a rift exit, a teleport) that lands a walker in the
+  // band with no race: the whole-scene prewarm under its loading screen skips
+  // the circuits (compile_exclusion.ts), so the seam alone links them. The
+  // arrival raises the cover before the landing frame (arrival_warmup.ts), the
+  // seam's in-flight preparation is what the curtain's wait reads, and the
+  // circuit shows only once its own gate linked it.
+  it('prepares the circuit before revealing it on a blocking arrival into the band, no race', async () => {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    const sky = fakeSky();
+    sky.finish(true);
+    prepareRealmRacersCircuits(seam, tracks, sky.sky);
+    const view = tracks.circuits[REALM_RACERS_CIRCUIT_LIST.indexOf(CIRCUIT)];
+    const linked = new Set<THREE.Object3D>();
+    const pending: (() => void)[] = [];
+    const gate = vi.fn(
+      (target: THREE.Object3D) =>
+        new Promise<void>((resolve) => {
+          pending.push(() => {
+            linked.add(target);
+            resolve();
+          });
+        }),
+    );
+    const host: RealmRacersPrepareHost = {
+      worldCompileGate: () => gate,
+      webgl: { properties: { get: () => undefined } },
+    };
+    const walker = { queued: false, match: null };
+    let shownLinked: boolean | null = null;
+    const frame = () => {
+      seam.frame(host, walker, LANE.x, LANE.z);
+      tracks.update(LANE.x, LANE.z, 0, null);
+      if (view.group.visible && shownLinked === null) shownLinked = linked.has(view.group);
+    };
+    const polls: (() => void)[] = [];
+    let lifted = false;
+    setArrivalCover(true);
+    expect(arrivalCoverActive()).toBe(true);
+    void awaitArrivalReveals(arrivalRevealSettleMaxMs(false), {
+      now: () => 0,
+      schedule: (poll) => polls.push(poll),
+    }).then(() => {
+      lifted = true;
+    });
+    const step = async () => {
+      frame();
+      await flush();
+      for (const poll of polls.splice(0)) poll();
+      await flush();
+    };
+    for (let i = 0; i < 4; i++) await step();
+    expect(seam.reason).toBe('band');
+    expect(gate).toHaveBeenCalledWith(view.group);
+    expect(view.group.visible).toBe(false);
+    expect(arrivalHeldImminentKeys()).toBeGreaterThan(0);
+    expect(lifted).toBe(false);
+    for (let i = 0; i < 12 && !lifted; i++) {
+      for (const release of pending.splice(0)) release();
+      await step();
+    }
+    expect(lifted).toBe(true);
+    expect(shownLinked).toBe(true);
+    expect(view.group.visible).toBe(true);
+    setArrivalCover(false);
   });
 
   it('attaches a model that lands after the preparation started through the world gate', async () => {

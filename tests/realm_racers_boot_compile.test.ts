@@ -65,6 +65,7 @@ import {
   linkColorPrograms,
   linkShadowPrograms,
 } from '../src/render/compile_arms';
+import { parentCompileExclusionOf } from '../src/render/compile_exclusion';
 import { GFX_TIER_RANK, type GfxTier } from '../src/render/gfx';
 import { buildInitialSceneCompileUnits } from '../src/render/initial_scene_compile_units';
 import { prepareRealmRacersCircuits } from '../src/render/realm_racers_circuit_prepare';
@@ -129,6 +130,10 @@ async function bootScene() {
   setRenderCategory(tracks.group, 'props');
   scene.add(tracks.group);
   scene.add(blasts.group);
+  // The exclusion is read off the compiled root's DIRECT children: a declared
+  // group moved under anything else would silently stop being skipped.
+  expect(tracks.group.parent).toBe(scene);
+  expect(blasts.group.parent).toBe(scene);
   return { scene, world, catalog, staged, tracks, blasts, seam };
 }
 
@@ -277,6 +282,21 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       expect(blasts.group.children.length).toBeGreaterThan(0);
     });
 
+    it('declares groups that carry no material and hold no light anywhere below them', async () => {
+      const { tracks, blasts } = await bootScene();
+      blasts.prepare();
+      for (const root of [tracks.group, blasts.group]) {
+        expect(parentCompileExclusionOf(root), root.name || root.type).toBe('realm-racers-prepare');
+        expect((root as THREE.Object3D & { material?: unknown }).material).toBeUndefined();
+        const lights: string[] = [];
+        root.traverse((object) => {
+          if ((object as THREE.Light).isLight) lights.push(object.name || object.type);
+        });
+        expect(lights).toEqual([]);
+      }
+      expect(drawsUnder(blasts.group).length).toBeGreaterThan(0);
+    });
+
     it("leaves the race preparation's own gates linking the whole circuit and pool", async () => {
       const { scene, tracks, blasts } = await bootScene();
       blasts.prepare();
@@ -304,8 +324,21 @@ describe('renderer wiring of the rally groups', () => {
     expect(staged).not.toMatch(/realmRacers|groundBlast/i);
   });
 
-  it('attaches the tracks and the Ground Blast pool to the live scene, walked visible-only', () => {
-    expect(renderer).toContain('this.scene.add(this.realmRacersTrack.group);');
-    expect(renderer).toContain('this.scene.add(this.realmRacersGroundBlasts.group);');
+  // No Renderer can be built headless, so the real wiring is read off its
+  // source: each declared group is attached once, straight to the scene, and
+  // never handed to any other parent (the exclusion reads direct children).
+  it('attaches the tracks and the Ground Blast pool to the scene itself, and nowhere else', () => {
+    for (const group of ['this.realmRacersTrack.group', 'this.realmRacersGroundBlasts.group']) {
+      const attaches = [...renderer.matchAll(/(\S+)\.(?:add|attach)\(([^)]*)\)/g)].filter((m) =>
+        m[2].split(',').some((arg) => arg.trim() === group),
+      );
+      expect(
+        attaches.map((m) => m[0]),
+        group,
+      ).toEqual([`this.scene.add(${group})`]);
+      expect(renderer).not.toMatch(
+        new RegExp(`attachSceneGroupGated\\([^)]*${group.replace(/\./g, '\\.')}`),
+      );
+    }
   });
 });

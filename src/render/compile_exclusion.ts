@@ -19,7 +19,9 @@
 //
 // The declared group itself is still visited, so it must be a plain group
 // carrying no material; a declared group must not hold a three light either,
-// since the compile gathers lights from the same walk.
+// since the compile gathers lights from the same walk. The declaration lives
+// in `userData`, which three's clone and copy carry over, so a clone of a
+// declared group is excluded too.
 
 import type * as THREE from 'three';
 
