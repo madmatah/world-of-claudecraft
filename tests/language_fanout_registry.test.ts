@@ -486,6 +486,14 @@ const ANSWERED: readonly AnsweredSurface[] = [
     why: 'the classification that gates the localized end-of-race ceremony, forwarded by the Rally painter that owns it',
   },
   {
+    file: 'hud/realm_racers/realm_racers_lobby_painter.ts',
+    memos: ['lastSig'],
+    // Same arm, one hop, like the podium: the Rally painter owns the lobby
+    // curtain and its relocalize() forwards to it.
+    answer: 'this.realmRacersUi.relocalize',
+    why: 'the match and grid shape that gate the localized lobby skeleton, forwarded by the Rally painter that owns it',
+  },
+  {
     file: 'hud/action_bar/mobile_action_ring_painter.ts',
     memos: ['lastPage', 'lastPageCount'],
     answer: 'this.mobileActionRingPainter.relocalize',

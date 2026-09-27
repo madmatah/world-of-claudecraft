@@ -1,5 +1,6 @@
-// When the race-only GPU producers prepare, and whether a preparation proved
-// itself. The painter is realm_racers_prepare.ts; this half is Three-free so a
+// When the race-only GPU producers prepare, whether a preparation proved
+// itself, and how far it has got (the race lobby's progress bar and ready
+// proof). The painter is realm_racers_prepare.ts; this half is Three-free so a
 // plain Vitest drives every trigger.
 //
 // A race-only program is worth nothing to a player who never races, so nothing
@@ -63,4 +64,61 @@ export function takeRealmRacersPrepare(
   const reason = realmRacersPrepareReason(commitment);
   if (reason !== null) latch.reason = reason;
   return reason;
+}
+
+export type RealmRacersPrepareState = 'idle' | 'preparing' | 'proven' | 'unproven';
+
+/** A client's own step count, for a client that prepares in several steps. */
+export interface RealmRacersPrepareUnits {
+  done: number;
+  total: number;
+}
+
+/**
+ * How far the seam has got, as prepared units over total units across every
+ * client, and whether every client has its verdict. A client that reports no
+ * units counts as one, done at its verdict. `settled` is the loading lobby's
+ * ready proof: it needs the seam started, so a seam that never fired is not
+ * settled even with no clients. It never reads a clock.
+ */
+export interface RealmRacersPrepareProgress {
+  done: number;
+  total: number;
+  settled: boolean;
+}
+
+export function realmRacersPrepareSettledState(state: RealmRacersPrepareState): boolean {
+  return state === 'proven' || state === 'unproven';
+}
+
+function wholeUnits(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/** Reset `out` before the clients are added: nothing counted yet, and settled
+ *  only if the seam has started. */
+export function beginRealmRacersPrepareTally(
+  out: RealmRacersPrepareProgress,
+  started: boolean,
+): RealmRacersPrepareProgress {
+  out.done = 0;
+  out.total = 0;
+  out.settled = started;
+  return out;
+}
+
+/** Add one client to the tally. Allocation-free. */
+export function addRealmRacersPrepareTally(
+  out: RealmRacersPrepareProgress,
+  state: RealmRacersPrepareState,
+  units: RealmRacersPrepareUnits | null,
+): void {
+  const total = Math.max(1, wholeUnits(units?.total ?? 1));
+  out.total += total;
+  if (realmRacersPrepareSettledState(state)) {
+    out.done += total;
+    return;
+  }
+  out.settled = false;
+  out.done += Math.min(total, wholeUnits(units?.done ?? 0));
 }

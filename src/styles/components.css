@@ -27269,3 +27269,141 @@
     }
   }
 }
+
+@layer components {
+  /* ---------- realm racers lobby ---------- */
+
+  /* The curtain a race opens under while every pilot's machine prepares the
+     circuit. It covers the world and the HUD like the loading screen does (and
+     holds the same arrival cover while up), and lifts for the whole grid on the
+     server's countdown, so every pilot sees the establishing shot whole. It
+     appears at once (it often takes over from a fading loading screen, and a
+     cross-fade would flash the world between them) and lifts with the loading
+     screen's fade. Its 150 ranks inside #ui, like the loading screen's does in
+     the body: it covers every HUD surface (the Esc menu included, as a loading
+     screen would) and takes the pointer off them for the lobby's bounded wait,
+     while tooltips and body-level overlays above #ui still draw over it. */
+  #realm-racers-lobby {
+    position: absolute;
+    inset: 0;
+    z-index: 150;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 16px;
+    background: radial-gradient(
+      ellipse at center,
+      var(--rally-hero-bg-mid) 0%,
+      var(--rally-hero-bg) 55%,
+      var(--color-ink-deep) 100%
+    );
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity calc(0.35s * var(--motion-scale)) ease,
+      visibility 0s linear calc(0.35s * var(--motion-scale));
+  }
+  #realm-racers-lobby.shown {
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+  .rally-lobby-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 420px;
+    padding: 20px 24px 16px;
+    border-color: var(--rally-gold-a99);
+  }
+  .rally-lobby-kicker {
+    margin: 0;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .rally-lobby-circuit {
+    margin: 0;
+    color: var(--rally-circuit-gold);
+    font-family: var(--font-display, serif);
+    font-size: 22px;
+    text-align: center;
+  }
+  .rally-lobby-count {
+    margin: 4px 0 0;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+  }
+  .rally-lobby-pilots {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rally-lobby-pilot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--rally-gold-a0a);
+  }
+  .rally-lobby-pilot.me {
+    background: var(--rally-gold-a1f);
+  }
+  .rally-lobby-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-light);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rally-lobby-tag {
+    flex: 0 0 auto;
+    color: var(--rally-gold);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+  .rally-lobby-status {
+    flex: 0 0 auto;
+    justify-content: center;
+    min-width: 72px;
+  }
+  .rally-lobby-prep {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .rally-lobby-prep-label {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+  }
+  .rally-lobby-bar {
+    --bar-color: var(--rally-gold);
+    height: 10px;
+  }
+  .rally-lobby-fill {
+    width: 0%;
+    transition: width calc(0.2s * var(--motion-scale)) ease;
+  }
+  .rally-lobby-deadline {
+    margin: 2px 0 0;
+    font-size: 12px;
+    text-align: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #realm-racers-lobby,
+    .rally-lobby-fill {
+      transition: none;
+    }
+  }
+}

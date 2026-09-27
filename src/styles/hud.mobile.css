@@ -10081,6 +10081,21 @@
       min-width: 66px;
       padding-inline: 6px;
     }
+    /* The lobby panel spans the phone width inside the safe area; nothing on it
+       is tappable, so only the fit matters. */
+    body.mobile-touch #realm-racers-lobby {
+      padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+        max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    }
+    body.mobile-touch .rally-lobby-panel {
+      max-height: 100%;
+      overflow-y: auto;
+      padding: 14px 14px 12px;
+      gap: 8px;
+    }
+    body.mobile-touch .rally-lobby-circuit {
+      font-size: 18px;
+    }
     /* All four standings rows survive on a phone: the placing, the name and the
        lap are what a pilot reacts to, so nothing is shed, only tightened. The
        panel clears the notch rather than sitting at the desktop inset. */

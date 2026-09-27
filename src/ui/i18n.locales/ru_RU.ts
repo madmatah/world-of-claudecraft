@@ -15351,6 +15351,13 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': 'ВЫ',
   'hudChrome.rally.standingsFinished': 'Финиш',
   'hudChrome.rally.standingsRetired': 'Сход',
+  'hudChrome.rally.lobbyReadyCount': 'Готово пилотов: {ready} из {total}',
+  'hudChrome.rally.lobbyReady': 'Готов',
+  'hudChrome.rally.lobbyWaiting': 'Ожидание',
+  'hudChrome.rally.lobbyPreparing': 'Подготовка трассы',
+  'hudChrome.rally.lobbyPrepared': 'Трасса готова',
+  'hudChrome.rally.lobbyStartsBy':
+    'Гонка начнётся, когда все пилоты будут готовы, но не позже чем через {time}.',
   'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Эвергардена',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Эвергардена',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного колодца Ночецветья',

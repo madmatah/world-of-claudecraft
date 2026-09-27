@@ -15056,6 +15056,13 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': '나',
   'hudChrome.rally.standingsFinished': '완주',
   'hudChrome.rally.standingsRetired': '기권',
+  'hudChrome.rally.lobbyReadyCount': '준비 완료 조종사 {ready}/{total}명',
+  'hudChrome.rally.lobbyReady': '준비 완료',
+  'hudChrome.rally.lobbyWaiting': '대기 중',
+  'hudChrome.rally.lobbyPreparing': '서킷 준비 중',
+  'hudChrome.rally.lobbyPrepared': '서킷 준비 완료',
+  'hudChrome.rally.lobbyStartsBy':
+    '모든 조종사가 준비되면 레이스가 시작됩니다. 늦어도 {time} 후에 시작합니다.',
   'hudChrome.rally.circuitName_evergarden_practice': '에버가든 훈련장',
   'hudChrome.rally.circuitName_evergarden_express_tour': '에버가든 익스프레스 투어',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '밤꽃 평원 문웰 런',

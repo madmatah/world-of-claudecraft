@@ -2512,6 +2512,16 @@ export const hudChromeStrings = {
     standingsBot: 'Bot',
     standingsFinished: 'Finished',
     standingsRetired: 'Out',
+    // The loading lobby a race opens in: a curtain over the circuit while every
+    // pilot's machine prepares it. The countdown starts for the whole grid at
+    // once, when every pilot is ready or the lobby's wait runs out, so the
+    // last line names both. The bar is this machine's own preparation.
+    lobbyReadyCount: '{ready} of {total} pilots ready',
+    lobbyReady: 'Ready',
+    lobbyWaiting: 'Waiting',
+    lobbyPreparing: 'Preparing the circuit',
+    lobbyPrepared: 'Circuit prepared',
+    lobbyStartsBy: 'The race starts when every pilot is ready, in {time} at the latest.',
     // One key per circuit in `src/sim/content/realm_racers_circuits.ts`, keyed
     // by its record id. Competition DRAWS its circuit when the grid fills, so
     // the name is the first thing a pilot has to be told: it names the circuit

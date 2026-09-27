@@ -20,6 +20,11 @@
 //
 // Clients root only what they build at `prepare()`: an object added under a
 // root after its gate ran is not covered by that gate.
+//
+// The race lobby reads the newest seam through `realmRacersPrepareProgress()`,
+// so the rally UI needs no renderer handle: its progress bar is the unit
+// tally, and its ready is sent once every client has a verdict, never on a
+// clock.
 
 import type * as THREE from 'three';
 import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
@@ -27,9 +32,14 @@ import { registerRevealGateForArrival } from './arrival_cover';
 import { compileTargetPrepared } from './compile_target_readiness';
 import { gpuPrepNow, recordGpuPrepEvent } from './gpu_prep_events';
 import {
+  addRealmRacersPrepareTally,
+  beginRealmRacersPrepareTally,
   createRealmRacersPrepareLatch,
   type RealmRacersCommitment,
+  type RealmRacersPrepareProgress,
   type RealmRacersPrepareReason,
+  type RealmRacersPrepareState,
+  type RealmRacersPrepareUnits,
   realmRacersPrepareHolds,
   takeRealmRacersPrepare,
 } from './realm_racers_prepare_core';
@@ -44,6 +54,9 @@ export interface RealmRacersPrepareClient {
   /** Build, hidden, every object this producer draws and return the root
    *  holding them. Idempotent. */
   prepare(): THREE.Object3D;
+  /** A client that prepares in several steps reports them; one without
+   *  counts as a single unit, done at its verdict. */
+  units?(): RealmRacersPrepareUnits;
 }
 
 /** What the seam needs of the renderer: its world gate (undefined without a
@@ -60,9 +73,25 @@ export interface RealmRacersPrepareViewer {
   match: { practice: boolean } | null;
 }
 
-export type RealmRacersPrepareState = 'idle' | 'preparing' | 'proven' | 'unproven';
+export type { RealmRacersPrepareProgress, RealmRacersPrepareState, RealmRacersPrepareUnits };
 
 export const REALM_RACERS_PREPARE_EVENT_PREFIX = 'realm-racers-prepare';
+
+// Weak for the arrival registry's reason: a graphics rebuild mints a fresh
+// renderer whose seam replaces this one, and the old one must not stay alive
+// through the readout.
+let newestSeam: WeakRef<RealmRacersPrepare> | null = null;
+const sharedProgress: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
+
+/** The newest seam's progress, in a reused record. Without a seam nothing is
+ *  prepared and nothing is settled. */
+export function realmRacersPrepareProgress(
+  out: RealmRacersPrepareProgress = sharedProgress,
+): RealmRacersPrepareProgress {
+  const seam = newestSeam?.deref();
+  if (!seam) return beginRealmRacersPrepareTally(out, false);
+  return seam.progress(out);
+}
 
 export class RealmRacersPrepare {
   private readonly latch = createRealmRacersPrepareLatch();
@@ -81,6 +110,7 @@ export class RealmRacersPrepare {
   constructor(clients: readonly RealmRacersPrepareClient[] = []) {
     for (const client of clients) this.addClient(client);
     registerRevealGateForArrival(this);
+    newestSeam = new WeakRef(this);
   }
 
   /** Register a producer. Once the seam has started, it starts at once. */
@@ -100,6 +130,16 @@ export class RealmRacersPrepare {
 
   stateOf(prepareId: string): RealmRacersPrepareState {
     return this.states.get(prepareId) ?? 'idle';
+  }
+
+  /** Units prepared over units to prepare, across every client, and whether
+   *  every client has its verdict. */
+  progress(out: RealmRacersPrepareProgress): RealmRacersPrepareProgress {
+    beginRealmRacersPrepareTally(out, this.latch.reason !== null);
+    for (const client of this.clients.values()) {
+      addRealmRacersPrepareTally(out, this.stateOf(client.prepareId), client.units?.() ?? null);
+    }
+    return out;
   }
 
   heldImminentKeys(): number {

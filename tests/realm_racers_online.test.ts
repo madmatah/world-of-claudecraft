@@ -314,7 +314,9 @@ describe('Realm Racers online parity', () => {
     const frame = () => {
       const snap = client.sent.filter((f) => f.t === 'snap').at(-1);
       (mirror as unknown as { applySnapshot(f: unknown): void }).applySnapshot(snap);
-      stepRealmRacersReady(sender, mirror.realmRacersInfo, () => mirror.readyRealmRacers());
+      stepRealmRacersReady(sender, mirror.realmRacersInfo, { settled: true }, () =>
+        mirror.readyRealmRacers(),
+      );
     };
     command(server, session, 'realm_racers_practice', { tier: 'rookie' });
     advance(server);

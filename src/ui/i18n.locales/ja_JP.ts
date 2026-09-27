@@ -15099,6 +15099,13 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': 'あなた',
   'hudChrome.rally.standingsFinished': 'ゴール',
   'hudChrome.rally.standingsRetired': 'リタイア',
+  'hudChrome.rally.lobbyReadyCount': '準備完了のパイロット {ready}/{total}',
+  'hudChrome.rally.lobbyReady': '準備完了',
+  'hudChrome.rally.lobbyWaiting': '待機中',
+  'hudChrome.rally.lobbyPreparing': 'サーキットを準備中',
+  'hudChrome.rally.lobbyPrepared': 'サーキットの準備完了',
+  'hudChrome.rally.lobbyStartsBy':
+    '全パイロットの準備が整うとレースが始まります（遅くとも{time}後）。',
   'hudChrome.rally.circuitName_evergarden_practice': 'エバーガーデン練習場',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'エバーガーデン・エクスプレスツアー',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・ムーンウェルラン',

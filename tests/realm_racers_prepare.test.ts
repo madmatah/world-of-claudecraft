@@ -14,10 +14,14 @@ import {
   RealmRacersPrepare,
   type RealmRacersPrepareClient,
   type RealmRacersPrepareHost,
+  realmRacersPrepareProgress,
 } from '../src/render/realm_racers_prepare';
 import {
+  addRealmRacersPrepareTally,
+  beginRealmRacersPrepareTally,
   createRealmRacersPrepareLatch,
   type RealmRacersCommitment,
+  type RealmRacersPrepareProgress,
   realmRacersPrepareHolds,
   realmRacersPrepareReason,
   takeRealmRacersPrepare,
@@ -312,6 +316,81 @@ describe('race preparation seam (painter)', () => {
     expect(host.gate).toHaveBeenCalledTimes(3);
     expect(host.gate).toHaveBeenLastCalledWith(grid.root);
     expect(seam.heldImminentKeys()).toBe(2);
+  });
+});
+
+describe('race preparation progress (the lobby readout)', () => {
+  const blank = (): RealmRacersPrepareProgress => ({ done: 9, total: 9, settled: true });
+
+  it('tallies units across clients and settles only once started with every verdict in', () => {
+    const out = blank();
+    expect(beginRealmRacersPrepareTally(out, false)).toEqual({ done: 0, total: 0, settled: false });
+    expect(beginRealmRacersPrepareTally(blank(), true)).toEqual({
+      done: 0,
+      total: 0,
+      settled: true,
+    });
+    beginRealmRacersPrepareTally(out, true);
+    addRealmRacersPrepareTally(out, 'proven', null);
+    addRealmRacersPrepareTally(out, 'preparing', null);
+    expect(out).toEqual({ done: 1, total: 2, settled: false });
+    addRealmRacersPrepareTally(out, 'preparing', { done: 3, total: 8 });
+    expect(out).toEqual({ done: 4, total: 10, settled: false });
+    beginRealmRacersPrepareTally(out, true);
+    addRealmRacersPrepareTally(out, 'unproven', { done: 2, total: 8 });
+    addRealmRacersPrepareTally(out, 'proven', null);
+    expect(out).toEqual({ done: 9, total: 9, settled: true });
+  });
+
+  it('clamps a client step count, and an idle client keeps the seam unsettled', () => {
+    const out = beginRealmRacersPrepareTally(blank(), true);
+    addRealmRacersPrepareTally(out, 'preparing', { done: 12, total: 4 });
+    addRealmRacersPrepareTally(out, 'preparing', { done: -1, total: 0 });
+    addRealmRacersPrepareTally(out, 'idle', { done: Number.NaN, total: Number.NaN });
+    expect(out).toEqual({ done: 4, total: 6, settled: false });
+  });
+
+  it('reads the newest seam: unsettled until every client has its verdict', async () => {
+    const host = fakeHost();
+    const road = countingClient('road');
+    const kerb = countingClient('kerb');
+    const seam = new RealmRacersPrepare([road, kerb]);
+    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 2, settled: false });
+    // A race opening in its lobby is a seat: the lobby needs no trigger of its own.
+    seam.frame(host, { queued: false, match: { practice: false } }, BAND.x, BAND.z);
+    expect(seam.reason).toBe('seated');
+    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 2, settled: false });
+    host.settle(road.root);
+    host.release();
+    await flush();
+    expect(realmRacersPrepareProgress()).toEqual({ done: 1, total: 2, settled: false });
+    host.release(false);
+    await flush();
+    expect(realmRacersPrepareProgress()).toEqual({ done: 2, total: 2, settled: true });
+    expect(seam.stateOf('kerb')).toBe('unproven');
+    // A rebuilt renderer's seam starts over, and the readout follows it.
+    const rebuilt = new RealmRacersPrepare([countingClient('road')]);
+    expect(realmRacersPrepareProgress()).toEqual({ done: 0, total: 1, settled: false });
+    rebuilt.frame(host, SEATED, BAND.x, BAND.z);
+    host.release();
+    await flush();
+    expect(realmRacersPrepareProgress().settled).toBe(true);
+  });
+
+  it('counts a client that reports its own steps, and settles at once without a parallel compile', () => {
+    const host = fakeHost(false);
+    const steps = { done: 1, total: 5 };
+    const staged: RealmRacersPrepareClient = {
+      prepareId: 'staged',
+      built: false,
+      prepare: () => new THREE.Group(),
+      units: () => steps,
+    };
+    const seam = new RealmRacersPrepare([staged, countingClient('plain')]);
+    const out: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
+    expect(seam.progress(out)).toEqual({ done: 1, total: 6, settled: false });
+    seam.frame(host, PRACTICE, BAND.x, BAND.z);
+    expect(seam.progress(out)).toEqual({ done: 6, total: 6, settled: true });
   });
 });
 

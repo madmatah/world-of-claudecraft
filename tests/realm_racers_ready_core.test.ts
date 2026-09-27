@@ -12,6 +12,8 @@ import type {
 } from '../src/world_api/realm_racers';
 
 const ME = 1;
+const SETTLED = { settled: true };
+const PREPARING = { settled: false };
 
 function info(phase: RealmRacersPhase, loading?: RealmRacersLoadingInfo, id = 7): RealmRacersInfo {
   const match = {
@@ -30,40 +32,75 @@ function info(phase: RealmRacersPhase, loading?: RealmRacersLoadingInfo, id = 7)
   };
 }
 
+const waiting = (secondsLeft: number, id = 7) =>
+  info('loading', { secondsLeft, readyIds: [2] }, id);
+
 describe('realmRacersReadyDueKey', () => {
-  it('is due only in the lobby, and only while the viewer is not listed ready', () => {
-    expect(realmRacersReadyDueKey({ ...info('loading'), match: null })).toBeNull();
-    expect(realmRacersReadyDueKey(info('countdown'))).toBeNull();
-    expect(realmRacersReadyDueKey(info('racing'))).toBeNull();
-    expect(realmRacersReadyDueKey(info('loading'))).toBeNull();
+  it('is due only in the lobby, only once prepared, and only while the viewer is not listed ready', () => {
+    expect(realmRacersReadyDueKey({ ...info('loading'), match: null }, SETTLED)).toBeNull();
+    expect(realmRacersReadyDueKey(info('countdown'), SETTLED)).toBeNull();
+    expect(realmRacersReadyDueKey(info('racing'), SETTLED)).toBeNull();
+    expect(realmRacersReadyDueKey(info('loading'), SETTLED)).toBeNull();
     expect(
-      realmRacersReadyDueKey(info('loading', { secondsLeft: 12, readyIds: [ME, 2] })),
+      realmRacersReadyDueKey(info('loading', { secondsLeft: 12, readyIds: [ME, 2] }), SETTLED),
     ).toBeNull();
-    expect(realmRacersReadyDueKey(info('loading', { secondsLeft: 12, readyIds: [2] }))).toBe(
-      '7|12',
-    );
-    expect(realmRacersReadyDueKey(info('loading', { secondsLeft: 12, readyIds: [] }, 8))).toBe(
-      '8|12',
-    );
+    expect(realmRacersReadyDueKey(waiting(12), PREPARING)).toBeNull();
+    expect(realmRacersReadyDueKey(waiting(12), SETTLED)).toBe('7|12');
+    expect(realmRacersReadyDueKey(waiting(12, 8), SETTLED)).toBe('8|12');
   });
 });
 
 describe('stepRealmRacersReady', () => {
-  it('sends once per key, retries on the next whole second, and re-sends once the flag is cleared', () => {
+  it('never sends while the preparation is unsettled, however long the lobby waits', () => {
     const sender = createRealmRacersReadySender();
     const send = vi.fn();
-    const waiting = (secondsLeft: number) => info('loading', { secondsLeft, readyIds: [2] });
-    expect(stepRealmRacersReady(sender, waiting(15), send)).toBe(true);
-    expect(stepRealmRacersReady(sender, waiting(15), send)).toBe(false);
+    for (let seconds = 15; seconds >= 0; seconds--) {
+      for (let frame = 0; frame < 60; frame++) {
+        expect(stepRealmRacersReady(sender, waiting(seconds), PREPARING, send)).toBe(false);
+      }
+    }
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('sends on the frame the preparation settles, then once per key', () => {
+    const sender = createRealmRacersReadySender();
+    const send = vi.fn();
+    expect(stepRealmRacersReady(sender, waiting(15), PREPARING, send)).toBe(false);
+    expect(stepRealmRacersReady(sender, waiting(15), SETTLED, send)).toBe(true);
+    expect(stepRealmRacersReady(sender, waiting(15), SETTLED, send)).toBe(false);
     expect(send).toHaveBeenCalledTimes(1);
-    // Unanswered for a second: one retry, not one per frame.
-    expect(stepRealmRacersReady(sender, waiting(14), send)).toBe(true);
+    // Unanswered for a server second: one retry, not one per frame.
+    expect(stepRealmRacersReady(sender, waiting(14), SETTLED, send)).toBe(true);
     expect(send).toHaveBeenCalledTimes(2);
-    // Acknowledged, then cleared by a drop and a resume inside the same second.
-    stepRealmRacersReady(sender, info('loading', { secondsLeft: 14, readyIds: [ME, 2] }), send);
-    expect(stepRealmRacersReady(sender, waiting(14), send)).toBe(true);
-    expect(send).toHaveBeenCalledTimes(3);
-    expect(stepRealmRacersReady(sender, info('countdown'), send)).toBe(false);
-    expect(send).toHaveBeenCalledTimes(3);
+    // Acknowledged: nothing more is due.
+    const listed = info('loading', { secondsLeft: 14, readyIds: [ME, 2] });
+    expect(stepRealmRacersReady(sender, listed, SETTLED, send)).toBe(false);
+    expect(stepRealmRacersReady(sender, info('countdown'), SETTLED, send)).toBe(false);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-sends after a resume clears the flag, within the same second', () => {
+    const sender = createRealmRacersReadySender();
+    const send = vi.fn();
+    stepRealmRacersReady(sender, waiting(14), SETTLED, send);
+    stepRealmRacersReady(
+      sender,
+      info('loading', { secondsLeft: 14, readyIds: [ME, 2] }),
+      SETTLED,
+      send,
+    );
+    expect(stepRealmRacersReady(sender, waiting(14), SETTLED, send)).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits again when a rebuilt renderer starts its preparation over', () => {
+    const sender = createRealmRacersReadySender();
+    const send = vi.fn();
+    stepRealmRacersReady(sender, waiting(14), PREPARING, send);
+    expect(send).not.toHaveBeenCalled();
+    expect(stepRealmRacersReady(sender, waiting(13), SETTLED, send)).toBe(true);
+    expect(stepRealmRacersReady(sender, waiting(12), PREPARING, send)).toBe(false);
+    expect(stepRealmRacersReady(sender, waiting(12), SETTLED, send)).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });

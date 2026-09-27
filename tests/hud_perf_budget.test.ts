@@ -746,6 +746,14 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 2 },
     reflowAllow: {},
   },
+  // The Realm Racers lobby curtain (hud/realm_racers/) rebuilds its text-free
+  // skeleton in ONE innerHTML write per structural sig (once per lobby); every
+  // name, status, count, the bar width and its aria-valuenow are facet-routed.
+  {
+    file: 'hud/realm_racers/realm_racers_lobby_painter.ts',
+    allow: { '.innerHTML': 1 },
+    reflowAllow: {},
+  },
   // reliquary_tracker is the same painter contract on the same budget: ONE
   // constructor innerHTML write for the whole skeleton, every refresh write
   // facet-routed (the fill-flash class rides toggleClass), and the three

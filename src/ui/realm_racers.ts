@@ -2,9 +2,14 @@
 // and the race HUD. The pure view module owns state decisions; this class only
 // renders, wires actions, and maintains dialog focus.
 
+import {
+  type RealmRacersPrepareProgress,
+  realmRacersPrepareProgress,
+} from '../render/realm_racers_prepare';
 import type { IWorld, RallyDriverTier } from '../world_api';
 import { markDialogRoot } from './dialog_root';
 import { esc } from './esc';
+import { buildRealmRacersLobbyView, RealmRacersLobby } from './hud/realm_racers';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
@@ -99,6 +104,8 @@ export interface RealmRacersDeps {
    */
   clearPickupSplash(): void;
   writers: PainterHostWriters;
+  /** This machine's race preparation; the renderer's seam by default. */
+  prepareProgress?(): RealmRacersPrepareProgress;
 }
 
 export class RealmRacersUi {
@@ -108,6 +115,9 @@ export class RealmRacersUi {
   private hudRoot: HTMLElement | null = null;
   private readonly standings: RealmRacersStandingsPanel;
   private readonly podium: RealmRacersPodium;
+  private readonly lobby: RealmRacersLobby;
+  /** The circuit banner waits for the lobby curtain to lift. */
+  private bannerPending = false;
   /** The off-screen live region that SPEAKS the drawn circuit. Kept outside the
    *  strip's rebuilt subtree so a rebuild cannot re-announce. */
   private announceEl: HTMLElement | null = null;
@@ -148,6 +158,7 @@ export class RealmRacersUi {
       layer: () => deps.layer(),
       writers: deps.writers,
     });
+    this.lobby = new RealmRacersLobby({ layer: () => deps.layer(), writers: deps.writers });
   }
 
   get isOpen(): boolean {
@@ -185,13 +196,16 @@ export class RealmRacersUi {
     // move on its own.
     this.standings.relocalize();
     this.podium.relocalize();
+    this.lobby.relocalize();
     if (this.isOpen) this.renderWindow();
   }
 
   update(): void {
     const world = this.deps.world();
     const info = world.realmRacersInfo;
-    stepRealmRacersReady(this.readySender, info, () => world.readyRealmRacers());
+    const prepared = (this.deps.prepareProgress ?? realmRacersPrepareProgress)();
+    stepRealmRacersReady(this.readySender, info, prepared, () => world.readyRealmRacers());
+    this.lobby.update(buildRealmRacersLobbyView(info.match, prepared));
     // Auto-close on the false -> true match edge only. The window is centered
     // over the viewport, so leaving it up would hide the circuit for the whole
     // countdown and race. An edge rather than a level check, so a player who
@@ -213,9 +227,15 @@ export class RealmRacersUi {
       // exactly once per race and re-arms for the next one (the match goes null
       // between races). Gated on the pre-race phase so a mid-race reconnect
       // restores a HUD without announcing a circuit the pilot has been driving
-      // for a minute.
-      const match = info.match;
-      if (match && (match.phase === 'loading' || match.phase === 'countdown')) {
+      // for a minute. A match seen in its loading lobby holds the banner until
+      // the countdown, since the lobby curtain would cover it.
+      const phase = info.match?.phase;
+      this.bannerPending = phase === 'loading' || phase === 'countdown';
+    }
+    const match = info.match;
+    if (this.bannerPending && match?.phase !== 'loading') {
+      this.bannerPending = false;
+      if (match?.phase === 'countdown') {
         // A circuit nothing names can only be a DRAFT registered by a dev
         // command (`tests/realm_racers_circuit_i18n.test.ts` pins that every
         // authored circuit has a name), so the raw id here is a developer
