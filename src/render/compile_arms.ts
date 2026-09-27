@@ -9,7 +9,8 @@
 // that set the state differently would describe programs the link never
 // asks for. Both arms, link and dry alike, skip a direct child of their root
 // that declared `excludeFromParentCompile` (compile_exclusion.ts): its
-// programs belong to its own preparation, never to a wider compile.
+// programs belong to its own preparation, never to a wider compile, unless
+// the colour link's caller lifts that owner for the call.
 
 import type * as THREE from 'three';
 import { withParentCompileExclusions } from './compile_exclusion';
@@ -122,12 +123,15 @@ export async function linkColorPrograms(
   host: CompileArmHost,
   root: THREE.Object3D,
   includeOffscreenVariant: boolean,
+  liftedOwners?: readonly string[],
 ): Promise<void> {
   armObserver?.(root, 'color');
   for (const target of colorArmTargets(host, includeOffscreenVariant)) {
     await underRenderTarget(host, target, () =>
-      withParentCompileExclusions(root, () =>
-        host.webgl().compileAsync(root, host.camera(), host.scene()),
+      withParentCompileExclusions(
+        root,
+        () => host.webgl().compileAsync(root, host.camera(), host.scene()),
+        liftedOwners,
       ),
     );
   }

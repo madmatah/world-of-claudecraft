@@ -311,7 +311,12 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   (`compile_exclusion.ts`), and both compile arms skip it when its PARENT is
   the compiled root; a compile of the group itself (its owner's gate) is
   unaffected. The Realm Racers tracks and Ground Blast pool use it, since the
-  race preparation seam is their one owner. Pinned by
+  race preparation seam is their one owner. A caller may LIFT an owner for one
+  call: the blocking arrival's scene compile passes `rallyArrivalLifts(x, z)`
+  (`realm_racers_prepare_core.ts`), which lifts the rally owner when the
+  landing point is in the rally band (landing there is a rally trigger, and
+  that compile is awaited under the loading screen, online too) and nothing
+  anywhere else. Pinned by
   `tests/compile_arms.test.ts` and `tests/realm_racers_boot_compile.test.ts`.
 - Shared machinery: `compile_gate.ts` (fail-soft async shader-compile gating
   that also BOUNDS in-flight driver links during snapshot bursts, plus the

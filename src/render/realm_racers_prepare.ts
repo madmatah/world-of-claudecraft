@@ -116,6 +116,7 @@ export interface RealmRacersPrepareViewer {
   match: { practice: boolean; circuitId?: string; phase?: string } | null;
 }
 
+export { rallyArrivalLifts } from './realm_racers_prepare_core';
 export type { RealmRacersPrepareProgress, RealmRacersPrepareState, RealmRacersPrepareUnits };
 
 export const REALM_RACERS_PREPARE_EVENT_PREFIX = 'realm-racers-prepare';

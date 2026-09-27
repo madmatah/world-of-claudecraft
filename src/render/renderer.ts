@@ -672,7 +672,7 @@ import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
-import { RealmRacersPrepare } from './realm_racers_prepare';
+import { RealmRacersPrepare, rallyArrivalLifts } from './realm_racers_prepare';
 import { RealmRacersSky } from './realm_racers_sky';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
@@ -3958,9 +3958,9 @@ export class Renderer {
           npcGroup.visible = true;
           tCompile = performance.now();
           this.renderPrewarmPass(1 / 60);
-          // The gating path compiles after the pass, exactly as before.
+          // The gating path compiles after the pass; a band landing links the rally too.
           if (this.asyncCompileSupported) {
-            await this.compilePrewarmColorPrograms(this.scene, false);
+            await linkColorPrograms(this.compileArms, this.scene, false, rallyArrivalLifts(x, z));
           }
         }
         this.prewarmedZonePrograms.add(zoneId);

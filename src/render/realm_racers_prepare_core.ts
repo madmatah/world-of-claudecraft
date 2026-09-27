@@ -13,6 +13,29 @@
 // draw (a shot seen before any of the above): the seam still links the rest.
 // The latch fires once for the life of one renderer: a graphics rebuild mints
 // a new renderer, whose programs are all new, so it starts over.
+//
+// One more trigger is not the seam's: a BLOCKING ARRIVAL that lands in the band
+// (a rift exit, a teleport, a mid-race reconnect's jump) awaits a whole-scene
+// compile under its loading screen, and landing there is a rally trigger in
+// its own right, so that one compile lifts the rally groups' exclusion
+// (`rallyArrivalLifts`, compile_exclusion.ts). Everywhere else they stay out of
+// it, and the lobby path stays the seam's alone.
+
+import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
+
+/** The compile owner the rally groups declare (compile_exclusion.ts): the race
+ *  preparation seam, which links them. */
+export const REALM_RACERS_COMPILE_OWNER = 'realm-racers-prepare';
+
+const RALLY_LIFT: readonly string[] = Object.freeze([REALM_RACERS_COMPILE_OWNER]);
+const NO_LIFT: readonly string[] = Object.freeze([]);
+
+/** The exclusion owners a blocking arrival's whole-scene compile lifts for a
+ *  landing at (x, z): the rally groups when the landing is in the rally band,
+ *  none anywhere else. */
+export function rallyArrivalLifts(x: number, z: number): readonly string[] {
+  return isAtRealmRacersXZ(x, z) ? RALLY_LIFT : NO_LIFT;
+}
 
 /** Why the preparation started, in the order the checks run: the reason is
  *  telemetry only, every reason prepares the same set. */

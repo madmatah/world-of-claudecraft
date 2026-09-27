@@ -19,13 +19,19 @@ import {
   addRealmRacersPrepareTally,
   beginRealmRacersPrepareTally,
   createRealmRacersPrepareLatch,
+  REALM_RACERS_COMPILE_OWNER,
   type RealmRacersCommitment,
   type RealmRacersPrepareProgress,
+  rallyArrivalLifts,
   realmRacersPrepareHolds,
   realmRacersPrepareReason,
   takeRealmRacersPrepare,
 } from '../src/render/realm_racers_prepare_core';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_LANES,
+  REALM_RACERS_ORIGIN,
+  realmRacersLaneOrigin,
+} from '../src/sim/realm_racers_layout';
 import { stripComments } from './helpers/strip_comments';
 
 vi.mock('../src/render/textures', () => ({
@@ -75,6 +81,19 @@ describe('race preparation trigger (core)', () => {
     expect(realmRacersPrepareHolds(at(SEATED, true))).toBe(true);
     expect(realmRacersPrepareHolds(at(IDLE, true))).toBe(true);
     expect(realmRacersPrepareHolds(at(QUEUED, true))).toBe(true);
+  });
+
+  it('lifts the rally exclusion for a blocking arrival that lands in the band, and only there', () => {
+    expect(REALM_RACERS_COMPILE_OWNER).toBe('realm-racers-prepare');
+    expect(rallyArrivalLifts(BAND.x, BAND.z)).toEqual([REALM_RACERS_COMPILE_OWNER]);
+    for (const lane of REALM_RACERS_LANES) {
+      const origin = realmRacersLaneOrigin(lane.index);
+      expect(rallyArrivalLifts(origin.x, origin.z), String(lane.index)).toEqual([
+        REALM_RACERS_COMPILE_OWNER,
+      ]);
+    }
+    expect(rallyArrivalLifts(TOWN.x, TOWN.z)).toEqual([]);
+    expect(rallyArrivalLifts(BAND.x - 100_000, BAND.z)).toEqual([]);
   });
 
   it('fires exactly once per latch, on the first committed frame', () => {

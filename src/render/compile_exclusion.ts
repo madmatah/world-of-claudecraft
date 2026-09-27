@@ -17,6 +17,11 @@
 // root's children instead of a second whole-scene walk. A compile whose root IS
 // the declared group, or lies inside it (the owner's own gate), is not affected.
 //
+// A caller may LIFT named owners for one call (`lifted`): a compile whose
+// trigger is that owner's own (the blocking arrival that lands in the rally
+// band, realm_racers_prepare_core.ts `rallyArrivalLifts`) links the group as
+// if it were never declared. The decision is the caller's, made explicit.
+//
 // The declared group itself is still visited, so it must be a plain group
 // carrying no material; a declared group must not hold a three light either,
 // since the compile gathers lights from the same walk. The declaration lives
@@ -39,12 +44,20 @@ export function parentCompileExclusionOf(group: THREE.Object3D): string | undefi
   return typeof owner === 'string' ? owner : undefined;
 }
 
+const NOTHING_LIFTED: readonly string[] = Object.freeze([]);
+
 /** Run `op` with every declared direct child of `root` emptied, restoring
- *  each child's own `children` array before returning. */
-export function withParentCompileExclusions<T>(root: THREE.Object3D, op: () => T): T {
+ *  each child's own `children` array before returning. A child whose owner is
+ *  in `lifted` is left whole for this call. */
+export function withParentCompileExclusions<T>(
+  root: THREE.Object3D,
+  op: () => T,
+  lifted: readonly string[] = NOTHING_LIFTED,
+): T {
   let muted: { group: THREE.Object3D; children: THREE.Object3D[] }[] | null = null;
   for (const child of root.children) {
-    if (parentCompileExclusionOf(child) === undefined || child.children.length === 0) continue;
+    const owner = parentCompileExclusionOf(child);
+    if (owner === undefined || lifted.includes(owner) || child.children.length === 0) continue;
     muted ??= [];
     muted.push({ group: child, children: child.children });
   }

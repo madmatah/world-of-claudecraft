@@ -406,6 +406,21 @@ describe("a subtree excluded from its parent's compile", () => {
     expect(s.walked).toEqual([ownedMesh, ownedMesh]);
   });
 
+  it('links it whole when the caller lifts its owner for that call, and only that owner', async () => {
+    const s = walkingStub();
+    const { scene, world, hiddenMesh, owned, ownedMesh } = sceneWithOwned();
+    const other = new THREE.Group();
+    const otherMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+    other.add(otherMesh);
+    excludeFromParentCompile(other, 'someone-else');
+    scene.add(other);
+    const before = owned.children;
+    await linkColorPrograms(s.host, scene, false, ['probe']);
+    expect(s.walked).toEqual([world, ownedMesh, hiddenMesh]);
+    expect(s.walked).not.toContain(otherMesh);
+    expect(owned.children).toBe(before);
+  });
+
   it('restores the subtree when the operation throws', () => {
     const { scene, owned } = sceneWithOwned();
     const before = owned.children;

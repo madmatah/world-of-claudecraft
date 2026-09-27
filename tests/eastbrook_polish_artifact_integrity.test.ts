@@ -1400,7 +1400,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
   // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
   // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
-  '7ca25b16c646edfba07e37b55549aa14f15ce5f3a2cc26a1d8b582e4e51ce411';
+  // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
+  '65cbf0740a3b85fd18d504fc5dcec4d12a49876074864df5c7baf0e11dd3b977';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1429,7 +1430,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
   // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
   // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
-  '07146ce081f159cbe67ccd743bf871d195120b82f6a0d769a0c000787a4a0f76';
+  // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
+  '875dff5d1c9661ec901ab7987780aff6aab9ba43193b67947db9cf76151874e2';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2817,7 +2819,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers lobby seam readout, narrowed.
       // Re-minted for the Realm Racers circuit preparation lot.
       // Re-minted for the Realm Racers shared remote racer step.
-    ).toBe('d747e6817fce91d364cb9664bbec2fd3683a3dbf900484cc247a73c079e6d928');
+      // Re-minted for the Realm Racers arrival compile lift for band landings.
+    ).toBe('ab6c0e56fa91200443e2b33201fc6fbeb2ed5b5d032ef36f907fc2c71e195b2c');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

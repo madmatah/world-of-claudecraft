@@ -74,8 +74,10 @@ import { RealmRacersGroundBlastVisuals } from '../src/render/realm_racers_ground
 import {
   RealmRacersPrepare,
   type RealmRacersPrepareHost,
+  rallyArrivalLifts,
 } from '../src/render/realm_racers_prepare';
 import { setRenderCategory } from '../src/render/renderer_diagnostics';
+import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 
 type TrackModule = typeof import('../src/render/realm_racers_track');
 
@@ -256,9 +258,9 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       activateTier(tier);
     });
 
-    // renderer.ts prewarmZoneAt, the covered arm: compilePrewarmColorPrograms
-    // over this.scene, which the colour arm hands to three's compile as is.
-    it('links no rally program, and still links the hidden world content beside it', async () => {
+    // renderer.ts prewarmZoneAt, the covered arm: the colour link over
+    // this.scene, which three's compile walks as is, lifted for a band landing.
+    it('links no rally program for a landing elsewhere, and still links the hidden world content', async () => {
       const { scene, world, staged, tracks, blasts } = await bootScene();
       // A racer's prepared pool sits in the scene too: skipped all the same.
       blasts.prepare();
@@ -266,7 +268,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       const rally = programsOf(drawsUnder(tracks.group).map((draw) => draw.object));
       expect(rally.size).toBeGreaterThan(0);
       const arms = walkingArms(scene);
-      await linkColorPrograms(arms.host, scene, false);
+      await linkColorPrograms(arms.host, scene, false, rallyArrivalLifts(TOWN.x, TOWN.z));
       await linkShadowPrograms(arms.host, scene);
       expect(arms.walked).toContain(world);
       // The hidden staged catalog links exactly as before.
@@ -280,6 +282,31 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
         expect(drawsUnder(view.group).length, view.circuitId).toBeGreaterThan(0);
       }
       expect(blasts.group.children.length).toBeGreaterThan(0);
+    });
+
+    it('links every rally program in the arrival compile of a landing in the band', async () => {
+      const { scene, world, staged, tracks, blasts } = await bootScene();
+      blasts.prepare();
+      const lane = realmRacersLaneOrigin(REALM_RACERS_LANES[0].index);
+      const arms = walkingArms(scene);
+      await linkColorPrograms(arms.host, scene, false, rallyArrivalLifts(lane.x, lane.z));
+      expect(arms.walked).toContain(world);
+      expect(arms.walked).toContain(staged);
+      const walked = new Set(arms.walked);
+      for (const root of [tracks.group, blasts.group]) {
+        const draws = drawsUnder(root).map((draw) => draw.object);
+        expect(draws.length).toBeGreaterThan(0);
+        expect(draws.filter((object) => !walked.has(object))).toEqual([]);
+      }
+      const rally = programsOf(drawsUnder(tracks.group).map((draw) => draw.object));
+      const linked = programsOf(arms.walked);
+      expect([...rally].filter((key) => !linked.has(key))).toEqual([]);
+      // The lift is for that one call: the next compile skips them again.
+      const after = walkingArms(scene);
+      await linkColorPrograms(after.host, scene, false);
+      expect(after.walked.filter((object) => under(object, [tracks.group, blasts.group]))).toEqual(
+        [],
+      );
     });
 
     it('declares groups that carry no material and hold no light anywhere below them', async () => {
@@ -322,6 +349,16 @@ describe('renderer wiring of the rally groups', () => {
     const staged = renderer.slice(start, end);
     expect(staged).toContain("['props', propMaterialPrewarmGroup]");
     expect(staged).not.toMatch(/realmRacers|groundBlast/i);
+  });
+
+  it('lifts the rally exclusion in the blocking arrival compile on the landing point alone', () => {
+    const start = renderer.indexOf('async prewarmZoneAt(x: number, z: number');
+    expect(start).toBeGreaterThan(-1);
+    const method = renderer.slice(start, renderer.indexOf('\n  }\n', start));
+    expect(method).toContain(
+      'await linkColorPrograms(this.compileArms, this.scene, false, rallyArrivalLifts(x, z));',
+    );
+    expect(method).not.toContain('compilePrewarmColorPrograms(this.scene');
   });
 
   // No Renderer can be built headless, so the real wiring is read off its

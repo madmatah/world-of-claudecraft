@@ -64,6 +64,7 @@ import {
   type RallyLampsView,
 } from './realm_racers_lamps';
 import { buildRealmRacersPickups } from './realm_racers_pickups';
+import { REALM_RACERS_COMPILE_OWNER } from './realm_racers_prepare_core';
 import { REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
@@ -1276,8 +1277,9 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   // Every circuit sits hidden under this group from boot, and three's compile
   // walks hidden children: a whole-scene compile (the blocking arrival's zone
   // prewarm) would link every circuit's programs for a player who never races.
-  // The race preparation seam (realm_racers_prepare.ts) is their one owner.
-  excludeFromParentCompile(group, 'realm-racers-prepare');
+  // The race preparation seam (realm_racers_prepare.ts) is their owner; only a
+  // blocking arrival that lands in the band lifts this (`rallyArrivalLifts`).
+  excludeFromParentCompile(group, REALM_RACERS_COMPILE_OWNER);
   const reveal: RevealHold = { held: NEVER_HELD.held };
   let fillGate: () => FillGate | undefined = () => undefined;
   const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit, reveal));
