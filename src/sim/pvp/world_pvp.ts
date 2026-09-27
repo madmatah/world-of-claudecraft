@@ -381,11 +381,13 @@ export function updateWorldPvp(ctx: SimContext): void {
   }
 }
 
-/** A player mid-battleground or mid-arena is under that mode's rules, never
- *  the open world's, whatever their flag or their ground says. */
+/** A player mid-battleground, mid-arena or seated in a Realm Racers heat is
+ *  under that mode's rules, never the open world's, whatever their flag or
+ *  their ground says. */
 function inInstancedPvp(ctx: SimContext, pid: number): boolean {
   if (ctx.bgMatches.get(pid)?.state === 'active') return true;
-  return ctx.arenaMatches.get(pid)?.state === 'active';
+  if (ctx.arenaMatches.get(pid)?.state === 'active') return true;
+  return (ctx.players.get(pid)?.realmRacersMatchId ?? null) !== null;
 }
 
 /** Two players mid-duel are under the duel's rules: a consensual duel fought

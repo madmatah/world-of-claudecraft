@@ -701,7 +701,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // (the Eastbrook ferry, PR 4225; remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted at the release/v0.44.0 sync into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  'fb8735e3203ea3dfb48c8c1b662a3ddaa9d1104f4a05bb560ba8fa19857d2cdc';
+  // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
+  'b09523ed405573acb22b7c8265fddc77c0ca164b5e3cb80037fda61f57e49426';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

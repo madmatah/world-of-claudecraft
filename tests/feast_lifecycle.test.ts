@@ -8,7 +8,9 @@ import {
   startBgMatch,
   updateBattleground,
 } from '../src/sim/social/battleground';
+import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { startYumiMatch } from '../src/sim/social/yumi';
+import { addAt, makeWorld } from './realm_racers_util';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
 function must<T>(value: T | null | undefined): T {
@@ -135,5 +137,21 @@ describe('feast ownership follows its match lifecycle', () => {
     endArenaMatch(sim.ctx, second, 'B', 'forfeit');
     expect(sim.entities.has(secondFeast)).toBe(false);
     expect(sim.feasts.size).toBe(0);
+  });
+});
+
+describe('feasts and a Realm Racers heat', () => {
+  it('refuses a table on the shared circuit and keeps the feast in the bags', () => {
+    const sim = makeWorld();
+    const pid = addAt(sim, 'warrior', 'Aster');
+    expect(startRealmRacersPractice(sim, 'driver', pid)).toBe(true);
+    sim.addItem('harvest_feast', 1, pid);
+    const from = sim.events.length;
+    sim.placeFeast(pid);
+    const events = sim.events.slice(from);
+    expect(events.some((event) => event.type === 'farmFeastPlaced')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'error', pid }));
+    expect(sim.feasts.size).toBe(0);
+    expect(sim.countItem('harvest_feast', pid)).toBe(1);
   });
 });

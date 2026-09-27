@@ -259,7 +259,7 @@ describe('Renderer lifecycle wiring', () => {
   });
 
   it('forwards the resolved skin look into run, jump, and landing dispatch', () => {
-    expect(source).toContain('const mountLook = mountPresentationKey(e.mountKey, e.mountSkinId);');
+    expect(source).toContain('const mountLook = mountPresentationKey(e.mountKey, riderSkin(e));');
     expect(source).toMatch(/updateRiddenMountAudio\(\s*sink,\s*v,\s*mountLook,\s*e.id,/);
     expect(source).toContain("sink.movement('jump', ax, ay, az, isSelf, mountLook || undefined)");
     expect(source).toContain("sink.movement('land', ax, ay, az, isSelf, mountLook || undefined)");

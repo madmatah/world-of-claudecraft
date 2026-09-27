@@ -256,7 +256,8 @@ export function placeFeastAction(
     ctx.error(meta.entityId, "You can't do that while dead.");
     return;
   }
-  if (p.castingAbility || isConsuming(p)) {
+  // A racer's table would stand on the shared circuit past the race.
+  if (p.castingAbility || isConsuming(p) || meta.realmRacersMatchId !== null) {
     ctx.error(meta.entityId, 'You are busy.');
     return;
   }

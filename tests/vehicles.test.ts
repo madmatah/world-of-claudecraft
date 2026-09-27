@@ -8,6 +8,8 @@ import {
 } from '../src/sim/content/vehicle_stations';
 import { WORLD_QUESTS_BY_ID } from '../src/sim/data';
 import { Sim } from '../src/sim/sim';
+import { REALM_RACERS_MOUNT_KEY } from '../src/sim/social/realm_racers';
+import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { terrainHeight } from '../src/sim/world';
 import { worldQuestCycleOfferingQuest } from '../src/sim/world_quest_rotation';
@@ -226,5 +228,20 @@ describe('authoritative personal vehicles', () => {
     expect(save).not.toHaveProperty('vehicle');
     expect(save).not.toHaveProperty('vehicleRetryAtTick');
     expect(JSON.stringify(save)).not.toContain('slowUntilTick');
+  });
+});
+
+describe('the cannon seat and a Realm Racers heat', () => {
+  it('refuses the cannon to a pilot seated in a race machine', () => {
+    const { sim, player, meta } = rig();
+    const stand = { ...player.pos };
+    expect(startRealmRacersPractice(sim, 'driver', player.id)).toBe(true);
+    expect(player.drive).not.toBeNull();
+    // Standing at the station is the only way the gate is ever the question.
+    player.pos = { ...stand };
+    player.prevPos = { ...stand };
+    expect(sim.enterVehicle(NORTH_WATCH_CANNON.id)).toBe(false);
+    expect(meta.vehicle ?? null).toBeNull();
+    expect(player.mountKey).toBe(REALM_RACERS_MOUNT_KEY);
   });
 });

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { VISUALS } from '../src/render/characters/manifest';
 import {
@@ -16,8 +17,10 @@ import {
   mountSkinDef,
   normalizeMountSkinId,
   RETIRED_MOUNT_SKIN_IDS,
+  riderSkin,
 } from '../src/sim/content/mount_skins';
 import { MOUNT_KEYS, MOUNTS } from '../src/sim/content/mounts';
+import { vehicleProfile } from '../src/sim/content/vehicles';
 
 // Mount skins are account cosmetics worn OVER a ridden mount: a look, never a
 // catalog row. These pins keep the family disjoint from the mount catalog and
@@ -109,6 +112,29 @@ describe('mount presentation key (what a ridden mount looks and sounds like)', (
     // Dismounted stays dismounted whatever is worn: no phantom cue set.
     expect(mountPresentationKey('', 'mech_bird')).toBe('');
     expect(mountPresentationKey('', null)).toBe('');
+  });
+});
+
+describe('rider skin (the one seam every presentation site reads)', () => {
+  it('passes the worn skin through, and presents none while a race machine is driven', () => {
+    expect(riderSkin({ mountSkinId: 'mech_bird', drive: null })).toBe('mech_bird');
+    expect(riderSkin({ mountSkinId: 'mech_bird' })).toBe('mech_bird');
+    expect(riderSkin({ mountSkinId: null, drive: null })).toBeNull();
+    expect(riderSkin({})).toBeNull();
+    const driving = { mountSkinId: 'goblin_rocket_sled', drive: {} };
+    expect(riderSkin(driving)).toBeNull();
+    // The race machine presents as itself, look and sound alike.
+    const machine = vehicleProfile('rally_loaner').key;
+    expect(mountPresentationKey(machine, riderSkin(driving))).toBe(machine);
+    expect(mountVisualSpecFor(machine, riderSkin(driving))).toBe(mountVisualSpec(machine));
+    // The stored choice is never written.
+    expect(driving.mountSkinId).toBe('goblin_rocket_sled');
+  });
+
+  it('is the only way the renderer reads a worn skin', () => {
+    const source = readFileSync('src/render/renderer.ts', 'utf8');
+    expect(source).not.toMatch(/\.mountSkinId\b/);
+    expect(source.match(/riderSkin\(e\)/g)).toHaveLength(4);
   });
 });
 

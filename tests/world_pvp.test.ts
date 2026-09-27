@@ -34,6 +34,7 @@ import {
   worldPvpOnPlayerDeath,
 } from '../src/sim/pvp/world_pvp';
 import { Sim } from '../src/sim/sim';
+import { realmRacersStartMatch } from '../src/sim/social/realm_racers';
 import type { Entity, SimConfig, SimEvent, WorldContent } from '../src/sim/types';
 import { DT } from '../src/sim/types';
 import { groundHeight } from '../src/sim/world';
@@ -464,6 +465,40 @@ describe('hostility: the world arm of isHostileTo', () => {
     expect(sim.isHostileTo(ent(sim, a), ent(sim, b))).toBe(false);
     sim.arenaMatches.delete(b);
     expect(sim.isHostileTo(ent(sim, a), ent(sim, b))).toBe(true);
+  });
+
+  it('a Realm Racers heat keeps the world arm off, and its knockouts book no stake', () => {
+    const sim = world();
+    const racers = ['Aleph', 'Bet', 'Gimel', 'Dalet'].map((name, i) =>
+      addFighter(sim, name, 20, 2001 + i),
+    );
+    for (const pid of racers) flag(sim, pid);
+    expect(realmRacersStartMatch(sim.ctx, racers)).toBe(true);
+    const [a, b] = racers;
+    // The same flags on the same ground, off the grid, ARE a world fight: the
+    // circuit is contested ground, so only the heat can switch the arm off.
+    const c = addFighter(sim, 'He', 20, 2005);
+    const d = addFighter(sim, 'Vav', 20, 2006);
+    flag(sim, c);
+    flag(sim, d);
+    for (const [pid, twin] of [
+      [c, a],
+      [d, b],
+    ]) {
+      ent(sim, pid).pos = { ...ent(sim, twin).pos, x: ent(sim, twin).pos.x + 1 };
+      ent(sim, pid).prevPos = { ...ent(sim, pid).pos };
+    }
+    expect(sim.isHostileTo(ent(sim, c), ent(sim, d))).toBe(true);
+    expect(sim.isHostileTo(ent(sim, a), ent(sim, b))).toBe(false);
+    expect(sim.isHostileTo(ent(sim, b), ent(sim, a))).toBe(false);
+    expect(sim.isHostileTo(ent(sim, c), ent(sim, a))).toBe(false);
+    sim.meta(b)!.copper = 20_000;
+    sim.meta(a)!.copper = 0;
+    sim.events = [];
+    slay(sim, a, b);
+    expect(sim.meta(b)!.copper).toBe(20_000);
+    expect(sim.meta(a)!.copper).toBe(0);
+    expect(honorEvents(sim, a)).toEqual([]);
   });
 
   it('an unflagged bystander is hostile to nobody and nobody is hostile to them', () => {

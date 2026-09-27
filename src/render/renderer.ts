@@ -6,7 +6,7 @@ import {
   emptyPriestMarkerState,
   priestMarkerStateForAuras,
 } from '../sim/combat/priest/presentation';
-import { mountPresentationKey } from '../sim/content/mount_skins';
+import { mountPresentationKey, riderSkin } from '../sim/content/mount_skins';
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../sim/content/vehicles';
 import {
@@ -8527,7 +8527,7 @@ export class Renderer {
     // entering interest range, or an already-mounted player logging in, is
     // born with a mountKey and no edge to detect, so without this it always
     // hits the cold path (see the edge-site comment near preloadMountEngine).
-    const look = mountPresentationKey(e.mountKey, e.mountSkinId);
+    const look = mountPresentationKey(e.mountKey, riderSkin(e));
     if (look !== '') this.audioSink?.preloadMountEngine(look);
   }
 
@@ -10988,7 +10988,7 @@ export class Renderer {
       // the visual appears once ready. A druid form replaces the whole body,
       // so the form wins visually and the mount hides (the sim's speed math
       // is untouched either way).
-      const mountSpec = e.kind === 'player' ? mountVisualSpecFor(e.mountKey, e.mountSkinId) : null;
+      const mountSpec = e.kind === 'player' ? mountVisualSpecFor(e.mountKey, riderSkin(e)) : null;
       const mountShown = !!mountSpec && requestedForm === 'base' && !e.dead;
       const targetMountVisualKey = mountSpec?.visualKey ?? '';
       if (v.mountVisualKey !== targetMountVisualKey) {
@@ -11300,7 +11300,7 @@ export class Renderer {
       // A mounted rider stays planted in the saddle: the MOUNT carries the
       // jump arc (its anim scratch below keeps the real airborne flag), while
       // the rider holds the seated pose instead of replaying the jump clip.
-      const mountLook = mountPresentationKey(e.mountKey, e.mountSkinId);
+      const mountLook = mountPresentationKey(e.mountKey, riderSkin(e));
       const logicallyMounted = mountLook !== '';
       const riderMounted = v.mountLift > 0;
       st.airborne = airborne && !riderMounted;
@@ -11344,7 +11344,7 @@ export class Renderer {
           mountCastKey: e.mountCastKey,
           mountCastRemaining: e.mountCastRemaining,
           mountKey: e.mountKey,
-          mountLook: mountPresentationKey(e.mountCastKey || e.mountKey, e.mountSkinId),
+          mountLook: mountPresentationKey(e.mountCastKey || e.mountKey, riderSkin(e)),
           poseAllowed: !visuallyDead && !swimming && runCharacterPresentation,
           present: runCharacterPresentation,
           playCallPose: (secs: number) => active.playCallPose(secs),

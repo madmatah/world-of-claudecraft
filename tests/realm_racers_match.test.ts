@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { mountVisualSpec } from '../src/render/mount_visuals';
+import { mountVisualSpec, mountVisualSpecFor } from '../src/render/mount_visuals';
 import { resolvePosition } from '../src/sim/colliders';
+import { mountPresentationKey, riderSkin } from '../src/sim/content/mount_skins';
 import { MOUNTS, type MountKey } from '../src/sim/content/mounts';
 import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
@@ -930,6 +931,29 @@ describe('The Realm Racers lifecycle', () => {
     const { sim, a } = startMatch();
     expect(sim.toggleMountFor(a)).toBe(false);
     expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
+  });
+
+  it('presents the race machine over a worn mount skin, and the skin again once home', () => {
+    const { sim, pids } = makeGrid();
+    const a = pids[0];
+    const e = entity(sim, a);
+    expect(sim.setMountSkin(a, 'goblin_rocket_sled')).toBe(true);
+    e.mountKey = 'valorsteed';
+    expect(mountPresentationKey(e.mountKey, riderSkin(e))).toBe('goblin_rocket_sled');
+    expect(realmRacersStartMatch(sim.ctx, pids)).toBe(true);
+    expect(e.mountKey).toBe(REALM_RACERS_MOUNT_KEY);
+    expect(mountPresentationKey(e.mountKey, riderSkin(e))).toBe(REALM_RACERS_MOUNT_KEY);
+    expect(mountVisualSpecFor(e.mountKey, riderSkin(e))).toBe(
+      mountVisualSpec(REALM_RACERS_MOUNT_KEY),
+    );
+    // The stored choice is untouched: the race only stops presenting it.
+    expect(sim.meta(a)?.mountSkinId).toBe('goblin_rocket_sled');
+    expect(e.mountSkinId).toBe('goblin_rocket_sled');
+    sim.realmRacersForfeit(a);
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + TICK_RATE && e.drive; i++) sim.tick();
+    expect(e.drive).toBeNull();
+    expect(e.mountKey).toBe('valorsteed');
+    expect(mountPresentationKey(e.mountKey, riderSkin(e))).toBe('goblin_rocket_sled');
   });
 
   it('resolves every unordered pair, and throttles each duel on its own clock', () => {

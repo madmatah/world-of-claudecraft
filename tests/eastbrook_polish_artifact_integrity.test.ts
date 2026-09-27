@@ -1395,7 +1395,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // (the Eastbrook ferry, PR 4225; remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted at the release/v0.44.0 sync into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  '6185dd6b57584b5f58eb7c305761d71e914918f6cb3a29a0b787c0c4491e13bb';
+  // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
+  '7de33413043f3196946cc2ad0da53413f36e76ae829781d5032933a07c32985d';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1419,7 +1420,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // (the Eastbrook ferry, PR 4225; remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted at the release/v0.44.0 sync into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  'fb8735e3203ea3dfb48c8c1b662a3ddaa9d1104f4a05bb560ba8fa19857d2cdc';
+  // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
+  'b09523ed405573acb22b7c8265fddc77c0ca164b5e3cb80037fda61f57e49426';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2802,7 +2804,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // LAST again over the re-swept evidence. No capture was retaken.
       // Release/v0.44.0 sync into feature/realm-racers: recomputed LAST over the
       // re-swept evidence. No capture was retaken.
-    ).toBe('7148d3d409d5c5f449b97827b41d8ee87defcf8987aac8ef0d4161ec20eb19f3');
+      // Re-minted for the Realm Racers mount-skin presentation fix.
+    ).toBe('dadc9e9455d41e2be12f69f73b2c1cdd514b4345b1ac327063d3663a2767fe12');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

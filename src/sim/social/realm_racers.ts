@@ -132,6 +132,7 @@ import {
   vehicleMaxSlip,
 } from '../vehicle_motion';
 import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from './arena';
+import { realmRacersHeldElsewhere } from './realm_racers_busy';
 
 /** The machine every pilot is loaned, as a VEHICLE_PROFILES key. A roster of
  *  machines is a later workstream. */
@@ -649,6 +650,7 @@ function eligible(ctx: SimContext, pid: number): boolean {
   if (ctx.arenaMatches.has(pid) || isArenaQueued(ctx, pid)) return false;
   if (ctx.duels.has(pid) || ctx.trades.has(pid)) return false;
   if (ctx.cardDuelQueue.includes(pid) || ctx.cardDuels.has(pid)) return false;
+  if (realmRacersHeldElsewhere(ctx, meta, e)) return false;
   return realmRacersMatchOf(ctx, pid) === null;
 }
 

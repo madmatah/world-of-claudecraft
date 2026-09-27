@@ -48,6 +48,9 @@ export function isPvpHostilePlayer(world: PvpHostileWorld, target: Entity): bool
   if (info?.enabled === false) return false;
   const self = world.entities.get(world.playerId);
   if (!self) return false;
+  // A race machine (`drive`) is only ever handed out by a Realm Racers seat,
+  // which the sim's world arm counts as a match of its own.
+  if (self.drive || target.drive) return false;
   // A plain loop: this runs on the per-frame target-frame path.
   let sameParty = false;
   const members = world.partyInfo?.members;
