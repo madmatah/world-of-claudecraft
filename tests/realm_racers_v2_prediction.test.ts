@@ -38,7 +38,10 @@ import { adaptiveSelfAlphaLead, SELF_LEAD_MIN } from '../src/game/self_alpha_lea
 import { SELF_RENDER_SMOOTH_RATE, updateSelfRenderFallback } from '../src/render/self_motion';
 import { selfSnapshotAlpha } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
-import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
+import {
+  REALM_RACERS_RETURN_TICKS,
+  REALM_RACERS_VEHICLE_KEY,
+} from '../src/sim/social/realm_racers';
 import { DT, RUN_SPEED } from '../src/sim/types';
 import type { LatencyLinkConfig } from './helpers/latency_link';
 import {
@@ -47,7 +50,13 @@ import {
   type HarnessRun,
   SERVER_TICK_MS,
 } from './helpers/online_harness';
-import { createRacerHarness, parkedPilotReachYd } from './helpers/racer_harness';
+import {
+  createRacerDuelHarness,
+  createRacerHarness,
+  parkedPilotReachYd,
+} from './helpers/racer_harness';
+import { type Phase, type PilotWatch, watchPilot } from './helpers/racer_prediction_watch';
+import { racerLink } from './helpers/rival_frames';
 
 // A browser always negotiates movement wire v2, whose self-prediction has no
 // drive state: it steps a kart with the runner kernel, and the server's
@@ -327,5 +336,186 @@ describe('a seated racer on movement wire v1 (120 ms RTT, key timeline)', () => 
     expect(racing.some((frame) => frame.predictedDrivingFacing !== null)).toBe(true);
     const offCamera = racing.filter((frame) => frame.cameraFacing !== mainCameraFacing(frame));
     expect(offCamera.map((frame) => frame.tMs)).toEqual([]);
+  });
+});
+
+// Driver prediction switched on (the pipeline flag the playtest sets with
+// `?drivepredict=1`; the default flips in a later lot), end to end on the real
+// client and server: the pipeline predicts the kart from the `rdv` drive,
+// reconciles every acknowledgement exactly, and leaves the kart only at the
+// server's own discontinuities. The proof suite with thresholds is separate;
+// this block shows the wiring works. Measured at this commit (flag on, single
+// = the practice circuit behind parked house pilots, duel = two humans a lane
+// apart on the drawn circuit, 3 s of racing each):
+//
+//   RTT   predicted racing frames    suspends (seat, GO, race, end)   replays
+//   single
+//    60        177 / 180                 0, 1, 0, 1                   GO re-seed 1, verge onset 1, band change 1
+//   120        179 / 180                 0, 1, 0, 1                   verge onset 1, band change 1
+//   200        179 / 180                 0, 1, 0, 1                   verge onset 1, band change 1
+//   duel (A / B)
+//    60   171 / 173, 171 / 173           0, 1, 0, 1                   none
+//   120   170 / 170, 170 / 170           0, 1, 0, 1                   GO re-seed 1 / none
+//   200   167 / 167, 167 / 167           0, 1, 0, 1                   GO re-seed 1 each
+//
+// Every ignore and stale falls between a suspend and the first reconcile after
+// it: the frames already in flight when the prediction re-seeded. Home on foot,
+// every frame after the first sample is predicted again, with no replay after
+// the race-end suspend. The recorder is tests/helpers/racer_prediction_watch.ts.
+
+function runPredictedSingle(rttMs: number): PilotWatch[] {
+  const rh = createRacerHarness({ latency: link(rttMs, 10), predictDrivers: true });
+  try {
+    const { harness } = rh;
+    let phase: Phase = 'seat';
+    const watch = watchPilot(
+      harness,
+      {
+        client: harness.client,
+        session: harness.session,
+        serverEntity: harness.serverEntity,
+        onFrame: harness.onClientFrame,
+        reconcileOutcomes: harness.reconcileOutcomes,
+      },
+      () => phase,
+    );
+    rh.seat();
+    phase = 'go';
+    rh.advanceToGo();
+    phase = 'race';
+    harness.runScript({
+      durationMs: RACE_MS,
+      script: [
+        { atMs: 0, mi: { forward: true }, facing: null },
+        { atMs: 800, mi: { turnLeft: true } },
+        { atMs: 1600, mi: { turnLeft: false, turnRight: true } },
+        { atMs: 2400, mi: { turnRight: false } },
+      ],
+    });
+    phase = 'end';
+    harness.runScript({
+      durationMs: REALM_RACERS_RETURN_TICKS * SERVER_TICK_MS + 1500,
+      script: [{ atMs: 0, mi: { forward: false, turnLeft: false, turnRight: false } }],
+      actions: [{ atMs: 0, run: () => harness.client.forfeitRealmRacers() }],
+    });
+    return [watch];
+  } finally {
+    rh.dispose();
+  }
+}
+
+/** Half a lane each side of the brain's line: wide enough that the two never
+ *  touch on this stretch at any of the links. */
+const DUEL_LANE_YD = 3.5;
+
+function runPredictedDuel(rttMs: number): {
+  watches: PilotWatch[];
+  bumps: number;
+  minGapYd: number;
+  reachYd: number;
+} {
+  const d = createRacerDuelHarness({
+    latencyA: racerLink(rttMs, 1337),
+    latencyB: racerLink(rttMs, 7331),
+    predictDrivers: true,
+  });
+  try {
+    const { harness, a, b } = d;
+    let phase: Phase = 'seat';
+    const watches = [a, b].map((pilot) => watchPilot(harness, pilot.peer, () => phase));
+    let bumps = 0;
+    let minGapYd = Number.POSITIVE_INFINITY;
+    harness.onServerTick((events) => {
+      if (phase !== 'race') return;
+      bumps += events.filter((ev) => ev.type === 'realmRacersBump').length;
+      const pa = a.peer.serverEntity.pos;
+      const pb = b.peer.serverEntity.pos;
+      minGapYd = Math.min(minGapYd, Math.hypot(pa.x - pb.x, pa.z - pb.z));
+    });
+    d.seat();
+    a.autopilot({ lineOffsetYd: -DUEL_LANE_YD, observe: 'server' });
+    b.autopilot({ lineOffsetYd: DUEL_LANE_YD, observe: 'server' });
+    phase = 'go';
+    d.advanceToGo();
+    phase = 'race';
+    d.advanceToRaceMs(RACE_MS);
+    phase = 'end';
+    a.autopilot(null);
+    b.autopilot(null);
+    a.client.forfeitRealmRacers();
+    b.client.forfeitRealmRacers();
+    d.advanceFor(REALM_RACERS_RETURN_TICKS * SERVER_TICK_MS + 1500);
+    const reachYd =
+      2 *
+      vehicleProfile(a.peer.serverEntity.drive?.profileKey ?? REALM_RACERS_VEHICLE_KEY).bodyRadius;
+    return { watches, bumps, minGapYd, reachYd };
+  } finally {
+    d.dispose();
+  }
+}
+
+function expectPredictedDrive(watch: PilotWatch): void {
+  // Predicted on every racing frame from the first one it owns; the frames
+  // before it are the GO suspend and the re-seed's first sample.
+  const first = watch.racingFrames.indexOf(true);
+  expect(first).toBeGreaterThanOrEqual(0);
+  expect(first).toBeLessThanOrEqual(3);
+  expect(watch.racingFrames.slice(first).filter((active) => !active)).toEqual([]);
+
+  // One suspend at the GO bump, one at the race-end teleport, none else.
+  const suspends = watch.notes.filter((n) => n.kind === 'suspend');
+  expect(suspends.filter((n) => n.phase === 'seat')).toEqual([]);
+  expect(
+    suspends.filter((n) => n.phase === 'go' || (n.phase === 'race' && n.beforePredictedRace)),
+  ).toHaveLength(1);
+  expect(suspends.filter((n) => n.phase === 'race' && !n.beforePredictedRace)).toEqual([]);
+  expect(suspends.filter((n) => n.phase === 'end')).toHaveLength(1);
+
+  // A replay is the re-seed's first reconcile or sits on a server transition,
+  // one at most per transition.
+  const replays = watch.notes.filter((n) => n.kind === 'replayed');
+  const offTransition = replays.filter(
+    (n) => !n.afterSuspend && (n.tick === null || !watch.transitions.has(n.tick)),
+  );
+  expect(offTransition).toEqual([]);
+  const onTicks = replays.filter((n) => !n.afterSuspend).map((n) => n.tick);
+  expect(new Set(onTicks).size).toBe(onTicks.length);
+
+  // Home on foot, the runner is predicted again once its first sample lands,
+  // and nothing replays after the race-end suspend.
+  const home = watch.endFrames.findIndex((f) => !f.driving);
+  expect(home).toBeGreaterThan(0);
+  const seedFrames = Math.ceil((DT * 1000) / DEFAULT_FRAME_MS) + 1;
+  const settled = watch.endFrames.slice(home + seedFrames);
+  expect(settled.length).toBeGreaterThan(20);
+  expect(settled.filter((f) => !f.predictorActive)).toEqual([]);
+  const endSuspend = watch.notes.findIndex((n) => n.phase === 'end' && n.kind === 'suspend');
+  expect(watch.notes.slice(endSuspend).filter((n) => n.kind === 'replayed')).toEqual([]);
+
+  // Ignores and stales are the frames in flight across a re-seed.
+  expect(
+    watch.notes.filter((n) => (n.kind === 'ignored' || n.kind === 'stale') && !n.afterSuspend),
+  ).toEqual([]);
+}
+
+describe.each([60, 120, 200])('driver prediction on, one racer (%i ms RTT)', (rttMs) => {
+  it('predicts the kart through a clean drive, leaving it only at GO and race end', () => {
+    const [watch] = runPredictedSingle(rttMs);
+    expectPredictedDrive(watch);
+    // the verge on this script: its onset and its deeper band each replay once
+    const racingReplays = watch.notes.filter((n) => n.kind === 'replayed' && !n.afterSuspend);
+    expect(racingReplays).toHaveLength(2);
+  });
+});
+
+describe.each([60, 120, 200])('driver prediction on, two racers (%i ms RTT)', (rttMs) => {
+  it('predicts both karts through a clean drive, leaving them only at GO and race end', () => {
+    const run = runPredictedDuel(rttMs);
+    expect(run.bumps).toBe(0);
+    expect(run.minGapYd).toBeGreaterThan(run.reachYd);
+    for (const watch of run.watches) {
+      expectPredictedDrive(watch);
+      expect(watch.notes.filter((n) => n.kind === 'replayed' && !n.afterSuspend)).toEqual([]);
+    }
   });
 });

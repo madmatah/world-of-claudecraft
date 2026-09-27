@@ -10,9 +10,11 @@ import {
 } from '../sim/types';
 import { type ClientDelveMotionState, createClientPlayerMotionDeps } from './client_player_motion';
 import { createDeckAwareStep } from './deck_prediction';
+import { drivePredictionRequested } from './render_dev_flags';
 import {
   copyMotionState,
   type MotionState,
+  type PredictionPose,
   PredictionRing,
   type PredictionStep,
   predictTick,
@@ -33,6 +35,9 @@ export interface SelfPredictionWire extends MovementWireClient {
   reconDeck?: FerryDeckMirror | null;
   /** The acknowledged drive state while seated behind a wheel. */
   reconDrive?: VehicleDrive | null;
+  /** The vertical state the vehicle kernel reads at the acked tick. */
+  reconVy?: number;
+  reconOnGround?: boolean;
   /** The ferry timetable at the newest snapshot (IWorld.ferryView): its
    *  schedule clock times the deck-aware prediction. */
   ferryView?(): { clock: number } | null;
@@ -55,8 +60,8 @@ function seatedWithoutDriveRecon(self: Entity, wire: SelfPredictionWire): boolea
   return self.drive != null && !wire.reconDrive;
 }
 
-/** A seated driver the pipeline must not predict: the drive-aware replay is
- *  not wired yet, so the drive recon alone never starts it. */
+/** A seated driver the pipeline must not predict: with driver prediction
+ *  off, the drive recon alone never starts it. */
 function driverStandsDown(
   self: Entity,
   wire: SelfPredictionWire,
@@ -68,19 +73,21 @@ function driverStandsDown(
 function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
   // aboard a sailing ship the prediction starts in its frame (deck_prediction.ts)
   const deck = wire.reconDeck ?? null;
+  const drive = wire.reconDrive ?? null;
   const x = deck ? deck.x : (wire.reconAuthoritativeX ?? self.pos.x);
   const y = deck ? deck.y : (wire.reconAuthoritativeY ?? self.pos.y);
   const z = deck ? deck.z : (wire.reconAuthoritativeZ ?? self.pos.z);
-  return {
+  const facing = deck ? deck.f : (wire.reconAuthoritativeFacing ?? self.facing);
+  const state: MotionState = {
     deck: deck ? deck.route : null,
     id: self.id,
     pos: { x, y, z },
     prevPos: { x, y, z },
-    facing: deck ? deck.f : (wire.reconAuthoritativeFacing ?? self.facing),
+    facing,
     vx: 0,
-    vy: 0,
+    vy: drive ? (wire.reconVy ?? 0) : 0,
     vz: 0,
-    onGround: true,
+    onGround: drive ? (wire.reconOnGround ?? true) : true,
     jumping: false,
     fallStartY: y,
     swimStroke: 0,
@@ -94,6 +101,36 @@ function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
     mountCastRemaining: self.mountCastRemaining,
     mountCastKey: self.mountCastKey,
   };
+  if (drive) {
+    state.drive = { ...drive };
+    state.prevFacing = facing;
+  }
+  return state;
+}
+
+/** The acked pose, plus the drive block only while the mirror or the
+ *  prediction drives: a runner's acknowledgement stays position and facing. */
+function acknowledgedPose(
+  self: Entity,
+  wire: SelfPredictionWire,
+  predicted: MotionState | null,
+): PredictionPose {
+  const deck = wire.reconDeck ?? null;
+  const pose: PredictionPose = deck
+    ? { x: deck.x, y: deck.y, z: deck.z, facing: deck.f, deck: deck.route }
+    : {
+        x: wire.reconAuthoritativeX as number,
+        y: wire.reconAuthoritativeY as number,
+        z: wire.reconAuthoritativeZ as number,
+        facing: wire.reconAuthoritativeFacing as number,
+        deck: null,
+      };
+  if (self.drive == null && predicted?.drive == null) return pose;
+  pose.drive = wire.reconDrive ?? null;
+  pose.vy = wire.reconVy ?? 0;
+  pose.onGround = wire.reconOnGround ?? true;
+  pose.auras = self.auras;
+  return pose;
 }
 
 function refreshMirroredMotionState(state: MotionState, self: Entity): void {
@@ -120,8 +157,9 @@ export class MovementPredictionPipeline {
   private lastAckClientTick = -1;
   private lastPredictedClientTick = -1;
   private reseedAfterDriverStandDown = false;
-  /** Off until the drive-aware replay lands; never set by main.ts. */
-  predictDrivers = false;
+  /** Off by default until the proof lot; `?drivepredict=1` or a test turns it
+   *  on. Never set by main.ts. */
+  predictDrivers = drivePredictionRequested();
   private pendingResidual: ReconciledSelfPrediction['residual'] = null;
   // The schedule clock of the snapshot that carried the newest acknowledged
   // client tick: the deck-aware step estimates the server tick (and so the
@@ -133,6 +171,7 @@ export class MovementPredictionPipeline {
     position: { x: 0, y: 0, z: 0 },
     residual: null,
     deck: null,
+    tickOffset: null,
   };
 
   constructor(seed: number, riftCollisionToken = 0) {
@@ -207,19 +246,10 @@ export class MovementPredictionPipeline {
       this.ackCt = wire.reconAckClientTick;
       this.ackClock = wire.ferryView?.()?.clock ?? null;
       const acknowledgedPrediction = this.ring.find(wire.reconAckClientTick);
-      const deck = wire.reconDeck ?? null;
       const result = reconcile(
         this.ring,
         wire.reconAckClientTick,
-        deck
-          ? { x: deck.x, y: deck.y, z: deck.z, facing: deck.f, deck: deck.route }
-          : {
-              x: wire.reconAuthoritativeX as number,
-              y: wire.reconAuthoritativeY as number,
-              z: wire.reconAuthoritativeZ as number,
-              facing: wire.reconAuthoritativeFacing as number,
-              deck: null,
-            },
+        acknowledgedPose(self, wire, this.predicted),
         wire.reconOverrideEpoch,
         this.lastEpoch,
         this.stepFn,
@@ -250,6 +280,10 @@ export class MovementPredictionPipeline {
       this.predicted.prevPos.z + (this.predicted.pos.z - this.predicted.prevPos.z) * alpha;
     output.residual = this.pendingResidual;
     output.deck = this.predicted.deck ?? null;
+    output.tickOffset =
+      this.predicted.drive && wire.reconAckClientTick >= 0
+        ? this.lastPredictedClientTick - wire.reconAckClientTick
+        : null;
     this.pendingResidual = null;
     return output;
   }
@@ -277,7 +311,7 @@ export class MovementPredictionPipeline {
       this.wire?.movementWireVersion === 2 &&
       !this.wire.reconOverrideActive &&
       hasAuthoritativePose(this.wire) &&
-      // Stands every driver down until the drive-aware replay is switched on.
+      // Stands every driver down unless driver prediction is switched on.
       !(this.self && driverStandsDown(this.self, this.wire, this.predictDrivers))
     );
   }

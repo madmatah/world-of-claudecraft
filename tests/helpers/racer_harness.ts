@@ -94,6 +94,8 @@ export interface RacerHarnessOptions {
   keyTimeline?: boolean;
   /** The negotiated movement wire (browsers negotiate 2, the default). */
   movementWire?: 1 | 2;
+  /** Predict the seated pilot on wire v2 (the pipeline flag, off by default). */
+  predictDrivers?: boolean;
 }
 
 /** A contact-shaped impulse on the local machine. */
@@ -136,6 +138,7 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
       frameMs: opts.frameMs,
       warmupMs: opts.warmupMs,
       keyTimeline: opts.keyTimeline ?? true,
+      predictDrivers: opts.predictDrivers,
     });
   } catch (error) {
     setActiveWorldContent(null);
@@ -355,6 +358,8 @@ export interface RacerDuelOptions {
   /** 'parked' (default): the two house pilots are held off the racing line;
    *  'driving': they race. */
   housePilots?: 'parked' | 'driving';
+  /** Predict both seated pilots on wire v2 (the pipeline flag). */
+  predictDrivers?: boolean;
 }
 
 export interface RacerDuelHarness {
@@ -403,6 +408,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       frameMs: opts.frameMs,
       warmupMs: opts.warmupMs,
       keyTimeline: opts.keyTimeline ?? true,
+      predictDrivers: opts.predictDrivers,
     });
   } catch (error) {
     setActiveWorldContent(null);
@@ -414,6 +420,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       characterId: 2,
       keyTimeline: opts.keyTimeline ?? true,
       warmupMs: opts.warmupMs,
+      predictDrivers: opts.predictDrivers,
     });
   } catch (error) {
     harness.dispose();

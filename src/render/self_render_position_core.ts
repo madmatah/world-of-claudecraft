@@ -117,6 +117,9 @@ export interface ReconciledSelfPrediction {
    *  height stays world yards, the hull never heaves), and
    *  render/deck_frame.ts places them on the drawn deck. */
   deck?: number | null;
+  /** While driving: the displayed client tick minus the acknowledged one, the
+   *  depth a rival drawn in the self frame is projected by. Null otherwise. */
+  tickOffset?: number | null;
 }
 
 export type SelfRenderPrediction = SelfMotionFrame | ReconciledSelfPrediction;

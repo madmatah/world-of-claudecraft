@@ -243,6 +243,9 @@ export interface OnlineHarnessOptions {
   facing?: number;
   /** Compose the frame's facing from the same producers as main.ts. */
   keyTimeline?: boolean;
+  /** Set the v2 pipeline's driver prediction (self_prediction.ts
+   *  `predictDrivers`); the shipped default when omitted. */
+  predictDrivers?: boolean;
 }
 
 /** Runs after each server sim tick, before the override epochs are updated
@@ -305,6 +308,7 @@ export interface PeerClientOptions {
   /** Virtual ms advanced after the join, so the peer's mirror is synced
    *  before the call returns. Must be a whole tick. */
   warmupMs?: number;
+  predictDrivers?: boolean;
 }
 
 export interface OnlineHarness {
@@ -426,6 +430,8 @@ interface ClientRigParams {
   keyTimeline: boolean;
   startFacing: number;
   movementWireVersion: 1 | 2;
+  /** Left at the pipeline's own default when omitted. */
+  predictDrivers?: boolean;
   /** Keep this rig's WebSocket stub installed after its client is built (the
    *  primary client), or put the previous one back (a peer). */
   keepSocketClass: boolean;
@@ -525,6 +531,8 @@ function createClientRig(params: ClientRigParams): ClientRig {
   const inputEcho = new InputEchoTracker();
   const selfMotionFrameBuffer = new SelfMotionFrameBuffer();
   const movementPrediction = new MovementPredictionPipeline(client.cfg.seed);
+  if (params.predictDrivers !== undefined)
+    movementPrediction.predictDrivers = params.predictDrivers;
   movementPrediction.connect(client);
   const selfRender = createSelfRenderPositionState({ x: 0, y: 0, z: 0 });
   const selfMotionGateArgs: SelfMotionGateArgs = {
@@ -898,6 +906,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     keyTimeline: opts.keyTimeline === true,
     startFacing,
     movementWireVersion,
+    predictDrivers: opts.predictDrivers,
     keepSocketClass: true,
   });
   const { client } = primary;
@@ -1078,6 +1087,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         keyTimeline: peerOpts.keyTimeline === true,
         startFacing: peerFacing,
         movementWireVersion,
+        predictDrivers: peerOpts.predictDrivers,
         keepSocketClass: false,
       });
       peers.push(peer);

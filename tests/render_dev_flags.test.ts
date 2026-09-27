@@ -45,6 +45,27 @@ describe('render dev flags: the GPU timer probe gate', () => {
   });
 });
 
+describe('render dev flags: the driver prediction playtest arm', () => {
+  it('is off by default, off in a headless host, and only on under ?drivepredict=1', async () => {
+    expect((await loadFlags('?perf')).drivePredictionRequested()).toBe(false);
+    expect((await loadFlags(null)).drivePredictionRequested()).toBe(false);
+    expect((await loadFlags('?drivepredict=on')).drivePredictionRequested()).toBe(false);
+    expect((await loadFlags('?perf&drivepredict=1')).drivePredictionRequested()).toBe(true);
+  });
+
+  it('is the default a new movement pipeline takes', async () => {
+    for (const [search, on] of [
+      ['?drivepredict=1', true],
+      ['', false],
+    ] as const) {
+      vi.resetModules();
+      vi.stubGlobal('location', { search });
+      const { MovementPredictionPipeline } = await import('../src/render/self_prediction');
+      expect(new MovementPredictionPipeline(17).predictDrivers).toBe(on);
+    }
+  }, 30_000);
+});
+
 describe('render dev flags: the character cull A/B arm', () => {
   // ?charcull=off has to restore the WHOLE pre-cull submission, not just the
   // renderer's group cull: a skinned caster that keeps three's frustum test on

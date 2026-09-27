@@ -1,12 +1,27 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { InputTickFrame } from '../src/game/input_tick_sampler';
 import { MovementWireGlue } from '../src/game/movement_wire_glue';
+import { createClientPlayerMotionDeps } from '../src/render/client_player_motion';
 import { MovementPredictionPipeline, type SelfPredictionWire } from '../src/render/self_prediction';
-import { SELF_PREDICTION_RING_CAPACITY } from '../src/render/self_prediction_core';
+import {
+  copyMotionState,
+  type MotionState,
+  type PredictionRing,
+  SELF_PREDICTION_RING_CAPACITY,
+} from '../src/render/self_prediction_core';
 import { DELVE_X_MIN } from '../src/sim/data';
 import { DELVE_DOOR_AISLE_HALF_DEPTH, type DelveDoorClampSolid } from '../src/sim/delves/geometry';
 import { createPlayer } from '../src/sim/entity';
-import { emptyMoveInput, type MoveInput, type VehicleDrive } from '../src/sim/types';
+import { stepPlayerMotion } from '../src/sim/player_motion';
+import { REALM_RACERS_VEHICLE_KEY } from '../src/sim/social/realm_racers';
+import {
+  type Aura,
+  type Entity,
+  emptyMoveInput,
+  type MoveInput,
+  type VehicleDrive,
+} from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { groundHeight } from '../src/sim/world';
 import type { DelveRunInfo } from '../src/world_api/delves';
@@ -32,6 +47,8 @@ class FakeSelfPredictionWire implements SelfPredictionWire {
   reconOverrideActive = false;
   reconMoveSpeedMult = 1;
   reconDrive?: VehicleDrive | null;
+  reconVy?: number;
+  reconOnGround?: boolean;
   open = true;
   readonly sends: SendRecord[] = [];
   readonly reconcileOutcomes: Array<'match' | 'replayed' | 'ignore' | 'stale' | 'suspend'> = [];
@@ -417,6 +434,301 @@ describe('MovementPredictionPipeline for a seated driver', () => {
     drivePredictionFrame(pipeline, 10);
     expect(ringHead(pipeline)).not.toBeNull();
     expect(pipeline.display()).not.toBeNull();
+  });
+});
+
+describe('MovementPredictionPipeline predicting a seated driver', () => {
+  const THROTTLE: MoveInput = { ...emptyMoveInput(), forward: true };
+
+  interface Internals {
+    predicted: MotionState | null;
+    ring: PredictionRing;
+  }
+
+  function internals(pipeline: MovementPredictionPipeline): Internals {
+    return pipeline as unknown as Internals;
+  }
+
+  function seatedDriver(drive: Partial<VehicleDrive> = {}) {
+    const wire = new FakeSelfPredictionWire();
+    const self = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Tester');
+    self.drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
+    wire.reconDrive = { ...createVehicleDrive(REALM_RACERS_VEHICLE_KEY), ...drive };
+    wire.reconVy = 0;
+    wire.reconOnGround = true;
+    const pipeline = new MovementPredictionPipeline(SEED);
+    pipeline.predictDrivers = true;
+    pipeline.connect(wire, 0);
+    pipeline.prepare(wire, self, true);
+    return { pipeline, wire, self };
+  }
+
+  /** The server's kart, seeded from the same recon the pipeline seeds from. */
+  function serverTwin(wire: FakeSelfPredictionWire): MotionState {
+    const x = wire.reconAuthoritativeX as number;
+    const y = wire.reconAuthoritativeY as number;
+    const z = wire.reconAuthoritativeZ as number;
+    const twin = copyMotionState({
+      ...createPlayer(1, 'warrior', { x, y, z }, 'Tester'),
+      pos: { x, y, z },
+      prevPos: { x, y, z },
+      facing: wire.reconAuthoritativeFacing as number,
+      vy: wire.reconVy ?? 0,
+      onGround: wire.reconOnGround ?? true,
+      fallStartY: y,
+    } as MotionState);
+    twin.drive = { ...(wire.reconDrive as VehicleDrive) };
+    return twin;
+  }
+
+  function slowAura(): Aura {
+    return {
+      id: 'probe_slow',
+      name: 'probe_slow',
+      kind: 'slow',
+      remaining: 60,
+      duration: 60,
+      value: 0.5,
+      sourceId: 9,
+      school: 'physical',
+    };
+  }
+
+  const twinDeps = createClientPlayerMotionDeps(SEED);
+
+  function stepTwin(twin: MotionState, mi: MoveInput): void {
+    twin.prevPos = { ...twin.pos };
+    stepPlayerMotion(twinDeps, twin as Entity, mi);
+  }
+
+  function acknowledge(wire: FakeSelfPredictionWire, twin: MotionState, ct: number): void {
+    wire.reconAuthoritativeX = twin.pos.x;
+    wire.reconAuthoritativeY = twin.pos.y;
+    wire.reconAuthoritativeZ = twin.pos.z;
+    wire.reconAuthoritativeFacing = twin.facing;
+    wire.reconDrive = twin.drive ? { ...twin.drive } : null;
+    wire.reconVy = twin.vy;
+    wire.reconOnGround = twin.onGround;
+    wire.reconAckClientTick = ct;
+  }
+
+  it('seeds the kart from the drive recon and matches an exact server twin', () => {
+    const { pipeline, wire } = seatedDriver({ speed: 12 });
+    const twin = serverTwin(wire);
+    const seeded = wire.reconDrive;
+    for (let ct = 0; ct < 6; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    const head = internals(pipeline).predicted as MotionState;
+    expect(head.drive?.profileKey).toBe(REALM_RACERS_VEHICLE_KEY);
+    expect(head.drive?.speed).toBeGreaterThan(12);
+    // the recon is copied, never stepped in place
+    expect(wire.reconDrive).toBe(seeded);
+    expect(wire.reconDrive?.speed).toBe(12);
+
+    for (let ct = 0; ct < 3; ct++) stepTwin(twin, THROTTLE);
+    acknowledge(wire, twin, 2);
+    expect(pipeline.display()).not.toBeNull();
+    expect(wire.reconcileOutcomes).toEqual(['match']);
+  });
+
+  it('re-seeds an airborne kart from the recon vertical state and heading', () => {
+    const { pipeline, wire } = seatedDriver({ speed: 18, yawRate: 1.2 });
+    wire.reconAuthoritativeY = (wire.reconAuthoritativeY as number) + 4;
+    wire.reconVy = -3;
+    wire.reconOnGround = false;
+    const seededFacing = wire.reconAuthoritativeFacing;
+    const twin = serverTwin(wire);
+    stepTwin(twin, THROTTLE);
+    drivePredictionFrame(pipeline, 0, THROTTLE);
+    const head = internals(pipeline).predicted as MotionState;
+    expect(twin.onGround).toBe(false);
+    expect(head.vy).toBe(twin.vy);
+    expect(head.onGround).toBe(twin.onGround);
+    // the heading the tick started from, for the display's yaw lerp
+    expect(head.prevFacing).toBe(seededFacing);
+    expect(head.facing).toBe(twin.facing);
+    expect(head.facing).not.toBe(seededFacing);
+    acknowledge(wire, twin, 0);
+    pipeline.display();
+    expect(wire.reconcileOutcomes).toEqual(['match']);
+  });
+
+  it('reports the displayed client tick over the ack while driving, and null on foot', () => {
+    const { pipeline, wire, self } = seatedDriver({ speed: 12 });
+    const twin = serverTwin(wire);
+    for (let ct = 0; ct < 6; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    expect(pipeline.display()?.tickOffset).toBeNull();
+    for (let ct = 0; ct < 3; ct++) stepTwin(twin, THROTTLE);
+    acknowledge(wire, twin, 2);
+    expect(pipeline.display()?.tickOffset).toBe(3);
+    drivePredictionFrame(pipeline, 6, THROTTLE);
+    expect(pipeline.display()?.tickOffset).toBe(4);
+
+    // back on foot the output carries no offset
+    self.drive = null;
+    setAuthoritativePose(wire, 30, 26, 0.75);
+    wire.reconDrive = null;
+    wire.reconOverrideEpoch = 1;
+    wire.reconAckClientTick = 5;
+    pipeline.display();
+    drivePredictionFrame(pipeline, 7);
+    wire.reconAckClientTick = 6;
+    const onFoot = pipeline.display();
+    expect(onFoot).not.toBeNull();
+    expect(onFoot?.tickOffset).toBeNull();
+
+    const runner = predictionFixture();
+    drivePredictionFrame(runner.pipeline, 0);
+    drivePredictionFrame(runner.pipeline, 1);
+    runner.wire.reconAckClientTick = 0;
+    expect(runner.pipeline.display()?.tickOffset).toBeNull();
+  });
+
+  it('adopts a shoved drive with the snapshot auras and replays to an exact match', () => {
+    const { pipeline, wire, self } = seatedDriver({ speed: 12 });
+    const twin = serverTwin(wire);
+    for (let ct = 0; ct < 8; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    const headBefore = copyMotionState(internals(pipeline).predicted as MotionState);
+
+    for (let ct = 0; ct < 4; ct++) stepTwin(twin, THROTTLE);
+    // a contact after tick 3: speed and spin the client never saw coming
+    (twin.drive as VehicleDrive).speed += 6;
+    (twin.drive as VehicleDrive).spin = 1.5;
+    const slow = slowAura();
+    self.auras = [slow];
+    acknowledge(wire, twin, 3);
+    const shown = pipeline.display();
+    expect(wire.reconcileOutcomes).toEqual(['replayed']);
+    expect(shown?.residual).not.toBeNull();
+    expect(shown?.residual).toHaveProperty('yaw');
+    const head = internals(pipeline).predicted as MotionState;
+    expect(head.drive?.speed).not.toBe(headBefore.drive?.speed);
+    expect(head.facing).not.toBe(headBefore.facing);
+    expect(internals(pipeline).ring.head?.pose.auras.map((a) => a.id)).toEqual(['probe_slow']);
+
+    // the server keeps the aura; the replayed kart is its exact twin
+    twin.auras = [slow];
+    stepTwin(twin, THROTTLE);
+    acknowledge(wire, twin, 4);
+    pipeline.display();
+    expect(wire.reconcileOutcomes).toEqual(['replayed', 'match']);
+  });
+
+  it('borrows the newest mirrored auras on every predicted frame', () => {
+    const { pipeline, self } = seatedDriver({ speed: 12 });
+    self.auras = [];
+    drivePredictionFrame(pipeline, 0, THROTTLE);
+    expect(internals(pipeline).ring.head?.pose.auras).toEqual([]);
+    self.auras = [slowAura()];
+    drivePredictionFrame(pipeline, 1, THROTTLE);
+    expect(internals(pipeline).ring.head?.pose.auras.map((a) => a.id)).toEqual(['probe_slow']);
+  });
+
+  it('returns to a runner at race end with no spin carried, on a replay', () => {
+    const { pipeline, wire, self } = seatedDriver({ speed: 20, spin: 2, yawRate: 1 });
+    self.auras = [slowAura()];
+    for (let ct = 0; ct < 6; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    const kart = internals(pipeline).predicted as MotionState;
+    expect(kart.drive).toBeTruthy();
+    expect(kart.facing).not.toBe(wire.reconAuthoritativeFacing);
+
+    // the race takes the wheel without a bump: the snapshot drops the drive
+    // and the race's slow with it
+    self.drive = null;
+    self.auras = [];
+    const home = setAuthoritativePose(wire, 30, 26, 0.75);
+    wire.reconDrive = null;
+    wire.reconVy = 0;
+    wire.reconOnGround = true;
+    wire.reconAckClientTick = 2;
+    pipeline.display();
+    expect(wire.reconcileOutcomes).toEqual(['replayed']);
+    const head = internals(pipeline).predicted as MotionState;
+    expect(head.drive).toBeNull();
+    expect(head).not.toHaveProperty('prevFacing');
+    expect(head.vy).toBe(0);
+    expect(head.onGround).toBe(true);
+    expect(internals(pipeline).ring.head?.pose.auras).toEqual([]);
+    // the replayed throttle frames ran on foot, off the acked pose and heading
+    expect(head.facing).toBe(0.75);
+    expect(head.pos).not.toEqual(home);
+
+    for (let ct = 6; ct < 12; ct++) drivePredictionFrame(pipeline, ct);
+    const settled = copyMotionState(internals(pipeline).predicted as MotionState);
+    for (let ct = 12; ct < 18; ct++) drivePredictionFrame(pipeline, ct);
+    const after = internals(pipeline).predicted as MotionState;
+    expect(after.facing).toBe(0.75);
+    expect(after.pos).toEqual(settled.pos);
+  });
+
+  it('suspends on the race-end teleport and re-seeds a runner', () => {
+    const { pipeline, wire, self } = seatedDriver({ speed: 20, spin: 2 });
+    for (let ct = 0; ct < 4; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    expect(pipeline.display()).not.toBeNull();
+
+    self.drive = null;
+    const home = setAuthoritativePose(wire, 30, 26, 0.75);
+    wire.reconDrive = null;
+    wire.reconOverrideEpoch = 1;
+    wire.reconAckClientTick = 2;
+    expect(pipeline.display()).toBeNull();
+    expect(wire.reconcileOutcomes).toEqual(['suspend']);
+
+    for (let ct = 4; ct < 8; ct++) drivePredictionFrame(pipeline, ct);
+    const runner = internals(pipeline).predicted as MotionState;
+    expect(runner).not.toHaveProperty('drive');
+    expect(runner.facing).toBe(0.75);
+    expect(pipeline.display()?.position).toEqual(home);
+  });
+
+  it('keeps the override stand-down: nothing predicted under ovA, one suspend at its end', () => {
+    const { pipeline, wire } = seatedDriver();
+    drivePredictionFrame(pipeline, 0, THROTTLE);
+    expect(pipeline.display()).not.toBeNull();
+
+    wire.reconOverrideActive = true;
+    wire.reconOverrideEpoch = 1;
+    for (let ct = 1; ct < 5; ct++) {
+      wire.reconAckClientTick = ct - 1;
+      expect(pipeline.display()).toBeNull();
+      drivePredictionFrame(pipeline, ct, THROTTLE);
+      expect(internals(pipeline).ring.head).toBeNull();
+    }
+    expect(wire.reconcileOutcomes).toEqual([]);
+
+    // the lock ends with its own bump
+    wire.reconOverrideActive = false;
+    wire.reconOverrideEpoch = 2;
+    expect(pipeline.display()).toBeNull();
+    expect(wire.reconcileOutcomes).toEqual(['suspend']);
+    drivePredictionFrame(pipeline, 5, THROTTLE);
+    expect(internals(pipeline).predicted?.drive).toBeTruthy();
+    expect(pipeline.display()).not.toBeNull();
+  });
+
+  it('hands a runner acknowledgement no drive, vertical state or auras', () => {
+    function correctedRunner(noise: boolean): MotionState {
+      const { pipeline, wire } = predictionFixture();
+      pipeline.predictDrivers = true;
+      if (noise) {
+        wire.reconVy = 5;
+        wire.reconOnGround = false;
+      }
+      for (let ct = 0; ct < 4; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+      pipeline.display();
+      wire.reconAckClientTick = 0;
+      pipeline.display();
+      expect(wire.reconcileOutcomes).toEqual(['replayed']);
+      return internals(pipeline).predicted as MotionState;
+    }
+    const head = correctedRunner(true);
+    expect(head).not.toHaveProperty('drive');
+    expect(head).toEqual(correctedRunner(false));
+  });
+
+  it('is never switched on by main.ts', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).toMatch(/new MovementPredictionPipeline/);
+    expect(main).not.toMatch(/predictDrivers|drivepredict/);
   });
 });
 
