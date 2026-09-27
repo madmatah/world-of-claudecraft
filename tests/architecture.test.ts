@@ -963,6 +963,7 @@ const RENDER_PURE_CORES = [
   'src/render/realm_racers_daylight_core.ts',
   'src/render/realm_racers_grass_core.ts',
   'src/render/realm_racers_pickups_core.ts',
+  'src/render/realm_racers_prepare_core.ts',
   'src/render/realm_racers_slicks_core.ts',
   // Data-as-code, but both are a purity DEPENDENCY of the cores above, so both
   // are swept: a three import in either would make those cores three-loading.

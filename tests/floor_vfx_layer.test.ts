@@ -150,6 +150,14 @@ const FLOOR_VFX_LAYERED_MODULES: readonly FloorVfxModule[] = [
   { file: 'src/render/varkhul_encounter.ts', layer: 'encounter', strict: true },
   { file: 'src/render/varkhul_frontal_visual.ts', layer: 'encounter', strict: true },
   { file: 'src/render/rift_death_zone.ts', layer: 'encounter', strict: true },
+  // The Ground Blast's landing marker is the dodge read a rival acts on; its
+  // impact shockwave is aftermath a pilot emitted, so it rides the player band.
+  {
+    file: 'src/render/realm_racers_ground_blast.ts',
+    layer: 'encounter',
+    alsoNames: ['player'],
+    strict: true,
+  },
   // the player's own ground aim guide (additive: it brightens what lies under it)
   { file: 'src/render/ground_aim_reticle_visual.ts', layer: 'reticle', strict: true },
 ];

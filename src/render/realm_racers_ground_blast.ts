@@ -14,9 +14,15 @@
 // Everything is pooled and driven by its own flight clock: a shell retires
 // itself at the tick its impact was scheduled for, so the marker is up for
 // exactly the flight and no event ordering can strand one on the ground.
+//
+// The whole pool is built by `prepare()`, which the race preparation seam
+// (realm_racers_prepare.ts) calls when the viewer commits to racing and then
+// links and uploads off the live frame; a shot never builds or waits.
 
 import * as THREE from 'three';
 import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
+import { floorVfxRenderOrder } from './floor_vfx_layer';
+import { tagVfxSubtree } from './renderer_diagnostics';
 import { rallyGroundBlastMarkerTexture } from './textures';
 
 /** How high the shell arcs, as a fraction of how far it is going, bounded so a
@@ -72,6 +78,15 @@ interface GroundBlastSlot {
   live: boolean;
 }
 
+/** What a shot's flight needs, as the Fired event carries it. */
+export interface GroundBlastShot {
+  x: number;
+  z: number;
+  targetX: number;
+  targetZ: number;
+  flightSeconds: number;
+}
+
 interface BurstSlot {
   flash: THREE.Mesh;
   wave: THREE.Mesh;
@@ -85,12 +100,17 @@ const POOL_SIZE = 6;
 
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 
+const materialName = (role: string): string => `realmRacersGroundBlast:${role}`;
+
 export class RealmRacersGroundBlastVisuals {
+  readonly prepareId = 'groundBlast';
   readonly group = new THREE.Group();
   private slots: GroundBlastSlot[] = [];
   private bursts: BurstSlot[] = [];
   private nextSlot = 0;
   private nextBurst = 0;
+  private prepared = false;
+  private disposed = false;
   private scratch = new THREE.Object3D();
 
   private projectileGeometry = new THREE.IcosahedronGeometry(0.3, 1);
@@ -113,8 +133,12 @@ export class RealmRacersGroundBlastVisuals {
   private flashGeometry = new THREE.IcosahedronGeometry(1, 2);
 
   private markerTexture = rallyGroundBlastMarkerTexture();
-  private projectileMaterial = new THREE.MeshBasicMaterial({ color: 0xdcf7ff });
+  private projectileMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('projectile'),
+    color: 0xdcf7ff,
+  });
   private glowMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('glow'),
     color: 0x63d5ff,
     transparent: true,
     opacity: 0.4,
@@ -122,6 +146,7 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
   private trailMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('trail'),
     color: 0x9ce6ff,
     transparent: true,
     opacity: 0.7,
@@ -129,6 +154,7 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
   private markerMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('marker'),
     map: this.markerTexture,
     color: COOL.clone(),
     transparent: true,
@@ -137,6 +163,7 @@ export class RealmRacersGroundBlastVisuals {
     side: THREE.DoubleSide,
   });
   private coreMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('core'),
     color: COOL.clone(),
     transparent: true,
     opacity: 0.26,
@@ -145,6 +172,7 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
   private columnMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('column'),
     color: COOL.clone(),
     transparent: true,
     opacity: 0.16,
@@ -153,6 +181,7 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
   private waveMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('wave'),
     color: 0xffd9a0,
     transparent: true,
     opacity: 0.9,
@@ -161,6 +190,7 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
   private flashMaterial = new THREE.MeshBasicMaterial({
+    name: materialName('flash'),
     color: 0xfff0cf,
     transparent: true,
     opacity: 1,
@@ -168,9 +198,36 @@ export class RealmRacersGroundBlastVisuals {
     blending: THREE.AdditiveBlending,
   });
 
-  private slotAt(index: number): GroundBlastSlot {
-    const existing = this.slots[index];
-    if (existing) return existing;
+  constructor() {
+    this.group.name = 'realmRacersGroundBlast';
+    tagVfxSubtree(this.group);
+  }
+
+  /**
+   * Build every slot and burst the pool will ever draw, hidden, and return the
+   * root holding them: the preparation seam links and uploads exactly this set,
+   * so `fire()` and `impact()` only move and show what is already here.
+   * Each transparent DoubleSide material (marker, core, column, wave) is TWO
+   * programs, the Back pass then the Front pass, and three's compile links
+   * both, exactly as the draw does. Idempotent, and a no-op once disposed.
+   */
+  prepare(): THREE.Object3D {
+    if (this.prepared || this.disposed) return this.group;
+    this.prepared = true;
+    for (let i = 0; i < POOL_SIZE; i++) {
+      this.slots[i] = this.buildSlot(i);
+      this.bursts[i] = this.buildBurst();
+    }
+    tagVfxSubtree(this.group);
+    return this.group;
+  }
+
+  /** Built, by `prepare()` or by a shot that came first. */
+  get built(): boolean {
+    return this.prepared;
+  }
+
+  private buildSlot(index: number): GroundBlastSlot {
     const projectile = new THREE.Mesh(this.projectileGeometry, this.projectileMaterial);
     const glow = new THREE.Mesh(this.glowGeometry, this.glowMaterial);
     const trail = new THREE.InstancedMesh(this.moteGeometry, this.trailMaterial, TRAIL_MOTES);
@@ -182,6 +239,10 @@ export class RealmRacersGroundBlastVisuals {
     // the track, and a billboard would read as a UI element floating over it.
     marker.rotation.x = -Math.PI / 2;
     core.rotation.x = -Math.PI / 2;
+    // The dodge read rides the encounter band, over any floor mark a pilot's
+    // own kit could paint, with the countdown fill under its disc.
+    core.renderOrder = floorVfxRenderOrder('encounter', 0);
+    marker.renderOrder = floorVfxRenderOrder('encounter', 1);
     // Named per slot so a test can address one part of one blast without
     // depending on the child ORDER, which every visual pass reshuffles.
     for (const [name, mesh] of [
@@ -218,23 +279,20 @@ export class RealmRacersGroundBlastVisuals {
       live: false,
     };
     this.retire(slot);
-    this.slots[index] = slot;
     return slot;
   }
 
-  private burstAt(index: number): BurstSlot {
-    const existing = this.bursts[index];
-    if (existing) return existing;
+  private buildBurst(): BurstSlot {
     const flash = new THREE.Mesh(this.flashGeometry, this.flashMaterial.clone());
     const wave = new THREE.Mesh(this.waveGeometry, this.waveMaterial.clone());
     wave.rotation.x = -Math.PI / 2;
+    wave.renderOrder = floorVfxRenderOrder('player', 0);
     flash.castShadow = false;
     wave.castShadow = false;
     this.group.add(flash, wave);
     const slot: BurstSlot = { flash, wave, elapsed: 0, live: false };
     flash.visible = false;
     wave.visible = false;
-    this.bursts[index] = slot;
     return slot;
   }
 
@@ -253,15 +311,11 @@ export class RealmRacersGroundBlastVisuals {
    * impact point was decided at fire time server-side and rides the event), so
    * nothing about this shot needs another packet.
    */
-  fire(
-    muzzleX: number,
-    muzzleZ: number,
-    targetX: number,
-    targetZ: number,
-    flightSeconds: number,
-    groundY: number,
-  ): void {
-    const slot = this.slotAt(this.nextSlot % POOL_SIZE);
+  fire(shot: GroundBlastShot, groundY: number): void {
+    if (this.disposed) return;
+    this.prepare();
+    const { x: muzzleX, z: muzzleZ, targetX, targetZ, flightSeconds } = shot;
+    const slot = this.slots[this.nextSlot % POOL_SIZE];
     this.nextSlot++;
     const span = Math.hypot(targetX - muzzleX, targetZ - muzzleZ);
     slot.fromX = muzzleX;
@@ -292,7 +346,9 @@ export class RealmRacersGroundBlastVisuals {
    *  impact EVENT rather than by the flight clock, so a shell that caught
    *  nothing still craters at the exact point the sim resolved. */
   impact(x: number, z: number, groundY: number): void {
-    const slot = this.burstAt(this.nextBurst % POOL_SIZE);
+    if (this.disposed) return;
+    this.prepare();
+    const slot = this.bursts[this.nextBurst % POOL_SIZE];
     this.nextBurst++;
     slot.elapsed = 0;
     slot.live = true;
@@ -389,6 +445,7 @@ export class RealmRacersGroundBlastVisuals {
   }
 
   update(dt: number): void {
+    if (this.disposed) return;
     for (const slot of this.slots) {
       if (slot.live) this.step(slot, dt);
     }
@@ -401,15 +458,15 @@ export class RealmRacersGroundBlastVisuals {
    *  pool minted, the per-slot clones included. The marker texture belongs to
    *  the shared texture cache and stays. */
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     for (const slot of this.slots) {
-      if (!slot) continue;
       slot.trail.dispose();
       for (const mesh of [slot.marker, slot.core, slot.column]) {
         (mesh.material as THREE.Material).dispose();
       }
     }
     for (const burst of this.bursts) {
-      if (!burst) continue;
       (burst.flash.material as THREE.Material).dispose();
       (burst.wave.material as THREE.Material).dispose();
     }

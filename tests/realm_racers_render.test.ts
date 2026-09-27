@@ -1234,7 +1234,7 @@ describe('Realm Racers procedural render', () => {
 
     it('arcs from the barrel and meets the marked point at exactly the flight time', async () => {
       const blasts = await groundBlastVisuals();
-      blasts.fire(10, 20, 10, 50, 0.6, 0);
+      blasts.fire({ x: 10, z: 20, targetX: 10, targetZ: 50, flightSeconds: 0.6 }, 0);
       const projectile = part(blasts, 'groundBlast0');
       expect(projectile.position.z).toBeCloseTo(20, 6);
       blasts.update(0.3);
@@ -1250,7 +1250,7 @@ describe('Realm Racers procedural render', () => {
 
     it('marks the impact point for the whole flight and retires it on impact', async () => {
       const blasts = await groundBlastVisuals();
-      blasts.fire(10, 20, 10, 50, 0.5, 0);
+      blasts.fire({ x: 10, z: 20, targetX: 10, targetZ: 50, flightSeconds: 0.5 }, 0);
       const marker = part(blasts, 'marker0');
       const core = part(blasts, 'core0');
       const column = part(blasts, 'column0');
@@ -1272,7 +1272,7 @@ describe('Realm Racers procedural render', () => {
 
     it('gives back every minted material and geometry on renderer teardown', async () => {
       const blasts = await groundBlastVisuals();
-      blasts.fire(0, 0, 0, 30, 0.5, 0);
+      blasts.fire({ x: 0, z: 0, targetX: 0, targetZ: 30, flightSeconds: 0.5 }, 0);
       blasts.impact(0, 30, 0);
       const disposed = new Set<unknown>();
       blasts.group.traverse((object) => {
@@ -1300,7 +1300,7 @@ describe('Realm Racers procedural render', () => {
       // size is fixed for the whole flight and identical on every preset. Only
       // the fill inside it and its colour carry the countdown.
       const blasts = await groundBlastVisuals();
-      blasts.fire(0, 0, 0, 30, 0.5, 0);
+      blasts.fire({ x: 0, z: 0, targetX: 0, targetZ: 30, flightSeconds: 0.5 }, 0);
       const marker = part(blasts, 'marker0') as THREE.Mesh;
       const core = part(blasts, 'core0');
       const opening = core.scale.x;
@@ -1325,17 +1325,24 @@ describe('Realm Racers procedural render', () => {
         'utf8',
       );
       const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort();
-      expect(imports).toEqual(['../sim/realm_racers_ground_blast', './textures', 'three']);
+      // The floor ladder and the diagnostics tag read no tier either.
+      expect(imports).toEqual([
+        '../sim/realm_racers_ground_blast',
+        './floor_vfx_layer',
+        './renderer_diagnostics',
+        './textures',
+        'three',
+      ]);
     });
 
     it('pools its meshes rather than growing one set per shot', async () => {
       const blasts = await groundBlastVisuals();
       const cycle = () => {
-        blasts.fire(0, 0, 0, 20, 0.5, 0);
+        blasts.fire({ x: 0, z: 0, targetX: 0, targetZ: 20, flightSeconds: 0.5 }, 0);
         blasts.impact(0, 20, 0);
         blasts.update(0.6);
       };
-      // The pool fills lazily, so let it saturate first, then keep firing.
+      // Let every slot see a shot first, then keep firing.
       for (let shot = 0; shot < 12; shot++) cycle();
       const pooled = blasts.group.children.length;
       for (let shot = 0; shot < 60; shot++) cycle();

@@ -936,7 +936,9 @@ GPU work signs. Each rule names its seam and its guard.
   budget snapshot, the event ring (`live-program`, `gate-timeout`, `reveal-watchdog`,
   `reveal-soft-deadline`, `submit-stop`, `attach-watchdog`, `touch-unproven` (programs a
   world gate's touch tail found unproven by any settle, the ones a walk mark used to
-  bless and block on), plus the `arrival` mark one per teleport-class landing), and the
+  bless and block on), `prepare` (an in-game trigger's verdict, proven 1/1 or not 0/1,
+  keyed `realm-racers-prepare:<reason>:<client>` by `realm_racers_prepare.ts`), plus the
+  `arrival` mark one per teleport-class landing), and the
   reveal counters. The CPU side of the same picture is `perfStats().buildLedger`
   (`build_ledger_core.ts`: main-thread ms per view build class and per zone feature
   builder, each kind's worst sample and when it happened (`maxAtMs`, the one frame

@@ -990,7 +990,10 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 12684). Exact count, zero slack.
-    ceiling: 13270,
+    // LOWERED 13270 -> 13265: the Ground Blast's Fired call now hands the
+    // event to the pool (fire(shot, groundY)), which paid for the race
+    // preparation seam's wiring (realm_racers_prepare.ts). Exact count.
+    ceiling: 13265,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

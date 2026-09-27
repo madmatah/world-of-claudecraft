@@ -15,6 +15,10 @@
 // world gate's touch tail found programs under its target that no settle had
 // proved (linked_program_touch_lane runWorldGateTouchLane), the
 // ones a walk mark used to bless and block on; `units` carries the count.
+// `prepare` is a verdict, not an escape: an in-game preparation trigger (the
+// Realm Racers seam, realm_racers_prepare.ts) settled one client's gate, and
+// readyRoots/totalRoots say whether the settle record proved it (1/1) or not
+// (0/1), ageMs how long it took from the trigger.
 //
 // Write-only telemetry: nothing here feeds a reveal, an admission, or any
 // other decision, so recording an event can never change what the renderer
@@ -33,7 +37,8 @@ export type GpuPrepEventKind =
   | 'submit-stop'
   | 'live-program'
   | 'arrival'
-  | 'touch-unproven';
+  | 'touch-unproven'
+  | 'prepare';
 
 export const GPU_PREP_EVENT_KINDS: readonly GpuPrepEventKind[] = [
   'reveal-watchdog',
@@ -44,6 +49,7 @@ export const GPU_PREP_EVENT_KINDS: readonly GpuPrepEventKind[] = [
   'live-program',
   'arrival',
   'touch-unproven',
+  'prepare',
 ];
 
 /**
@@ -206,6 +212,7 @@ const counts: Record<GpuPrepEventKind, number> = {
   'live-program': 0,
   arrival: 0,
   'touch-unproven': 0,
+  prepare: 0,
 };
 
 const reveal: GpuPrepRevealCounters = {

@@ -671,6 +671,7 @@ import {
 import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
+import { RealmRacersPrepare } from './realm_racers_prepare';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
@@ -2052,6 +2053,7 @@ export class Renderer {
   private realmRacersSkyReady: RallySkyKey | null = null;
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
+  private realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
   // seed-bound ground sampler, built once so per-frame drape updates
   // allocate no closure.
   private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);
@@ -2663,7 +2665,6 @@ export class Renderer {
     this.realmRacersTrack = buildRealmRacersTracks();
     setRenderCategory(this.realmRacersTrack.group, 'props');
     this.scene.add(this.realmRacersTrack.group);
-    setRenderCategory(this.realmRacersGroundBlasts.group, 'vfx');
     this.scene.add(this.realmRacersGroundBlasts.group);
     this.propsView = props;
 
@@ -7889,14 +7890,7 @@ export class Renderer {
         // Muzzle flash and smoke at the barrel, then the arc and the ground
         // marker the shot is dodged off. The marker's own richness never scales:
         // only this burst does, and it is the pooled cloud's business.
-        this.realmRacersGroundBlasts.fire(
-          ev.x,
-          ev.z,
-          ev.targetX,
-          ev.targetZ,
-          ev.flightSeconds,
-          this.groundSample(ev.targetX, ev.targetZ),
-        );
+        this.realmRacersGroundBlasts.fire(ev, this.groundSample(ev.targetX, ev.targetZ));
         // The local pilot's own muzzle flash and report already played at the
         // press (predictOwnGroundBlastFire); replaying them one round trip
         // later reads as a double shot. The arc and the marker above are not
@@ -12298,6 +12292,7 @@ export class Renderer {
       this.time,
       realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
     );
+    this.realmRacersPrepare.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
     this.realmRacersGroundBlasts.update(dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);
