@@ -634,7 +634,12 @@ export function realmRacersMatches(ctx: SimContext): RealmRacersMatch[] {
 export function realmRacersMatchOf(ctx: SimContext, pid: number): RealmRacersMatch | null {
   const rally = ctx.realmRacers;
   if (matchSeats(rally.match, pid)) return rally.match;
-  return rally.practices.find((m) => matchSeats(m, pid)) ?? null;
+  // A plain loop: the movement gate and the server epoch ask this per racer
+  // per tick, and a find callback would allocate a closure each time.
+  for (let i = 0; i < rally.practices.length; i++) {
+    if (matchSeats(rally.practices[i], pid)) return rally.practices[i];
+  }
+  return null;
 }
 
 /**
@@ -2925,6 +2930,15 @@ export function realmRacersInfoFor(ctx: SimContext, pid: number): RealmRacersInf
  * which of the live races the racer is in.
  */
 export function realmRacersMovementLocked(ctx: SimContext, pid: number): boolean {
+  return realmRacersMovementLockedAt(ctx, pid, ctx.tickCount);
+}
+
+/**
+ * The same lock as the movement pass of `tick` reads it. Asked between ticks for
+ * `tickCount + 1`, it is exact for the next pass: that pass runs before the rally
+ * pass that could flip the phase. The server's override epoch asks it that way.
+ */
+export function realmRacersMovementLockedAt(ctx: SimContext, pid: number, tick: number): boolean {
   const match = realmRacersMatchOf(ctx, pid);
   if (!match) return false;
   if (match.phase !== 'racing') return true;
@@ -2936,5 +2950,5 @@ export function realmRacersMovementLocked(ctx: SimContext, pid: number): boolean
   // A pilot who quit is held where they stopped until the Society returns them,
   // even though the race around them is still live.
   if (progress.retiredTick !== null) return true;
-  return ctx.tickCount < progress.resetLockedUntilTick;
+  return tick < progress.resetLockedUntilTick;
 }

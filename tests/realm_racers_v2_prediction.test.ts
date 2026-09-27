@@ -85,6 +85,9 @@ interface Scenario {
   /** The largest move-speed multiplier the override epoch sized a legal step
    *  with during the race. */
   maxEpochSpeedMult: number;
+  /** Override-epoch bumps across the 3 s race: the server session's and the
+   *  one the v2 wire delivered to the client. */
+  raceEpochBumps: { server: number; client: number };
   parkedReachYd: number;
   bodyRadiusYd: number;
 }
@@ -99,6 +102,11 @@ function runScenario(keyTimeline: boolean, movementWire: 1 | 2 = 2): Scenario {
     const afterSeat = suspends();
     rh.advanceToGo();
     const afterGo = suspends();
+    const epochs = () => ({
+      server: harness.session.movementOverrideEpoch,
+      client: harness.client.reconOverrideEpoch,
+    });
+    const epochsAtGo = epochs();
     const profileKey = harness.serverEntity.drive?.profileKey ?? '';
     const parked = rh.parkedPilots();
     let minParkedGapYd = Number.POSITIVE_INFINITY;
@@ -124,6 +132,7 @@ function runScenario(keyTimeline: boolean, movementWire: 1 | 2 = 2): Scenario {
     });
     unwatch();
     const afterRace = suspends();
+    const epochsAfterRace = epochs();
     const unseat = harness.runScript({
       durationMs: REALM_RACERS_RETURN_TICKS * SERVER_TICK_MS + 1500,
       script: [{ atMs: 0, mi: { forward: false, turnLeft: false, turnRight: false } }],
@@ -140,6 +149,10 @@ function runScenario(keyTimeline: boolean, movementWire: 1 | 2 = 2): Scenario {
       },
       minParkedGapYd,
       maxEpochSpeedMult,
+      raceEpochBumps: {
+        server: epochsAfterRace.server - epochsAtGo.server,
+        client: epochsAfterRace.client - epochsAtGo.client,
+      },
       parkedReachYd: parkedPilotReachYd(profileKey),
       bodyRadiusYd: vehicleProfile(profileKey).bodyRadius,
     };
@@ -253,6 +266,10 @@ describe.each([
     // On wire v2 no v1 predictor is ever built, so the camera follows the
     // interpolated server heading (the v1 case below covers the other arm).
     expect(racing.filter((f) => f.predictedDrivingFacing !== null).map((f) => f.tMs)).toEqual([]);
+  });
+
+  it('keeps the override epoch flat across the race, on the server and on the wire', () => {
+    expect(scenario.raceEpochBumps).toEqual({ server: 0, client: 0 });
   });
 
   it('never lets the predictor own a racing frame', () => {
