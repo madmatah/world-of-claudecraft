@@ -33,10 +33,12 @@ import {
   REALM_RACERS_RETURN_TICKS,
   REALM_RACERS_VEHICLE_KEY,
   REALM_RACERS_VERGE_BAND,
+  REALM_RACERS_WARD_AURA,
   realmRacersCircuitOf,
   realmRacersFireGroundBlast,
   realmRacersStartMatch,
   realmRacersToCanonical,
+  realmRacersWarded,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
@@ -246,6 +248,36 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacers.match).toBeNull();
     expect(realmRacersStartMatch(sim.ctx, pids)).toBe(true);
     expect(match(sim).pids).toEqual(pids);
+  });
+
+  it("spends a finisher's ward at the line, while a rival still racing keeps theirs", () => {
+    // Over the line a pilot is untargetable, so the ward (and the gold veil
+    // every rival reads it by) goes with the crossing, not with the flag.
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    for (const pid of [a, b]) {
+      sim.ctx.applyAura(required(sim.entities.get(pid), `racer ${pid}`), {
+        id: REALM_RACERS_WARD_AURA,
+        name: 'Racing Ward',
+        kind: 'rally_ward',
+        remaining: 9999,
+        duration: 9999,
+        value: 0,
+        sourceId: pid,
+        school: 'physical',
+      });
+    }
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    expect(realmRacersWarded(sim.entities.get(a))).toBe(true);
+    completeLap(sim, a);
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).finishedTick).not.toBeNull();
+    expect(liveMatch.phase).toBe('racing');
+    expect(realmRacersWarded(sim.entities.get(a))).toBe(false);
+    expect(realmRacersWarded(sim.entities.get(b))).toBe(true);
   });
 
   it('keeps the race running until the last machine is home, then ranks the field', () => {

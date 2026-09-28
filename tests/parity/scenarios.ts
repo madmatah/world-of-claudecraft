@@ -6557,6 +6557,7 @@ function realmRacersRace(): Scenario {
       'countdown lock + vehicle kernel drive on the circuit copy',
       'rival contact: the swept same-tick resolve, depenetration, impulse and bump event',
       'pickup take (the one weighted effect draw per box that changes hands)',
+      'ground blast landing: a core victim at full force and a falloff-band victim, per-racer hits',
       'forfeit cascade -> endMatch classification -> tableau return -> teardown',
     ],
     build: () => new Sim({ seed: 7601, playerClass: 'warrior', noPlayer: true }),
@@ -6600,11 +6601,7 @@ function realmRacersRace(): Scenario {
       const at = realmRacersToCanonical(liveMatch, rammed.pos.x, rammed.pos.z);
       const onLap = lap.project(at.x, at.z, rammedProgress.trackIndex);
       const sample = lap.samples[onLap.index];
-      const side = realmRacersToWorld(
-        liveMatch,
-        at.x - sample.tz * 3.0,
-        at.z + sample.tx * 3.0,
-      );
+      const side = realmRacersToWorld(liveMatch, at.x - sample.tz * 3.0, at.z + sample.tx * 3.0);
       teleport(sim, rammer, side.x, side.z);
       rammer.facing = rammed.facing;
       rammer.drive.speed = rammed.drive.speed;
@@ -6628,6 +6625,61 @@ function realmRacersRace(): Scenario {
       progress.trackIndex = projection.index;
       rec.tick(2); // the take: exactly one draw, and the effect grant
       rec.snapshot('pickup');
+      // A Ground Blast landing on two machines at once: the second pilot at a
+      // standstill a yard off the crater (inside the full-force core) and the
+      // third, parked four yards up the road behind it with the lap
+      // bookkeeping a machine that drove there would carry, out in the falloff
+      // band. The impact, the nearest target and the per-racer list ride the
+      // event digest, and each pop, shove and spin rides the entity samples:
+      // any change to the falloff curve moves this beat.
+      const coreVictim = sim.entities.get(pids[1]) as AnyEntity;
+      const bandVictim = sim.entities.get(pids[2]) as AnyEntity;
+      const bandProgress = liveMatch.progress.get(pids[2]);
+      const coreProgress = liveMatch.progress.get(pids[1]);
+      if (!coreVictim.drive || !bandVictim.drive || !bandProgress || !coreProgress) {
+        throw new Error('missing blast victims');
+      }
+      const coreAt = realmRacersToCanonical(liveMatch, coreVictim.pos.x, coreVictim.pos.z);
+      const coreOnLap = lap.project(coreAt.x, coreAt.z, coreProgress.trackIndex);
+      const coreSample = lap.samples[coreOnLap.index];
+      const behind = realmRacersToWorld(
+        liveMatch,
+        coreAt.x - coreSample.tx * 4,
+        coreAt.z - coreSample.tz * 4,
+      );
+      teleport(sim, bandVictim, behind.x, behind.z);
+      bandVictim.facing = coreVictim.facing;
+      const bandOnLap = lap.project(
+        coreAt.x - coreSample.tx * 4,
+        coreAt.z - coreSample.tz * 4,
+        coreOnLap.index,
+      );
+      bandProgress.lastS = bandOnLap.s;
+      bandProgress.trackIndex = bandOnLap.index;
+      for (const victim of [coreVictim, bandVictim]) {
+        const drive = victim.drive as NonNullable<AnyEntity['drive']>;
+        drive.speed = 0;
+        drive.slip = 0;
+        drive.yawRate = 0;
+        drive.spin = 0;
+        const meta = sim.players.get(victim.id);
+        if (meta) meta.moveInput.forward = false;
+      }
+      const crater = realmRacersToWorld(
+        liveMatch,
+        coreAt.x - coreSample.tz * 1,
+        coreAt.z + coreSample.tx * 1,
+      );
+      liveMatch.groundBlasts.push({
+        ownerPid: pids[0],
+        x: crater.x,
+        z: crater.z,
+        impactTick: sim.tickCount + 1,
+      });
+      rec.notes.blastCoreVictim = pids[1];
+      rec.notes.blastBandVictim = pids[2];
+      rec.tick(2); // the landing: both machines popped, shoved and spun
+      rec.snapshot('ground_blast');
       // The forfeit cascade ends it: three quit, the lone survivor's race is
       // decided, and the classification plus deed credit land in the digest.
       sim.realmRacersForfeit(pids[1]);

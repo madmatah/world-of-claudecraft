@@ -2039,6 +2039,10 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
     if (step.finished) {
       progress.finishedTick = ctx.tickCount;
       progress.finishFraction = step.finishFraction ?? 1;
+      // Over the line is out of the fight: nothing can shell a finisher, so a
+      // ward (and the gold veil every rival sees on it) goes with the crossing.
+      const finisher = ctx.entities.get(pid);
+      if (finisher) consumeRealmRacersWard(ctx, finisher);
       anyFinished = true;
       // The winner starts everyone else's clock, and only the winner: a second
       // crossing must not push the window back and let the field wait again.

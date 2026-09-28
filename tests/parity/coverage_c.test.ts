@@ -1576,6 +1576,21 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     // The box really changed hands, which is the tick the one weighted effect
     // draw fires on; without it the digest never covers the rally's draw site.
     expect(ev.some((e) => e.type === 'realmRacersPickup')).toBe(true);
+    // The shell really caught one machine inside the full-force core and one
+    // out in the falloff band, so a falloff change moves the digest.
+    const hits = ev.filter((e) => e.type === 'realmRacersGroundBlastHit');
+    expect(hits).toHaveLength(1);
+    const core = rec.notes.blastCoreVictim as number;
+    const band = rec.notes.blastBandVictim as number;
+    expect(hits[0].targetId).toBe(core);
+    expect(hits[0].impact).toBe(1);
+    const list = hits[0].hits as number[];
+    expect(list).toHaveLength(4);
+    expect(list[0]).toBe(core);
+    expect(list[1]).toBe(1);
+    expect(list[2]).toBe(band);
+    // sqrt(17) yd off the crater: 1 - (4.123 - 1.5) / 4.5, in thousandths.
+    expect(list[3]).toBe(0.417);
     // The forfeit cascade decided the race and the survivor got a tableau.
     expect(ev.some((e) => e.type === 'realmRacersResult')).toBe(true);
     // Teardown really ran: the race slot is free again.
