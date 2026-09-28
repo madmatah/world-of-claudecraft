@@ -13,6 +13,7 @@ import { resumeWhenAllowed } from './audio_unlock';
 import { CRUCIBLE_STREAM_URLS, type CrucibleFloor } from './crucible_music';
 import { dungeonMusicZoneForDungeon } from './dungeon_music_zones';
 import { minigameLayerFor } from './minigame_music_layer';
+import { type AreaTrackId, areaTrackLayerFor } from './music_area_tracks';
 import type { MusicMixState } from './music_mix_policy';
 import { isMusicMixAudible, musicMixMasterTarget } from './music_mix_policy';
 import type { ChordDef, NoteEvent, Phrase, Theme } from './music_notes';
@@ -28,15 +29,7 @@ import {
 } from './music_notes';
 import { MUSIC_OVERRIDES } from './music_overrides.generated';
 import { composeDungeonGravewyrmSanctum } from './music_theme_gravewyrm_sanctum';
-import {
-  AREA_TRACK_GROUP,
-  AREA_TRACK_URLS,
-  type AreaTrackId,
-  COMBAT_STREAM_URLS,
-  pickCombatTrackIndex,
-  REALM_RACERS_AREA_TRACKS,
-  ZONE_STREAM_URLS,
-} from './music_tracks';
+import { COMBAT_STREAM_URLS, pickCombatTrackIndex, ZONE_STREAM_URLS } from './music_tracks';
 import type { MusicZone } from './music_zones';
 
 export type { NoteEvent, Phrase, Theme } from './music_notes';
@@ -3460,10 +3453,6 @@ const STREAM_LEVEL = 0.5;
 // a zone picks its theme back up mid-phrase.
 const STREAM_PAUSE_AFTER_S = 4;
 const STREAM_KEEPER_MS = 500;
-// Same idea for the area file tracks, whose gain fades on a 0.5s time constant:
-// after 2.5s the outgoing track sits below 1% (under -40 dB), so pausing it then
-// is inaudible where pausing it mid-fade would clip the tail.
-const AREA_FADE_PAUSE_MS = 2500;
 
 export function buildMusicThemes(withOverrides = true): Record<string, Theme> {
   const composed: Record<string, Theme> = {
@@ -4328,13 +4317,6 @@ export class MusicDirector {
   // Boss-fight override: a looped file track routed through the same AudioContext
   // that user gestures already unlock for the procedural soundtrack.
   private bossActive = false;
-  // Area music (a Realm Racers circuit): looped mp3s that crossfade against
-  // each other and duck the procedural score while you stand there. Same
-  // file-track pattern as the boss loop; catalog in music_tracks.ts.
-  private areaEls: Partial<Record<AreaTrackId, HTMLAudioElement>> = {};
-  private areaGains: Partial<Record<AreaTrackId, GainNode>> = {};
-  private areaPauseTimer = 0;
-  private areaTrack: AreaTrackId | null = null;
 
   get enabled(): boolean {
     return this._enabled;
@@ -4347,10 +4329,7 @@ export class MusicDirector {
     return {
       enabled: this._enabled,
       menuPaused: this._menuPaused,
-      // A dedicated file track owns the mix, and an AREA track is one: a rally
-      // circuit ducks the procedural score exactly the way the boss loop does,
-      // so it rides the policy's one file-track flag (music_mix_policy.ts).
-      bossActive: this.bossActive || this.areaTrack !== null,
+      bossActive: this.bossActive || areaTrackLayerFor(this).areaTrack !== null,
       vol: this._vol,
     };
   }
@@ -4478,104 +4457,9 @@ export class MusicDirector {
     this.bossSource = null;
   }
 
-  /** Drive the area music: which dedicated file track owns the mix right now
-   *  (a circuit's own track on the rally band), null when the player is in none
-   *  of those places. Idempotent; the HUD calls it every frame. Crossfades
-   *  between the tracks and ducks the procedural score while active. */
+  /** Drive the area music (music_area_tracks.ts); the HUD calls it every frame. */
   setAreaTrack(track: AreaTrackId | null, restart = false): void {
-    const changed = track !== this.areaTrack;
-    if (track !== null && REALM_RACERS_AREA_TRACKS.has(track) && (changed || restart)) {
-      // Keep the downloaded element cached, but start each circuit visit and
-      // each new match from the top of the soundtrack.
-      this.ensureAreaElements(track);
-      const race = this.areaEls[track];
-      if (race) {
-        try {
-          race.currentTime = 0;
-        } catch {
-          /* browser may reject seeking before metadata */
-        }
-      }
-    }
-    if (track === this.areaTrack) {
-      this.applyAreaTracks();
-      return;
-    }
-    const enteringOrLeaving = (this.areaTrack === null) !== (track === null);
-    this.areaTrack = track;
-    this.applyAreaTracks();
-    if (this.ctx && this.master && enteringOrLeaving) {
-      this.master.gain.setTargetAtTime(
-        this.masterTarget(),
-        this.ctx.currentTime,
-        track ? 0.4 : 0.7,
-      );
-    }
-    // walking away from the area must revive paused streams now
-    if (enteringOrLeaving && track === null) this.streamKeeper();
-  }
-
-  // Create (and so start downloading) the tracks of the active track's place.
-  // Lazily and per group: an area soundtrack is minutes long, and the places
-  // are far apart, so nothing warms a track the player cannot hear next.
-  private ensureAreaElements(active: AreaTrackId): void {
-    if (!this.ctx || typeof Audio !== 'function') return;
-    for (const [id, url] of Object.entries(AREA_TRACK_URLS) as [AreaTrackId, string][]) {
-      if (AREA_TRACK_GROUP[id] !== AREA_TRACK_GROUP[active] || this.areaEls[id]) continue;
-      const el = new Audio(url);
-      el.loop = true;
-      el.preload = 'auto';
-      try {
-        const src = this.ctx?.createMediaElementSource(el);
-        const gain = this.areaGains[id];
-        if (src && gain) src.connect(gain);
-      } catch {
-        /* element already wired or unsupported */
-      }
-      this.areaEls[id] = el;
-    }
-  }
-
-  // Which area track should be audible right now: the selected one unless the
-  // toggle, the menu fade, or a zero volume has the whole mix down. Same rule
-  // as streamsAudible(), so a silenced track stops decoding rather than playing
-  // to nobody.
-  private audibleAreaTrack(): AreaTrackId | null {
-    return this._enabled && !this._menuPaused && this._vol > 0 ? this.areaTrack : null;
-  }
-
-  private applyAreaTracks(): void {
-    if (!this.ctx) return;
-    const playing = this.audibleAreaTrack();
-    const level = 0.5 * this._vol;
-    if (playing) {
-      resumeWhenAllowed(this.ctx);
-      this.ensureAreaElements(playing);
-      void this.areaEls[playing]?.play().catch(() => {});
-    }
-    for (const id of Object.keys(AREA_TRACK_URLS) as AreaTrackId[]) {
-      this.areaGains[id]?.gain.setTargetAtTime(
-        id === playing ? level : 0,
-        this.ctx.currentTime,
-        0.5,
-      );
-    }
-    // Let the gain fade finish, then pause whatever no longer owns the mix so it
-    // stops decoding and downloading (pausing it mid-fade would clip the tail).
-    // Re-checked inside the timeout: a quick re-entry may have handed the mix
-    // straight back before it fires.
-    const stale = (Object.keys(this.areaEls) as AreaTrackId[]).some(
-      (id) => id !== playing && this.areaEls[id]?.paused === false,
-    );
-    if (stale && this.areaPauseTimer === 0) {
-      this.areaPauseTimer = window.setTimeout(() => {
-        this.areaPauseTimer = 0;
-        const keep = this.audibleAreaTrack();
-        for (const id of Object.keys(this.areaEls) as AreaTrackId[]) {
-          if (id !== keep) this.areaEls[id]?.pause();
-        }
-      }, AREA_FADE_PAUSE_MS);
-    }
+    areaTrackLayerFor(this).setAreaTrack(track, restart);
   }
 
   /** Set music volume (0..1). Safe before init(); applied to the master gain. */
@@ -4585,7 +4469,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.2);
     }
     this.applyBossPlayback();
-    this.applyAreaTracks();
+    areaTrackLayerFor(this).applyAreaTracks();
     // leaving volume 0 must revive paused streams now, not a tick later
     if (this.streamsAudible()) this.streamKeeper();
   }
@@ -4615,12 +4499,7 @@ export class MusicDirector {
     this.bossGain = ctx.createGain();
     this.bossGain.gain.value = 0;
     this.bossGain.connect(compressor);
-    for (const id of Object.keys(AREA_TRACK_URLS) as AreaTrackId[]) {
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      gain.connect(compressor);
-      this.areaGains[id] = gain;
-    }
+    areaTrackLayerFor(this).wireGains(ctx, compressor);
 
     // Register both battle themes now (and warm their downloads whenever the
     // mix is audible, see streamKeeper): a fight can start at any moment and
@@ -4765,7 +4644,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.3);
     }
     this.applyBossPlayback();
-    this.applyAreaTracks();
+    areaTrackLayerFor(this).applyAreaTracks();
     // re-enabling must revive paused streams now, not a keeper tick later
     if (on) this.streamKeeper();
   }
@@ -4780,7 +4659,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
     }
     this.applyBossPlayback();
-    this.applyAreaTracks();
+    areaTrackLayerFor(this).applyAreaTracks();
   }
 
   /** Restore playback after closing the game menu. */
@@ -4793,7 +4672,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.35);
     }
     this.applyBossPlayback();
-    this.applyAreaTracks();
+    areaTrackLayerFor(this).applyAreaTracks();
     // closing the menu must revive paused streams now, not a keeper tick later
     this.streamKeeper();
   }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMusicThemes,
@@ -8,6 +9,7 @@ import {
   shouldResetMusicForDungeonEntry,
   THEME_TRIM,
 } from '../src/game/music';
+import { areaTrackLayerFor } from '../src/game/music_area_tracks';
 import { AREA_TRACK_URLS, COMBAT_STREAM_URLS, ZONE_STREAM_URLS } from '../src/game/music_tracks';
 import { RIFT_THEMES } from '../src/sim/content/rift/themes';
 import type { BiomeId } from '../src/sim/types';
@@ -422,7 +424,7 @@ describe('MusicDirector area file tracks', () => {
   });
 
   const areaEls = () =>
-    (director as unknown as { areaEls: Partial<Record<string, FakeAudio>> }).areaEls;
+    areaTrackLayerFor(director).areaEls as unknown as Partial<Record<string, FakeAudio>>;
 
   it('gives the race track the mix on the circuit and ducks the procedural score', () => {
     const master = (director as unknown as { master: FakeGain }).master;
@@ -474,7 +476,7 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('never fades two area tracks up at once', () => {
-    const gains = (director as unknown as { areaGains: Record<string, FakeGain> }).areaGains;
+    const gains = areaTrackLayerFor(director).areaGains as unknown as Record<string, FakeGain>;
     for (const track of ['realm_racers_evergarden', 'realm_racers_nightbloom', null] as const) {
       director.setAreaTrack(track);
       const up = Object.values(gains).filter((gain) => gain.gain.value > 0);
@@ -533,6 +535,27 @@ describe('MusicDirector area file tracks', () => {
     director.setAreaTrack('realm_racers_evergarden', true);
 
     expect(race.currentTime).toBe(0);
+  });
+});
+
+describe('the area-track layer host seam', () => {
+  it('stays welded to the private MusicDirector members it reads and its hooks', () => {
+    const source = readFileSync(new URL('../src/game/music.ts', import.meta.url), 'utf8');
+    for (const anchor of [
+      'private ctx: AudioContext | null = null;',
+      'private master: GainNode | null = null;',
+      'private _enabled = (() => {',
+      'private _vol = 1;',
+      'private _menuPaused = false;',
+      'private masterTarget(): number {',
+      'private streamKeeper(): void {',
+      'bossActive: this.bossActive || areaTrackLayerFor(this).areaTrack !== null,',
+      'areaTrackLayerFor(this).setAreaTrack(track, restart);',
+      'areaTrackLayerFor(this).wireGains(ctx, compressor);',
+    ]) {
+      expect(source, anchor).toContain(anchor);
+    }
+    expect(source.split('areaTrackLayerFor(this).applyAreaTracks();')).toHaveLength(5);
   });
 });
 

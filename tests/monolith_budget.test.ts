@@ -1915,7 +1915,8 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 4720). Exact count, zero slack.
-    ceiling: 4849,
+    // LOWERED 4849 -> 4728: the Realm Racers area-track layer moved to music_area_tracks.ts.
+    ceiling: 4728,
     seam: 'a src/game sibling module (the refactor/game-music split is the template)',
   },
   {
