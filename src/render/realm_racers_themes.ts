@@ -38,10 +38,11 @@ import type { FlowerKind } from './textures';
  * rect), so the only honest answer for a Farshore circuit is that same key, and
  * the biome under it (`vale`) is a different question.
  *
- * Deliberately narrower than `sky.ts`'s own `SkyKey`, which also carries the
- * Vale Cup's practice sky: a circuit may never fly the boarball dome, and a
- * union that could say so would be a knob nobody wants. It is a SUBSET of
- * `SkyKey`, so every consumer over there takes it unchanged.
+ * Spelled out rather than borrowed from `sky.ts`'s own `SkyKey`, which is the
+ * same union today: a place-keyed dome added there for another purpose (the
+ * retired Vale Cup's practice sky was one) must not become a circuit option by
+ * accident. It has to stay a SUBSET of `SkyKey`, so every consumer over there
+ * takes it unchanged.
  */
 export type RallySkyKey = BiomeId | 'farshore';
 
@@ -162,8 +163,9 @@ export interface RallyCircuitTheme {
 }
 
 /** The game's own race arch: `props.ts` already plants this exact model as the
- *  Highwatch show-jumping start gate, so a rally start line inherits a fixture
- *  the world has established rather than inventing one. */
+ *  start gate of the show-jumping course at the Galecrest Stables
+ *  (`MOUNT_RACE_COURSE`), so a rally start line inherits a fixture the world has
+ *  established rather than inventing one. */
 const COURSE_ARCH_URL = '/models/props/course_arch.glb';
 /** Reeds are reeds: every theme that plants a rim plants the same one, by
  *  design, and the suite holds the exemption open so it stays auditable rather
@@ -171,9 +173,9 @@ const COURSE_ARCH_URL = '/models/props/course_arch.glb';
 const REEDS_URL = '/models/props/reeds.glb';
 
 /**
- * The Evergarden: the theme both shipped circuits wear, and the one every
- * number here was measured on. It reproduces the pre-theme track build exactly,
- * which is what `tests/realm_racers_render.test.ts` pins.
+ * The Evergarden: the default theme, worn by the two garden circuits, and the
+ * one every number here was measured on. It reproduces the pre-theme track
+ * build exactly, which is what `tests/realm_racers_render.test.ts` pins.
  */
 const EVERGARDEN: RallyCircuitTheme = {
   ground: 'garden',
@@ -239,7 +241,7 @@ const EVERGARDEN: RallyCircuitTheme = {
     'hexWall',
   ],
   sky: {
-    // The Evergarden's OWN dome (`/env/evergarden_day_2k.hdr`), which is what a
+    // The Evergarden's OWN dome (`/env/evergarden_day_2k.ktx2`), which is what a
     // circuit wearing this zone's art should always have flown. It used to name
     // `vale` instead, to keep the shipped circuit lit byte for byte as it was
     // the day the theme seam was extracted; that was conservatism rather than a
@@ -262,9 +264,9 @@ const EVERGARDEN: RallyCircuitTheme = {
  * authored for real.
  *
  * Minimal on purpose: it re-skins what the Evergarden theme already covers, out
- * of kits the zone itself is built from (the coastal stone wall, the pine, the
- * Galecrest golden horse), and invents nothing that would need a seat pass of
- * its own to judge.
+ * of kits the zone itself is built from (the scalloped stone fence, the
+ * Wickharbor quarter, the Galecrest golden horse), and invents nothing that
+ * would need a seat pass of its own to judge.
  */
 const GALECREST: RallyCircuitTheme = {
   ground: 'gale',
@@ -306,11 +308,11 @@ const GALECREST: RallyCircuitTheme = {
     'reeds',
     // Wickharbor's own quarter and its working harbour: the blue colourway,
     // the moored fleet and the cargo on the quay, all keys `galecrest.ts`
-    // already places in the zone this theme wears. Three are aesthetic picks
-    // off the already-loaded registry instead: the coastal fence module (which
-    // this theme's own perimeter wall is built from, though no zone places it
-    // as a prop), the pier deck, and the rowboat, which belongs to Palmreach
-    // and is here because a harbour circuit wants a dinghy on the shingle.
+    // already places in the zone this theme wears, and the scalloped stone
+    // fence its own `stone` fence runs are drawn in. Two are aesthetic picks
+    // off the already-loaded registry instead: the pier deck, which no
+    // Galecrest dock places, and the rowboat, which Palmreach and Eastbrook
+    // moor and is here because a harbour circuit wants a dinghy on the shingle.
     'hexbHomeA',
     'hexbHomeB',
     'hexbTavern',
@@ -342,14 +344,17 @@ const GALECREST: RallyCircuitTheme = {
  * Galecrest proved the seam is general; it did not prove it is INTERESTING,
  * because a coastal down beside a walled garden is two greens. The Nightbloom
  * is the other end of the shipped world: a saturated violet meadow under the
- * dream sky, lit by giant fungus and amethyst rather than planted with beds,
- * and nothing about the circuit's geometry changes to get there.
+ * dream sky, lit by glowing growth rather than planted with beds, and nothing
+ * about the circuit's geometry changes to get there.
  *
- * Every size below is MEASURED rather than eyed, off the placements the zone
- * itself already makes (`src/sim/content/realm.ts` seats the giant mushroom at
- * scale 10 for a 1.9 yard radius and a 10 yard height, and the amethyst cluster
- * at scale 1 for 2.4 by 6), so a piece in the ring is the size the world draws
- * it at rather than a guess that would need its own seat pass.
+ * The glowing growth is BORROWED, and that is recorded rather than implied: the
+ * zone's own glow is procedural (the lumen blossoms of `night_features.ts`) and
+ * has no catalog piece, so the giant fungus and the amethyst are the Veiled
+ * Hollow's. Their sizes are MEASURED rather than eyed, off the placements that
+ * zone makes (`src/sim/content/realm.ts` seats the giant mushroom at scale 10
+ * for a 1.9 yard radius and a 10 yard height, and the amethyst cluster at
+ * scale 1 for 2.4 by 6), so a piece in the ring is the size the world draws it
+ * at rather than a guess that would need its own seat pass.
  */
 const NIGHTBLOOM: RallyCircuitTheme = {
   ground: 'night',
@@ -379,10 +384,10 @@ const NIGHTBLOOM: RallyCircuitTheme = {
   reedUrl: REEDS_URL,
   // Still water under a violet sky: dark to nearly black at depth, with a cold
   // moonlit shallow.
-  // The dream wood's own growth, plus the little civic furniture a night
-  // meadow carries. The four glowing kinds are the reason this list exists:
-  // they are what the deleted ring used to plant, and nothing else in the
-  // catalog looks remotely like them.
+  // The glowing growth, plus the little civic furniture a night meadow
+  // carries. The four glowing kinds are the reason this list exists: they are
+  // what the deleted ring used to plant, and nothing else in the catalog looks
+  // remotely like them (they are the Veiled Hollow's, see the header).
   props: [
     'lampNightbloomMoonflower',
     'giantMushroom',
@@ -400,9 +405,10 @@ const NIGHTBLOOM: RallyCircuitTheme = {
     // `realm.ts`: the pixie village, the crystal mound, the fallen star, the
     // stags' shrine and the dungeon stone its wall is built from. The last four
     // are aesthetic picks off the already-loaded registry: the dusk-violet
-    // houses (the zone raises those through `BuildingDef` kinds rather than as
-    // props) and the two small fungi, which no zone places at all but which are
-    // the only knee-high growth in the catalog.
+    // houses (the Hollow raises those through `BuildingDef` kinds rather than
+    // as props) and the two small fungi, the only knee-high growth in the
+    // catalog (the Hollow's flora scatters them, and props.ts builds the mud
+    // huts of three zones out of the red one).
     'pixieMushroomHouse',
     'crystalMoundCave',
     'starHeartCrystal',
@@ -427,8 +433,9 @@ const NIGHTBLOOM: RallyCircuitTheme = {
  * The zone's landmark set is the reason this record is short: `realm.ts` seats
  * the pixie village, the crystal mound, the fallen star and the stags' shrine
  * itself, so the vocabulary is the Hollow's own furniture rather than a
- * borrowed one. The four GLOWING kinds are deliberately absent: the Nightbloom
- * owns those, and a Hollow circuit lit by them would read as the dream wood.
+ * borrowed one. The four GLOWING kinds are deliberately absent although the
+ * Hollow places them itself (`realm.ts`): the Nightbloom theme leads with them,
+ * and a Hollow circuit lit by them would read as the dream wood.
  */
 const VEILED_HOLLOW: RallyCircuitTheme = {
   ground: 'dusk',
@@ -484,13 +491,13 @@ const VEILED_HOLLOW: RallyCircuitTheme = {
 };
 
 /**
- * Thornpeak Heights: bare mountain stone, and the one theme whose vocabulary
- * is already a racing fixture.
+ * Thornpeak Heights: bare mountain stone, and what a quarry road carries: ore,
+ * boulders, cut timber and crates.
  *
- * Highwatch runs the world's show-jumping course, so the vertical and the oxer
- * are the zone's OWN furniture and read instantly as a circuit rather than as
- * scenery that happens to be there. The rest is what a quarry road carries:
- * ore, boulders, cut timber and crates.
+ * The show-jumping fixtures are NOT here, though this record once led with
+ * them: the course they belong to left Highwatch for the Galecrest Stables
+ * (`MOUNT_RACE_COURSE`), so on a Thornpeak circuit they would be another zone's
+ * furniture.
  */
 const THORNPEAK: RallyCircuitTheme = {
   ground: 'peaks',
@@ -522,9 +529,6 @@ const THORNPEAK: RallyCircuitTheme = {
   reedUrl: REEDS_URL,
   props: [
     'lampThornpeakBeacon',
-    'jumpVertical',
-    'jumpOxer',
-    'courseArch',
     'oreRocks',
     'rockTallA',
     'rockTallH',
@@ -729,10 +733,12 @@ const WRAITHWOOD: RallyCircuitTheme = {
  * Eastbrook Vale: the starting valley, and the one circuit a new player would
  * recognise before they had raced anything.
  *
- * Deliberately the plainest record in the registry. Eastbrook is a working
- * farming village, so the vocabulary is its yard clutter and its buildings and
- * the wall is its own wooden rail, and nothing here reaches for a landmark:
- * the zone's identity is that it has none.
+ * The town is the rebuilt harbour village of `eastbrook_layout.ts`: the
+ * blue-roofed hexagon-kit homes, inn, bank, smithy and market round the hex
+ * chapel, a stone hut on the dock, the village's own wooden rail along the
+ * smithy yard and the market edge, and the clutter and churchyard a working
+ * town keeps. Its two landmarks, the town wall wing and the Realm Builder
+ * monument, are bespoke models the rally catalog does not carry.
  */
 const EASTBROOK: RallyCircuitTheme = {
   ground: 'vale',
@@ -763,22 +769,21 @@ const EASTBROOK: RallyCircuitTheme = {
   reedUrl: REEDS_URL,
   props: [
     'lampEastbrookCivic',
-    'well',
+    'hexbHomeA',
+    'hexbHomeB',
+    'hexbTavern',
+    'hexbTownhall',
+    'hexbWorkshop',
+    'hexbMarket',
+    'hexChurch',
+    'house3',
     'fence',
     'timberPillar',
-    'farmCrate',
     'crateWooden',
     'barrel',
-    'haybale',
     'bonfire',
-    'house1',
-    'house3',
-    'blacksmith',
-    'inn',
-    'bellTower',
     'graveRound',
     'bench',
-    'postLantern',
     'oak',
     'shrub',
   ],
@@ -792,14 +797,15 @@ const EASTBROOK: RallyCircuitTheme = {
  * Mirefen Marsh: peat, reeds and standing water under an overcast.
  *
  * The honest limitation, recorded because it is the only thing about this
- * record worth arguing with: the marsh delve's own dressing (the dead tree,
- * the sluice post, the corpse candle, the bell gallows) is NOT reachable from
- * here. Those models load on delve entry rather than at world entry, so
- * promoting them into the rally catalog would break the promise that a
- * circuit's scenery costs world entry nothing. The vocabulary below is what
- * the marsh reads as out of the already-loaded set: waterside planting, a
- * palisade, and the fen village's own timber. If a seat pass calls it thin,
- * the fix is a preload split for non-resident kits, not a change here.
+ * record worth arguing with: the marsh's own dressing is not in the rally
+ * catalog. The delve's pieces (the dead tree, the sluice post, the corpse
+ * candle, the bell gallows) DO load at world entry for every player
+ * (`delve_marsh_dressing.ts` registers them in the deferred lane), and so do
+ * Fenbridge's bespoke `fenbridge_*` buildings, but neither set is a
+ * `PROP_ASSET_DEFS` key, so reaching them is a registration of their own, not
+ * a change here. The vocabulary below is what the marsh reads as out of the
+ * catalog: waterside planting, clutter, and a palisade and timber picked for
+ * the look, since the zone itself lays no fence.
  */
 const MIREFEN: RallyCircuitTheme = {
   ground: 'marsh',
@@ -858,10 +864,11 @@ const MIREFEN: RallyCircuitTheme = {
 /**
  * The Willowfen: still green water, lily rafts and a living hedge.
  *
- * The only theme walled in something that GROWS. The Great Maze's hedge module
- * is a yard long and half a yard tall, so at scale 3 it runs just under three
- * yards and stands over one and a half, and the maze's own arch caps the
- * corners: a wetland circuit fenced in cut stone would read as anywhere else.
+ * Walled first in something that GROWS. The Great Maze's hedge module is a
+ * yard long and half a yard tall, so at scale 3 it runs just under three yards
+ * and stands over one and a half, and its runs overlap at a joint rather than
+ * taking a cap: a wetland circuit fenced in cut stone would read as anywhere
+ * else.
  */
 const WILLOWFEN: RallyCircuitTheme = {
   ground: 'fen',
@@ -919,12 +926,13 @@ const WILLOWFEN: RallyCircuitTheme = {
 };
 
 /**
- * The Palmreach: a tropical shore behind a log stockade.
+ * The Palmreach: a tropical shore behind rough timber.
  *
- * Shares the Nightbloom's palisade MODULE and nothing else about it: cut at
- * 3.2 rather than 2.5, so the logs stand three and a half yards rather than
- * two and three quarters, which is a stockade rather than a garden fence. The
- * repeat is deliberate and cheap; two log walls in one world is not a defect.
+ * The stockade this record was first written around is gone: it was the hex
+ * wall module at a larger scale, and that module is one kit (`stoneWall`) whose
+ * size a record sets. The zone itself lays no fence, so the paling, the log
+ * palisade and the timber posts offered here are picks for the look, and the
+ * shore's own pieces are its rowboats, its dock and its banyans.
  */
 const PALMREACH: RallyCircuitTheme = {
   ground: 'jungle',
@@ -997,11 +1005,13 @@ const PALMREACH: RallyCircuitTheme = {
  *    sand shore, `beach` is a fully-tabled paint-only biome, and it leaves the
  *    vale free for Eastbrook under the one-ground-per-theme rule.
  *
- * The 16 manifested `beach_*` models (the dock, the ship, the house, the
- * cannon) are NOT reachable from here: none is registered in the world's prop
- * catalog, so promoting one would cost every player a download at world entry.
- * The harbour vocabulary below is the already-loaded set's own, which is
- * Wickharbor's rather than the isle's.
+ * The isle's own models are NOT in the rally catalog: the manifested `beach_*`
+ * set (the dock, the ship, the house, the cannon, the palms) and the salvage
+ * quest's wreck kit (`farshore_shipwreck.ts`) sit outside `PROP_ASSET_DEFS`.
+ * The palms (fetched by `jungle_features.ts`) and the wreck kit do load at
+ * world entry for every player, so reaching them is a registration rather than
+ * a download; the rest would be a fetch of their own. The harbour vocabulary
+ * below is the catalog's, which is Wickharbor's rather than the isle's.
  */
 const FARSHORE: RallyCircuitTheme = {
   ground: 'beach',
@@ -1123,16 +1133,19 @@ const AMBERFALL: RallyCircuitTheme = {
  * The Frostveil Reach: the honest gap in this registry.
  *
  * NAMED rather than papered over, because the next person to open this file
- * should not spend an afternoon looking for what is missing: there is NO frost
- * asset anywhere in the world. No snowed model, no ice piece, no frost flower
- * card, and `GRASS_BIOME_DENSITY.frost` is zero, so the circuit's lawn is bare.
- * What carries the zone here is the ground and the air: a near-white surface
- * under the frost twilight dome, the coldest fog in the registry, and borrowed
- * castle masonry standing in for a wall nobody has carved.
+ * should not spend an afternoon looking for what is missing: the catalog holds
+ * no frost piece. The world has exactly one, the ice spire the Reach is planted
+ * with (`frostveil_ice_spire.glb`, `frost_ice_fields.ts`, fetched at world
+ * entry for every player), and it is not a `PROP_ASSET_DEFS` key. There is no
+ * snowed model and no frost flower card, and `GRASS_BIOME_DENSITY.frost` is
+ * zero, so the circuit's lawn is bare. What carries the zone here is the
+ * ground and the air: a near-white surface under the frost twilight dome, the
+ * coldest fog in the registry, and borrowed castle masonry standing in for a
+ * wall nobody has carved.
  *
- * If the seat verdict is that this is not good enough, the follow-up is an
- * asset job (the image-to-glb pipeline, a handful of snow-laden pieces), not a
- * theme job: there is nothing left to author out of what exists.
+ * If the seat verdict is that this is not good enough, the first follow-up is
+ * registering the spire (a catalog row, no new art); past that it is an asset
+ * job (the image-to-glb pipeline, a handful of snow-laden pieces).
  */
 const FROSTVEIL: RallyCircuitTheme = {
   ground: 'frost',
@@ -1282,7 +1295,7 @@ export const REALM_RACERS_THEME_ASSET_URLS: readonly string[] = [
  * So the lane is scoped to what is actually raced. The default theme is in it
  * unconditionally, because an unknown theme id falls back to it mid-build. A
  * theme with no circuit on it (the registry is meant to be written a zone ahead
- * of its circuit, and every one of these is) reaches the draw path through
+ * of its circuit, and all but the worn ones are) reaches the draw path through
  * `instanceModel`'s fetch-and-fill arm instead: one bounded fetch at circuit
  * build, on the dev routes that are the only way to see such a circuit today
  * (the editor's preview and `/dev rallydraft`).

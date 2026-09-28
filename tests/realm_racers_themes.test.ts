@@ -386,12 +386,13 @@ describe('Realm Racers circuit themes', () => {
     const themeIdForZone = (zoneId: string): string =>
       zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
     // ONE named exemption, and it is a fact about the place rather than a
-    // shortcut: the Proving Shore is the level 1 to 2 tutorial island the
-    // ferry takes a character off for good, so no circuit is ever drawn on
-    // it. It also carries the vale's own biome, and the unique-ground rule
-    // below forbids a second record painting the vale, so it could not have a
-    // theme of its own even if a circuit wanted one. Named here, exactly as
-    // the Farshore's two art exceptions are, rather than exempted quietly.
+    // shortcut: the Proving Shore is the level 1 to 2 tutorial island a
+    // character learns on and sails away from (its ferry bell only ever brings
+    // one back for a refresher), so no circuit is drawn on it. It also carries
+    // the vale's own biome, and the unique-ground rule below forbids a second
+    // record painting the vale, so it could not have a theme of its own even
+    // if a circuit wanted one. Named here, exactly as the Farshore's two art
+    // exceptions are, rather than exempted quietly.
     const RACEABLE_ZONES = ZONES.filter((zone) => zone.id !== 'proving_shore');
     expect(ZONES.length - RACEABLE_ZONES.length).toBe(1);
     expect(RACEABLE_ZONES.length).toBeGreaterThan(13);

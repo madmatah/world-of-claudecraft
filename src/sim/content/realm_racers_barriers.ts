@@ -92,7 +92,8 @@ export const REALM_RACERS_BARRIERS: Record<string, RallyBarrierDef> = {
   // city_fence_wood at 1.6: 3.30 long, 1.30 tall, 0.19 deep. A rough paling.
   woodPaling: { halfThickness: 0.09, height: 1.3 },
   // props/fence at 3: 2.37 long, 0.97 tall, 0.08 deep. The village rail the
-  // world runs along Eastbrook's paddocks, and barely knee high.
+  // world runs round the Galecrest Stables paddock and along Eastbrook's smithy
+  // yard and market edge, and barely knee high.
   paddockRail: { halfThickness: 0.03, height: 0.97 },
 
   // --- masonry ---

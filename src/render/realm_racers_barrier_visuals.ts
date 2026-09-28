@@ -146,8 +146,9 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     lengthAxis: 'x',
     corner: 'none',
   },
-  // The village rail the world runs along Eastbrook's paddocks. Its own timber
-  // post would stand three times the rail's height, so the joint overlaps.
+  // The village rail the world runs round the Galecrest Stables paddock and
+  // along Eastbrook's smithy yard. Its own timber post would stand three times
+  // the rail's height, so the joint overlaps.
   paddockRail: {
     panelUrl: VILLAGE_RAIL_URL,
     panelYards: 2.35,
