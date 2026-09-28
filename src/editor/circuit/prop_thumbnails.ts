@@ -28,10 +28,10 @@
 
 import * as THREE from 'three';
 import { loadGltf } from '../../render/assets/loader';
+import { whenIgnivarEnvPropsSettled } from '../../render/ignivar_env_props';
 import { REALM_RACERS_BARRIER_VISUALS } from '../../render/realm_racers_barrier_visuals';
 import {
   realmRacersDressingPart,
-  realmRacersDressingRoute,
   realmRacersWorldKitPart,
 } from '../../render/realm_racers_dressing_material';
 import { REALM_RACERS_PROP_VISUALS } from '../../render/realm_racers_prop_visuals';
@@ -57,12 +57,6 @@ const BACKDROP = 0x232733;
 /** A clone of a model, each part wearing what a circuit draws it with. The
  *  swapped geometry and material are shared caches, never ours to dispose. */
 function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
-  // A kit piece is the world's template, not the file; the file stands in
-  // only until the template has landed.
-  if (realmRacersDressingRoute(url) === 'worldKit') {
-    const template = realmRacersWorldKitPart(url);
-    return template ? new THREE.Mesh(template.geometry, template.material) : object;
-  }
   object.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -75,6 +69,18 @@ function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
     mesh.material = part.material;
   });
   return object;
+}
+
+/**
+ * A kit piece as a circuit draws it: the world's own env-prop template, never
+ * its file (the `worldKit` route). Waits for the templates' one load, which
+ * this page opens on its own, and gives no tile rather than a stand-in when
+ * the template is missing, since a tile is stored for good.
+ */
+async function worldKitModel(url: string): Promise<THREE.Mesh | null> {
+  await whenIgnivarEnvPropsSettled();
+  const template = realmRacersWorldKitPart(url);
+  return template ? new THREE.Mesh(template.geometry, template.material) : null;
 }
 
 export class PropThumbnailRig {
@@ -134,18 +140,22 @@ export class PropThumbnailRig {
    * the difference between a rail and a wall is mostly what it does repeated.
    * Three is enough to read as a run and cheap enough to photograph.
    *
-   * Every module is a clone of the loader's parsed scene, so its geometry and
+   * Every module is a clone of the loader's parsed scene, or a mesh of the
+   * world's own template for a kit drawn from one, so its geometry and
    * materials belong to that cache and are never disposed here.
    */
   private async barrierSubject(kit: string): Promise<THREE.Object3D | null> {
     const visual = REALM_RACERS_BARRIER_VISUALS[kit];
     if (!visual) return null;
     try {
-      const gltf = await loadGltf(visual.panelUrl);
+      const module = visual.worldTemplate
+        ? await worldKitModel(visual.panelUrl)
+        : dressed((await loadGltf(visual.panelUrl)).scene.clone(true), visual.panelUrl);
+      if (!module) return null;
       const row = new THREE.Group();
       const step = visual.panelYards / visual.scale;
       for (let i = -1; i <= 1; i++) {
-        const panel = dressed(gltf.scene.clone(true), visual.panelUrl);
+        const panel = module.clone();
         // Along the module's OWN length axis, so a kit authored on +z lays the
         // same row as one authored on +x rather than three pieces stacked
         // through each other.
@@ -180,6 +190,10 @@ export class PropThumbnailRig {
         object: new THREE.Mesh(visual.geometry(), visual.material()),
         owned: thumbnailOwnsGeometry('instanced'),
       };
+    }
+    if (visual.kind === 'worldKit') {
+      const object = await worldKitModel(visual.url);
+      return object ? { object, owned: thumbnailOwnsGeometry('worldKit') } : null;
     }
     try {
       // Both remaining kinds are a model on disk: a `streetlamp` is the world's

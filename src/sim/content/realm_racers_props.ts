@@ -31,12 +31,13 @@
 // download to world entry. Two other world lanes keep the same promise and are
 // the only others admitted: the env-prop templates (`ignivar_env_props.ts`) and
 // the ember zone's own set (`ember_prop_urls.ts`), both registered in that same
-// deferred lane when the renderer's modules load. A model that arrives on zone proximity or on
-// instance entry is a different promise, and `tests/realm_racers_props.test.ts`
-// fails on one. The RESIDENT half of that promise is the rally track builder's
-// business rather than this file's: it fetches a dressing model when a circuit
-// is actually built and keeps only what an authored circuit places, so a
-// catalog this wide costs nobody who never races anything at all.
+// deferred lane when the renderer's modules load. A model that arrives on zone
+// proximity or on instance entry is a different promise, and
+// `tests/realm_racers_props.test.ts` fails on one. The RESIDENT half of that
+// promise is the rally track builder's business rather than this file's: it
+// fetches a dressing model when a circuit is actually built and keeps only what
+// an authored circuit places, so a catalog this wide costs nobody who never
+// races anything at all.
 //
 // Kinds of already-loaded key that are deliberately still absent:
 //  - anything whose scale-1 box leaves the suite's envelope (height >= 20 or

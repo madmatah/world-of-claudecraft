@@ -151,6 +151,8 @@ export interface IgnivarEnvPropTemplate {
 
 const templates = new Map<IgnivarEnvPropKey, IgnivarEnvPropTemplate>();
 let loadTask: Promise<void> | null = null;
+/** Whether a full preparation has run to its end, whatever it could bake. */
+let settledOnce = false;
 
 /** Bake possibly-quantized attributes to plain float so the canonical
  *  transform below can write real-world coordinates (same trick as the
@@ -283,8 +285,22 @@ export function prepareIgnivarEnvProps(): Promise<void> {
     }),
   ).then(() => {
     loadTask = null;
+    settledOnce = true;
   });
   return loadTask;
+}
+
+/**
+ * Resolves once the templates have had their one load: the one in flight, or
+ * the first if none has run. Unlike `prepareIgnivarEnvProps`, it never starts a
+ * second load after a first has settled, so a consumer asking for a key whose
+ * file failed does not re-bake (and replace) every template the world is
+ * already drawing.
+ */
+export function whenIgnivarEnvPropsSettled(): Promise<void> {
+  if (loadTask) return loadTask;
+  if (settledOnce) return Promise.resolve();
+  return prepareIgnivarEnvProps();
 }
 
 if (typeof window !== 'undefined') {
@@ -294,6 +310,7 @@ if (typeof window !== 'undefined') {
 export function resetIgnivarEnvPropCaches(): void {
   templates.clear();
   loadTask = null;
+  settledOnce = false;
 }
 
 function propMatrix(placement: IgnivarPropPlacement): THREE.Matrix4 {
@@ -356,6 +373,12 @@ export function appendIgnivarEnvProps(
 
 export function ignivarEnvPropTemplateCount(): number {
   return templates.size;
+}
+
+/** Whether the world's instances of a key cast shadows (on every tier the
+ *  fortress and the Drakelands town are built at). */
+export function ignivarEnvPropCastsShadow(key: IgnivarEnvPropKey): boolean {
+  return SHADOW_CASTERS.has(key);
 }
 
 /** The baked template a key draws with, or null until its load has landed. */

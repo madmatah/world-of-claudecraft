@@ -53,6 +53,7 @@ import { attachBiomeHaze } from '../src/render/biome_haze_field';
 import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
 import { GFX_TIER_RANK, type GfxSettings, type GfxTier } from '../src/render/gfx';
 import {
+  ignivarEnvPropCastsShadow,
   ignivarEnvPropKeyOfUrl,
   ignivarEnvPropTemplate,
   prepareIgnivarEnvProps,
@@ -81,6 +82,7 @@ import {
   REALM_RACERS_PRACTICE_CIRCUIT,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
+import { FORGEFATHER_FORTRESS_PLACEMENTS } from '../src/sim/forgefather_fortress';
 
 afterAll(gfxProfileRestorer());
 
@@ -149,6 +151,22 @@ const RACE_ONLY_URLS = [
 ];
 
 type Draw = { object: THREE.Object3D; material: THREE.Material };
+
+/** The kit draws a Drakelands circuit makes: one per offered kit piece, one
+ *  per barrier module kind, and the url each instances. */
+function drakelandsKitDraws(): { urls: Set<string>; draws: number } {
+  const theme = CIRCUIT_THEMES.drakelands;
+  const urls: string[] = [];
+  for (const asset of theme.props) {
+    const visual = REALM_RACERS_PROP_VISUALS[asset];
+    if (visual.kind === 'worldKit') urls.push(visual.url);
+  }
+  for (const kit of theme.barriers) {
+    const visual = REALM_RACERS_BARRIER_VISUALS[kit];
+    urls.push(visual.panelUrl, ...(visual.corner === 'none' ? [] : [visual.corner.url]));
+  }
+  return { urls: new Set(urls), draws: urls.length };
+}
 
 /**
  * A Drakelands circuit: the garden's curve wearing the drakelands theme, with
@@ -394,23 +412,35 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
       const route = realmRacersDressingRoute(url);
       routes.set(route, [...(routes.get(route) ?? []), url]);
     }
-    // Every kit piece and both walls, through the template.
+    // Every kit piece and both walls, through the template: exactly the set
+    // the theme offers, one draw per piece and per barrier module.
+    const expected = drakelandsKitDraws();
     const kitUrls = routes.get('worldKit') ?? [];
-    expect(kitUrls.length).toBeGreaterThanOrEqual(18);
+    expect(new Set(kitUrls)).toEqual(expected.urls);
+    expect(kitUrls.reduce((n, url) => n + (byUrl.get(url)?.length ?? 0), 0)).toBe(expected.draws);
+    const placed = new Map<string, number>();
+    for (const placement of FORGEFATHER_FORTRESS_PLACEMENTS) {
+      placed.set(placement.key, (placed.get(placement.key) ?? 0) + 1);
+    }
     for (const url of kitUrls) {
       const key = ignivarEnvPropKeyOfUrl(url);
       const template = key ? ignivarEnvPropTemplate(key) : null;
       expect(template, url).not.toBeNull();
-      if (!template) continue;
+      if (!key || !template) continue;
       expect(realmRacersWorldKitPart(url)).toBe(template);
-      // The very objects the world instances, so the very program.
-      const world = new THREE.InstancedMesh(template.geometry, template.material, 1);
+      // The world draws the key INSTANCED (appendIgnivarEnvProps instances a
+      // key placed twice or more, on every tier the fortress is built at), so
+      // the circuit's instanced draw of the very same objects is its program.
+      expect(placed.get(key) ?? 0, `${url} is instanced by the world`).toBeGreaterThan(1);
+      const world = new THREE.InstancedMesh(template.geometry, template.material, 2);
       for (const { object, material } of byUrl.get(url) ?? []) {
         expect(material, url).toBe(template.material);
         expect((object as THREE.Mesh).geometry, url).toBe(template.geometry);
         expect(threeProgramKeys(material, object), url).toBe(
           threeProgramKeys(template.material, world),
         );
+        // ...and it casts where the world's instances cast, no more.
+        expect(object.castShadow, url).toBe(ignivarEnvPropCastsShadow(key));
       }
     }
     // The ember set wears its own raw materials, as ember_features draws it.

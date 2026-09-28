@@ -39,7 +39,11 @@ import { createStaticBladeCluster } from './blade_grass';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
-import { prepareIgnivarEnvProps } from './ignivar_env_props';
+import {
+  ignivarEnvPropCastsShadow,
+  ignivarEnvPropKeyOfUrl,
+  whenIgnivarEnvPropsSettled,
+} from './ignivar_env_props';
 import {
   biomeGroundTint,
   buildInstanceGroundMaterial,
@@ -301,9 +305,10 @@ function landFill(group: THREE.Group, draw: (target: THREE.Object3D) => void): v
  * the Drakelands rebuild kits): the circuit instances the template itself, so
  * it wears exactly the material the world's own instances link, and adds no
  * fetch or parse of its own. The templates load in the deferred lane at world
- * entry, so the wait arm below is for a host that has not opened it yet; it
- * rides the fill ledger like a fetch, so the race preparation gates only once
- * it has landed.
+ * entry, so the wait arm below is for a host that has not opened it yet, and
+ * it never starts a second load once one has settled; it rides the fill ledger
+ * like a fetch, so the race preparation gates only once it has landed. Shadow
+ * casting follows the world's own instances of the key.
  */
 function instanceWorldKit(group: THREE.Group, url: string, spots: readonly ModelSpot[]): void {
   if (realmRacersWorldKitPart(url)) {
@@ -311,7 +316,7 @@ function instanceWorldKit(group: THREE.Group, url: string, spots: readonly Model
     return;
   }
   if (typeof window === 'undefined') return;
-  const fill = prepareIgnivarEnvProps().then(() => {
+  const fill = whenIgnivarEnvPropsSettled().then(() => {
     if (realmRacersWorldKitPart(url)) landFill(group, (target) => drawWorldKit(target, url, spots));
     // Dev-channel English, per the render i18n carve-out.
     else console.warn('Realm Racers: world kit template missing', url);
@@ -336,7 +341,8 @@ function drawWorldKit(group: THREE.Object3D, url: string, spots: readonly ModelS
     mesh.setMatrixAt(i, m.compose(v, q, sc));
   });
   mesh.instanceMatrix.needsUpdate = true;
-  mesh.castShadow = true;
+  const key = ignivarEnvPropKeyOfUrl(url);
+  mesh.castShadow = key !== undefined && ignivarEnvPropCastsShadow(key);
   mesh.receiveShadow = true;
   mesh.computeBoundingSphere();
   mesh.userData.realmRacersDressing = true;

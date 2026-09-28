@@ -507,6 +507,10 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     const env = await import('../src/render/ignivar_env_props');
     const route = await import('../src/render/realm_racers_dressing_material');
     const { CIRCUIT_THEMES } = await import('../src/render/realm_racers_themes');
+    const { REALM_RACERS_PROP_VISUALS } = await import('../src/render/realm_racers_prop_visuals');
+    const { REALM_RACERS_BARRIER_VISUALS } = await import(
+      '../src/render/realm_racers_barrier_visuals'
+    );
     const registry = await import('../src/sim/realm_racers_draft_registry');
     const layout = await import('../src/sim/realm_racers_layout');
     const theme = CIRCUIT_THEMES.drakelands;
@@ -586,7 +590,14 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
         }
         kit++;
       }
-      expect(kit).toBeGreaterThanOrEqual(18);
+      // One draw per offered kit piece and per barrier module kind, none lost.
+      const expectedKit =
+        theme.props.filter((asset) => REALM_RACERS_PROP_VISUALS[asset].kind === 'worldKit').length +
+        theme.barriers.reduce(
+          (n, kitId) => n + (REALM_RACERS_BARRIER_VISUALS[kitId].corner === 'none' ? 1 : 2),
+          0,
+        );
+      expect(kit).toBe(expectedKit);
       // Through the countdown and the start on its own lane: every program the
       // view draws, the lit start lights included, was under the gate.
       const origin = layout.realmRacersLaneOrigin(layout.realmRacersPublicLane(circuit));
@@ -610,6 +621,53 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       expect([...drawn].filter((key) => !calls[0].keys.has(key))).toEqual([]);
     } finally {
       registry.clearRealmRacersDraftCircuits();
+    }
+  });
+
+  it('lands a kit fill whose template never bakes, draws the rest, and never loads the kit twice', async () => {
+    loaderControl.deferred = true;
+    vi.resetModules();
+    const fresh = await import('../src/render/realm_racers_track');
+    const { realmRacersFills: freshFills } = await import('../src/render/realm_racers_fills');
+    const env = await import('../src/render/ignivar_env_props');
+    const failing = env.IGNIVAR_ENV_PROP_URLS.dragon_statue;
+    const circuit: RealmRacersCircuit = {
+      ...REALM_RACERS_CIRCUIT_LIST[0],
+      id: 'drakelands_missing_kit_probe',
+      theme: 'drakelands',
+      props: [
+        { asset: 'dkDragonStatue', at: { x: -260, z: 120 }, scale: 4 },
+        { asset: 'dkChurch', at: { x: -230, z: 120 }, scale: 10 },
+      ],
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const view = fresh.buildRealmRacersTrack(circuit);
+      const fills = freshFills(view.group);
+      for (let round = 0; round < 8 && loaderControl.pending.length > 0; round++) {
+        for (const fill of loaderControl.pending.splice(0)) {
+          if (fill.url === failing) fill.reject();
+          else fill.resolve();
+        }
+        await flush();
+      }
+      await fills.landed();
+      expect(fills.done).toBe(fills.total);
+      const drawn = new Set<string>();
+      view.group.traverse((object) => {
+        if (object.userData.realmRacersDressing) drawn.add(object.name);
+      });
+      expect(drawn.has(`realm-racers-dressing:${env.IGNIVAR_ENV_PROP_URLS.church}`)).toBe(true);
+      expect(drawn.has(`realm-racers-dressing:${failing}`)).toBe(false);
+      // The wait arm never starts a second load after the first has settled,
+      // however many builds ask for the missing piece.
+      const calls = loaderControl.calls.filter((url) => url === failing).length;
+      fresh.buildRealmRacersTrack({ ...circuit, id: 'drakelands_missing_kit_probe_2' });
+      await flush();
+      expect(loaderControl.calls.filter((url) => url === failing).length).toBe(calls);
+      expect(loaderControl.pending).toEqual([]);
+    } finally {
+      warn.mockRestore();
     }
   });
 

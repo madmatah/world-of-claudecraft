@@ -15,6 +15,8 @@ import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
 import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
 import { ignivarEnvPropKeyOfUrl } from '../src/render/ignivar_env_props';
+import { PROP_ASSET_DEFS } from '../src/render/props';
+import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
 import {
   REALM_RACERS_BARRIER_BOOT_URLS,
   REALM_RACERS_BARRIER_VISUALS,
@@ -641,6 +643,17 @@ describe('Realm Racers circuit themes', () => {
       z >= DRAKELANDS_ZONE.zMin &&
       z <= DRAKELANDS_ZONE.zMax;
     const decorKeys = new Set((DRAKELANDS_PROPS.decorProps ?? []).map((prop) => prop.key));
+    // The props.ts builder a ZonePropsDef list feeds, read off its own section
+    // of `buildProps`, so a builder that changed its model fails the evidence.
+    const propsSource = readFileSync(new URL('../src/render/props.ts', import.meta.url), 'utf8');
+    const builderPlaces = (section: string, key: string): boolean => {
+      const start = propsSource.indexOf(`  // ---- ${section}`);
+      const end = propsSource.indexOf('  // ---- ', start + 1);
+      return start >= 0 && propsSource.slice(start, end).includes(`'${key}'`);
+    };
+    const stationUrls = VEHICLE_STATIONS.filter((station) => inZone(station.x, station.z)).map(
+      (station) => questObjectPreloadInternalsForTest.questObjectUrl[station.id],
+    );
     /** The catalog pieces the zone places itself, each with WHERE it does. */
     const PLACED_BY_THE_ZONE: Record<string, () => boolean> = {
       lampDrakelandsBrazier: () => STREETLAMP_STYLE_BY_ZONE.drakelands === 'drakelands_brazier',
@@ -650,17 +663,23 @@ describe('Realm Racers circuit themes', () => {
       kcasCratesStacked: () => decorKeys.has('kcasCratesStacked'),
       hexCrateBig: () => decorKeys.has('hexCrateBig'),
       hexSack: () => decorKeys.has('hexSack'),
-      // The stations themselves stand the same hex cannon (quest_objects.ts).
-      hexCannon: () => VEHICLE_STATIONS.some((station) => inZone(station.x, station.z)),
+      // The stations themselves stand the very hex cannon model.
+      hexCannon: () =>
+        stationUrls.length > 0 && stationUrls.every((url) => url === PROP_ASSET_DEFS.hexCannon.url),
       // The four ruin rings, their columns and their relic hearts.
-      column: () => DRAKELANDS_PROPS.ruinRings.length > 0,
-      columnBroken: () => DRAKELANDS_PROPS.ruinRings.length > 0,
-      statueHead: () => DRAKELANDS_PROPS.ruinRings.length > 0,
-      statueBlock: () => DRAKELANDS_PROPS.ruinRings.length > 0,
-      graveRound: () => DRAKELANDS_PROPS.graveyards.length > 0,
-      graveCross: () => DRAKELANDS_PROPS.graveyards.length > 0,
-      well: () => DRAKELANDS_PROPS.wells.length > 0,
-      bonfire: () => DRAKELANDS_PROPS.campfires.length > 0,
+      column: () => DRAKELANDS_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'column'),
+      columnBroken: () =>
+        DRAKELANDS_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'columnBroken'),
+      statueHead: () =>
+        DRAKELANDS_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'statueHead'),
+      statueBlock: () =>
+        DRAKELANDS_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'statueBlock'),
+      graveRound: () =>
+        DRAKELANDS_PROPS.graveyards.length > 0 && builderPlaces('graveyards', 'graveRound'),
+      graveCross: () =>
+        DRAKELANDS_PROPS.graveyards.length > 0 && builderPlaces('graveyards', 'graveCross'),
+      well: () => DRAKELANDS_PROPS.wells.length > 0 && builderPlaces('wells', 'well'),
+      bonfire: () => DRAKELANDS_PROPS.campfires.length > 0 && builderPlaces('campfires', 'bonfire'),
     };
     const worldKitKeys = new Set<string>(
       FORGEFATHER_FORTRESS_PLACEMENTS.map((placement) => placement.key),

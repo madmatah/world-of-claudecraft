@@ -9,10 +9,11 @@
 // Every entry but the two Drakelands kits is one of the fourteen kit
 // configurations the THEME registry used to carry as its `perimeter` field,
 // promoted verbatim along with the reasoning each one was chosen for; those two
-// were added from the zone as the world builds it today. That field dressed a DERIVED rectangle: one kit, four
-// straight faces, four right angles, which is what made every circuit read as a
-// box however different its road was. Nothing draws that box any more, so these
-// are what an operator reaches for instead.
+// were added from the zone as the world builds it today. That field dressed a
+// DERIVED rectangle: one kit, four straight faces, four right angles, which is
+// what made every circuit read as a box however different its road was.
+// Nothing draws that box any more, so these are what an operator reaches for
+// instead.
 //
 // URLS ARE WRITTEN OUT, which is the KIT convention rather than the dressing
 // one, and the difference is worth stating because the two rules look
@@ -69,7 +70,6 @@ import {
   type RealmRacersCircuit,
 } from '../sim/content/realm_racers_circuits';
 import { GARDEN_MAZE_WALL_URL } from './garden_maze_core';
-import { IGNIVAR_ENV_PROP_URLS, ignivarEnvPropKeyOfUrl } from './ignivar_env_props';
 
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
 const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
@@ -84,9 +84,9 @@ const CRACKED_WALL_URL = '/models/dungeon/wall_cracked.glb';
 const MOUNTAIN_WALL_URL = '/models/biome/dungeon_wall_stone.glb';
 const BATTLEMENT_URL = '/models/biome/kcas_barrier.glb';
 const CURTAIN_WALL_URL = '/models/biome/kcas_wall.glb';
-const FORTRESS_WALL_URL = IGNIVAR_ENV_PROP_URLS.fortress_wall;
-const FORTRESS_TOWER_URL = IGNIVAR_ENV_PROP_URLS.tower_pillar;
-const KEEP_FENCE_URL = IGNIVAR_ENV_PROP_URLS.fence;
+const FORTRESS_WALL_URL = '/models/dungeon/ignivar_prop_fortress_wall.glb';
+const FORTRESS_TOWER_URL = '/models/dungeon/ignivar_prop_tower_pillar.glb';
+const KEEP_FENCE_URL = '/models/drakelands_kit/fence.glb';
 
 export interface RallyBarrierVisual {
   panelUrl: string;
@@ -106,6 +106,13 @@ export interface RallyBarrierVisual {
    * pillar, which is what the first seat test of the corner rework showed.
    */
   corner: { url: string; yards: number } | 'none';
+  /**
+   * Drawn from the world's own env-prop templates (the `worldKit` dressing
+   * route, realm_racers_dressing_material.ts) rather than from its files, which
+   * are resident from world entry: the boot lane never parses such a kit.
+   * `tests/realm_racers_barriers.test.ts` holds the flag to the route.
+   */
+  worldTemplate?: true;
 }
 
 export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = {
@@ -230,6 +237,7 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     scale: 5,
     lengthAxis: 'x',
     corner: { url: FORTRESS_TOWER_URL, yards: 2.6 },
+    worldTemplate: true,
   },
 
   // --- the Drakelands rebuild kit ---
@@ -241,6 +249,7 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     scale: 5,
     lengthAxis: 'x',
     corner: 'none',
+    worldTemplate: true,
   },
 };
 
@@ -289,9 +298,8 @@ export function realmRacersBarrierBootUrls(
       circuits
         .flatMap((circuit) => circuit.fences ?? [])
         .map((fence) => REALM_RACERS_BARRIER_VISUALS[fence.kit])
-        .filter((visual): visual is RallyBarrierVisual => Boolean(visual))
-        .flatMap(kitUrls)
-        .filter((url) => ignivarEnvPropKeyOfUrl(url) === undefined),
+        .filter((visual): visual is RallyBarrierVisual => Boolean(visual) && !visual.worldTemplate)
+        .flatMap(kitUrls),
     ),
   ];
 }

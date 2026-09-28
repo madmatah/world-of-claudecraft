@@ -12,6 +12,7 @@ import {
   REALM_RACERS_BARRIER_VISUALS,
   realmRacersBarrierBootUrls,
 } from '../src/render/realm_racers_barrier_visuals';
+import { realmRacersDressingRoute } from '../src/render/realm_racers_dressing_material';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import { rallyFencePieces } from '../src/render/realm_racers_track_core';
 import {
@@ -273,6 +274,22 @@ describe('the barrier kit catalog', () => {
     expect(REALM_RACERS_BARRIER_BOOT_URLS.length).toBeLessThan(
       REALM_RACERS_BARRIER_ASSET_URLS.length,
     );
+  });
+
+  it('flags exactly the kits the dressing draws from the world templates', () => {
+    // The boot lane reads the flag rather than the route, so the barrier
+    // catalog stays Three-free; this is what keeps the two from disagreeing.
+    let flagged = 0;
+    for (const [kit, visual] of Object.entries(REALM_RACERS_BARRIER_VISUALS)) {
+      const urls = [visual.panelUrl, ...(visual.corner === 'none' ? [] : [visual.corner.url])];
+      for (const url of urls) {
+        expect(realmRacersDressingRoute(url) === 'worldKit', `${kit} ${url}`).toBe(
+          visual.worldTemplate === true,
+        );
+      }
+      if (visual.worldTemplate) flagged++;
+    }
+    expect(flagged).toBe(2);
   });
 
   it('keeps a kit drawn from the world templates out of the boot lane, whoever authors it', () => {

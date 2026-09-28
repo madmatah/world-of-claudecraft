@@ -28,10 +28,10 @@
 // keep fence came later, from the zone's own kits). Three of them drew ONE
 // model: the world ships `hex_wall.glb` and `hexn_palisade.glb` as separate
 // files whose binary chunks are byte for byte identical, and the registry
-// described them as a town wall and a log palisade. Two kits differing only in `scale` are not two
-// kits, because a scale is a field on the record. A fourteenth was dropped for a
-// different reason, recorded in the render half: its module is authored a whole
-// unit off its own origin.
+// described them as a town wall and a log palisade. Two kits differing only in
+// `scale` are not two kits, because a scale is a field on the record. A
+// fourteenth was dropped for a different reason, recorded in the render half:
+// its module is authored a whole unit off its own origin.
 //
 // THE NUMBERS ARE THE KIT AS DRAWN, not the GLB at scale 1, and that is the one
 // convention worth stating plainly. A kit IS a model-and-scale pairing (the
