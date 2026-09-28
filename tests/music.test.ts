@@ -454,6 +454,12 @@ describe('MusicDirector area file tracks', () => {
       'realm_racers_evergarden',
       'realm_racers_nightbloom',
     ]);
+    director.setAreaTrack('realm_racers_drakelands');
+    expect(Object.keys(areaEls()).sort()).toEqual([
+      'realm_racers_drakelands',
+      'realm_racers_evergarden',
+      'realm_racers_nightbloom',
+    ]);
   });
 
   it('hands the mix back to the zone streams when the player leaves', () => {
@@ -477,7 +483,12 @@ describe('MusicDirector area file tracks', () => {
 
   it('never fades two area tracks up at once', () => {
     const gains = areaTrackLayerFor(director).areaGains as unknown as Record<string, FakeGain>;
-    for (const track of ['realm_racers_evergarden', 'realm_racers_nightbloom', null] as const) {
+    for (const track of [
+      'realm_racers_evergarden',
+      'realm_racers_nightbloom',
+      'realm_racers_drakelands',
+      null,
+    ] as const) {
       director.setAreaTrack(track);
       const up = Object.values(gains).filter((gain) => gain.gain.value > 0);
       expect(up).toHaveLength(track === null ? 0 : 1);

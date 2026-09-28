@@ -46,7 +46,11 @@ describe('remastered soundtrack catalog', () => {
   });
 
   it('ships every area file track at the top level of public/audio', () => {
-    const ids: AreaTrackId[] = ['realm_racers_evergarden', 'realm_racers_nightbloom'];
+    const ids: AreaTrackId[] = [
+      'realm_racers_evergarden',
+      'realm_racers_nightbloom',
+      'realm_racers_drakelands',
+    ];
     expect(Object.keys(AREA_TRACK_URLS).sort()).toEqual([...ids].sort());
     for (const [id, url] of Object.entries(AREA_TRACK_URLS)) {
       expect(url, `area track '${id}'`).toMatch(/^\/audio\/[a-z0-9-]+\.mp3$/);
@@ -65,6 +69,10 @@ describe('remastered soundtrack catalog', () => {
       realm_racers_nightbloom: [
         '/audio/realm-racers-nightbloom.mp3',
         '7b4a78114dd129db9a7744c4f897229365fbab8c49aa2f0a88867d5ee2e24423',
+      ],
+      realm_racers_drakelands: [
+        '/audio/realm-racers-drakelands.mp3',
+        '4c336156b8a8f5f2dc839e6ec26486a8d6b68a9939d6506ccbefa68769785132',
       ],
     } as const;
     for (const [id, [url, expected]] of Object.entries(supplied)) {
