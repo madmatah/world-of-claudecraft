@@ -128,3 +128,32 @@ export function rallyGhostMayClear(input: RallyGhostClearInput): boolean {
   if (input.tick >= input.capTick) return true;
   return input.tick >= input.earliestClearTick && !input.overlapping;
 }
+
+/**
+ * Does a contact the contact pass resolved count as RIVAL contact (the
+ * clean-race deed's flag)? Not between a pair still PARTING: one of them is a
+ * ghost that ended inside the other (only the cap ends one there), and the push
+ * that separates them is the race's doing, not a pilot's. Each list holds the
+ * machines that pilot's ghost ended inside; a contact with anyone else counts.
+ */
+export function rallyContactCounts(
+  aPid: number,
+  aParting: readonly number[] | undefined,
+  bPid: number,
+  bParting: readonly number[] | undefined,
+): boolean {
+  return !aParting?.includes(bPid) && !bParting?.includes(aPid);
+}
+
+/**
+ * Keep only the partners a machine still meets this tick (`stillMeeting`, the
+ * ghost's own swept hull test). One tick apart ends a parting for good, so the
+ * next contact between that pair counts like any other. In place.
+ */
+export function rallyKeepParting(partners: number[], stillMeeting: (pid: number) => boolean): void {
+  let kept = 0;
+  for (let i = 0; i < partners.length; i++) {
+    if (stillMeeting(partners[i])) partners[kept++] = partners[i];
+  }
+  partners.length = kept;
+}

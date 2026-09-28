@@ -43,9 +43,11 @@ import type { RallyDriverTier } from '../realm_racers_driver';
 import {
   REALM_RACERS_GHOST_AURA,
   REALM_RACERS_GHOST_AURA_NAME,
+  rallyContactCounts,
   rallyGhostMayClear,
   rallyGhostWindow,
   rallyHullsMeetInTick,
+  rallyKeepParting,
   realmRacersGhosted,
 } from '../realm_racers_ghost';
 import {
@@ -311,6 +313,7 @@ function applyRealmRacersGhost(
   const ghostWindow = rallyGhostWindow(ctx.tickCount, progress.resetLockedUntilTick);
   progress.ghostClearTick = ghostWindow.earliestClearTick;
   progress.ghostCapTick = ghostWindow.capTick;
+  progress.ghostPartingPids.length = 0;
   if (realmRacersGhosted(racer)) return;
   racer.auras.push({
     id: REALM_RACERS_GHOST_AURA,
@@ -327,11 +330,12 @@ function applyRealmRacersGhost(
 }
 
 /** End a ghost, if there is one, as silently as it began (in place, the way
- *  the ward is spent). */
+ *  the ward is spent), and any parting a previous one left. */
 function clearRealmRacersGhost(racer: Entity, progress: RealmRacersProgress | undefined): void {
   if (progress) {
     progress.ghostClearTick = 0;
     progress.ghostCapTick = 0;
+    progress.ghostPartingPids.length = 0;
   }
   const index = racer.auras.findIndex((aura) => aura.id === REALM_RACERS_GHOST_AURA);
   if (index >= 0) racer.auras.splice(index, 1);
@@ -495,6 +499,11 @@ export interface RealmRacersProgress {
    *  it is one; these only time it. */
   ghostClearTick: number;
   ghostCapTick: number;
+  /** The machines this one's ghost ended INSIDE (its cap ran out on an
+   *  overlap), each dropped the first tick the pair is apart. Their contacts
+   *  with this machine until then never count as rival contact
+   *  (`rallyContactCounts`). Empty otherwise. */
+  ghostPartingPids: number[];
   /** Tick the current lap began (reset to GO, and to every later lap wrap).
    *  Feeds the fast-lap deed; nothing else reads it. */
   lapStartTick: number;
@@ -1151,6 +1160,7 @@ function startMatch(
           groundBlastShockUntilTick: 0,
           ghostClearTick: 0,
           ghostCapTick: 0,
+          ghostPartingPids: [],
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
           hadRivalContact: false,
@@ -1393,6 +1403,9 @@ function returnRacer(ctx: SimContext, match: RealmRacersMatch, pid: number): voi
   progress.returned = true;
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
+  // The ghost and its partings are this race's to time, and the race no longer
+  // holds this pilot: none of it may follow them into the next one.
+  if (e) clearRealmRacersGhost(e, progress);
   if (meta && e) restoreRacer(ctx, match, meta, e);
 }
 
@@ -1787,8 +1800,10 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
  * on the grid, over the tick's whole motion; or whose cap has run out. Runs right before the contact
  * pass, so a ghost that ends here is solid for that same pass, and one that
  * stays is skipped by it. Clear means clear of the SAME set the contact pass
- * resolves (any seated, living machine), over the same hull circles. Draws no
- * rng.
+ * resolves (any seated, living machine), over the same hull circles. A ghost
+ * the cap ends inside a rival leaves the pair PARTING, and this pass ends each
+ * parting the first tick its pair is apart, again before the contact pass reads
+ * it. Draws no rng.
  */
 function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
@@ -1796,18 +1811,27 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
     const progress = match.progress.get(pid);
     // A returned pilot is no longer this race's: a ghost they carry now was
     // made by the race seating them since, and only its progress can time it.
-    if (!racer || !progress || progress.returned || !realmRacersGhosted(racer)) continue;
-    let overlapping = false;
-    if (racer.drive) {
-      const hull = contactBodyFor(racer, racer.drive);
+    if (!racer || !progress || progress.returned) continue;
+    const drive = racer.drive;
+    if (progress.ghostPartingPids.length > 0) {
+      if (drive) {
+        const hull = contactBodyFor(racer, drive);
+        rallyKeepParting(progress.ghostPartingPids, (otherPid) =>
+          hullMeetsMachine(ctx, hull, otherPid),
+        );
+      } else {
+        progress.ghostPartingPids.length = 0;
+      }
+    }
+    if (!realmRacersGhosted(racer)) continue;
+    let inside: number[] | null = null;
+    if (drive) {
+      const hull = contactBodyFor(racer, drive);
       // Returned pilots stay in this set: the contact pass still pairs them.
       for (const otherPid of match.pids) {
-        if (otherPid === pid) continue;
-        const other = ctx.entities.get(otherPid);
-        if (!other?.drive || other.dead) continue;
-        if (rallyHullsMeetInTick(hull, contactBodyFor(other, other.drive))) {
-          overlapping = true;
-          break;
+        if (otherPid !== pid && hullMeetsMachine(ctx, hull, otherPid)) {
+          if (inside === null) inside = [];
+          inside.push(otherPid);
         }
       }
     }
@@ -1816,12 +1840,22 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
         tick: ctx.tickCount,
         earliestClearTick: progress.ghostClearTick,
         capTick: progress.ghostCapTick,
-        overlapping,
+        overlapping: inside !== null,
       })
     ) {
       clearRealmRacersGhost(racer, progress);
+      if (inside) progress.ghostPartingPids.push(...inside);
     }
   }
+}
+
+/** Does another machine on the grid meet this hull at any point of the tick?
+ *  The same machines, and the same circles, the contact pass resolves. */
+function hullMeetsMachine(ctx: SimContext, hull: SweptContactBody, otherPid: number): boolean {
+  const other = ctx.entities.get(otherPid);
+  return (
+    !!other?.drive && !other.dead && rallyHullsMeetInTick(hull, contactBodyFor(other, other.drive))
+  );
 }
 
 /**
@@ -1869,11 +1903,18 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       // BOTH cars, not just the one that gets the announce credit. Gated on
       // still racing: a pilot who already crossed the line clean keeps that
       // outcome through the post-finish tableau, a rival's business no
-      // longer touches theirs.
+      // longer touches theirs. A pair still parting from a ghost the cap
+      // ended inside the other is being separated by the race, not racing.
       const progressA = match.progress.get(match.pids[i]);
       const progressB = match.progress.get(match.pids[j]);
-      if (progressA?.finishedTick === null) progressA.hadRivalContact = true;
-      if (progressB?.finishedTick === null) progressB.hadRivalContact = true;
+      const counts = rallyContactCounts(
+        match.pids[i],
+        progressA?.ghostPartingPids,
+        match.pids[j],
+        progressB?.ghostPartingPids,
+      );
+      if (counts && progressA?.finishedTick === null) progressA.hadRivalContact = true;
+      if (counts && progressB?.finishedTick === null) progressB.hadRivalContact = true;
       const pair = i * match.pids.length + j;
       const last = match.bumpTicks.get(pair);
       if (last !== undefined && ctx.tickCount - last < REALM_RACERS_BUMP_EVENT_TICKS) continue;
