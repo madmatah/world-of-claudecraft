@@ -329,6 +329,11 @@ const GALECREST: RallyCircuitTheme = {
     'hexSack',
     'dockPlatform',
     'rowboat',
+    // The show-jumping course of the Galecrest Stables (`MOUNT_RACE_COURSE`),
+    // the zone's own racing furniture: a second gate mid-lap, and the jumps.
+    'courseArch',
+    'jumpVertical',
+    'jumpOxer',
   ],
   water: { shallow: 0x3f7f92, deep: 0x123043 },
   sky: {
@@ -496,8 +501,7 @@ const VEILED_HOLLOW: RallyCircuitTheme = {
  *
  * The show-jumping fixtures are NOT here, though this record once led with
  * them: the course they belong to left Highwatch for the Galecrest Stables
- * (`MOUNT_RACE_COURSE`), so on a Thornpeak circuit they would be another zone's
- * furniture.
+ * (`MOUNT_RACE_COURSE`), so they are the Galecrest theme's now.
  */
 const THORNPEAK: RallyCircuitTheme = {
   ground: 'peaks',
