@@ -775,6 +775,45 @@ describe('the ward', () => {
     expect(progress.groundBlastShockUntilTick).toBe(0);
   });
 
+  it('comes off on every way out of a race: forfeit, disconnect and the flag', () => {
+    const { sim, pids } = racingGrid();
+    const [a, b, c, d] = pids;
+    const [boxB, boxC, boxD] = spreadBoxes();
+    takeWithEffect(sim, b, boxB, 'ward');
+    for (let i = 0; i < 21; i++) sim.tick();
+    takeWithEffect(sim, c, boxC, 'ward');
+    for (let i = 0; i < 21; i++) sim.tick();
+    takeWithEffect(sim, d, boxD, 'ward');
+    for (const pid of [b, c, d]) expect(wardedOf(sim, pid), `premise ${pid}`).toBe(true);
+    const live = match(sim);
+
+    // Forfeit: the quitter keeps their machine for the tableau, but not the
+    // ward, which every rival would otherwise see as a live gold veil.
+    realmRacersForfeit(sim.ctx, b);
+    expect(progressOf(sim, b).retiredTick).not.toBeNull();
+    expect(progressOf(sim, b).returned).toBe(false);
+    expect(wardedOf(sim, b)).toBe(false);
+    // The fade the buff bar listens for rides out with the next tick.
+    expect(sim.tick()).toContainEqual(
+      expect.objectContaining({ type: 'aura', targetId: b, gained: false }),
+    );
+
+    // Disconnect: restored on the spot, ward and all.
+    realmRacersForfeit(sim.ctx, c, true);
+    expect(progressOf(sim, c).returned).toBe(true);
+    expect(wardedOf(sim, c)).toBe(false);
+
+    // The flag: `a` quits too, which leaves `d` the lone runner and decides
+    // the race with d still on the circuit and still warded.
+    expect(live.phase).toBe('racing');
+    expect(wardedOf(sim, d)).toBe(true);
+    realmRacersForfeit(sim.ctx, a);
+    expect(live.phase).toBe('finished');
+    expect(progressOf(sim, d).returned).toBe(false);
+    expect(progressOf(sim, d).retiredTick).toBeNull();
+    expect(wardedOf(sim, d)).toBe(false);
+  });
+
   it('is swept off the circuit with the flag, along with the oil', () => {
     const { sim, pids } = racingGrid();
     const [a, b, c, d] = pids;

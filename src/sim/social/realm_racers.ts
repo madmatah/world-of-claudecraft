@@ -1354,7 +1354,12 @@ function retireRacer(
   }
   progress.retiredTick = ctx.tickCount;
   progress.finishedTick = null;
-  const drive = ctx.entities.get(pid)?.drive;
+  const racer = ctx.entities.get(pid);
+  // A quitter is out of the race and no longer a target, so a ward left up
+  // through their tableau is chrome, and every rival would see it as a live
+  // gold veil on a machine nothing can hit.
+  if (racer) consumeRealmRacersWard(ctx, racer);
+  const drive = racer?.drive;
   if (drive) {
     resetVehicleDrive(drive);
     drive.controlsLocked = true;

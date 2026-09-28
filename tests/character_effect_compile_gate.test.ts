@@ -374,4 +374,27 @@ describe('a transparent character effect swaps in only once its programs are lin
     // A settle landing after the teardown is inert.
     expect(() => gateCalls[0].settle()).not.toThrow();
   });
+
+  it('draws a racer ward as a gold veil through the same gate, and repaints it on a flip', async () => {
+    const visual = await makeVisual();
+    const gateCalls: GateCall[] = [];
+    visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
+    const opaque = rigMaterials(visual);
+    visual.setGhost(true, 'ward');
+    // Linked hidden first, like every translucent overlay: never a live link.
+    expect(gateCalls).toHaveLength(1);
+    expect(rigMaterials(visual)).toEqual(opaque);
+    gateCalls[0].settle();
+    visual.update(FRAME, anim(), true);
+    expect(rigIsTranslucent(visual)).toBe(true);
+    const body = meshNamed(visual, 'body').material as THREE.MeshStandardMaterial;
+    expect(body.emissive.getHex()).toBe(0xb8860b);
+    expect(body.color.b).toBeLessThan(body.color.r);
+    // The same clone becomes a plain spirit veil on a style flip, untinted.
+    visual.setGhost(true, 'spirit');
+    const spirit = meshNamed(visual, 'body').material as THREE.MeshStandardMaterial;
+    expect(spirit).toBe(body);
+    expect(spirit.emissive.getHex()).not.toBe(0xb8860b);
+    visual.dispose();
+  });
 });

@@ -77,7 +77,7 @@ import {
   createMoonkinEffectMaterial,
   createShadowformEffectMaterial,
   type GhostStyle,
-  ghostEffectOpacity,
+  paintGhostEffectMaterial,
 } from './effect_materials';
 import { farMeshShown, shadowProxyShown } from './far_lod_reveal_core';
 import { FormAdornments } from './form_adornments';
@@ -3607,12 +3607,11 @@ export class CharacterVisual {
   }
 
   private ghostMaterial(material: THREE.Material): THREE.Material {
-    const opacity = ghostEffectOpacity(this.ghostStyle);
     const cached = this.ghostMaterials.get(material);
     if (cached) {
-      // one cache serves both flavors; rewrite the opacity on style flips
-      // (stealth -> die -> ghost run reuses the same clones)
-      cached.opacity = opacity;
+      // one cache serves every flavor; repaint it on style flips (stealth ->
+      // die -> ghost run, or a racer's gold ward veil, reuses the same clones)
+      paintGhostEffectMaterial(cached, material, this.ghostStyle);
       return cached;
     }
     const ghost = createGhostEffectMaterial(material, this.ghostStyle);

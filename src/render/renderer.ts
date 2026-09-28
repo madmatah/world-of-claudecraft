@@ -143,8 +143,10 @@ import {
 import { buildCharacterEffectPrewarmGroup } from './character_effect_prewarm';
 import {
   type CharacterWeaponAura,
+  characterGhostStyle,
   characterRuneTintColor,
   characterVeilboundState,
+  characterVeilGhosted,
   characterWeaponAuraInto,
   characterWeaponAuraMode,
   hunterPetFerocityStage,
@@ -10971,12 +10973,10 @@ export class Renderer {
         e.templateId.startsWith('vision_') ||
         e.ghost || // a released player spirit renders translucent (the ghost run)
         e.templateId === 'spirit_healer'; // the graveyard angel is an ethereal figure
-      // Duskveil/Smokefade wear the denser stealth fade; every spirit read
-      // (ghost run, ghost wolf, visions, the graveyard angel) keeps the thin
-      // ethereal one. A dead stealther is a spirit first.
-      const ghostStyle =
-        stealthGhost && !ghostWolf && !e.ghost ? ('stealth' as const) : ('spirit' as const);
-      active.setGhost(ghost || veilboundState === 'march', ghostStyle);
+      // Which fade a translucent rig wears: characterGhostStyle (character_effects.ts).
+      const stealthFade = stealthGhost && !ghostWolf && !e.ghost;
+      const ghostStyle = characterGhostStyle(stealthFade, ghost, veilboundState);
+      active.setGhost(ghost || characterVeilGhosted(veilboundState), ghostStyle);
       active.setSoulRend(hasSoulRend);
       // Shadowform tints the base priest rig shadow-purple (no rig swap). Moonkin Form and
       // Metamorphosis reuse the same tint treatment (a bright violet, and a dark fel demon);

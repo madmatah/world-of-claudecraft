@@ -27,8 +27,10 @@ import * as THREE from 'three';
 import { cloneMaterialWithHooks } from '../material_clone_hooks';
 
 /** Translucent-rig flavor: 'spirit' is the thin ghost run (released spirits,
- *  ghost wolf, the graveyard angel); 'stealth' is the denser Duskveil fade. */
-export type GhostStyle = 'spirit' | 'stealth';
+ *  ghost wolf, the graveyard angel, the Veilbound March); 'stealth' is the
+ *  denser Duskveil fade; 'ward' is the March's veil recoloured gold, worn by a
+ *  racer carrying the Realm Racers ward. */
+export type GhostStyle = 'spirit' | 'stealth' | 'ward';
 
 /** Every overlay that flips `transparent` on a rig material. */
 type CharacterEffectStyle = GhostStyle | 'shadowform' | 'moonkin';
@@ -37,6 +39,13 @@ const GHOST_OPACITY = 0.34;
 // Stealth (Duskveil/Smokefade) reads as a faded-but-solid silhouette, a touch
 // denser than the spirit run's 0.34 (owner: stealth was "too transparent").
 const STEALTH_OPACITY = 0.45;
+// The racing ward: denser than the spirit run so the rider still reads in the
+// seat at racing distance, and gold so a rival reads it as a shield.
+const WARD_OPACITY = 0.6;
+const WARD_TINT = new THREE.Color(0xffd35a);
+const WARD_TINT_STRENGTH = 0.6;
+const WARD_EMISSIVE_HEX = 0xb8860b;
+const WARD_EMISSIVE_INTENSITY = 0.6;
 const SHADOWFORM_OPACITY = 0.9;
 const SHADOWFORM_TINT = new THREE.Color(0x5a2a8f);
 const SHADOWFORM_EMISSIVE_HEX = 0x2a0a4a;
@@ -78,20 +87,48 @@ function cloneTransparent(source: THREE.Material, style: CharacterEffectStyle): 
   return clone;
 }
 
-/** The ghost run / stealth fade clone of `source`. */
+/** The ghost run / stealth fade / ward veil clone of `source`. */
 export function createGhostEffectMaterial(
   source: THREE.Material,
   style: GhostStyle = 'spirit',
 ): THREE.Material {
   const clone = cloneTransparent(source, style);
-  clone.opacity = ghostEffectOpacity(style);
+  paintGhostEffectMaterial(clone, source, style);
   return clone;
 }
 
-/** The opacity a ghost clone wears for `style` (rewritten in place on a flip:
- *  stealth to death to ghost run reuses the same clones). */
+/** The opacity a ghost clone wears for `style`. */
 export function ghostEffectOpacity(style: GhostStyle): number {
-  return style === 'stealth' ? STEALTH_OPACITY : GHOST_OPACITY;
+  return style === 'stealth' ? STEALTH_OPACITY : style === 'ward' ? WARD_OPACITY : GHOST_OPACITY;
+}
+
+/**
+ * Paint a ghost clone for `style` from its `source`, in place: one clone serves
+ * every flavour (stealth to death to ghost run, or a ward veil, reuses it), so
+ * a flip rewrites the look. Opacity, colour and emissive are uniforms, never
+ * program-key inputs, so a repaint never relinks.
+ */
+export function paintGhostEffectMaterial(
+  clone: THREE.Material,
+  source: THREE.Material,
+  style: GhostStyle,
+): void {
+  const target = clone as TintableMaterial;
+  const from = source as TintableMaterial;
+  target.opacity = ghostEffectOpacity(style);
+  if (target.color && from.color) {
+    target.color.copy(from.color);
+    if (style === 'ward') target.color.lerp(WARD_TINT, WARD_TINT_STRENGTH);
+  }
+  if (target.emissive && from.emissive) {
+    if (style === 'ward') {
+      target.emissive.setHex(WARD_EMISSIVE_HEX);
+      target.emissiveIntensity = Math.max(from.emissiveIntensity ?? 0, WARD_EMISSIVE_INTENSITY);
+    } else {
+      target.emissive.copy(from.emissive);
+      target.emissiveIntensity = from.emissiveIntensity ?? 1;
+    }
+  }
 }
 
 /** The Shadowform clone of `source`. */

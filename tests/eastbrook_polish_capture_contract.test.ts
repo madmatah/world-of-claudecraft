@@ -713,7 +713,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
-  '205e7df396bbdd6c8bf0f275487f1a432cd7e7f709ba3368e2315a7c11239ed2';
+  // Re-minted for the Realm Racers golden ward veil (renderer leaf).
+  '4072c2627b01164e2766d50f707a1f872e842815e036fa0b6c87ef05aa1466e4';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

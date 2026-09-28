@@ -16,6 +16,7 @@ import {
   characterEffectFlags,
   hasCharacterEffect,
 } from './character_effects_core';
+import type { GhostStyle } from './characters/effect_materials';
 
 export function isAvengingWrathAura(aura: Pick<Aura, 'id' | 'kind'>): boolean {
   return aura.id === 'avenging_wrath' && aura.kind === 'buff_dmg_done';
@@ -145,12 +146,42 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
   return !entity.dead && entity.templateId === 'guardian_tithefiend' && entity.scale > 1;
 }
 
-export type CharacterVeilboundState = 'none' | 'march' | 'mark';
+/**
+ * The veil family: the paladin's Veilbound March and Mark, and the Realm
+ * Racers ward, which wears the March's translucent veil recoloured gold.
+ *
+ * The ward is ACTIONABLE (a shell fired at a warded rival is wasted), so it is
+ * read off the entity aura every client mirrors and drawn on every graphics
+ * tier; nothing here takes a tier. It is matched by its own aura kind, which
+ * nothing else in the game carries.
+ */
+export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward';
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
   if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
+  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
   return 'none';
+}
+
+/** Whether the veil turns the rig translucent (the Mark only tints it). */
+export function characterVeilGhosted(state: CharacterVeilboundState): boolean {
+  return state === 'march' || state === 'ward';
+}
+
+/**
+ * Which fade a translucent rig wears. Duskveil/Smokefade (`stealthFade`) wear
+ * the denser stealth fade; every spirit read (`spirit`: the ghost run, ghost
+ * wolf, visions, the graveyard angel) keeps the thin ethereal one, and a dead
+ * stealther is a spirit first; a racer's ward alone wears the gold veil.
+ */
+export function characterGhostStyle(
+  stealthFade: boolean,
+  spirit: boolean,
+  veil: CharacterVeilboundState,
+): GhostStyle {
+  if (stealthFade) return 'stealth';
+  return !spirit && veil === 'ward' ? 'ward' : 'spirit';
 }
 
 /** The whole-body tint color for an active Thornhollow Fields rune buff (null = none). */

@@ -1407,7 +1407,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
-  '72a80a83f8609f0d2f543665f9bfc1f12cbd5cc5b20a8e12ba3fa4bfb515e1a3';
+  // Re-minted for the Realm Racers golden ward veil (renderer leaf).
+  '93090d92bd3a58852abeced86331149b8c767a3e258e6b1dab52ce51a29c0228';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1443,7 +1444,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
-  '205e7df396bbdd6c8bf0f275487f1a432cd7e7f709ba3368e2315a7c11239ed2';
+  // Re-minted for the Realm Racers golden ward veil (renderer leaf).
+  '4072c2627b01164e2766d50f707a1f872e842815e036fa0b6c87ef05aa1466e4';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2837,7 +2839,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers rivals drawn in the local kart frame.
       // Re-minted for the Realm Racers aim pose and prediction lead through the core.
       // Re-minted for the Realm Racers rival blast pop drawn from the Hit event.
-    ).toBe('587e5d7cc7f2f6bac9c736b86c61c9ca623e3c20a918fcb0c2e0d3cb5affcaab');
+      // Re-minted for the Realm Racers golden ward veil.
+    ).toBe('536f89f1c8a09058958b20b8724581e3d645149efdce5c2f144158e0391e75f3');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {
