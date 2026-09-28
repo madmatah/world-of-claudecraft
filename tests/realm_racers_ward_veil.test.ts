@@ -1,33 +1,30 @@
-// The Realm Racers ward drawn as a golden veil on any racer carrying it: the
-// Veilbound March's translucent veil (`setGhost`), recoloured gold.
+// The Realm Racers ward drawn as a veil on any racer carrying it: the shared
+// spirit veil (ghost_veil.ts) in the Veilbound March's gold palette, an interim
+// look until the ward gets a palette of its own.
 //
 // Three contracts. The veil follows the entity aura every client mirrors, so a
 // rival sees it too. It is ACTIONABLE (a shell fired at a warded rival is
 // wasted), so it draws on every graphics tier: the decision takes no tier, and
-// the gold clone paints on every material family a rig wears across the
-// presets. And it links nothing new during play: the gold clone shares every
-// program-key input with the March's own clone, so the boot character-effect
-// prewarm twin (character_effect_prewarm.ts) is the exact program it draws.
+// the veil mounts over every material family a rig wears across the presets.
+// And it links nothing new during play: a palette is uniform values on the
+// veil's shared program family, which the boot manifest links.
 
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  buildCharacterEffectPrewarmGroup,
-  characterEffectDrawPath,
-} from '../src/render/character_effect_prewarm';
-import { characterEffectProgramKey } from '../src/render/character_effect_prewarm_core';
-import {
-  characterGhostStyle,
   characterVeilboundState,
-  characterVeilGhosted,
+  classVeilboundState,
+  rallyVeilLook,
 } from '../src/render/character_effects';
 import {
-  createGhostEffectMaterial,
-  ghostEffectOpacity,
-  paintGhostEffectMaterial,
-} from '../src/render/characters/effect_materials';
+  createSpiritVeilMaterial,
+  spiritVeilPaletteOf,
+  spiritVeilPassOf,
+} from '../src/render/characters/ghost_veil';
+import { SPIRIT_VEIL_PALETTES } from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
+import { characterGhostLook } from '../src/render/ghost_style_core';
 import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
 
@@ -42,7 +39,8 @@ const ward: Aura = {
   school: 'physical',
 };
 
-const racer = (auras: Aura[]): Entity => ({ auras }) as unknown as Entity;
+const racer = (auras: Aura[], over: Partial<Entity> = {}): Entity =>
+  ({ id: 2, kind: 'player', auras, ghost: false, templateId: 'player', ...over }) as Entity;
 
 /** The rig material families the graphics presets hand a character: the lit
  *  standard material, the low preset's Lambert, and the unlit basic one. */
@@ -56,39 +54,14 @@ function tierMaterials(): THREE.Material[] {
   return [standard, lambert, basic];
 }
 
-function skinnedGeometry(): THREE.BufferGeometry {
-  const geometry = new THREE.BoxGeometry(1, 2, 1);
-  const count = geometry.getAttribute('position').count;
-  geometry.setAttribute(
-    'skinIndex',
-    new THREE.Uint16BufferAttribute(new Uint16Array(count * 4), 4),
-  );
-  geometry.setAttribute(
-    'skinWeight',
-    new THREE.Float32BufferAttribute(new Float32Array(count * 4), 4),
-  );
-  return geometry;
-}
-
-/** The inputs three folds into a program key (WebGLPrograms.getParameters). */
-function programKeyInputs(material: THREE.Material): Record<string, unknown> {
-  const m = material as THREE.MeshStandardMaterial;
-  return {
-    type: material.type,
-    opaque: material.transparent === false && material.blending === THREE.NormalBlending,
-    cacheKey: material.customProgramCacheKey(),
-    defines: JSON.stringify(material.defines ?? null),
-    side: material.side,
-    vertexColors: m.vertexColors,
-    blending: material.blending,
-    alphaTest: material.alphaTest,
-    map: !!m.map,
-    emissive: m.emissive !== undefined,
-  };
+/** The look renderer.ts hands a racer's rig, composed the same way. */
+function lookFor(e: Entity): string | null {
+  const state = characterVeilboundState(e);
+  return characterGhostLook(1, e, false, classVeilboundState(state)) ?? rallyVeilLook(state);
 }
 
 describe('the ward veil decision', () => {
-  it('reads the ward off the racer aura and wears the gold veil', () => {
+  it('reads the ward off the racer aura and wears the gold March palette', () => {
     expect(characterVeilboundState(racer([ward]))).toBe('ward');
     expect(characterVeilboundState(racer([]))).toBe('none');
     // The actionable read wins over any class veil a racer could carry.
@@ -96,78 +69,50 @@ describe('the ward veil decision', () => {
     const mark = { ...ward, id: 'veilbound_mark', kind: 'dot' } as Aura;
     expect(characterVeilboundState(racer([march, ward]))).toBe('ward');
     expect(characterVeilboundState(racer([mark, ward]))).toBe('ward');
-    expect(characterVeilGhosted('ward')).toBe(true);
-    expect(characterVeilGhosted('march')).toBe(true);
-    expect(characterVeilGhosted('mark')).toBe(false);
-    expect(characterVeilGhosted('none')).toBe(false);
-    expect(characterGhostStyle(false, false, 'ward')).toBe('ward');
-    // The March keeps its own spirit veil, and a real spirit or stealth read
-    // wins over the ward (a ghost run is a spirit first).
-    expect(characterGhostStyle(false, false, 'march')).toBe('spirit');
-    expect(characterGhostStyle(false, true, 'ward')).toBe('spirit');
-    expect(characterGhostStyle(true, true, 'ward')).toBe('stealth');
-    expect(characterGhostStyle(false, false, 'none')).toBe('spirit');
+    expect(classVeilboundState('ward')).toBe('none');
+    expect(classVeilboundState('march')).toBe('march');
+    expect(classVeilboundState('mark')).toBe('mark');
+    expect(classVeilboundState('none')).toBe('none');
+    expect(rallyVeilLook('ward')).toBe('march');
+    expect(rallyVeilLook('march')).toBeNull();
+    expect(rallyVeilLook('mark')).toBeNull();
+    expect(rallyVeilLook('none')).toBeNull();
+    expect(lookFor(racer([ward]))).toBe('march');
+    expect(lookFor(racer([]))).toBeNull();
+    // A real spirit wins over the ward (a ghost run is a spirit first).
+    expect(lookFor(racer([ward], { ghost: true }))).toBe('spirit');
   });
 
   it('takes no graphics tier, and the renderer mounts it on every rig it draws', () => {
     // Fairness: nothing between the aura and the rig may read a preset.
-    expect(characterGhostStyle.length).toBe(3);
-    expect(characterVeilGhosted.length).toBe(1);
+    expect(characterVeilboundState.length).toBe(1);
+    expect(classVeilboundState.length).toBe(1);
+    expect(rallyVeilLook.length).toBe(1);
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain(
-      'active.setGhost(ghost || characterVeilGhosted(veilboundState), ghostStyle);',
+      'characterGhostLook(this.sim.playerId, e, ghostWolf, classVeilboundState(veilboundState)) ??',
     );
-    expect(renderer).toContain(
-      'const ghostStyle = characterGhostStyle(stealthFade, ghost, veilboundState);',
-    );
+    expect(renderer).toContain('rallyVeilLook(veilboundState);');
+    expect(renderer).toContain("active.setGhost(ghostLook !== null, ghostLook ?? 'spirit');");
   });
 });
 
-describe('the ward veil draws gold on every tier with a program the March already prepared', () => {
-  it('paints every rig material family gold and translucent', () => {
+describe('the ward veil draws on every tier with the shared veil programs', () => {
+  it('mounts the gold palette over every rig material family', () => {
+    const look = rallyVeilLook('ward');
+    if (!look) throw new Error('the ward wears no veil');
+    const tint = SPIRIT_VEIL_PALETTES[look].tint;
+    // Gold: red and green lifted over blue.
+    expect(tint >> 16).toBeGreaterThan(tint & 0xff);
+    expect((tint >> 8) & 0xff).toBeGreaterThan(tint & 0xff);
     for (const source of tierMaterials()) {
-      const veil = createGhostEffectMaterial(source, 'ward') as THREE.MeshStandardMaterial;
-      const march = createGhostEffectMaterial(source, 'spirit') as THREE.MeshStandardMaterial;
+      const veil = createSpiritVeilMaterial(source, look);
       expect(veil.transparent, source.type).toBe(true);
-      expect(veil.opacity).toBe(ghostEffectOpacity('ward'));
-      expect(veil.opacity).toBeGreaterThan(march.opacity);
-      // Gold: red and green lifted over blue, off the source colour.
-      const { r, g, b } = veil.color;
-      expect(r, source.type).toBeGreaterThan(b);
-      expect(g, source.type).toBeGreaterThan(b);
-      expect(veil.color.getHex()).not.toBe(march.color.getHex());
-      if (veil.emissive) expect(veil.emissive.getHex()).toBe(0xb8860b);
-    }
-  });
-
-  it('shares every program-key input with the March veil and the boot prewarm twin', () => {
-    for (const source of tierMaterials()) {
-      const geometry = skinnedGeometry();
-      const root = new THREE.Group();
-      root.add(new THREE.SkinnedMesh(geometry, source));
-      const group = buildCharacterEffectPrewarmGroup(root);
-      expect(group.children, source.type).toHaveLength(1);
-      const twin = (group.children[0] as THREE.Mesh).material as THREE.Material;
-      const veil = createGhostEffectMaterial(source, 'ward');
-      const march = createGhostEffectMaterial(source, 'spirit');
-      expect(programKeyInputs(veil)).toEqual(programKeyInputs(march));
-      expect(programKeyInputs(veil)).toEqual(programKeyInputs(twin));
-      const target = { material: source, geometry, skinned: true };
-      expect(characterEffectProgramKey(characterEffectDrawPath(target, veil))).toBe(
-        characterEffectProgramKey(characterEffectDrawPath(target, twin)),
+      expect(spiritVeilPassOf(veil), source.type).toBe('color');
+      expect(spiritVeilPaletteOf(veil), source.type).toBe(look);
+      expect(veil.customProgramCacheKey()).toBe(
+        createSpiritVeilMaterial(source, 'spirit').customProgramCacheKey(),
       );
     }
-  });
-
-  it('repaints a shared clone on a style flip, so a veil never leaks into a ghost run', () => {
-    const [source] = tierMaterials() as THREE.MeshStandardMaterial[];
-    const clone = createGhostEffectMaterial(source, 'ward') as THREE.MeshStandardMaterial;
-    const gold = clone.color.getHex();
-    paintGhostEffectMaterial(clone, source, 'spirit');
-    expect(clone.color.getHex()).toBe(source.color.getHex());
-    expect(clone.emissive.getHex()).toBe(source.emissive.getHex());
-    expect(clone.opacity).toBe(ghostEffectOpacity('spirit'));
-    paintGhostEffectMaterial(clone, source, 'ward');
-    expect(clone.color.getHex()).toBe(gold);
   });
 });
