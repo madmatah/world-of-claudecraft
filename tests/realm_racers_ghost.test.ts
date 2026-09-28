@@ -35,13 +35,19 @@ import {
   realmRacersCircuitOf,
   realmRacersFreePracticeSlot,
   realmRacersMatchOf,
+  realmRacersMovementLockedAt,
   realmRacersStartMatch,
   realmRacersToCanonical,
   realmRacersToWorld,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
-import { expectGhostWindow } from './helpers/realm_racers_ghost_window';
+import {
+  autoGhostClearTick,
+  expectGhostEndsWhenClear,
+  expectGhostWindow,
+  manualGhostClearTick,
+} from './helpers/realm_racers_ghost_window';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
@@ -232,15 +238,16 @@ describe('the ghost starts on every recovery', () => {
     const { sim, a, racer, progress } = racing();
     const auras = watch(sim, 'aura');
     expect(realmRacersGhosted(racer)).toBe(false);
+    const resetTick = sim.tickCount;
     sim.realmRacersResetPosition(a);
     const aura = required(
       racer.auras.find((entry) => entry.id === REALM_RACERS_GHOST_AURA),
       'ghost aura',
     );
     expect(aura).toMatchObject({ kind: 'rally_ghost', name: 'Ghosted', value: 0 });
-    expect(progress.ghostClearTick).toBe(progress.resetLockedUntilTick);
+    expect(progress.ghostClearTick).toBe(resetTick + REALM_RACERS_RESET_LOCK_TICKS + 1);
     expect(progress.ghostCapTick).toBe(
-      progress.resetLockedUntilTick + REALM_RACERS_GHOST_MARGIN_TICKS,
+      resetTick + REALM_RACERS_RESET_LOCK_TICKS + 1 + REALM_RACERS_GHOST_MARGIN_TICKS,
     );
     // Silent, like the recovery itself: the entity aura list is the whole wire,
     // and no gain line lands in anybody's event frame.
@@ -249,38 +256,70 @@ describe('the ghost starts on every recovery', () => {
 
   it('holds a manual recovery for its minimum, then to the cap with a rival on it', () => {
     const { sim, match, a, b, racer, progress } = racing();
+    const resetTick = sim.tickCount;
     sim.realmRacersResetPosition(a);
     expectGhostWindow({
       sim,
       racer,
       progress,
-      resetTick: sim.tickCount,
+      earliestClearTick: manualGhostClearTick(resetTick),
       holdRivalOn: () => parkOn(sim, match, b, racer),
     });
   });
 
-  it('holds a stuck recovery for its minimum, well past its one-tick lock, then to the cap', () => {
-    const { sim, match, a, b, racer, road, progress } = racing();
+  it('ends a manual recovery ghost on its earliest clear tick with nobody near', () => {
+    const { sim, a, racer, progress } = racing();
+    const resetTick = sim.tickCount;
+    sim.realmRacersResetPosition(a);
+    expectGhostEndsWhenClear({
+      sim,
+      racer,
+      progress,
+      earliestClearTick: manualGhostClearTick(resetTick),
+    });
+  });
+
+  /** A real stuck recovery: parked off the road at a standstill until the
+   *  wedged arm puts the machine back on the line at `road`. */
+  function stuckRecovery() {
+    const staged = racing();
+    const { sim, match, a, racer, road, progress } = staged;
     const lateral = road.halfWidth + 8;
     park(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS; i++) sim.tick();
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
     expect(progress.resetLockedUntilTick).toBe(sim.tickCount + 2);
+    return { ...staged, resetTick: sim.tickCount };
+  }
+
+  it('holds a stuck recovery for its minimum, well past its one-tick lock, then to the cap', () => {
+    const { sim, match, b, racer, progress, resetTick } = stuckRecovery();
     expectGhostWindow({
       sim,
       racer,
       progress,
-      resetTick: sim.tickCount,
+      earliestClearTick: autoGhostClearTick(resetTick),
       holdRivalOn: () => parkOn(sim, match, b, racer),
     });
     expect(progress.ghostCapTick).toBe(0);
   });
 
+  it('ends a stuck recovery ghost on its earliest clear tick with nobody near', () => {
+    const { sim, racer, progress, resetTick } = stuckRecovery();
+    expectGhostEndsWhenClear({
+      sim,
+      racer,
+      progress,
+      earliestClearTick: autoGhostClearTick(resetTick),
+    });
+  });
+
   it('replaces the window on a second recovery rather than stacking a longer one', () => {
     const { sim, match, a, b, racer, progress } = racing();
+    const first = sim.tickCount;
     sim.realmRacersResetPosition(a);
     // Held a ghost past the lock by a rival parked on it, then reset again.
-    while (sim.tickCount < progress.resetLockedUntilTick + 4) {
+    while (sim.tickCount < first + REALM_RACERS_RESET_LOCK_TICKS + 1 + 4) {
       parkOn(sim, match, b, racer);
       sim.tick();
     }
@@ -288,9 +327,10 @@ describe('the ghost starts on every recovery', () => {
     const second = sim.tickCount;
     sim.realmRacersResetPosition(a);
     // Exactly what one fresh recovery at this tick opens.
-    expect({ earliestClearTick: progress.ghostClearTick, capTick: progress.ghostCapTick }).toEqual(
-      rallyGhostWindow(second, progress.resetLockedUntilTick),
-    );
+    expect({ earliestClearTick: progress.ghostClearTick, capTick: progress.ghostCapTick }).toEqual({
+      earliestClearTick: second + REALM_RACERS_RESET_LOCK_TICKS + 1,
+      capTick: second + REALM_RACERS_RESET_LOCK_TICKS + 1 + REALM_RACERS_GHOST_MARGIN_TICKS,
+    });
     expect(racer.auras.filter((aura) => aura.id === REALM_RACERS_GHOST_AURA)).toHaveLength(1);
   });
 });
@@ -326,14 +366,15 @@ describe('a ghost touches nobody', () => {
 
   it('stays a ghost past its window while overlapped, and ends the first tick it is clear', () => {
     const { sim, match, a, b, racer, rival, progress } = racing();
+    const earliestClearTick = manualGhostClearTick(sim.tickCount);
     sim.realmRacersResetPosition(a);
     parkOn(sim, match, b, racer);
-    while (sim.tickCount < progress.ghostClearTick) sim.tick();
+    while (sim.tickCount < earliestClearTick) sim.tick();
     sim.tick();
     sim.tick();
     // Unlocked, still inside the rival: a ghost, or two machines spawn in each
     // other.
-    expect(sim.tickCount).toBeGreaterThan(progress.ghostClearTick);
+    expect(sim.tickCount).toBe(earliestClearTick + 2);
     expect(realmRacersGhosted(racer)).toBe(true);
     // Clear of it by more than the reach: solid on the next tick.
     park(sim, match, b, racer.pos.x + REACH + 1, racer.pos.z);
@@ -345,9 +386,9 @@ describe('a ghost touches nobody', () => {
 
   it('ends at the cap even with a rival parked on it, and the contact resolves again', () => {
     const { sim, match, a, b, racer, rival, progress } = racing();
+    const cap = manualGhostClearTick(sim.tickCount) + REALM_RACERS_GHOST_MARGIN_TICKS;
     sim.realmRacersResetPosition(a);
-    const cap = progress.ghostCapTick;
-    expect(cap).toBe(progress.ghostClearTick + REALM_RACERS_GHOST_MARGIN_TICKS);
+    expect(progress.ghostCapTick).toBe(cap);
     while (sim.tickCount < cap - 1) {
       // Held on top of it every tick, the way a rival parked on it would sit.
       parkOn(sim, match, b, racer, 0.5);
@@ -365,8 +406,9 @@ describe('a ghost touches nobody', () => {
 
   it('replays the playtest: the shooter follows at speed and passes the recovered kart clean', () => {
     const run = (ghost: boolean) => {
-      const { sim, match, a, b, racer, rival, pids, progress } = racing();
+      const { sim, match, a, b, racer, rival, pids } = racing();
       const bumps = watch(sim, 'realmRacersBump');
+      const lockedUntilTick = sim.tickCount + REALM_RACERS_RESET_LOCK_TICKS + 1;
       sim.realmRacersResetPosition(a);
       if (!ghost) racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_GHOST_AURA);
       // The shooter, twelve yards behind on the racing line, aimed straight at
@@ -385,7 +427,7 @@ describe('a ghost touches nobody', () => {
         ahead,
         racerMoved: Math.hypot(racer.pos.x - parked.x, racer.pos.z - parked.z),
         rivalContact: required(match.progress.get(b), 'rival progress').hadRivalContact,
-        stillLocked: sim.tickCount < progress.resetLockedUntilTick,
+        stillLocked: sim.tickCount < lockedUntilTick,
       };
     };
     const clean = run(true);
@@ -406,11 +448,12 @@ describe('a ghost touches nobody', () => {
 
 describe('the ghost ends only when it really is clear', () => {
   it('holds through a rival tunnelling through it on the clearing tick, with no bump', () => {
-    const { sim, match, a, b, racer, rival, progress } = racing();
+    const { sim, match, a, b, racer, rival } = racing();
     const bumps = watch(sim, 'realmRacersBump');
+    const earliestClearTick = manualGhostClearTick(sim.tickCount);
     sim.realmRacersResetPosition(a);
     // Held on it past the earliest clear, so the next evaluation may clear.
-    while (sim.tickCount < progress.ghostClearTick + 1) {
+    while (sim.tickCount < earliestClearTick + 1) {
       parkOn(sim, match, b, racer);
       sim.tick();
     }
@@ -424,7 +467,7 @@ describe('the ghost ends only when it really is clear', () => {
     sim.ctx.rebucket(rival);
     const rivalAt = { ...rival.pos };
     updateRealmRacers(sim.ctx);
-    expect(sim.tickCount).toBeLessThan(progress.ghostCapTick);
+    expect(sim.tickCount).toBeLessThan(earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS);
     expect(realmRacersGhosted(racer)).toBe(true);
     expect(bumps()).toEqual([]);
     expect(rival.pos.x).toBeCloseTo(rivalAt.x, 9);
@@ -435,12 +478,13 @@ describe('the ghost ends only when it really is clear', () => {
     const { sim, match, a, b, racer, rival, progress, road } = racing();
     const rivalProgress = required(match.progress.get(b), 'rival progress');
     rivalProgress.resetS = road.s;
+    const cap = manualGhostClearTick(sim.tickCount) + REALM_RACERS_GHOST_MARGIN_TICKS;
     sim.realmRacersResetPosition(a);
     sim.realmRacersResetPosition(b);
     expect(realmRacersGhosted(racer)).toBe(true);
     expect(realmRacersGhosted(rival)).toBe(true);
     expect(Math.hypot(racer.pos.x - rival.pos.x, racer.pos.z - rival.pos.z)).toBeLessThan(REACH);
-    const cap = progress.ghostCapTick;
+    expect(progress.ghostCapTick).toBe(cap);
     expect(rivalProgress.ghostCapTick).toBe(cap);
     while (sim.tickCount < cap - 1) {
       sim.tick();
@@ -459,6 +503,112 @@ describe('the ghost ends only when it really is clear', () => {
     expect(apart).toBeGreaterThan(REACH * 0.9);
     expect(apart).toBeLessThan(REACH * 3);
   });
+
+  it('holds two karts recovered onto one anchor on different ticks, each to its own cap', () => {
+    const { sim, match, a, b, racer, rival, progress, road } = racing();
+    const rivalProgress = required(match.progress.get(b), 'rival progress');
+    rivalProgress.resetS = road.s;
+    const firstCap = manualGhostClearTick(sim.tickCount) + REALM_RACERS_GHOST_MARGIN_TICKS;
+    sim.realmRacersResetPosition(a);
+    for (let i = 0; i < 10; i++) sim.tick();
+    const secondCap = manualGhostClearTick(sim.tickCount) + REALM_RACERS_GHOST_MARGIN_TICKS;
+    sim.realmRacersResetPosition(b);
+    expect(progress.ghostCapTick).toBe(firstCap);
+    expect(rivalProgress.ghostCapTick).toBe(secondCap);
+    expect(Math.hypot(racer.pos.x - rival.pos.x, racer.pos.z - rival.pos.z)).toBeLessThan(REACH);
+    // The second kart inside it all along does not stretch the first past its
+    // own cap: the later window is the second kart's alone.
+    while (sim.tickCount < firstCap - 1) {
+      sim.tick();
+      expect(realmRacersGhosted(racer)).toBe(true);
+      expect(realmRacersGhosted(rival)).toBe(true);
+    }
+    sim.tick();
+    expect(realmRacersGhosted(racer)).toBe(false);
+    expect(realmRacersGhosted(rival)).toBe(true);
+    // Solid now, with a ghost still inside it: nothing touches until that one
+    // runs out too.
+    const firstAt = { ...racer.pos };
+    while (sim.tickCount < secondCap - 1) {
+      sim.tick();
+      expect(realmRacersGhosted(rival)).toBe(true);
+    }
+    expect(racer.pos.x).toBeCloseTo(firstAt.x, 9);
+    expect(racer.pos.z).toBeCloseTo(firstAt.z, 9);
+    sim.tick();
+    expect(realmRacersGhosted(rival)).toBe(false);
+    for (let i = 0; i < 10; i++) sim.tick();
+    for (const p of [racer.pos, rival.pos]) {
+      expect(Number.isFinite(p.x) && Number.isFinite(p.z)).toBe(true);
+    }
+    const apart = Math.hypot(racer.pos.x - rival.pos.x, racer.pos.z - rival.pos.z);
+    expect(apart).toBeGreaterThan(REACH * 0.9);
+    expect(apart).toBeLessThan(REACH * 3);
+  });
+
+  it('still collides two solid rivals while a third machine on the grid is a ghost', () => {
+    const { sim, match, a, pids, racer, progress } = racing();
+    const [, b, c] = pids;
+    const bumps = watch(sim, 'realmRacersBump');
+    sim.realmRacersResetPosition(a);
+    const rival = required(sim.entities.get(b), 'rival');
+    // Far from the ghost, the third machine drives into the rival.
+    ramInto(sim, match, c, rival, 1.5);
+    const rivalAt = { ...rival.pos };
+    sim.tick();
+    expect(realmRacersGhosted(racer)).toBe(true);
+    const pairs = bumps().map((event) => [event.aId, event.bId].sort());
+    expect(pairs).toEqual([[b, c].sort()]);
+    expect(Math.hypot(rival.pos.x - rivalAt.x, rival.pos.z - rivalAt.z)).toBeGreaterThan(0.01);
+    expect(required(match.progress.get(b), 'rival progress').hadRivalContact).toBe(true);
+    expect(required(match.progress.get(c), 'third progress').hadRivalContact).toBe(true);
+    expect(progress.hadRivalContact).toBe(false);
+  });
+
+  for (const rivalOn of [false, true]) {
+    it(`still ends the ghost of a pilot who crossed the line in it${rivalOn ? ', at the cap with a rival on it' : ''}`, () => {
+      const { sim, match, a, b, racer, progress } = racing();
+      const track = realmRacersTrack(RACE_CIRCUIT);
+      // On the last lap, wedged off the road twenty yards short of the line:
+      // the stuck arm's one-tick lock hands the wheel straight back, so the
+      // pilot drives on as a ghost.
+      const anchor = onLane(match, track.length - 20);
+      progress.lap = match.totalLaps;
+      progress.resetS = anchor.s;
+      progress.resetLap = match.totalLaps;
+      progress.resetDistanceSinceWrap = track.length - 20;
+      const lateral = anchor.halfWidth + 8;
+      park(sim, match, a, anchor.x - anchor.tz * lateral, anchor.z + anchor.tx * lateral);
+      for (let i = 0; i < REALM_RACERS_STUCK_TICKS; i++) sim.tick();
+      expect(racer.pos.x).toBeCloseTo(anchor.x, 5);
+      const resetTick = sim.tickCount;
+      sim.tick();
+      sim.tick();
+      // Over the line (teleport, not park: the crossing is read off the last
+      // arc the race credited, which is the anchor's).
+      const over = onLane(match, 5);
+      teleport(sim, a, over.x, over.z);
+      sim.tick();
+      expect(progress.finishedTick).toBe(sim.tickCount);
+      expect(realmRacersGhosted(racer)).toBe(true);
+      expect(match.phase).toBe('racing');
+      const earliestClearTick = autoGhostClearTick(resetTick);
+      if (rivalOn) {
+        expectGhostWindow({
+          sim,
+          racer,
+          progress,
+          earliestClearTick,
+          holdRivalOn: () => parkOn(sim, match, b, racer),
+        });
+      } else {
+        expectGhostEndsWhenClear({ sim, racer, progress, earliestClearTick });
+      }
+      // And gone for good: nothing brings it back through the tableau.
+      for (let i = 0; i < TICK_RATE; i++) sim.tick();
+      expect(realmRacersGhosted(racer)).toBe(false);
+    });
+  }
 });
 
 describe('the separation at the cap is no rival contact', () => {
@@ -573,14 +723,17 @@ describe('hazards ignore the ghost', () => {
   /** A ghost past its lock, held a ghost by a rival parked on it. */
   function unlockedGhost() {
     const staged = racing();
-    const { sim, match, a, b, racer, progress } = staged;
+    const { sim, match, a, b, racer } = staged;
+    // A manual lock ends on the ghost's earliest clear tick.
+    const unlockedTick = manualGhostClearTick(sim.tickCount);
     sim.realmRacersResetPosition(a);
-    while (sim.tickCount < progress.ghostClearTick + 1) {
+    while (sim.tickCount < unlockedTick + 1) {
       parkOn(sim, match, b, racer);
       sim.tick();
     }
     expect(realmRacersGhosted(racer)).toBe(true);
-    expect(sim.tickCount).toBeGreaterThan(progress.resetLockedUntilTick);
+    expect(realmRacersMovementLockedAt(sim.ctx, a, unlockedTick - 1)).toBe(true);
+    expect(realmRacersMovementLockedAt(sim.ctx, a, sim.tickCount)).toBe(false);
     return staged;
   }
 

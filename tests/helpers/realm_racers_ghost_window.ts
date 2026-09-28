@@ -1,8 +1,8 @@
 // One recovery's ghost window, asserted end to end on a live race: the ghost
 // holds to its earliest clear tick even with nobody near it (the minimum), and
-// with a rival held on it from there it holds to the cap exactly, then goes.
-// Shared by the ghost suite and the recovery suite, so every recovery kind is
-// judged by the same rule.
+// then either ends on that very tick (nobody near) or, with a rival held on it,
+// holds to the cap exactly, then goes. Shared by the ghost suite and the
+// recovery suite, so every recovery kind is judged by the same rule.
 
 import { expect } from 'vitest';
 import {
@@ -11,50 +11,78 @@ import {
   realmRacersGhosted,
 } from '../../src/sim/realm_racers_ghost';
 import type { Sim } from '../../src/sim/sim';
-import type { RealmRacersProgress } from '../../src/sim/social/realm_racers';
+import {
+  REALM_RACERS_RESET_LOCK_TICKS,
+  type RealmRacersProgress,
+} from '../../src/sim/social/realm_racers';
 import type { Entity } from '../../src/sim/types';
 
-export interface GhostWindowCase {
+// The expected windows are spelled out from the constants here rather than
+// read back off the race or the module's own window function, so a wrong rule
+// there cannot agree with itself. Ticks are exclusive, the lock's convention.
+
+/** A manual recovery at `resetTick`: its two-second lock outlasts the minimum,
+ *  so the ghost may end on the tick the lock does. */
+export function manualGhostClearTick(resetTick: number): number {
+  return resetTick + REALM_RACERS_RESET_LOCK_TICKS + 1;
+}
+
+/** An automatic (stuck, loiter) or cut recovery at `resetTick`: the minimum
+ *  from the recovery outlasts its short lock. */
+export function autoGhostClearTick(resetTick: number): number {
+  return resetTick + REALM_RACERS_GHOST_MIN_TICKS + 1;
+}
+
+export interface GhostEndCase {
   sim: Sim;
   racer: Entity;
   progress: RealmRacersProgress;
-  /** `sim.tickCount` right after the recovery was observed. */
-  resetTick: number;
+  /** From `manualGhostClearTick` or `autoGhostClearTick`. */
+  earliestClearTick: number;
+}
+
+export interface GhostWindowCase extends GhostEndCase {
   /** Put a rival on top of the recovered machine (called before each tick). */
   holdRivalOn: () => void;
 }
 
-export function expectGhostWindow(c: GhostWindowCase): void {
-  const { sim, racer, progress, resetTick } = c;
+/** The window opened as spelled, and nobody near it: a ghost up to the tick
+ *  before its earliest clear. */
+function expectMinimumHeld(c: GhostEndCase): void {
+  const { sim, racer, progress, earliestClearTick } = c;
   expect(realmRacersGhosted(racer)).toBe(true);
-  // Spelled out here rather than read back off the module's own window
-  // function, so a wrong rule there cannot agree with itself: the minimum is
-  // from the RECOVERY whatever lock it carried, and the cap is one margin past
-  // the earliest clear.
-  const earliestClearTick = Math.max(
-    progress.resetLockedUntilTick,
-    resetTick + REALM_RACERS_GHOST_MIN_TICKS + 1,
-  );
-  const expected = {
-    earliestClearTick,
-    capTick: earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS,
-  };
-  expect(progress.ghostClearTick).toBe(expected.earliestClearTick);
-  expect(progress.ghostCapTick).toBe(expected.capTick);
-  // Nobody near it: still a ghost for the whole minimum.
-  while (sim.tickCount < expected.earliestClearTick - 1) {
+  expect(progress.ghostClearTick).toBe(earliestClearTick);
+  expect(progress.ghostCapTick).toBe(earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS);
+  while (sim.tickCount < earliestClearTick - 1) {
     sim.tick();
     expect(realmRacersGhosted(racer)).toBe(true);
   }
-  // Held on from there: a ghost to the cap, and not one tick more.
-  while (sim.tickCount < expected.capTick - 1) {
+}
+
+/** Nobody near it at all: the ghost ends ON its earliest clear tick. */
+export function expectGhostEndsWhenClear(c: GhostEndCase): void {
+  expectMinimumHeld(c);
+  const { sim, racer, progress, earliestClearTick } = c;
+  sim.tick();
+  expect(sim.tickCount).toBe(earliestClearTick);
+  expect(realmRacersGhosted(racer)).toBe(false);
+  expect(progress.ghostCapTick).toBe(0);
+}
+
+/** A rival held on it from the tick before its earliest clear: a ghost to the
+ *  cap, and not one tick more. */
+export function expectGhostWindow(c: GhostWindowCase): void {
+  expectMinimumHeld(c);
+  const { sim, racer } = c;
+  const capTick = c.earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS;
+  while (sim.tickCount < capTick - 1) {
     c.holdRivalOn();
     sim.tick();
     expect(realmRacersGhosted(racer)).toBe(true);
   }
   c.holdRivalOn();
   sim.tick();
-  expect(sim.tickCount).toBe(expected.capTick);
+  expect(sim.tickCount).toBe(capTick);
   expect(realmRacersGhosted(racer)).toBe(false);
 }
 

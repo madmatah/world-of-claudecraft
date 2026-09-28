@@ -36,10 +36,11 @@ export const REALM_RACERS_GHOST_MIN_TICKS = (3 * TICK_RATE) / 2;
  * How long past its earliest clear tick a ghost may last at most, ticks.
  *
  * The ghost normally ends the first tick it may clear and is clear of every
- * rival. The margin only bounds the case where a rival parks on top of it: one
- * second of driving is enough to separate two machines that want to be
- * separated, and short enough that nobody can use the window to pass through a
- * rival they would otherwise have to go around.
+ * rival; the margin bounds how long an overlap can keep it going past that, and
+ * one second of driving is enough to part two machines that want to be parted.
+ * The window itself is intangible driving by design (about 1.5 s after an
+ * automatic recovery's one-tick lock), and the recovery that opened it already
+ * cost the pilot the trip back to the last anchor.
  */
 export const REALM_RACERS_GHOST_MARGIN_TICKS = TICK_RATE;
 

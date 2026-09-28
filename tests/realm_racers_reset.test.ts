@@ -10,6 +10,7 @@ import { REALM_RACERS_GHOST_AURA, realmRacersGhosted } from '../src/sim/realm_ra
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
+  REALM_RACERS_CUT_LOCK_TICKS,
   REALM_RACERS_LOITER_TICKS,
   REALM_RACERS_LOITER_WARN_TICKS,
 } from '../src/sim/realm_racers_track_limits';
@@ -28,7 +29,12 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
-import { expectGhostWindow, followThrough } from './helpers/realm_racers_ghost_window';
+import {
+  autoGhostClearTick,
+  expectGhostEndsWhenClear,
+  expectGhostWindow,
+  followThrough,
+} from './helpers/realm_racers_ghost_window';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 /** The racers the sim has marked with the silent relocation event (the
@@ -593,7 +599,10 @@ describe('Realm Racers track limits in a live race', () => {
       glide(sim, a, exit.x + (target.x - exit.x) * t, exit.z + (target.z - exit.z) * t);
     }
     expect(progress.cutReturnUntilTick).toBeGreaterThan(sim.ctx.tickCount);
-    return { ...staged, progress, resetTick: sim.tickCount };
+    const resetTick = sim.tickCount;
+    const lockedUntilTick = resetTick + REALM_RACERS_CUT_LOCK_TICKS + 1;
+    expect(progress.resetLockedUntilTick).toBe(lockedUntilTick);
+    return { ...staged, progress, resetTick, lockedUntilTick };
   }
 
   /** A real loiter return: parked off the road, circling, until the clock runs out. */
@@ -612,7 +621,10 @@ describe('Realm Racers track limits in a live race', () => {
       glide(sim, a, racer.pos.x + road.tz * wobble, racer.pos.z - road.tx * wobble);
     }
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
-    return { ...staged, progress, resetTick: sim.tickCount };
+    const resetTick = sim.tickCount;
+    const lockedUntilTick = resetTick + REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS + 1;
+    expect(progress.resetLockedUntilTick).toBe(lockedUntilTick);
+    return { ...staged, progress, resetTick, lockedUntilTick };
   }
 
   for (const [kind, stage] of [
@@ -626,18 +638,29 @@ describe('Realm Racers track limits in a live race', () => {
         sim,
         racer,
         progress,
-        resetTick,
+        earliestClearTick: autoGhostClearTick(resetTick),
         holdRivalOn: () => parkOffRoad(sim, match, b, racer.pos.x + 1, racer.pos.z),
+      });
+    });
+
+    it(`ends a ${kind} ghost on its earliest clear tick with nobody near`, () => {
+      const { sim, a, pids, match, racer, progress, resetTick } = stage();
+      clearTheField(sim, match, pids, a, progress.lastS);
+      expectGhostEndsWhenClear({
+        sim,
+        racer,
+        progress,
+        earliestClearTick: autoGhostClearTick(resetTick),
       });
     });
 
     it(`replays the playtest on a ${kind}: a follower at speed passes it clean`, () => {
       const run = (ghost: boolean) => {
-        const { sim, a, b, pids, match, racer, progress } = stage();
+        const { sim, a, b, pids, match, racer, progress, lockedUntilTick } = stage();
         clearTheField(sim, match, pids, a, progress.lastS);
         // The follower arrives once the short lock is over, which is exactly
         // when a ghost tied to the lock alone would already have gone.
-        while (sim.tickCount < progress.resetLockedUntilTick) sim.tick();
+        while (sim.tickCount < lockedUntilTick) sim.tick();
         expect(realmRacersGhosted(racer)).toBe(true);
         if (!ghost) racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_GHOST_AURA);
         return followThrough({
