@@ -277,6 +277,32 @@ failure, kept as stable English that `main.ts` re-localizes.
   gated states and `?nopredict` use the plain interpolated fallback in
   `src/render/self_render_position_core.ts`, with the rewind-clamped handoff.
   The legacy extrapolator is deleted when v1 is retired, not before.
+- **Movement wire v2 predicts a seated Realm Racers pilot too**, under the same
+  constraints. The pieces: (a) the capability: `src/net/world_auth_message.ts`
+  advertises `driveReconWire` (`DRIVE_RECON_WIRE_VERSION`) and the server keeps
+  it per session (`server/ws_auth.ts`, `server/movement_input_timeline_v2.ts`);
+  a client that does not advertise it keeps the rounded `drv` and is never
+  predicted while seated. (b) The recon: for a capable v2 session the self
+  block drops the rounded self `drv` and carries `rdv`, the full-precision
+  drive state at the acked tick (encoder `server/drive_recon_wire.ts`, decoder
+  `src/net/drive_recon_wire.ts`, both inside the reconciliation self-wire
+  modules); rivals keep their `drv`, which the rival projection reads. A
+  malformed `rdv` decodes to null and stands the prediction down. (c) The
+  epoch: `server/movement_override_epoch.ts` compares a `driving` bit, carries
+  an active `raceLocked` bit (`realmRacersMovementLockedAt`: every phase but
+  racing, a retired pilot, the recovery lock), sizes a driver's legal step by
+  the machine (`vehicleStepCeilingYd`) instead of run speed, and ignores
+  move-speed changes while a pilot drives, so a kart at race speed no longer
+  bumps it every tick. (d) The flag:
+  `MovementPredictionPipeline.predictDrivers` (`src/render/self_prediction.ts`)
+  is on by default; `?drivepredict=0` (`src/render/render_dev_flags.ts`) is
+  the A/B opt-out that draws the kart from the interpolated mirror instead.
+  main.ts never sets it. Contacts, blasts, oil, nitro and pickups stay server
+  outcomes that arrive through the reconcile replay; they are never predicted.
+  Proofs: `tests/realm_racers_prediction_proof.test.ts`,
+  `tests/realm_racers_v2_prediction.test.ts`,
+  `tests/realm_racers_drive_recon_online.test.ts`, and for rivals drawn in the
+  local kart's time frame, `tests/realm_racers_rival_frames.test.ts`.
 - **The heading is NOT predicted, it is client-authoritative input.** The facing
   channel (`input.facing`, applied outright when the player may turn)
   has always been client-driven for mouselook; `src/game/keyboard_turn_facing.ts`

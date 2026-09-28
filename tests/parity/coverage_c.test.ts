@@ -1563,11 +1563,16 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     expect(SCENARIOS.filter((s) => s.name.startsWith('rift_clear_rewards')).length).toBe(4);
   });
 
-  it('realm_racers: seats a grid, drives, takes a box, and classifies the forfeit cascade', () => {
+  it('realm_racers: seats a grid, drives, bumps, takes a box, and classifies the forfeit cascade', () => {
     const rec = run('realm_racers');
     const ev = rec.allEvents as Ev[];
     // The grid really seated and went green: one personal GO per pilot.
     expect(ev.filter((e) => e.type === 'realmRacersGo')).toHaveLength(4);
+    // The rival contact beat really resolved an announced impact between the
+    // third and fourth pilots, so a contact-rule change moves the digest.
+    const bumps = ev.filter((e) => e.type === 'realmRacersBump');
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].impact as number).toBeGreaterThan(3);
     // The box really changed hands, which is the tick the one weighted effect
     // draw fires on; without it the digest never covers the rally's draw site.
     expect(ev.some((e) => e.type === 'realmRacersPickup')).toBe(true);

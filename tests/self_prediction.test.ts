@@ -386,7 +386,6 @@ describe('MovementPredictionPipeline for a seated driver', () => {
 
   it('arms the stand-down re-seed while a malformed row holds the last good machine', () => {
     const { pipeline, wire, self } = driverFixture();
-    pipeline.predictDrivers = true;
     // What a malformed `rdv` leaves: the mirror still seated on the held
     // machine, no drive recon, and the override flag standing the client down.
     wire.reconDrive = null;
@@ -400,7 +399,7 @@ describe('MovementPredictionPipeline for a seated driver', () => {
 
   it('keeps a driver standing down on a drive recon while driver prediction is off', () => {
     const { pipeline, wire } = driverFixture();
-    expect(pipeline.predictDrivers).toBe(false);
+    pipeline.predictDrivers = false;
     wire.reconDrive = createVehicleDrive('rally_loaner');
     for (let epoch = 1; epoch <= 3; epoch++) {
       wire.reconOverrideEpoch = epoch;
@@ -414,7 +413,6 @@ describe('MovementPredictionPipeline for a seated driver', () => {
 
   it('re-seeds once the drive recon arrives while still seated', () => {
     const { pipeline, wire, self } = driverFixture();
-    pipeline.predictDrivers = true;
     self.drive = null;
     drivePredictionFrame(pipeline, 5);
     expect(pipeline.display()).not.toBeNull();
@@ -428,9 +426,9 @@ describe('MovementPredictionPipeline for a seated driver', () => {
     expect(wire.reconcileOutcomes).toEqual([]);
   });
 
-  it('predicts a driver once the wire carries a drive recon', () => {
+  it('predicts a driver by default once the wire carries a drive recon', () => {
     const { pipeline, wire } = driverFixture();
-    pipeline.predictDrivers = true;
+    expect(pipeline.predictDrivers).toBe(true);
     wire.reconDrive = createVehicleDrive('rally_loaner');
     drivePredictionFrame(pipeline, 10);
     expect(ringHead(pipeline)).not.toBeNull();
@@ -458,7 +456,6 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     wire.reconVy = 0;
     wire.reconOnGround = true;
     const pipeline = new MovementPredictionPipeline(SEED);
-    pipeline.predictDrivers = true;
     pipeline.connect(wire, 0);
     pipeline.prepare(wire, self, true);
     return { pipeline, wire, self };
@@ -747,7 +744,6 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
   it('hands a runner acknowledgement no drive, vertical state or auras', () => {
     function correctedRunner(noise: boolean): MotionState {
       const { pipeline, wire } = predictionFixture();
-      pipeline.predictDrivers = true;
       if (noise) {
         wire.reconVy = 5;
         wire.reconOnGround = false;
@@ -764,7 +760,7 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(head).toEqual(correctedRunner(false));
   });
 
-  it('is never switched on by main.ts', () => {
+  it('is never switched by main.ts', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     expect(main).toMatch(/new MovementPredictionPipeline/);
     expect(main).not.toMatch(/predictDrivers|drivepredict/);

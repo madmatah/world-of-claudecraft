@@ -711,14 +711,14 @@ describe('Realm Racers circuits: which one a race lands on', () => {
     );
     expect(slot, 'the racer stands on a derived grid slot').toBeDefined();
 
-    // 3) Let the countdown run out and a machine drive most of a lap, then the
-    // race's own record of where it is has to be the arc length THIS curve
-    // gives for where it physically stands. Measured on the house pilot rather
-    // than the human: a test player has no throttle, and a racer sitting still
-    // on the grid would satisfy this without proving anything.
-    const bot = match.pids.find((pid) => pid !== human);
-    if (bot === undefined) throw new Error('no house pilot');
-    const agreement = (): { lastS: number; travelled: number } => {
+    // 3) Let the countdown run out and the machines drive most of a lap, then
+    // the race's own record of where each is has to be the arc length THIS
+    // curve gives for where it physically stands. Measured on the house pilots
+    // rather than the human: a test player has no throttle, and a racer sitting
+    // still on the grid would satisfy this without proving anything.
+    const bots = match.pids.filter((pid) => pid !== human);
+    if (bots.length === 0) throw new Error('no house pilot');
+    const agreement = (bot: number): number => {
       const driver = sim.entities.get(bot);
       const progress = match.progress.get(bot);
       if (!driver || !progress) throw new Error('no progress');
@@ -728,15 +728,18 @@ describe('Realm Racers circuits: which one a race lands on', () => {
         progress.trackIndex,
       );
       expect(progress.lastS).toBeCloseTo(projected.s, 6);
-      return { lastS: progress.lastS, travelled: progress.travelled };
+      return progress.travelled;
     };
     for (let tick = 0; tick < 20 * 8; tick++) sim.tick();
-    const early = agreement();
+    const early = bots.map(agreement);
     for (let tick = 0; tick < 20 * 8; tick++) sim.tick();
-    const later = agreement();
-    // Not vacuous: the machine really drove a stretch of the derived lap
-    // between the two readings, and both agreed with the curve.
-    expect(later.travelled - early.travelled).toBeGreaterThan(50);
+    const later = bots.map(agreement);
+    // Not vacuous: the machines really drove a stretch of the derived lap
+    // between the two readings, and every one agreed with the curve both times.
+    // One pilot may lose that stretch to a Ground Blast knock off the road,
+    // which the track-limits referee takes a few seconds to recover.
+    const drove = later.filter((travelled, i) => travelled - early[i] > 50);
+    expect(drove.length).toBeGreaterThanOrEqual(bots.length - 1);
 
     // 4) And the race is run over the DERIVED lap, never a constant.
     expect(match.totalLaps).toBe(circuit.practiceLaps);

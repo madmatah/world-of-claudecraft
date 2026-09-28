@@ -84,6 +84,7 @@ import { MovementPredictionPipeline } from '../../src/render/self_prediction';
 import type { MotionState } from '../../src/render/self_prediction_core';
 import {
   createSelfRenderPositionState,
+  displayedAimPose,
   noteSelfIdentity,
   type SelfRenderPrediction,
 } from '../../src/render/self_render_position_core';
@@ -276,6 +277,10 @@ export interface ClientFrameInfo {
   selfMotion: SelfRenderPrediction | null;
   /** The drawn self pose. */
   drawn: Readonly<{ x: number; y: number; z: number }>;
+  /** The pose the HUD's ground-aim clamp measures from: renderer.selfAimPose
+   *  (displayedAimPose), null while the display is not predicted, where the
+   *  HUD falls back to the mirrored player. */
+  aimPose: Readonly<{ pos: { x: number; y: number; z: number }; facing: number }> | null;
   predictorActive: boolean;
   /** The events this frame drained off the client. */
   events: readonly SimEvent[];
@@ -669,9 +674,9 @@ function createClientRig(params: ClientRigParams): ClientRig {
       }
     }
 
-    // main.ts reads the renderer's PREVIOUS frame for the driving heading.
-    const predictedDrivingFacing =
-      selfRender.active && selfRender.predictor?.driving ? selfRender.predictor.facing : null;
+    // main.ts reads the renderer's PREVIOUS frame for the driving heading
+    // (renderer.selfMotionFacing, the drive view on either wire).
+    const predictedDrivingFacing = selfRender.drive.steersHeading ? selfRender.drive.facing : null;
     if (driving) {
       cameraFacing = cameraFollowFacing(
         true,
@@ -788,12 +793,17 @@ function createClientRig(params: ClientRigParams): ClientRig {
       : null;
 
     if (frameHooks.length > 0) {
+      const aim = displayedAimPose(selfRender, pe.facing, {
+        pos: { x: 0, y: 0, z: 0 },
+        facing: 0,
+      });
       const info: ClientFrameInfo = {
         nowMs: now,
         frameDtSec: frameDt,
         alpha,
         selfMotion,
         drawn: { x: drawn.x, y: drawn.y, z: drawn.z },
+        aimPose: aim,
         predictorActive: selfRender.active,
         events,
       };

@@ -1457,13 +1457,12 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(progressB.hadRivalContact).toBe(true);
   });
 
-  it('fires an imminent lunge through the forward contact window, impulse-only', () => {
-    // Option B of docs/prd/realm-racers-contact-lag-compensation.md, wired:
-    // A dives laterally at B with the same-tick gap still OUTSIDE the 3.4 yd
-    // reach, closing fast enough that the hulls meet within the 2-tick
-    // horizon (the exact shape of the uplink miss). The window arm must fire
-    // the bump now, impulse-only: both machines keep their positions, only
-    // their velocities pay.
+  it('holds an imminent lunge until the hulls meet: there is no forward window', () => {
+    // docs/prd/realm-racers-contact-lag-compensation.md: A dives laterally at
+    // B with the same-tick gap still OUTSIDE the 3.4 yd reach, closing fast
+    // enough that the hulls would meet within two ticks. The retired forward
+    // window fired that bump now; with rivals drawn in the local kart's time
+    // frame the contact waits for the real touch, on every host.
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
     const track = realmRacersTrack(RACE_CIRCUIT);
@@ -1503,15 +1502,15 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(progressA.hadRivalContact).toBe(false);
     sim.tickCount++;
     updateRealmRacers(sim.ctx);
-    expect(progressA.hadRivalContact).toBe(true);
-    expect(progressB.hadRivalContact).toBe(true);
-    // Impulse-only: the early window never moves a hull.
+    expect(progressA.hadRivalContact).toBe(false);
+    expect(progressB.hadRivalContact).toBe(false);
+    // Nothing fired: no hull moved and neither machine paid any speed.
     expect(racerA.pos.x).toBe(posA.x);
     expect(racerA.pos.z).toBe(posA.z);
     expect(racerB.pos.x).toBe(posB.x);
     expect(racerB.pos.z).toBe(posB.z);
-    // The dive cost A speed along the touch normal.
-    expect(driveA.speed).toBeLessThan(Math.hypot(15, 30));
+    expect(driveA.speed).toBe(Math.hypot(15, 30));
+    expect(driveB.speed).toBe(30);
   });
 
   it('tracks a Ground Blast hit on the victim only', () => {

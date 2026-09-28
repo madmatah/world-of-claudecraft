@@ -1,117 +1,100 @@
 # Realm Racers: contact under latency, the last mile
 
-Status: DECIDED, Option B chosen and implemented, in its FORWARD form:
-`resolveVehicleContactEarly` in `src/sim/vehicle_contact.ts`, wired into
-`tickContacts` behind `REALM_RACERS_CONTACT_EARLY_TICKS`. The window fires
-the touch a pair is ABOUT to make within the horizon at its current motion,
-impulse-only (no depenetration, no position writes), gated on the
-announceable-bump closing-speed floor.
-
-Why forward rather than the history sketch below: the first implementation
-compared the attacker's present hull against the rival's recorded past
-segments, and review measured the flaw before it shipped. Testing against
-where the rival stood K ticks ago forgives the rival's OWN displacement,
-several yards per tick at race speed, so a straight-line follower took a full
-bump from 7 to 12 yards back at 4 yd/s of closing while a genuinely close one
-got nothing (the reach around discrete past segments forms an annulus, not a
-disc). The forward window forgives only the CLOSING distance covered inside
-the horizon, under a yard for a tailgater and a couple of yards in a real
-lunge, which is the actual perception gap; a slipstream with ~zero closing
-can never trip it, and no position history, teleport invalidation, or probe
-ordering exists at all. Awaiting the user's in-game verdict on whether it
-stays.
+Status: DECIDED, and the forward window is RETIRED. Racer contact is the
+same-tick swept test (`resolveVehicleContactSwept` in
+`src/sim/vehicle_contact.ts`, called from `tickContacts` in
+`src/sim/social/realm_racers.ts`) on every host, offline, online and headless
+alike. The earlier Option B, a forward window that fired a touch up to two
+ticks before the hulls met (`resolveVehicleContactEarly` behind
+`REALM_RACERS_CONTACT_EARLY_TICKS`), was implemented, measured once the display
+was right, and removed. The pin is the "holds an imminent lunge until the hulls
+meet" case in `tests/realm_racers_match.test.ts`, plus the "lot 7 flipped"
+block in `tests/realm_racers_rival_frames.test.ts`.
 
 ## Where the problem stands
 
-Racer-versus-racer contact resolves server side, in `tickContacts`
-(`src/sim/social/realm_racers.ts`), by testing both machines at the same
-server tick against their combined body radius (3.4 yards for two loaners).
-Three latency fixes have already landed on `feature/realm-racers`:
+Racer-versus-racer contact resolves server side, in `tickContacts`, by testing
+both machines at the same server tick against their combined body radius (3.4
+yards for two loaners). The contact test is swept over the tick's motion, so a
+pair whose closing speed crosses the whole reach inside one 50 ms tick (a
+head-on, a shell launch) cannot tunnel through the discrete test.
 
-1. Remote machines are drawn projected to the present through the real
-   vehicle kernel (`src/render/remote_vehicle_display_core.ts`), removing the
-   downlink-plus-interval display lag (~110 ms at a 120 ms RTT) and the
-   jitter stutter.
-2. The pilot's own machine was already predicted to the present
-   (`src/render/self_motion.ts`).
-3. The contact test is swept over the tick's motion
-   (`resolveVehicleContactSwept` in `src/sim/vehicle_contact.ts`), so a pair
-   whose closing speed crosses the whole reach inside one 50 ms tick (a
-   head-on, a shell launch) can no longer tunnel through the discrete test.
+What each pilot's screen shows, on movement wire v2 (every browser):
 
-What remains is structural: at a round trip of E, the server's copy of the
-LOCAL machine trails the pose its pilot is steering by roughly the uplink
-half plus tick quantization (E/2 + up to 50 ms; about 85 ms at E = 120 ms).
-Both pilots see themselves at the present and their rival near the present,
-but the server compares two poses of which each pilot's OWN is stale. A lunge
-that visually connects can therefore still miss server side by
-`speed * (E/2 + q)`: about 2.5 yards at 30 yd/s, under but close to the
-3.4 yard reach, and more at speed. No client-side display work can close this
-gap; only the server's contact rule can.
+1. The pilot's own kart IS predicted in the browser. The v2 pipeline
+   (`src/render/self_prediction.ts` with `self_prediction_core.ts`) steps the
+   shared kernel over the same per-tick input frames the client sent, seeded
+   and reconciled from the full-precision drive recon `rdv`, so the kart is
+   drawn about the uplink AHEAD of the server's copy. Driver prediction is on by
+   default (`MovementPredictionPipeline.predictDrivers`); `?drivepredict=0` is
+   the playtest opt-out that draws the kart from the interpolated mirror. The
+   earlier premise of this document, "the pilot's own machine was already
+   predicted to the present (`src/render/self_motion.ts`)", described the v1
+   extrapolator, which no browser runs: before the drive-aware v2 prediction
+   the browser either stepped a kart with the runner kernel (a 20 Hz surge and
+   snap) or, stood down, drew it from the mirror, behind the server.
+2. Rivals are projected through the real vehicle kernel into the SAME time
+   frame as the local kart (`remoteRacerHorizon` in
+   `src/render/remote_vehicle_display_core.ts`): the horizon is the local
+   display's predicted client tick over the acknowledged one
+   (`selfFrameLeadMs`), read off the predictor's own bookkeeping, with no ping
+   estimate. So a rival drawn next to your kart is where the server will have it
+   when the server reaches the instant your kart shows.
 
-## Options
+With both machines drawn in one frame, the touch a pilot sees is the touch the
+server computes about one uplink later. The remaining latency is the reaction:
+a bump is a server outcome, so it reaches the screen through the reconcile
+replay about one round trip after the drawn touch. That is inherent to
+server-authoritative contact and is not a contact-rule problem.
 
-### Option A: accept the residual
+## The forward window, measured and retired
 
-Do nothing further. The gap is now under one body radius at typical corner
-speeds and pings, and every other latency symptom is addressed.
+The window assumed a client geometry that was false when it shipped (no browser
+predicted the local kart) and it runs as a sim constant, so it also fired early
+offline and between house pilots, where there is no latency at all. Once the
+local kart was predicted and rivals shared its frame, it was measured with the
+two-human duel harness (`tests/helpers/rival_frames.ts` `runDuel`, driver
+prediction on, the rear ram and the side swipe at 60 / 120 / 200 ms, 10 ms
+jitter), at its shipped value (two ticks), at one tick, and removed:
 
-- Cost: zero. Risk: zero.
-- Verdict: the honest baseline. Reject only if play testing still reads
-  contact as unfair.
+| Window | Server gap at the bump, yd (reach 3.40) | Screens: first drawn touch vs the server bump, ms |
+|---|---|---|
+| 2 ticks | 3.61 to 5.19 (every bump over the reach) | +150 to -50; the 60 ms rear ram never draws a touch at all (closest 3.53 / 3.59 yd) |
+| 1 tick | 3.40 to 4.23 | +150 to -67 |
+| none | 3.40 exactly (every bump) | -17 to -100: every screen draws the touch first, by at most its own lead plus a tick |
 
-### Option B: time-window contact (recommended)
+Every contact still happened with the window removed (no missed bump in any
+scenario or RTT). With the window, bumps fired while both screens still drew a
+gap ("bounce off air"); without it, each screen shows the hulls meeting and the
+server bumps at the touch. An online-only residue would need a per-session
+latency input fed into the sim, which is Option C's cost (below) for a benefit
+the measurement does not show, so none is kept.
 
-Keep a short per-racer position history on the match (sim state, a ring of
-the last N tick segments, N around 4). Declare contact when machine A's
-segment at tick t and machine B's segment at tick s come within reach for any
-pair with `|t - s| <= K` ticks, with K a small constant (start at 2, i.e.
-100 ms). Resolve at the touch configuration of the offending pair of
-segments, with the same impulse pipeline the swept test uses today.
+One side effect worth knowing: with no early impulse, a grid-start side contact
+between two house pilots is a real touch with depenetration, so a pilot can be
+shoved into the barrier off the grid and spend a few seconds backing out. That
+is ordinary racing behavior, not a regression of the contact rule.
 
-The rule is symmetric by construction: it never asks whose view was right,
-it asks whether the two hulls crossed the same ground within K ticks of each
-other, which is exactly the situation both pilots read as "we touched". It
-needs no per-session latency estimate, draws no rng, and adds no new tick
-phase (it extends the existing contact pass), so determinism and the parity
-gate are untouched: the history is ordinary sim state and K is a constant.
-
-- Cost: a bounded history ring per seated racer, and the pair test grows
-  from one segment pair to at most (2K+1) segment pairs; with four racers
-  and K = 2 that is at most 30 sweep tests per tick, all pure arithmetic.
-- Risk: ghost contacts. A pair that genuinely missed by less than
-  `relative speed * K ticks` reads as a touch. At K = 2 and a 20 yd/s
-  relative pass that is up to 2 yards of tolerance: the same order as the
-  perception gap it forgives. K is the single knob; lower it if contact
-  feels grabby, and K = 0 degrades exactly to today's swept test.
-- Fairness note: the tolerance applies identically to every pilot whatever
-  their ping, which is both its virtue (no per-player asymmetry to exploit)
-  and its limit (a 300 ms pilot still misses more than a 40 ms one; the
-  window narrows the difference rather than erasing it).
+## Options that stay parked
 
 ### Option C: per-viewer rewind (classic lag compensation)
 
-Keep the same position history, estimate each session's one-way delay, and
-evaluate the contact for each pilot against the rival rewound to that
-pilot's view time.
+Keep a position history, estimate each session's one-way delay, and evaluate
+the contact for each pilot against the rival rewound to that pilot's view time.
 
 - Cost: per-session latency estimation feeding the sim (a new impurity to
   fence), and a genuine design problem: contact is symmetric, so when the
-  rewound evaluation succeeds for one pilot and fails for the other, the
-  server must pick a winner. Every choice (favor the initiator, favor the
-  lower ping, apply half) creates an outcome one pilot demonstrably did not
-  see, and "initiator" is not even well defined for two machines leaning on
-  each other.
-- Risk: high-ping advantage (the classic favor-the-shooter complaint,
-  symmetrized), plus parity-gate and determinism plumbing for the latency
-  input.
-- Verdict: the heavy option. Only worth specifying further if Option B's
-  uniform window proves insufficient in play.
+  rewound evaluation succeeds for one pilot and fails for the other, the server
+  must pick a winner, and every choice creates an outcome one pilot
+  demonstrably did not see.
+- Risk: high-ping advantage, plus parity-gate and determinism plumbing for the
+  latency input.
+- Verdict: not needed while rivals are drawn in the local kart's frame.
 
-## Recommendation
+### Display-only contact impulse
 
-Option B with K = 2, behind a named constant beside the other contact
-tuning in `src/sim/vehicle_contact.ts` or the rally module, with the
-degenerate K = 0 pinned equal to the swept test in the leaf's suite. Ship it,
-play test under netem at 60 to 150 ms, and only then decide whether Option C
-is worth its complexity.
+Play the bump on the screen at the drawn touch, before the server confirms it,
+so the reaction does not wait a round trip. It reverses the "we never predict a
+bump" rule, and a false positive (a rival steering away at the last moment)
+bounces the rival and then snaps it back. Parked: to be tried behind a flag
+after the flag-on playtest, and kept only if such mispredictions are rare.

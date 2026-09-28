@@ -45,18 +45,24 @@ describe('render dev flags: the GPU timer probe gate', () => {
   });
 });
 
-describe('render dev flags: the driver prediction playtest arm', () => {
-  it('is off by default, off in a headless host, and only on under ?drivepredict=1', async () => {
-    expect((await loadFlags('?perf')).drivePredictionRequested()).toBe(false);
-    expect((await loadFlags(null)).drivePredictionRequested()).toBe(false);
-    expect((await loadFlags('?drivepredict=on')).drivePredictionRequested()).toBe(false);
-    expect((await loadFlags('?perf&drivepredict=1')).drivePredictionRequested()).toBe(true);
+describe('render dev flags: the driver prediction opt-out', () => {
+  it('is on by default, on in a headless host, and only off under ?drivepredict=0', async () => {
+    expect((await loadFlags('')).drivePredictionRequested()).toBe(true);
+    expect((await loadFlags('?perf')).drivePredictionRequested()).toBe(true);
+    expect((await loadFlags(null)).drivePredictionRequested()).toBe(true);
+    // Any other value keeps the default, so a typo cannot silently stand down.
+    for (const search of ['?drivepredict=1', '?drivepredict=no', '?drivepredict=', '?nopredict']) {
+      expect((await loadFlags(search)).drivePredictionRequested(), search).toBe(true);
+    }
+    expect((await loadFlags('?perf&drivepredict=0')).drivePredictionRequested()).toBe(false);
+    // The file's own `=off` idiom reads as the opt-out too.
+    expect((await loadFlags('?drivepredict=off')).drivePredictionRequested()).toBe(false);
   });
 
   it('is the default a new movement pipeline takes', async () => {
     for (const [search, on] of [
-      ['?drivepredict=1', true],
-      ['', false],
+      ['?drivepredict=0', false],
+      ['', true],
     ] as const) {
       vi.resetModules();
       vi.stubGlobal('location', { search });

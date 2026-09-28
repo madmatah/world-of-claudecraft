@@ -4,7 +4,7 @@
 // without a camera step. Pure ({x,y,z} in and out, no Three), so the renderer
 // is a thin consumer and a headless latency harness can drive the same math.
 
-import { type Entity, RUN_SPEED } from '../sim/types';
+import { DT, type Entity, RUN_SPEED } from '../sim/types';
 import {
   createSelfDriveView,
   driveViewFromMirror,
@@ -153,6 +153,24 @@ export interface ReconciledSelfPrediction {
 
 export type SelfRenderPrediction = SelfMotionFrame | ReconciledSelfPrediction;
 
+/**
+ * How far ahead of the snapshot its acknowledgement came in the local kart is
+ * drawn, ms, or null when the local kart is not predicted (on foot, stood down,
+ * suspended, or a v1 frame). The display lerps the predicted head between the
+ * tick before it and the head itself at `tickAlpha`, so it shows client tick
+ * `head - 1 + alpha`; the snapshot's poses are the server's state after it
+ * consumed tick `ack`, and every later server tick consumes the next one. The
+ * gap is therefore `(tickOffset - 1 + alpha)` ticks, read off the predictor's
+ * own bookkeeping: no ping estimate and no clock of its own.
+ */
+export function selfFrameLeadMs(selfMotion: SelfRenderPrediction | null): number | null {
+  if (!selfMotion || !('kind' in selfMotion)) return null;
+  const offset = selfMotion.tickOffset;
+  const alpha = selfMotion.tickAlpha;
+  if (offset == null || alpha == null) return null;
+  return (offset - 1 + alpha) * DT * 1000;
+}
+
 export function selfSnapshotAlpha(alpha: number, lead: number): number {
   return Math.min(1.25, alpha + Math.max(0, lead));
 }
@@ -170,6 +188,9 @@ export interface SelfRenderPositionState {
   predictor: SelfMotionPredictor | null;
   /** The local kart on either wire (self_drive_view_core.ts). */
   drive: SelfDriveView;
+  /** `selfFrameLeadMs` of the frame the v2 prediction drew last, null on a v1
+   *  frame, on the fallback, and whenever the frame carries no tick offset. */
+  reconciledLeadMs: number | null;
 }
 
 export function createSelfRenderPositionState(
@@ -183,7 +204,41 @@ export function createSelfRenderPositionState(
     lastSelfId: null,
     predictor: null,
     drive: createSelfDriveView(),
+    reconciledLeadMs: null,
   };
+}
+
+/**
+ * Perf-overlay telemetry: ms of latency the prediction hides, that is how far
+ * ahead of the snapshot it reconciles against the drawn self is, or null while
+ * nothing predicts it. On wire v1 it is the extrapolator's latency budget; on
+ * wire v2 it is the predicted tick offset over the ack (`selfFrameLeadMs`,
+ * about the round trip), which the pipeline hands out while a pilot drives, so
+ * a v2 runner reads null.
+ */
+export function selfPredictionLeadMs(state: SelfRenderPositionState): number | null {
+  if (!state.active) return null;
+  return state.reconciledLeadMs ?? state.predictor?.leadMs ?? null;
+}
+
+/**
+ * The DISPLAYED self pose for aiming affordances (the ground-aim reticle's
+ * cone and range clamp), written into `out`: the drawn position, and while
+ * driving the drive view's heading, else the mirror's facing. Null while the
+ * display is not predicted, where the mirror pose is already the right
+ * reference. The renderer's `selfAimPose` and the latency harness both read it.
+ */
+export function displayedAimPose<T extends { pos: Vec3Like; facing: number }>(
+  state: SelfRenderPositionState,
+  mirrorFacing: number,
+  out: T,
+): T | null {
+  if (!state.active || !state.ready) return null;
+  out.pos.x = state.position.x;
+  out.pos.y = state.position.y;
+  out.pos.z = state.position.z;
+  out.facing = state.drive.steersHeading ? state.drive.facing : mirrorFacing;
+  return out;
 }
 
 /**
@@ -262,6 +317,8 @@ export function updateSelfRenderPosition(
         }
       }
       decayOffset(state.offset, dt);
+      state.reconciledLeadMs =
+        reconciled.kind === 'reconciled' ? selfFrameLeadMs(selfMotion) : null;
       if (reconciled.kind !== 'reconciled' && state.predictor) {
         driveViewFromPredictor(state.drive, state.predictor, p, alpha);
       } else {
@@ -286,6 +343,7 @@ export function updateSelfRenderPosition(
   }
   const predictorWasActive = state.active;
   state.active = false;
+  state.reconciledLeadMs = null;
   const playerAlpha = selfSnapshotAlpha(alpha, selfAlphaLead);
   const px = p.prevPos.x + (p.pos.x - p.prevPos.x) * playerAlpha;
   const py = p.prevPos.y + (p.pos.y - p.prevPos.y) * playerAlpha;

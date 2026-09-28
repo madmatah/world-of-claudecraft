@@ -2,7 +2,7 @@
 // of the other, set against the server at the same wall instant, and what the
 // server makes of the contacts and Ground Blast shots the screens suggest. It
 // is the baseline for drawing rivals in the local kart's own time frame and
-// for retuning the server's forward contact window.
+// the measurement that retired the server's forward contact window.
 //
 // Built on createRacerDuelHarness (tests/helpers/racer_harness.ts): both pilots
 // are real ClientWorlds on one GameServer, each over its own LatencyLink, and
@@ -274,8 +274,8 @@ export interface ContactOutcome {
   /** Wall instant of that tick, ms (NaN when none). */
   serverBumpTMs: number;
   impact: number;
-  /** Server centre distance at the end of the bump tick, yd: over the reach
-   *  means the forward window fired it before the hulls met. */
+  /** Server centre distance at the end of the bump tick, yd: a same-tick
+   *  contact settles the pair at exactly the reach. */
   serverGapAtBumpYd: number;
   /** First tick whose end-of-tick hulls overlapped, ms after the bump (null:
    *  never). */
@@ -390,22 +390,40 @@ export function visualLeadAim(
   return { x, z, flight };
 }
 
+/** Which pose the HUD's range clamp measured the shot from. */
+export type AimCasterSource = 'drawn' | 'mirror';
+
+export interface DrawnRivalShot {
+  sent: { x: number; z: number } | null;
+  hudClamped: boolean;
+  /** 'drawn': renderer.selfAimPose (the predicted display); 'mirror': the
+   *  mirrored player the HUD falls back to while the display is not predicted. */
+  caster: AimCasterSource | null;
+  /** The caster the clamp measured from, and the drawn self on that frame. */
+  casterPos: { x: number; z: number } | null;
+  drawnSelf: { x: number; z: number } | null;
+}
+
 /**
  * Fire the shooter's Ground Blast at its DRAWN rival with a visual lead, on the
  * next frame it draws: the HUD commit path (clampAimToRange from the aim
- * caster, which is the mirrored self while the driver is stood down, then
+ * caster, `renderer.selfAimPose ?? sim.player`: the drawn pose while the kart
+ * is predicted, the mirrored self while it is stood down, then
  * castAbilityAt). Returns the aim it sent, filled on that frame.
  */
 export function fireAtDrawnRival(
   shooter: DuelPilot,
   rivalPid: number,
   rec: DuelRecording,
-): { sent: { x: number; z: number } | null; hudClamped: boolean } {
-  const out: { sent: { x: number; z: number } | null; hudClamped: boolean } = {
+): DrawnRivalShot {
+  const out: DrawnRivalShot = {
     sent: null,
     hudClamped: false,
+    caster: null,
+    casterPos: null,
+    drawnSelf: null,
   };
-  const remove = shooter.peer.onFrame(() => {
+  const remove = shooter.peer.onFrame((frame) => {
     const screen = rec.screens[shooter.pid];
     const f = screen?.[screen.length - 1];
     const mirror = shooter.client.entities.get(rivalPid);
@@ -421,9 +439,14 @@ export function fireAtDrawnRival(
         vz: vehicleVelocityZ(mirror.drive, f.rivalFacing),
       },
     );
-    const clamp = clampAimToRange(shooter.client.player, lead, 0, REALM_RACERS_ABILITY_ID);
+    // The HUD's aimCaster(): the displayed pose first, the mirror as fallback.
+    const caster = frame.aimPose ?? shooter.client.player;
+    const clamp = clampAimToRange(caster, lead, 0, REALM_RACERS_ABILITY_ID);
     out.sent = clamp.point;
     out.hudClamped = clamp.clamped;
+    out.caster = frame.aimPose ? 'drawn' : 'mirror';
+    out.casterPos = { x: caster.pos.x, z: caster.pos.z };
+    out.drawnSelf = { x: f.selfX, z: f.selfZ };
     shooter.client.castAbilityAt(REALM_RACERS_ABILITY_ID, clamp.point);
   });
   return out;
@@ -524,7 +547,9 @@ export interface DuelResult {
    *  v2 driver is stood down). */
   predictedFrames: number;
   contact: ContactOutcome | null;
-  blast: (BlastOutcome & { hudClamped: boolean }) | null;
+  blast:
+    | (BlastOutcome & Pick<DrawnRivalShot, 'hudClamped' | 'caster' | 'casterPos' | 'drawnSelf'>)
+    | null;
   /** The server bump (contact scenarios) or the tick that processed the shot
    *  (blast): when in the race and where on the lap A was. */
   event: RaceEventAt | null;
@@ -568,9 +593,9 @@ const SWIPE_AT_MS = 2000;
  *   blast       one line, A 1 s behind; at 4 s A fires at its drawn B.
  */
 export interface DuelOptions {
-  /** Predict both seated pilots on wire v2 (the `?drivepredict=1` pipeline
-   *  flag): each self is drawn ahead of the server, and each rival in that
-   *  self's frame. Off: both stood down, today's default. */
+  /** Predict both seated pilots on wire v2 (the pipeline's `predictDrivers`,
+   *  on by default): each self is drawn ahead of the server, and each rival in
+   *  that self's frame. False: both stood down, the `?drivepredict=0` arm. */
   predictDrivers?: boolean;
 }
 
@@ -623,7 +648,13 @@ export function runDuel(
         d.advanceToRaceMs(4000);
         const shot = fireAtDrawnRival(a, b.pid, rec);
         d.advanceToRaceMs(6000);
-        blast = { ...blastOutcome(rec, a.pid, b.pid, shot.sent), hudClamped: shot.hudClamped };
+        blast = {
+          ...blastOutcome(rec, a.pid, b.pid, shot.sent),
+          hudClamped: shot.hudClamped,
+          caster: shot.caster,
+          casterPos: shot.casterPos,
+          drawnSelf: shot.drawnSelf,
+        };
         blastFiredTMs = firedRowTMs(rec, a.pid);
         scoreToMs = go + 4000;
       } else {

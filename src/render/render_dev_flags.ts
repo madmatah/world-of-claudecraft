@@ -87,10 +87,12 @@
 //                  per-query cost and is fingerprint-grade, and it joins the
 //                  context's enabled extension set, so a session under this
 //                  flag is not a warm-cache twin of one without it.
-//   ?drivepredict=1 - predicts a seated Realm Racers pilot on movement wire v2
-//                  (self_prediction.ts `predictDrivers`) instead of drawing the
-//                  kart from the interpolated mirror. The playtest arm until the
-//                  default flips; it reads no tier and no frame rate.
+//   ?drivepredict=0 - stands a seated Realm Racers pilot down on movement
+//                  wire v2 (self_prediction.ts `predictDrivers`), drawing the
+//                  kart from the interpolated mirror instead of predicting it
+//                  (`=off` reads the same). Driver prediction is ON by default;
+//                  this is the A/B arm for a playtest. It reads no tier and no
+//                  frame rate.
 
 /**
  * Sectors per axis each blade-grass pool splits its slot grid into. Four is
@@ -192,11 +194,12 @@ export function gpuTimerRequested(): boolean {
 }
 
 const drivePrediction = ((): boolean => {
-  if (typeof location === 'undefined') return false;
-  return new URLSearchParams(location.search).get('drivepredict') === '1';
+  if (typeof location === 'undefined') return true;
+  const value = new URLSearchParams(location.search).get('drivepredict');
+  return value !== '0' && value !== 'off';
 })();
 
-/** True under `?drivepredict=1`: predict a seated driver on wire v2 (dev only). */
+/** False only under `?drivepredict=0` or `=off`: predict a seated driver on wire v2. */
 export function drivePredictionRequested(): boolean {
   return drivePrediction;
 }

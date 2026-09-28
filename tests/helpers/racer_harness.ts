@@ -94,7 +94,7 @@ export interface RacerHarnessOptions {
   keyTimeline?: boolean;
   /** The negotiated movement wire (browsers negotiate 2, the default). */
   movementWire?: 1 | 2;
-  /** Predict the seated pilot on wire v2 (the pipeline flag, off by default). */
+  /** Predict the seated pilot on wire v2 (the pipeline flag, on by default). */
   predictDrivers?: boolean;
   /** Where the house pilots are parked: 'onLine' (default) on the tail of the
    *  lap, fine for a short run off the grid; 'infield' at the points of the

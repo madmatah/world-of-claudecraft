@@ -90,6 +90,7 @@ import {
   REALM_RACERS_RETURN_TICKS,
   realmRacersCircuitOf,
   realmRacersReady,
+  realmRacersToCanonical,
   realmRacersToWorld,
 } from '../../src/sim/social/realm_racers';
 import { addThreat } from '../../src/sim/threat';
@@ -6554,6 +6555,7 @@ function realmRacersRace(): Scenario {
       'realm racers grid seat (startMatch competition-circuit draw)',
       'loading lobby: every pilot ready closes it on one tick',
       'countdown lock + vehicle kernel drive on the circuit copy',
+      'rival contact: the swept same-tick resolve, depenetration, impulse and bump event',
       'pickup take (the one weighted effect draw per box that changes hands)',
       'forfeit cascade -> endMatch classification -> tableau return -> teardown',
     ],
@@ -6575,9 +6577,6 @@ function realmRacersRace(): Scenario {
         if (meta) meta.moveInput.forward = true;
       }
       rec.tick(40); // two seconds of the vehicle kernel on the circuit
-      // A deterministic take: stand the leader on box 0 with the bookkeeping a
-      // machine that DROVE there would carry. A bare jump reads as a cut and
-      // the referee returns it before the take can fire.
       const liveMatch = sim.realmRacers.match;
       if (!liveMatch) throw new Error('realm racers grid did not seat');
       // The circuit the grid was SEATED on, not the pool's first entry: the
@@ -6585,13 +6584,46 @@ function realmRacersRace(): Scenario {
       // resolved off another circuit's road would stand the leader in the
       // meadow of this one.
       const circuit = realmRacersCircuitOf(liveMatch);
+      const lap = realmRacersTrack(circuit);
+      // A rival contact: stand the fourth pilot a hull's width inside the
+      // third's reach, level with it on the road and sliding into it, so the
+      // contact pass resolves a real impact (depenetration, impulse, spin,
+      // scrub, the bump event and the deed flags) inside the digest. Any
+      // change to the contact rule moves this beat.
+      const rammed = sim.entities.get(pids[2]) as AnyEntity;
+      const rammer = sim.entities.get(pids[3]) as AnyEntity;
+      const rammedProgress = liveMatch.progress.get(pids[2]);
+      const rammerProgress = liveMatch.progress.get(pids[3]);
+      if (!rammedProgress || !rammerProgress || !rammed.drive || !rammer.drive) {
+        throw new Error('missing rival contact pilots');
+      }
+      const at = realmRacersToCanonical(liveMatch, rammed.pos.x, rammed.pos.z);
+      const onLap = lap.project(at.x, at.z, rammedProgress.trackIndex);
+      const sample = lap.samples[onLap.index];
+      const side = realmRacersToWorld(
+        liveMatch,
+        at.x - sample.tz * 3.0,
+        at.z + sample.tx * 3.0,
+      );
+      teleport(sim, rammer, side.x, side.z);
+      rammer.facing = rammed.facing;
+      rammer.drive.speed = rammed.drive.speed;
+      rammer.drive.slip = -8;
+      rammer.drive.yawRate = 0;
+      rammerProgress.lastS = onLap.s;
+      rammerProgress.trackIndex = onLap.index;
+      rec.tick(2); // the contact pass: one announced bump for the pair
+      rec.snapshot('contact');
+      // A deterministic take: stand the leader on box 0 with the bookkeeping a
+      // machine that DROVE there would carry. A bare jump reads as a cut and
+      // the referee returns it before the take can fire.
       const box = realmRacersPickupBoxes(circuit)[0];
       const world = realmRacersToWorld(liveMatch, box.x, box.z);
       const racer = sim.entities.get(pids[0]) as AnyEntity;
       teleport(sim, racer, world.x, world.z);
       const progress = liveMatch.progress.get(pids[0]);
       if (!progress) throw new Error('missing racer progress');
-      const projection = realmRacersTrack(circuit).project(box.x, box.z, progress.trackIndex);
+      const projection = lap.project(box.x, box.z, progress.trackIndex);
       progress.lastS = projection.s;
       progress.trackIndex = projection.index;
       rec.tick(2); // the take: exactly one draw, and the effect grant

@@ -12,12 +12,14 @@ import {
   remoteRacerMuzzle,
   remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
-  selfFrameLeadMs,
   stepRemoteRacerView,
   stepRemoteVehicleDisplay,
 } from '../src/render/remote_vehicle_display_core';
 import type { SelfMotionFrame } from '../src/render/self_motion';
-import type { ReconciledSelfPrediction } from '../src/render/self_render_position_core';
+import {
+  type ReconciledSelfPrediction,
+  selfFrameLeadMs,
+} from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_ORIGIN, realmRacersLaneAt } from '../src/sim/realm_racers_layout';

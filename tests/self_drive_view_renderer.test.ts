@@ -88,6 +88,20 @@ describe('renderer self-kart consumers on wire v2', () => {
     expect(renderer.selfAimPose).toBeNull();
   });
 
+  it('reports the v2 prediction lead from the tick offset over the ack while driving', () => {
+    const renderer = harness() as RendererHarness & { readonly selfMotionLeadMs: number | null };
+    // Two ticks ahead of the ack, drawn at alpha 0.4: 1.4 ticks of lead.
+    frame(renderer, { ...v2Kart(), tickOffset: 2, tickAlpha: 0.4 });
+    expect(renderer.selfMotionLeadMs).toBeCloseTo(70, 9);
+    // A reconciled frame with no tick offset (a v2 runner) reads null.
+    frame(renderer, { ...v2Kart(), tickOffset: null, tickAlpha: null });
+    expect(renderer.selfMotionLeadMs).toBeNull();
+    // Stood down on the fallback: nothing predicts the kart.
+    frame(renderer, { ...v2Kart(), tickOffset: 2, tickAlpha: 0.4 });
+    frame(renderer, null);
+    expect(renderer.selfMotionLeadMs).toBeNull();
+  });
+
   it('hands the chase camera the held heading across a suspend on the same seat', () => {
     const renderer = harness();
     const near = v2Kart();
@@ -134,13 +148,9 @@ describe('renderer self-kart reads go through the drive view', () => {
     return source.match(new RegExp(pattern, 'g'))?.length ?? 0;
   };
 
-  it('reads the v1 predictor object only for the latency telemetry', () => {
-    expect(count('this.selfRender.predictor')).toBe(2);
-    expect(
-      count(
-        'return this.selfRender.active && this.selfRender.predictor ? this.selfRender.predictor.leadMs',
-      ),
-    ).toBe(1);
+  it('never reads the v1 predictor object: the latency telemetry goes through the core', () => {
+    expect(count('this.selfRender.predictor')).toBe(0);
+    expect(count('return selfPredictionLeadMs(this.selfRender);')).toBe(1);
   });
 
   it('never rebuilds the self kart velocity from the mirror', () => {
@@ -152,7 +162,7 @@ describe('renderer self-kart reads go through the drive view', () => {
     const consumers: string[] = [
       // selfMotionFacing: the aim pose and the chase camera (camera_follow via main.ts)
       'return this.selfRender.drive.steersHeading ? this.selfRender.drive.facing : null;',
-      'out.facing = this.selfMotionFacing ?? this.sim.player?.facing ?? 0;',
+      'return displayedAimPose(this.selfRender, this.sim.player?.facing ?? 0, this.selfAimPoseOut);',
       // the provisional oil drop's lag and velocity
       "const lag = this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;",
       'const vx = this.selfRender.drive.velocityX;',

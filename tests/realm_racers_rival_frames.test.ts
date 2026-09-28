@@ -52,16 +52,17 @@ import {
 //
 // Three kinds of pin. Ceilings: how far a screen may sit from the server, at
 // the measured worst case plus a margin, one-sided so a better display stays
-// green. Invariants: what holds whatever the display (the server bumps over
-// the reach, events arrive within the link). And the block "baseline R1 is
-// expected to flip": today's defects, as they stand while a v2 driver is
-// stood down (src/render/self_prediction.ts) and a rival is projected off its
-// arrival age with no downlink term. Drawing rivals in the local kart's own
-// time frame, and retuning the forward contact window
-// (REALM_RACERS_CONTACT_EARLY_TICKS), are meant to flip those knowingly.
+// green. Invariants: what holds whatever the display (the server bumps at the
+// reach, events arrive within the link). And the block "baseline R1 is
+// expected to flip": the defects of the stood-down display (driver prediction
+// off, the `?drivepredict=0` arm of src/render/self_prediction.ts), where a
+// rival is projected off its arrival age with no downlink term. Drawing rivals
+// in the local kart's own time frame flipped those (the "R1 flipped" block),
+// and the forward contact window that fired bumps before the hulls met is gone
+// (the "lot 7 flipped" block).
 //
 // Every scenario step is timed from the SERVER tick that dropped the flag.
-// Measured at this commit (evergarden_express_tour, the drawn circuit; closed
+// Measured stood down (evergarden_express_tour, the drawn circuit; closed
 // loop house-pilot brain; links RTT/2 each way plus 0 to 10 ms seeded jitter;
 // racing speed on this circuit is about 30 yd/s, not the loaner's 60 top speed):
 //
@@ -74,14 +75,15 @@ import {
 //   behind it, at every RTT. A 60/200 pair shows each screen on its own link:
 //   A -78 / -36 ms, B -148 / -106 ms.
 //
-//   Contacts (server bump vs the screens):
-//     rear ram   RTT 60/120/200: the server bumps at 4.2 / 4.5 / 5.2 yd (the
-//                forward window, reach 3.4), while the rammer's screen shows
-//                6.1 / 6.5 / 8.7 yd. A drawn touch, when there is one, comes
-//                250 to 1383 ms AFTER the server's bump. The event lands
-//                33 to 50 / 67 to 83 / 117 ms later.
-//     side swipe RTT 60/120/200: bumps at 3.8 / 3.9 / 3.6 yd, screens at 4.1 to
-//                5.5 yd; a drawn touch comes 250 to 2500 ms after the bump.
+//   Contacts (server bump vs the screens), with no forward window:
+//     rear ram   RTT 60/120/200: the server bumps at the touch (3.40 yd, the
+//                reach), while the rammer's screen shows 5.0 / 5.3 / 6.7 yd;
+//                its drawn touch, when there is one, comes 767 ms AFTER the
+//                bump. The rammed screen touches 33 ms before to 100 ms after.
+//     side swipe RTT 60/120/200: bumps at 3.40 yd, screens at 3.9 to 5.0 yd; a
+//                drawn touch comes 117 to 1233 ms after the bump.
+//   (With the retired two-tick window the bumps fired at 3.6 to 5.2 yd, and
+//   the rammer's screen showed 6.1 / 6.5 / 8.7 yd.)
 //
 //   Ground Blast, A one second behind B, a perfect visual lead on its drawn B:
 //     RTT 60: hit, falloff 0.47, miss 3.2 yd (along -1.7)
@@ -92,10 +94,10 @@ import {
 //   Drawing the raw mirrored pose instead of the projection fails the display
 //   ceilings at every RTT and the blast ceilings at 120 and 200 ms.
 //
-// The same runs with driver prediction on (`predictDrivers`, the
-// `?drivepredict=1` flag): each self is drawn ahead of the server and each
-// rival in that self's frame (remote_vehicle_display_core.ts
-// remoteRacerHorizon), measured at the R1 commit:
+// The same runs with driver prediction on (`predictDrivers`, the shipped
+// default): each self is drawn ahead of the server and each rival in that
+// self's frame (remote_vehicle_display_core.ts remoteRacerHorizon), measured
+// at the R1 commit:
 //
 //   Display, every scenario (both screens):
 //     RTT   self frame    rival frame   gap         rival in the self frame p95
@@ -108,13 +110,12 @@ import {
 //   to 2 ms (rival 2.5 to 2.6 yd off the self frame, p95); the fixed 250 ms
 //   arrival-age cap would leave it 84 ms behind at 260 ms and 140 at 300.
 //
-//   Contacts: every screen reaches the separation the server bumped at from
-//   0 to 99 ms BEFORE the server's bump (the self frame's lead), against 16 to
-//   2466 ms after it stood down (the rammer 300 to 600 ms after); its drawn
-//   gap at the bump sits 0.02 to 1.4 yd off the server's (2.0 to 3.5 yd for the
-//   stood-down rammer). At 60 ms the rear ram fires at 4.15 yd and both screens
-//   stay above the reach (3.53 / 3.59 yd): with the display right, the forward
-//   window's early bump is what shows as a bounce off air.
+//   Contacts, re-measured with the forward window removed: the server bumps
+//   at the touch (3.40 yd), and every screen has already drawn the hulls
+//   touching 17 to 100 ms before it (the self frame's lead); its drawn gap at
+//   the bump sits 0.08 to 1.68 yd inside the server's. With the two-tick
+//   window the rear ram at 60 ms fired at 4.15 yd while both screens stayed
+//   above the reach (3.53 / 3.59 yd): a bounce off air.
 //
 //   Ground Blast, the same visual lead: hit at every RTT, falloff 0.45 / 0.65 /
 //   0.01, miss 3.3 / 2.1 / 5.9 yd with its along part -0.07 / -1.8 / -2.8 yd
@@ -150,7 +151,10 @@ const SELF_FRAME_RIVAL_P95_CEIL: Record<Rtt, number> = { 60: 0.5, 120: 1.4, 200:
 /** The same at a 300 ms round trip (tailgate only, measured 2.52 / 2.58). */
 const SELF_FRAME_RIVAL_P95_CEIL_300 = 3.1;
 const SELF_FRAME_SEPARATION_P95_CEIL: Record<Rtt, number> = { 60: 0.7, 120: 3.2, 200: 3.4 };
-const SELF_FRAME_BUMP_GAP_ERR_CEIL: Record<Rtt, number> = { 60: 0.2, 120: 1.0, 200: 1.7 };
+/** |drawn - server| centre distance at the server bump, yd. With no forward
+ *  window the screens are the closer ones: drawn about the uplink ahead, they
+ *  already overlap when the server touches (measured 0.39 / 1.10 / 1.68). */
+const SELF_FRAME_BUMP_GAP_ERR_CEIL: Record<Rtt, number> = { 60: 0.47, 120: 1.4, 200: 2.1 };
 /** The part of the blast miss along the rival's motion, |yd|: what latency
  *  costs a visual lead. */
 const SELF_FRAME_BLAST_ALONG_CEIL: Record<Rtt, number> = { 60: 0.5, 120: 2.2, 200: 3.4 };
@@ -194,9 +198,11 @@ const predictedContactOf = (scenario: DuelScenario, rtt: number) =>
 const predictedBlastOf = (rtt: number) => blastIn(predictedResult('blast', rtt));
 
 beforeAll(() => {
+  // Stood down is the `?drivepredict=0` arm; the predicted arm is the shipped
+  // default (the option left out).
   for (const [runs, predictDrivers] of [
     [results, false],
-    [predicted, true],
+    [predicted, undefined],
   ] as const) {
     for (const scenario of SCENARIOS) {
       for (const rtt of RTTS) {
@@ -206,7 +212,7 @@ beforeAll(() => {
     runs.set(key('sideBySide', 60, 200), runDuel('sideBySide', 60, 200, { predictDrivers }));
   }
   // Past the arrival-age cap: only the scaled cap keeps this rival in frame.
-  predicted.set(key('tailgate', 300), runDuel('tailgate', 300, 300, { predictDrivers: true }));
+  predicted.set(key('tailgate', 300), runDuel('tailgate', 300));
 }, 240_000);
 
 /** The ceilings on how far a screen may sit from the server. */
@@ -276,7 +282,7 @@ describe('two human racers under latency: the harness', () => {
     ['sideBySide', 200],
     ['blast', 200],
   ] as const)('replays %s at %i ms identically for the same seeds and links', (s, rtt) => {
-    expect(runDuel(s, rtt)).toEqual(result(s, rtt));
+    expect(runDuel(s, rtt, rtt, { predictDrivers: false })).toEqual(result(s, rtt));
   });
 
   it('times every scripted event from the server GO, not from each screen', () => {
@@ -302,12 +308,13 @@ describe.each(RTTS)('rival frames at RTT %i ms: ceilings and invariants', (rtt) 
   });
 
   it.each(['rearRam', 'sideSwipe'] as const)(
-    '%s: the server bumps over the reach and the event arrives within the link',
+    '%s: the server bumps at the reach and the event arrives within the link',
     (s) => {
       const contact = contactOf(s, rtt);
       expect(contact.serverBumped).toBe(true);
-      // The forward window fires the contact before the server hulls meet.
-      expect(contact.serverGapAtBumpYd).toBeGreaterThan(CONTACT_REACH_YD);
+      // No forward window: the server bumps on the real touch, and the
+      // same-tick contact settles the pair at exactly the reach.
+      expect(Math.abs(contact.serverGapAtBumpYd - CONTACT_REACH_YD)).toBeLessThan(1e-6);
       for (const screen of [contact.a, contact.b]) {
         expect(screen.eventArrivalMs).toBeGreaterThanOrEqual(rtt / 2);
         expect(screen.eventArrivalMs).toBeLessThanOrEqual(rtt / 2 + 60);
@@ -328,6 +335,8 @@ describe.each(RTTS)('rival frames at RTT %i ms: ceilings and invariants', (rtt) 
   it('Ground Blast: the shot is the server geometry, within the miss ceiling', () => {
     const blast = blastOf(rtt);
     expect(blast.fired).toBe(true);
+    // Stood down, the HUD clamps from the mirrored self (selfAimPose is null).
+    expect(blast.caster).toBe('mirror');
     expect(blast.hudClamped).toBe(false);
     expect(blast.serverClamped).toBe(false);
     expect(blast.flightTicks).toBe(Math.round(blast.flightSeconds * TICK_RATE));
@@ -371,14 +380,16 @@ describe('baseline R1 is expected to flip', () => {
     expect(along[1]).toBeLessThan(along[2]);
   });
 
-  it.each(RTTS)('contacts at %i ms: no screen shows the touch before the server bumps', (rtt) => {
+  it.each(RTTS)('contacts at %i ms: the chasing screen never shows the touch first', (rtt) => {
+    // The rammer and the swiper (A) see their own kart about 42 ms further in
+    // the past than the rival they close on. (The rammed pilot's screen can
+    // touch first now: with no forward window the server bumps on the real
+    // touch, one tick after a screen drawn ahead of it.)
     for (const s of ['rearRam', 'sideSwipe'] as const) {
-      const contact = contactOf(s, rtt);
-      for (const screen of [contact.a, contact.b]) {
-        expect(screen.drawnGapAtServerBumpYd).toBeGreaterThan(CONTACT_REACH_YD);
-        if (screen.drawnTouchVsServerMs !== null) {
-          expect(screen.drawnTouchVsServerMs).toBeGreaterThan(0);
-        }
+      const screen = contactOf(s, rtt).a;
+      expect(screen.drawnGapAtServerBumpYd).toBeGreaterThan(CONTACT_REACH_YD);
+      if (screen.drawnTouchVsServerMs !== null) {
+        expect(screen.drawnTouchVsServerMs).toBeGreaterThan(0);
       }
     }
     // The rammer, following, sees the gap wider than the one it is rammed from.
@@ -412,7 +423,7 @@ describe('two human racers under latency, driver prediction on', () => {
     ['rearRam', 120],
     ['blast', 200],
   ] as const)('replays %s at %i ms identically for the same seeds and links', (s, rtt) => {
-    expect(runDuel(s, rtt, rtt, { predictDrivers: true })).toEqual(predictedResult(s, rtt));
+    expect(runDuel(s, rtt)).toEqual(predictedResult(s, rtt));
   });
 });
 
@@ -447,6 +458,10 @@ describe.each(RTTS)('rival frames at RTT %i ms, driver prediction on', (rtt) => 
   it('Ground Blast: a visual lead on the drawn rival hits, within the along ceiling', () => {
     const blast = predictedBlastOf(rtt);
     expect(blast.fired).toBe(true);
+    // Predicted, the HUD clamps from the drawn kart (renderer.selfAimPose),
+    // exactly the self pose that screen draws.
+    expect(blast.caster).toBe('drawn');
+    expect(blast.casterPos).toEqual(blast.drawnSelf);
     expect(blast.serverClamped).toBe(false);
     expect(blast.falloff).toBeCloseTo(Math.max(0, 1 - blast.missYd / GROUND_BLAST_RADIUS), 9);
     expect(blast.hit).toBe(true);
@@ -535,15 +550,33 @@ describe('R1 flipped: rivals drawn in the local kart frame', () => {
   });
 });
 
-// The server's forward contact window (REALM_RACERS_CONTACT_EARLY_TICKS) is to
-// be retuned or removed once rivals share the local kart's frame. This holds
-// what it does then: at 60 ms the rear ram fires over the reach while both
-// screens still draw a gap, the "bounce off air" the display no longer hides.
-describe('lot 7 is expected to flip: the forward contact window', () => {
-  it('rear ram at 60 ms: the server bumps while both screens draw a gap', () => {
+// The server's forward contact window fired a touch up to two ticks before the
+// hulls met. With rivals in the local kart's frame it only over-fired (at 60 ms
+// the rear ram bumped at 4.15 yd while neither screen ever drew a touch), so it
+// is gone: every contact is the same-tick swept one, on every host.
+describe('lot 7 flipped: no forward contact window', () => {
+  it('rear ram at 60 ms: the server bumps at the touch both screens draw', () => {
     const ram = predictedContactOf('rearRam', 60);
-    expect(ram.serverGapAtBumpYd).toBeGreaterThan(CONTACT_REACH_YD);
-    expect(ram.a.minDrawnGapYd).toBeGreaterThan(CONTACT_REACH_YD);
-    expect(ram.b.minDrawnGapYd).toBeGreaterThan(CONTACT_REACH_YD);
+    expect(Math.abs(ram.serverGapAtBumpYd - CONTACT_REACH_YD)).toBeLessThan(1e-6);
+    expect(ram.a.minDrawnGapYd).toBeLessThan(CONTACT_REACH_YD);
+    expect(ram.b.minDrawnGapYd).toBeLessThan(CONTACT_REACH_YD);
   });
+
+  it.each(RTTS)(
+    'contacts at %i ms: every screen draws the touch, at most its lead early',
+    (rtt) => {
+      for (const s of ['rearRam', 'sideSwipe'] as const) {
+        const contact = predictedContactOf(s, rtt);
+        expect(Math.abs(contact.serverGapAtBumpYd - CONTACT_REACH_YD)).toBeLessThan(1e-6);
+        for (const screen of [contact.a, contact.b]) {
+          // Drawn ahead of the server by about the uplink, the screen touches
+          // first, by no more than its lead plus a tick, and never after.
+          const touch = screen.drawnTouchVsServerMs;
+          expect(touch).not.toBeNull();
+          expect(touch as number).toBeLessThanOrEqual(0);
+          expect(touch as number).toBeGreaterThanOrEqual(-(rtt / 2 + TICK_MS));
+        }
+      }
+    },
+  );
 });

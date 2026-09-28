@@ -56,7 +56,11 @@ import {
   vehicleVelocityX,
   vehicleVelocityZ,
 } from '../sim/vehicle_motion';
-import { SELF_MOTION_HANDOFF_RATE, type SelfRenderPrediction } from './self_render_position_core';
+import {
+  SELF_MOTION_HANDOFF_RATE,
+  type SelfRenderPrediction,
+  selfFrameLeadMs,
+} from './self_render_position_core';
 
 export interface RemoteVehiclePose {
   x: number;
@@ -311,24 +315,6 @@ export interface RemoteRacerMirror {
   drive: VehicleDrive | null;
   /** Arrival time of its newest wire pose (performance.now() ms). */
   netUpdatedAt?: number;
-}
-
-/**
- * How far ahead of the snapshot its acknowledgement came in the local kart is
- * drawn, ms, or null when the local kart is not predicted (on foot, stood down,
- * suspended, or a v1 frame). The display lerps the predicted head between the
- * tick before it and the head itself at `tickAlpha`, so it shows client tick
- * `head - 1 + alpha`; the snapshot's poses are the server's state after it
- * consumed tick `ack`, and every later server tick consumes the next one. The
- * gap is therefore `(tickOffset - 1 + alpha)` ticks, read off the predictor's
- * own bookkeeping: no ping estimate and no clock of its own.
- */
-export function selfFrameLeadMs(selfMotion: SelfRenderPrediction | null): number | null {
-  if (!selfMotion || !('kind' in selfMotion)) return null;
-  const offset = selfMotion.tickOffset;
-  const alpha = selfMotion.tickAlpha;
-  if (offset == null || alpha == null) return null;
-  return (offset - 1 + alpha) * DT * 1000;
 }
 
 export interface RemoteRacerHorizon {

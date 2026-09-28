@@ -757,8 +757,10 @@ import { captureRendererScreenshot } from './screenshot_capture';
 import { drapeRingLocalY } from './selection_ring';
 import {
   createSelfRenderPositionState,
+  displayedAimPose,
   noteSelfIdentity,
   type SelfRenderPrediction,
+  selfPredictionLeadMs,
 } from './self_render_position_core';
 import { SelfSpiritPrewarmer } from './self_spirit_prewarm';
 import { warmSelfSpiritPrograms } from './self_spirit_warm';
@@ -1625,12 +1627,11 @@ export class Renderer {
   // is lazy: offline never passes a SelfMotionFrame, so it is never built.
   private selfRender = createSelfRenderPositionState(this.selfRenderPosition);
 
-  /** Perf-overlay telemetry: ms of latency the self-motion extrapolation is
-   *  currently hiding, or null while the predictor is inactive. */
+  /** Perf-overlay telemetry: ms of latency the prediction hides (the v1
+   *  extrapolation's budget, or the v2 predicted tick offset over the ack while
+   *  driving), or null while nothing predicts it (selfPredictionLeadMs). */
   get selfMotionLeadMs(): number | null {
-    return this.selfRender.active && this.selfRender.predictor
-      ? this.selfRender.predictor.leadMs
-      : null;
+    return selfPredictionLeadMs(this.selfRender);
   }
 
   /** Previous rendered frame's predicted driving heading for main.ts's chase
@@ -1654,16 +1655,10 @@ export class Renderer {
    * per-frame reticle redraw path.
    */
   get selfAimPose(): { pos: { x: number; y: number; z: number }; facing: number } | null {
-    if (!this.selfRender.active || !this.selfRender.ready) return null;
-    const out = this.selfAimPoseOut;
-    out.pos.x = this.selfRenderPosition.x;
-    out.pos.y = this.selfRenderPosition.y;
-    out.pos.z = this.selfRenderPosition.z;
-    // Driving, the predictor's steered heading is the zero-latency truth
-    // (selfMotionFacing); on foot the facing channel is client-authoritative
-    // input and the mirror is already current.
-    out.facing = this.selfMotionFacing ?? this.sim.player?.facing ?? 0;
-    return out;
+    // Driving, the drive view's steered heading is the zero-latency truth; on
+    // foot the facing channel is client-authoritative input and the mirror is
+    // already current (displayedAimPose).
+    return displayedAimPose(this.selfRender, this.sim.player?.facing ?? 0, this.selfAimPoseOut);
   }
 
   // Last yaw applied to the local player while the camera was driving its facing
@@ -10472,7 +10467,7 @@ export class Renderer {
         // LOCAL race in its racing phase: the sim only resolves contacts over
         // the match's own grid, so a paddock or post-tableau touch must never
         // bang. The overlap test is the plain instantaneous circle, not the
-        // sim's swept-plus-early window, on purpose: a fast crossing the
+        // sim's swept same-tick test, on purpose: a fast crossing the
         // circle misses simply plays through the unsuppressed server event.
         const race = this.sim.realmRacersInfo.match;
         if (

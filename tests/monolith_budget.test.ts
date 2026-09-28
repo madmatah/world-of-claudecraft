@@ -1008,7 +1008,11 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13225 -> 13223: the camera's kart velocity reads the drive view
     // whole, and the self kart's surface and scrape effects read its state.
     // Exact count.
-    ceiling: 13223,
+    // LOWERED 13223 -> 13218: the aim pose and the prediction-lead telemetry
+    // moved to displayedAimPose and selfPredictionLeadMs in
+    // self_render_position_core.ts, shared with the latency harness. Exact
+    // count.
+    ceiling: 13218,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

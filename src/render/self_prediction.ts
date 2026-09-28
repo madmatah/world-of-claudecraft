@@ -158,8 +158,9 @@ export class MovementPredictionPipeline {
   private lastAckClientTick = -1;
   private lastPredictedClientTick = -1;
   private reseedAfterDriverStandDown = false;
-  /** Off by default until the proof lot; `?drivepredict=1` or a test turns it
-   *  on. Never set by main.ts. */
+  /** On by default: a seated pilot whose wire carries the drive recon (the
+   *  `driveReconWire` capability) is predicted; `?drivepredict=0` or a test
+   *  turns it off. Never set by main.ts. */
   predictDrivers = drivePredictionRequested();
   private pendingResidual: ReconciledSelfPrediction['residual'] = null;
   // The schedule clock of the snapshot that carried the newest acknowledged

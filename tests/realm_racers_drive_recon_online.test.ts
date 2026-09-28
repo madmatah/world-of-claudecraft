@@ -40,9 +40,10 @@ import { createRacerHarness } from './helpers/racer_harness';
 
 // The drive recon (`rdv`) on the REAL online path: every self snapshot a v2
 // racer's client decodes must hand it the server's drive state at the
-// acknowledged tick, bit for bit, over a whole scripted race. The prediction
-// stays stood down for the driver while the drive-aware replay is off, even
-// though the recon is now on the wire.
+// acknowledged tick, bit for bit, over a whole scripted race, and the
+// pipeline predicts the kart from it (driver prediction is on by default; the
+// stood-down arm with the recon on the wire is
+// tests/realm_racers_v2_prediction.test.ts with `predictDrivers: false`).
 
 const RACE_MS = 3000;
 
@@ -191,10 +192,15 @@ describe('the drive recon over a 3 s race on movement wire v2 (120 ms RTT)', () 
     expect(decoded.filter((d) => d.hasDrv).map((d) => d.tick)).toEqual([]);
   });
 
-  it('keeps the predictor stood down for the driver with the recon on the wire', () => {
+  it('predicts the driver from the recon on the wire', () => {
     expect(racingFrames.length).toBeGreaterThan(RACE_MS / 20);
     expect(racingFrames.every((f) => f.reconDrive)).toBe(true);
-    expect(racingFrames.filter((f) => f.predictorActive)).toEqual([]);
+    // Every racing frame from the first one the prediction owns: the frames
+    // before it are the GO suspend and the re-seed's first sample.
+    const first = racingFrames.findIndex((f) => f.predictorActive);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThanOrEqual(3);
+    expect(racingFrames.slice(first).filter((f) => !f.predictorActive)).toEqual([]);
   });
 
   it('costs about as much as the rounded drive it replaces', () => {

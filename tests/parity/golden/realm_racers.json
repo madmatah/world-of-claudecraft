@@ -2,16 +2,17 @@
   "scenario": "realm_racers",
   "seed": 7601,
   "sampleEvery": 20,
-  "ticks": 346,
+  "ticks": 348,
   "coverage": [
     "realm racers grid seat (startMatch competition-circuit draw)",
     "loading lobby: every pilot ready closes it on one tick",
     "countdown lock + vehicle kernel drive on the circuit copy",
+    "rival contact: the swept same-tick resolve, depenetration, impulse and bump event",
     "pickup take (the one weighted effect draw per box that changes hands)",
     "forfeit cascade -> endMatch classification -> tableau return -> teardown"
   ],
-  "draws": 2917,
-  "drawDigest": "c086bd51",
+  "draws": 2945,
+  "drawDigest": "956ce6df",
   "frames": [
     {
       "tick": 0,
@@ -752,11 +753,623 @@
       "tick": 224,
       "time": 11.2,
       "nextId": 1014,
-      "state": "c7349ea6",
+      "state": "33680fee",
+      "events": "2a40fe44",
+      "rng": {
+        "draws": 1851,
+        "digest": "debc92bf"
+      },
+      "label": "contact",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "recruit_tunic",
+              "worn_sword"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1010,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "realmRacersMatchId": 1,
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "mage",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1011,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "realmRacersMatchId": 1,
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "rogue",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "footpad_jerkin",
+              "rusty_dagger"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1012,
+          "equipment": {
+            "chest": "footpad_jerkin",
+            "mainhand": "rusty_dagger",
+            "offhand": "rusty_dagger"
+          },
+          "equipmentInstance": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "realmRacersMatchId": 1,
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "priest",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1013,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "realmRacersMatchId": 1,
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        }
+      ],
+      "entities": [
+        {
+          "abilityCharges": {
+            "rally_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 46,
+          "auras": [
+            {
+              "duration": 3600,
+              "id": "battle_stance",
+              "kind": "battle_stance",
+              "name": "Battle Stance",
+              "remaining": 3588.85,
+              "school": "physical",
+              "sourceId": 1010
+            }
+          ],
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "combatTimer": 110.15,
+          "comboUntil": -1,
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "rally_loaner",
+            "slipCap": 1,
+            "speed": 36.822786,
+            "speedCap": 1
+          },
+          "facing": 1.56224,
+          "fiveSecondRule": 110.2,
+          "healPower": 5,
+          "hp": 100,
+          "id": 1010,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113678.755265,
+            "z": 3395.81275
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        },
+        {
+          "abilityCharges": {
+            "rally_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "combatTimer": 110.15,
+          "comboUntil": -1,
+          "critChance": 0.056,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.056,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "rally_loaner",
+            "slipCap": 1,
+            "speed": 36.822786,
+            "speedCap": 1
+          },
+          "facing": 1.56224,
+          "fiveSecondRule": 110.2,
+          "healPower": 13,
+          "hp": 54,
+          "id": 1011,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 54,
+          "maxResource": 195,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113678.712485,
+            "z": 3400.812567
+          },
+          "potionCooldownUntil": -1,
+          "resource": 195,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 13,
+          "stats": {
+            "agi": 12,
+            "armor": 57,
+            "int": 25,
+            "spi": 22,
+            "sta": 14,
+            "str": 10
+          },
+          "templateId": "mage",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        },
+        {
+          "abilityCharges": {
+            "rally_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 42,
+          "combatTimer": 110.15,
+          "comboUntil": -1,
+          "critChance": 0.0625,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0625,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "rally_loaner",
+            "slip": -5.133393,
+            "slipCap": 1,
+            "speed": 35.060057,
+            "speedCap": 1,
+            "spin": 0.055694
+          },
+          "dualWielding": true,
+          "facing": 1.565318,
+          "fiveSecondRule": 110.2,
+          "healPower": 6,
+          "hp": 62,
+          "id": 1012,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 62,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "rusty_dagger",
+          "offhandWeapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          },
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113678.570598,
+            "z": 3405.168939
+          },
+          "potionCooldownUntil": -1,
+          "resource": 100,
+          "resourceType": "energy",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 6,
+          "stats": {
+            "agi": 25,
+            "armor": 104,
+            "int": 11,
+            "spi": 12,
+            "sta": 17,
+            "str": 17
+          },
+          "templateId": "rogue",
+          "weapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          }
+        },
+        {
+          "abilityCharges": {
+            "rally_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "combatTimer": 110.15,
+          "comboUntil": -1,
+          "critChance": 0.0555,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0555,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "rally_loaner",
+            "slip": -1.455788,
+            "slipCap": 1,
+            "speed": 34.712321,
+            "speedCap": 1,
+            "spin": 0.000919
+          },
+          "facing": 1.562291,
+          "fallStartY": 48.562487,
+          "fiveSecondRule": 110.2,
+          "healPower": 12,
+          "hp": 51,
+          "id": 1013,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 51,
+          "maxResource": 175,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113678.663257,
+            "y": 48.522487,
+            "z": 3408.756168
+          },
+          "potionCooldownUntil": -1,
+          "resource": 175,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 12,
+          "stats": {
+            "agi": 11,
+            "armor": 50,
+            "int": 23,
+            "spi": 24,
+            "sta": 13,
+            "str": 10
+          },
+          "templateId": "priest",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        }
+      ]
+    },
+    {
+      "tick": 226,
+      "time": 11.3,
+      "nextId": 1014,
+      "state": "28f256a0",
       "events": "2334ed5c",
       "rng": {
-        "draws": 1852,
-        "digest": "ee36e844"
+        "draws": 1866,
+        "digest": "495a5ec3"
       },
       "label": "pickup",
       "players": [
@@ -1088,14 +1701,14 @@
               "id": "battle_stance",
               "kind": "battle_stance",
               "name": "Battle Stance",
-              "remaining": 3588.85,
+              "remaining": 3588.75,
               "school": "physical",
               "sourceId": 1010
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "combatTimer": 110.15,
+          "combatTimer": 110.25,
           "comboUntil": -1,
           "critChance": 0.06,
           "detonateTimer": "Infinity",
@@ -1105,12 +1718,12 @@
             "gripMult": 1,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 36.065263,
+            "speed": 37.568245,
             "speedCap": 1
           },
           "facing": 1.56224,
           "fallStartY": 36.677555,
-          "fiveSecondRule": 110.2,
+          "fiveSecondRule": 110.3,
           "healPower": 5,
           "hp": 100,
           "id": 1010,
@@ -1125,9 +1738,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113565.925802,
+            "x": 113566.076094,
             "y": 36.637555,
-            "z": 3531.41179
+            "z": 3531.413076
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -1162,7 +1775,7 @@
           },
           "aiState": "idle",
           "attackPower": 10,
-          "combatTimer": 110.15,
+          "combatTimer": 110.25,
           "comboUntil": -1,
           "critChance": 0.056,
           "detonateTimer": "Infinity",
@@ -1172,11 +1785,11 @@
             "gripMult": 1,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 36.822786,
+            "speed": 38.301129,
             "speedCap": 1
           },
           "facing": 1.56224,
-          "fiveSecondRule": 110.2,
+          "fiveSecondRule": 110.3,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -1191,8 +1804,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113678.712485,
-            "z": 3400.812567
+            "x": 113682.505815,
+            "z": 3400.845024
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -1228,7 +1841,7 @@
           },
           "aiState": "idle",
           "attackPower": 42,
-          "combatTimer": 110.15,
+          "combatTimer": 110.25,
           "comboUntil": -1,
           "critChance": 0.0625,
           "detonateTimer": "Infinity",
@@ -1237,13 +1850,15 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
+            "slip": -4.037679,
             "slipCap": 1,
-            "speed": 36.822786,
-            "speedCap": 1
+            "speed": 36.618918,
+            "speedCap": 1,
+            "spin": 0.045598
           },
           "dualWielding": true,
-          "facing": 1.56224,
-          "fiveSecondRule": 110.2,
+          "facing": 1.570622,
+          "fiveSecondRule": 110.3,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -1265,8 +1880,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113678.669705,
-            "z": 3405.812384
+            "x": 113682.19452,
+            "z": 3404.744474
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -1303,7 +1918,7 @@
           },
           "aiState": "idle",
           "attackPower": 10,
-          "combatTimer": 110.15,
+          "combatTimer": 110.25,
           "comboUntil": -1,
           "critChance": 0.0555,
           "detonateTimer": "Infinity",
@@ -1312,12 +1927,15 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
+            "slip": -1.45275,
             "slipCap": 1,
-            "speed": 36.822786,
-            "speedCap": 1
+            "speed": 34.712448,
+            "speedCap": 1,
+            "spin": 0.000752
           },
-          "facing": 1.56224,
-          "fiveSecondRule": 110.2,
+          "facing": 1.562379,
+          "fallStartY": 48.562487,
+          "fiveSecondRule": 110.3,
           "healPower": 12,
           "hp": 51,
           "id": 1013,
@@ -1328,12 +1946,12 @@
           "maxResource": 175,
           "mountKey": "terrorspark_groundshaker",
           "moveSpeed": 7,
-          "onGround": true,
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113678.626926,
-            "z": 3410.812201
+            "x": 113682.135602,
+            "y": 48.322487,
+            "z": 3408.640118
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -1365,7 +1983,7 @@
       "tick": 240,
       "time": 12,
       "nextId": 1014,
-      "state": "17894347",
+      "state": "1aa4fc96",
       "events": "44721fd3",
       "rng": {
         "draws": 1992,
@@ -1376,7 +1994,7 @@
       "tick": 260,
       "time": 13,
       "nextId": 1014,
-      "state": "d57e3e4a",
+      "state": "98bbf077",
       "events": "741638a5",
       "rng": {
         "draws": 2149,
@@ -1387,18 +2005,18 @@
       "tick": 280,
       "time": 14,
       "nextId": 1014,
-      "state": "7e3cbec9",
+      "state": "a6360738",
       "events": "741638a5",
       "rng": {
-        "draws": 2323,
-        "digest": "3dd6e243"
+        "draws": 2326,
+        "digest": "3efacbf5"
       }
     },
     {
       "tick": 300,
       "time": 15,
       "nextId": 1014,
-      "state": "bf353b14",
+      "state": "76452fa1",
       "events": "741638a5",
       "rng": {
         "draws": 2502,
@@ -1409,33 +2027,33 @@
       "tick": 320,
       "time": 16,
       "nextId": 1014,
-      "state": "e65c5f73",
+      "state": "eece3dba",
       "events": "741638a5",
       "rng": {
-        "draws": 2681,
-        "digest": "52eebc0a"
+        "draws": 2684,
+        "digest": "14b89e03"
       }
     },
     {
       "tick": 340,
       "time": 17,
       "nextId": 1014,
-      "state": "1c04896e",
+      "state": "739eddc3",
       "events": "741638a5",
       "rng": {
-        "draws": 2863,
-        "digest": "b8567851"
+        "draws": 2874,
+        "digest": "c899d76b"
       }
     },
     {
-      "tick": 346,
-      "time": 17.3,
+      "tick": 348,
+      "time": 17.4,
       "nextId": 1014,
-      "state": "dc4d42db",
-      "events": "7645dd97",
+      "state": "b87899e1",
+      "events": "bdc27dfe",
       "rng": {
-        "draws": 2917,
-        "digest": "c086bd51"
+        "draws": 2945,
+        "digest": "956ce6df"
       },
       "label": "teardown",
       "players": [
@@ -1710,11 +2328,16 @@
           "bgRating": 1500,
           "cls": "priest",
           "companionUpgrades": {},
-          "counters": {},
+          "counters": {
+            "damageTaken": 138,
+            "deaths": 1
+          },
           "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
-            "counters": {},
+            "counters": {
+              "deaths": 1
+            },
             "dungeonClears": {},
             "itemsDiscovered": [
               "apprentice_robe",
@@ -1723,6 +2346,16 @@
               "spring_water"
             ]
           },
+          "deedsEarned": [
+            [
+              "cmb_first_fall",
+              ""
+            ],
+            [
+              "hid_fall_death",
+              ""
+            ]
+          ],
           "delveClears": {},
           "delveDaily": {},
           "entityId": 1013,
@@ -1755,6 +2388,7 @@
             "counts": {},
             "firstFind": {}
           },
+          "renown": 10,
           "talents": {
             "rows": {}
           },
@@ -1779,7 +2413,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 5,
           "id": 1010,
           "kind": "player",
@@ -1793,9 +2427,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": -92.196803,
+            "x": -92.121657,
             "y": -2,
-            "z": -57.984571
+            "z": -57.983928
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -1829,7 +2463,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -1881,7 +2515,7 @@
           "dodgeChance": 0.0625,
           "dualWielding": true,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -1937,12 +2571,12 @@
           "combatTimer": 99.1,
           "comboUntil": -1,
           "critChance": 0.0555,
+          "dead": true,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0555,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 12,
-          "hp": 51,
           "id": 1013,
           "kind": "player",
           "level": 1,
@@ -1954,9 +2588,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": -94,
+            "x": -92.193706,
             "y": -2,
-            "z": -58
+            "z": -58.346493
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -1985,14 +2619,14 @@
       ]
     },
     {
-      "tick": 346,
-      "time": 17.3,
+      "tick": 348,
+      "time": 17.4,
       "nextId": 1014,
-      "state": "dc4d42db",
+      "state": "b87899e1",
       "events": "741638a5",
       "rng": {
-        "draws": 2917,
-        "digest": "c086bd51"
+        "draws": 2945,
+        "digest": "956ce6df"
       },
       "label": "final",
       "players": [
@@ -2267,11 +2901,16 @@
           "bgRating": 1500,
           "cls": "priest",
           "companionUpgrades": {},
-          "counters": {},
+          "counters": {
+            "damageTaken": 138,
+            "deaths": 1
+          },
           "craftDaily": {},
           "craftSkills": {},
           "deedStats": {
-            "counters": {},
+            "counters": {
+              "deaths": 1
+            },
             "dungeonClears": {},
             "itemsDiscovered": [
               "apprentice_robe",
@@ -2280,6 +2919,16 @@
               "spring_water"
             ]
           },
+          "deedsEarned": [
+            [
+              "cmb_first_fall",
+              ""
+            ],
+            [
+              "hid_fall_death",
+              ""
+            ]
+          ],
           "delveClears": {},
           "delveDaily": {},
           "entityId": 1013,
@@ -2312,6 +2961,7 @@
             "counts": {},
             "firstFind": {}
           },
+          "renown": 10,
           "talents": {
             "rows": {}
           },
@@ -2336,7 +2986,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 5,
           "id": 1010,
           "kind": "player",
@@ -2350,9 +3000,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": -92.196803,
+            "x": -92.121657,
             "y": -2,
-            "z": -57.984571
+            "z": -57.983928
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -2386,7 +3036,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -2438,7 +3088,7 @@
           "dodgeChance": 0.0625,
           "dualWielding": true,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -2494,12 +3144,12 @@
           "combatTimer": 99.1,
           "comboUntil": -1,
           "critChance": 0.0555,
+          "dead": true,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0555,
           "fallStartY": -2,
-          "fiveSecondRule": 116.3,
+          "fiveSecondRule": 116.4,
           "healPower": 12,
-          "hp": 51,
           "id": 1013,
           "kind": "player",
           "level": 1,
@@ -2511,9 +3161,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": -94,
+            "x": -92.193706,
             "y": -2,
-            "z": -58
+            "z": -58.346493
           },
           "potionCooldownUntil": -1,
           "resource": 175,

@@ -121,7 +121,7 @@ export function resolveVehicleContact(a: ContactBody, b: ContactBody): ContactRe
   const midX = (a.x + b.x) / 2;
   const midZ = (a.z + b.z) / 2;
 
-  const relN = applyContactImpulse(a, b, nx, nz, 0);
+  const relN = applyContactImpulse(a, b, nx, nz);
   // Already moving apart: separating them is the whole correction. Applying an
   // impulse here would suck two bodies that had settled back into each other.
   if (relN <= 0) return { contacted: true, impact: 0, x: midX, z: midZ };
@@ -131,25 +131,17 @@ export function resolveVehicleContact(a: ContactBody, b: ContactBody): ContactRe
 /**
  * The velocity half of a contact: spin split, reciprocal impulse, scrub, all
  * along an established normal. Returns the closing speed, applying NOTHING
- * when it does not exceed `minRelN` (0 for a same-tick contact, the honest
- * "already separating" line; the time-window test passes a real floor so a
- * skewed geometric graze with no closing is a complete no-op). Extracted
- * verbatim from the same-tick resolver: the float ops and their order are
- * unchanged, which is what keeps the parity traces intact.
+ * when the pair is already separating. Extracted verbatim from the same-tick
+ * resolver: the float ops and their order are unchanged, which is what keeps
+ * the parity traces intact.
  */
-function applyContactImpulse(
-  a: ContactBody,
-  b: ContactBody,
-  nx: number,
-  nz: number,
-  minRelN: number,
-): number {
+function applyContactImpulse(a: ContactBody, b: ContactBody, nx: number, nz: number): number {
   let avx = vehicleVelocityX(a.drive, a.facing);
   let avz = vehicleVelocityZ(a.drive, a.facing);
   let bvx = vehicleVelocityX(b.drive, b.facing);
   let bvz = vehicleVelocityZ(b.drive, b.facing);
   const relN = (avx - bvx) * nx + (avz - bvz) * nz;
-  if (relN <= minRelN) return relN;
+  if (relN <= 0) return relN;
 
   const noseA = Math.max(0, Math.sin(a.facing) * nx + Math.cos(a.facing) * nz);
   const noseB = Math.max(0, Math.sin(b.facing) * -nx + Math.cos(b.facing) * -nz);
@@ -263,74 +255,4 @@ export function resolveVehicleContactSwept(
   b.x = b.prevX + (b.x - b.prevX) * t;
   b.z = b.prevZ + (b.z - b.prevZ) * t;
   return resolveVehicleContact(a, b);
-}
-
-/**
- * Resolve one EARLY contact: fire the touch the pair is ABOUT to make, up to
- * `horizonTicks` ahead of the same-tick test, assuming both machines keep
- * this tick's motion. This is option B of
- * docs/prd/realm-racers-contact-lag-compensation.md, in its forward form: the
- * attacker's server pose trails their display by roughly the uplink, so the
- * touch the attacker SEES is the touch the server is about to compute one to
- * two ticks later; firing it at its predicted instant is the compensation.
- * (The first implementation compared against the rival's HISTORY instead,
- * and review measured why that is wrong: it forgives the rival's own
- * displacement, several yards per tick at race speed, so it fired rear-end
- * taps from ten yards back. The forward window forgives only the CLOSING
- * distance covered inside the horizon, under a yard for a tailgater and a
- * couple of yards in a genuine lunge, which is exactly the perception gap.)
- *
- * Deliberately IMPULSE-ONLY, and gated on a real closing speed (`minClosing`,
- * the caller passes its announceable-bump floor):
- *  - No depenetration and no position writes: the hulls do not overlap YET,
- *    so there is nothing to push apart; the exchange is velocities, spin and
- *    scrub, applied to both current drive states along the touch normal
- *    (well defined by construction: at first touch the centers sit exactly
- *    one reach apart).
- *  - A pair holding station (a slipstream) has ~zero closing speed: it never
- *    reaches the touch inside any horizon, and the window never touches it.
- *  - Re-firing self-limits: the impulse flips the closing speed negative
- *    (restitution), so the next tick's probe sees a separating pair.
- *
- * Pure, deterministic, and order independent like its siblings (swapping the
- * arguments mirrors every term).
- */
-export function resolveVehicleContactEarly(
-  a: SweptContactBody,
-  b: SweptContactBody,
-  horizonTicks: number,
-  minClosing: number,
-): ContactResult {
-  const reach = a.radius + b.radius;
-  const px = b.x - a.x;
-  const pz = b.z - a.z;
-  const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
-  // Already overlapping now is the same-tick resolver's business.
-  if (px * px + pz * pz < reach * reach) {
-    return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  }
-  // This tick's relative displacement, assumed to continue over the horizon.
-  const vx = b.x - b.prevX - (a.x - a.prevX);
-  const vz = b.z - b.prevZ - (a.z - a.prevZ);
-  const vv = vx * vx + vz * vz;
-  if (vv <= 1e-12) return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  const bq = px * vx + pz * vz;
-  if (bq >= 0) return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  const disc = bq * bq - vv * (px * px + pz * pz - reach * reach);
-  if (disc <= 0) return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  const tTouch = (-bq - Math.sqrt(disc)) / vv;
-  if (tTouch >= horizonTicks) return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  // The touch configuration: centers one reach apart, so the normal needs no
-  // degenerate fallback.
-  const nx = (px + vx * tTouch) / reach;
-  const nz = (pz + vz * tTouch) / reach;
-  const relN = applyContactImpulse(a, b, nx, nz, minClosing);
-  if (relN <= minClosing) return { contacted: false, impact: 0, x: mid.x, z: mid.z };
-  // The event anchor is where the touch will happen: each body advanced to
-  // the touch instant, midpointed.
-  const ax = a.x + (a.x - a.prevX) * tTouch;
-  const az = a.z + (a.z - a.prevZ) * tTouch;
-  const bx = b.x + (b.x - b.prevX) * tTouch;
-  const bz = b.z + (b.z - b.prevZ) * tTouch;
-  return { contacted: true, impact: relN, x: (ax + bx) / 2, z: (az + bz) / 2 };
 }

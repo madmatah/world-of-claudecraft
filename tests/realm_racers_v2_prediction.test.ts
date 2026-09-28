@@ -58,12 +58,15 @@ import {
 import { type Phase, type PilotWatch, watchPilot } from './helpers/racer_prediction_watch';
 import { racerLink } from './helpers/rival_frames';
 
-// A browser always negotiates movement wire v2, whose self-prediction has no
-// drive state: it steps a kart with the runner kernel, and the server's
-// override epoch sizes a legal step at run speed, so it bumps nearly every
-// tick for a kart. Until the drive-aware wire lands, a seated driver with no
-// drive recon on the wire stands prediction down (self_prediction.ts) and is
-// drawn by the plain interpolated fallback, the `?nopredict` path.
+// A browser always negotiates movement wire v2. Before the drive-aware wire,
+// its self-prediction had no drive state: it stepped a kart with the runner
+// kernel, and the server's override epoch sized a legal step at run speed, so
+// it bumped nearly every tick for a kart. A seated driver the pipeline does
+// not predict (driver prediction off, the `?drivepredict=0` arm, or a wire
+// with no drive recon) stands prediction down (self_prediction.ts) and is
+// drawn by the plain interpolated fallback, the `?nopredict` path. The first
+// block below holds that stand-down with driver prediction switched OFF; the
+// shipped default predicts the kart (the blocks after it).
 //
 // BEFORE the stand-down (re-measured with the production change reverted),
 // this exact scenario (seed, link, script) counted 49 reconcile suspends:
@@ -102,7 +105,12 @@ interface Scenario {
 }
 
 function runScenario(keyTimeline: boolean, movementWire: 1 | 2 = 2): Scenario {
-  const rh = createRacerHarness({ latency: link(RTT_MS, 10), keyTimeline, movementWire });
+  const rh = createRacerHarness({
+    latency: link(RTT_MS, 10),
+    keyTimeline,
+    movementWire,
+    predictDrivers: false,
+  });
   try {
     const { harness } = rh;
     const suspends = () => harness.reconcileOutcomes().suspends;
@@ -240,91 +248,97 @@ function scoreRacingFrames(frames: readonly FrameRecord[]): Excursion[] {
 describe.each([
   { mode: 'key timeline', keyTimeline: true },
   { mode: 'direct intent', keyTimeline: false },
-])('a seated racer on movement wire v2 (120 ms RTT, $mode)', ({ keyTimeline }) => {
-  let scenario: Scenario;
-  let racing: FrameRecord[];
-  beforeAll(() => {
-    scenario = runScenario(keyTimeline);
-    racing = scenario.race.frames;
-  });
+])(
+  'a seated racer on movement wire v2, driver prediction off (120 ms RTT, $mode)',
+  ({ keyTimeline }) => {
+    let scenario: Scenario;
+    let racing: FrameRecord[];
+    beforeAll(() => {
+      scenario = runScenario(keyTimeline);
+      racing = scenario.race.frames;
+    });
 
-  it('races the circuit with the house pilots parked out of reach', () => {
-    expect(racing.length).toBeGreaterThanOrEqual(Math.floor(RACE_MS / DEFAULT_FRAME_MS));
-    expect(racing.every((frame) => frame.driving)).toBe(true);
-    // The machine really raced: faster than any step the override epoch reads
-    // as a legal run, which is what thrashes the epoch under a kart.
-    const peakSpeed = Math.max(
-      ...racing.map((f) => Math.hypot(f.mirrorX - f.mirrorPrevX, f.mirrorZ - f.mirrorPrevZ) / DT),
-    );
-    expect(scenario.maxEpochSpeedMult).toBeGreaterThan(0);
-    expect(peakSpeed).toBeGreaterThan(RUN_SPEED * scenario.maxEpochSpeedMult);
-    // No rival could have touched it: every parked pilot stayed farther than
-    // two bodies plus the ground one tick of rolling covers before re-parking.
-    expect(scenario.minParkedGapYd).toBeGreaterThan(
-      2 * scenario.bodyRadiusYd + scenario.parkedReachYd,
-    );
-  });
+    it('races the circuit with the house pilots parked out of reach', () => {
+      expect(racing.length).toBeGreaterThanOrEqual(Math.floor(RACE_MS / DEFAULT_FRAME_MS));
+      expect(racing.every((frame) => frame.driving)).toBe(true);
+      // The machine really raced: faster than any step the override epoch reads
+      // as a legal run, which is what thrashes the epoch under a kart.
+      const peakSpeed = Math.max(
+        ...racing.map((f) => Math.hypot(f.mirrorX - f.mirrorPrevX, f.mirrorZ - f.mirrorPrevZ) / DT),
+      );
+      expect(scenario.maxEpochSpeedMult).toBeGreaterThan(0);
+      expect(peakSpeed).toBeGreaterThan(RUN_SPEED * scenario.maxEpochSpeedMult);
+      // No rival could have touched it: every parked pilot stayed farther than
+      // two bodies plus the ground one tick of rolling covers before re-parking.
+      expect(scenario.minParkedGapYd).toBeGreaterThan(
+        2 * scenario.bodyRadiusYd + scenario.parkedReachYd,
+      );
+    });
 
-  it('takes the driving arm: steering on the wire, no heading, the chase camera', () => {
-    expect(scenario.race.commands.some((c) => c.mi.turnLeft)).toBe(true);
-    expect(scenario.race.commands.some((c) => c.mi.turnRight)).toBe(true);
-    expect(racing.filter((frame) => frame.netFacing !== null).map((f) => f.tMs)).toEqual([]);
-    expect(racing.filter((frame) => frame.keyboardFacing !== null).map((f) => f.tMs)).toEqual([]);
-    const offCamera = racing.filter((frame) => frame.cameraFacing !== mainCameraFacing(frame));
-    expect(offCamera.map((frame) => frame.tMs)).toEqual([]);
-    // On wire v2 no v1 predictor is ever built, so the camera follows the
-    // interpolated server heading (the v1 case below covers the other arm).
-    expect(racing.filter((f) => f.predictedDrivingFacing !== null).map((f) => f.tMs)).toEqual([]);
-  });
+    it('takes the driving arm: steering on the wire, no heading, the chase camera', () => {
+      expect(scenario.race.commands.some((c) => c.mi.turnLeft)).toBe(true);
+      expect(scenario.race.commands.some((c) => c.mi.turnRight)).toBe(true);
+      expect(racing.filter((frame) => frame.netFacing !== null).map((f) => f.tMs)).toEqual([]);
+      expect(racing.filter((frame) => frame.keyboardFacing !== null).map((f) => f.tMs)).toEqual([]);
+      const offCamera = racing.filter((frame) => frame.cameraFacing !== mainCameraFacing(frame));
+      expect(offCamera.map((frame) => frame.tMs)).toEqual([]);
+      // Stood down, the drive view never steers the heading, so the camera
+      // follows the interpolated server heading (the v1 case below covers the
+      // predicted arm).
+      expect(racing.filter((f) => f.predictedDrivingFacing !== null).map((f) => f.tMs)).toEqual([]);
+    });
 
-  it('keeps the override epoch flat across the race, on the server and on the wire', () => {
-    expect(scenario.raceEpochBumps).toEqual({ server: 0, client: 0 });
-  });
+    it('keeps the override epoch flat across the race, on the server and on the wire', () => {
+      expect(scenario.raceEpochBumps).toEqual({ server: 0, client: 0 });
+    });
 
-  it('never lets the predictor own a racing frame', () => {
-    expect(racing.filter((frame) => frame.predictorActive).map((frame) => frame.tMs)).toEqual([]);
-  });
+    it('never lets the predictor own a racing frame', () => {
+      expect(racing.filter((frame) => frame.predictorActive).map((frame) => frame.tMs)).toEqual([]);
+    });
 
-  it('never suspends through the seat, the countdown, the race and the unseat', () => {
-    expect(scenario.suspends).toEqual({ seat: 0, countdown: 0, race: 0, unseat: 0 });
-  });
+    it('never suspends through the seat, the countdown, the race and the unseat', () => {
+      expect(scenario.suspends).toEqual({ seat: 0, countdown: 0, race: 0, unseat: 0 });
+    });
 
-  it('is never drawn ahead of the fallback envelope', () => {
-    const scored = scoreRacingFrames(racing);
-    // Most racing frames moved (only the launch off the grid is still).
-    expect(scored.length).toBeGreaterThan(racing.length / 2);
-    // Float slack only: the fallback frame and the reference differ by a
-    // non-positive multiple of the mirror's step.
-    expect(scored.filter((s) => s.aheadYd > 1e-9)).toEqual([]);
-  });
+    it('is never drawn ahead of the fallback envelope', () => {
+      const scored = scoreRacingFrames(racing);
+      // Most racing frames moved (only the launch off the grid is still).
+      expect(scored.length).toBeGreaterThan(racing.length / 2);
+      // Float slack only: the fallback frame and the reference differ by a
+      // non-positive multiple of the mirror's step.
+      expect(scored.filter((s) => s.aheadYd > 1e-9)).toEqual([]);
+    });
 
-  it('never trails the mirror by more than one input echo', () => {
-    const scored = scoreRacingFrames(racing);
-    expect(scored.length).toBeGreaterThan(racing.length / 2);
-    expect(scored.filter((s) => !(s.echoMs > 0))).toEqual([]);
-    expect(scored.filter((s) => s.behindYd > s.behindBoundYd)).toEqual([]);
-    // The policy is reachable by the fallback's own terms: at the lead floor
-    // the target trails the mirror by the rest of one snapshot step, and the
-    // smoother lags a steady target by speed over its rate.
-    expect(adaptiveSelfAlphaLead(1, 1e9, SERVER_TICK_MS)).toBe(SELF_LEAD_MIN);
-    const envelopeOverBound = scored.filter(
-      (s) => s.speed * ((1 - SELF_LEAD_MIN) * DT + 1 / SELF_RENDER_SMOOTH_RATE) > s.behindBoundYd,
-    );
-    expect(envelopeOverBound).toEqual([]);
-  });
+    it('never trails the mirror by more than one input echo', () => {
+      const scored = scoreRacingFrames(racing);
+      expect(scored.length).toBeGreaterThan(racing.length / 2);
+      expect(scored.filter((s) => !(s.echoMs > 0))).toEqual([]);
+      expect(scored.filter((s) => s.behindYd > s.behindBoundYd)).toEqual([]);
+      // The policy is reachable by the fallback's own terms: at the lead floor
+      // the target trails the mirror by the rest of one snapshot step, and the
+      // smoother lags a steady target by speed over its rate.
+      expect(adaptiveSelfAlphaLead(1, 1e9, SERVER_TICK_MS)).toBe(SELF_LEAD_MIN);
+      const envelopeOverBound = scored.filter(
+        (s) => s.speed * ((1 - SELF_LEAD_MIN) * DT + 1 / SELF_RENDER_SMOOTH_RATE) > s.behindBoundYd,
+      );
+      expect(envelopeOverBound).toEqual([]);
+    });
 
-  it('hands the pose back to prediction once the pilot is home on foot', () => {
-    const frames = scenario.unseat.frames;
-    const home = frames.findIndex((frame) => !frame.driving);
-    expect(home).toBeGreaterThan(0);
-    // The first fixed-tick sample after the return seeds the prediction: at
-    // most one sampler period of frames, plus the frame the return lands on.
-    const seedFrames = Math.ceil((DT * 1000) / DEFAULT_FRAME_MS) + 1;
-    const settled = frames.slice(home + seedFrames);
-    expect(settled.length).toBeGreaterThan(0);
-    expect(settled.filter((frame) => !frame.predictorActive).map((frame) => frame.tMs)).toEqual([]);
-  });
-});
+    it('hands the pose back to prediction once the pilot is home on foot', () => {
+      const frames = scenario.unseat.frames;
+      const home = frames.findIndex((frame) => !frame.driving);
+      expect(home).toBeGreaterThan(0);
+      // The first fixed-tick sample after the return seeds the prediction: at
+      // most one sampler period of frames, plus the frame the return lands on.
+      const seedFrames = Math.ceil((DT * 1000) / DEFAULT_FRAME_MS) + 1;
+      const settled = frames.slice(home + seedFrames);
+      expect(settled.length).toBeGreaterThan(0);
+      expect(settled.filter((frame) => !frame.predictorActive).map((frame) => frame.tMs)).toEqual(
+        [],
+      );
+    });
+  },
+);
 
 // The chase camera's other arm: on wire v1 the display extrapolator drives the
 // machine and the camera follows its predicted heading, as main.ts reads it
@@ -339,9 +353,8 @@ describe('a seated racer on movement wire v1 (120 ms RTT, key timeline)', () => 
   });
 });
 
-// Driver prediction switched on (the pipeline flag the playtest sets with
-// `?drivepredict=1`; the default flips in a later lot), end to end on the real
-// client and server: the pipeline predicts the kart from the `rdv` drive,
+// Driver prediction on (the shipped default; `?drivepredict=0` is the
+// opt-out), end to end on the real client and server: the pipeline predicts the kart from the `rdv` drive,
 // reconciles every acknowledgement exactly, and leaves the kart only at the
 // server's own discontinuities. The proof suite with thresholds is separate;
 // this block shows the wiring works. Measured at this commit (flag on, single
@@ -364,7 +377,7 @@ describe('a seated racer on movement wire v1 (120 ms RTT, key timeline)', () => 
 // the race-end suspend. The recorder is tests/helpers/racer_prediction_watch.ts.
 
 function runPredictedSingle(rttMs: number): PilotWatch[] {
-  const rh = createRacerHarness({ latency: link(rttMs, 10), predictDrivers: true });
+  const rh = createRacerHarness({ latency: link(rttMs, 10) });
   try {
     const { harness } = rh;
     let phase: Phase = 'seat';
@@ -417,7 +430,6 @@ function runPredictedDuel(rttMs: number): {
   const d = createRacerDuelHarness({
     latencyA: racerLink(rttMs, 1337),
     latencyB: racerLink(rttMs, 7331),
-    predictDrivers: true,
   });
   try {
     const { harness, a, b } = d;

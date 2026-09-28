@@ -1404,7 +1404,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
   // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
   // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
-  'f9b5e1674d7b09d9645c8fcec52ee6ba2fa5293ecd638d97a3cc2aa7bce1766d';
+  // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
+  '87bda79588cd9e75f525f25dbca30603d00ca4fedcf031394ad1fa44e3581a49';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1437,7 +1438,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
   // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
   // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
-  '5076bcf99fd904f8b2d31b930fbaddb0d42a4eb3976cbbc650b0a40de221285f';
+  // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
+  'fbef95b1089c5f92f98aa264acafe1455b90fa175bc4377285f08e05ccf1aab2';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2829,7 +2831,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers self drive view on both wires.
       // Re-minted for the Realm Racers drive view heading handoff and kart effects.
       // Re-minted for the Realm Racers rivals drawn in the local kart frame.
-    ).toBe('2acae4e22e522a1dd37608911c1bc0fa0b96b1eea9e7103487c20b6339a6c672');
+      // Re-minted for the Realm Racers aim pose and prediction lead through the core.
+    ).toBe('26bcb41408de776c595af367cfb542342db4fb4e9418e53f73bc22bcd75cb360');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

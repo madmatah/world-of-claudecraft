@@ -82,7 +82,7 @@ import {
 import { rallyPickupRollFor } from './helpers/realm_racers_rng';
 
 // THE TWO-HOST PROOF that kart prediction (the v2 pipeline predicting a seated
-// racer from the full drive recon, behind `predictDrivers`) is correct and
+// racer from the full drive recon, `predictDrivers`, on by default) is correct and
 // fair, on the real client and server over the simulated link. Every run is
 // deterministic: the virtual clock, seeded links, the scripted pickup stream.
 //
@@ -383,7 +383,6 @@ function solo(key: string, opts: SoloOptions): SoloRun {
 function runSolo(opts: SoloOptions): SoloRun {
   const rh = createRacerHarness({
     latency: link(opts.rttMs, opts.jitterMs ?? 10),
-    predictDrivers: true,
     frameMs: opts.frameMs,
     parking: 'infield',
   });
@@ -1252,7 +1251,6 @@ function runDuelRam(rttA: number, rttB: number): DuelRun {
   const d = createRacerDuelHarness({
     latencyA: link(rttA, 10, 1337),
     latencyB: link(rttB, 10, 7331),
-    predictDrivers: true,
   });
   try {
     const { harness, a, b } = d;
@@ -1273,8 +1271,8 @@ function runDuelRam(rttA: number, rttB: number): DuelRun {
       if (events.some((ev) => ev.type === 'realmRacersBump')) bumpTicks.push(tick);
       const pa = a.peer.serverEntity.pos;
       const pb = b.peer.serverEntity.pos;
-      // Within the reach plus the forward window's lead: a tick the server
-      // may settle or shove the pair without an announced bump.
+      // Within the reach plus a margin: a tick the server may settle or
+      // shove the pair without an announced bump.
       if (Math.hypot(pa.x - pb.x, pa.z - pb.z) < reachYd + 2) {
         contactTicks.push(tick);
         for (const w of [watches.a, watches.b]) {

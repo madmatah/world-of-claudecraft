@@ -710,7 +710,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
   // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
   // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
-  '5076bcf99fd904f8b2d31b930fbaddb0d42a4eb3976cbbc650b0a40de221285f';
+  // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
+  'fbef95b1089c5f92f98aa264acafe1455b90fa175bc4377285f08e05ccf1aab2';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

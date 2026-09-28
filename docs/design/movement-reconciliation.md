@@ -153,6 +153,38 @@ reduce the time frames wait in the server timeline. That delay is observable as
 the harness's inputToAuthorityMs metric; a phase lock is a deferred refinement
 to be justified by that number, not assumed.
 
+### Seated drivers (Realm Racers)
+
+A pilot behind a wheel is predicted by the same pipeline, with the drive state
+as part of the replayed state:
+
+- Capability and recon: a client that advertises `driveReconWire` in its auth
+  message gets `rdv` in its self block while seated, the full-precision drive
+  state at the acked tick (`server/drive_recon_wire.ts`, decoded by
+  `src/net/drive_recon_wire.ts`), in place of the rounded self `drv`. A client
+  without it, or a malformed row, stands the driver down to the fallback.
+- Replay: `MotionState` carries the drive (`src/render/self_prediction_core.ts`);
+  the match compares the drive, the vertical state and the airborne flag as
+  well as the pose, and a mismatch adopts them with the snapshot's auras. Kernel
+  inputs stay the per-tick flags; pickups, contacts, blasts, oil and nitro are
+  server outcomes that arrive through the replay, never predicted.
+- Epoch: while a pilot drives, the override epoch sizes a legal step by the
+  machine (`vehicleStepCeilingYd`) instead of run speed, ignores move-speed
+  changes (surface bands are auras), and carries an active `raceLocked` bit for
+  the grid, recovery and retirement locks (`server/movement_override_epoch.ts`).
+- Flag: `MovementPredictionPipeline.predictDrivers` is on by default;
+  `?drivepredict=0` (`src/render/render_dev_flags.ts`) is the A/B opt-out.
+- Rivals: remote racers are projected into the local kart's own time frame
+  (`remoteRacerHorizon` in `src/render/remote_vehicle_display_core.ts`), so the
+  server's contact rule needs no forward window
+  (`docs/prd/realm-racers-contact-lag-compensation.md`).
+
+Verified by `tests/realm_racers_prediction_proof.test.ts` (the two-host proof:
+exact match rates, replays per server transition, fairness at 30 vs 144 fps),
+`tests/realm_racers_v2_prediction.test.ts`,
+`tests/realm_racers_drive_recon_online.test.ts` and
+`tests/realm_racers_rival_frames.test.ts`.
+
 ## Rollout inside the rework PR
 
 Phase 2 lands the protocol and the server timeline behind negotiation, with

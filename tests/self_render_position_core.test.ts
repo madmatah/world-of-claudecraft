@@ -3,11 +3,14 @@ import type { SelfMotionFrame, SelfMotionPredictor, Vec3Like } from '../src/rend
 import { SELF_MOTION_SNAP_DIST_SQ } from '../src/render/self_motion';
 import {
   createSelfRenderPositionState,
+  displayedAimPose,
   isTeleportGap,
   MAX_SELF_REWIND_YD_PER_SEC,
   noteSelfIdentity,
+  type ReconciledSelfPrediction,
   type SelfRenderPositionState,
   type SelfRenderPrediction,
+  selfPredictionLeadMs,
   selfSnapshotAlpha,
   teleportGapLimitSq,
   updateSelfRenderPosition,
@@ -828,5 +831,85 @@ describe('updateSelfRenderPosition teleport rule for a seated driver', () => {
     updateSelfRenderPosition(state, driver, SEED, 1, HITCH_DT, 0.2, frame(), false);
     expect(state.offset).toEqual({ x: 0, y: 0, z: 0 });
     expect(state.position).toEqual({ x: 600, y: 0, z: 0 });
+  });
+});
+
+describe('selfPredictionLeadMs and displayedAimPose', () => {
+  const kart = {
+    prevPos: { x: 2, y: 0, z: 3 },
+    pos: { x: 2, y: 0, z: 3 },
+    prevFacing: 0.2,
+    facing: 0.2,
+    vy: 0,
+    onGround: true,
+    auras: [],
+    ghost: false,
+    drive: createVehicleDrive('rally_loaner'),
+  } as unknown as Entity;
+  const reconciled = (over: Partial<ReconciledSelfPrediction> = {}): ReconciledSelfPrediction => ({
+    kind: 'reconciled',
+    position: { x: 10, y: 0, z: 20 },
+    residual: null,
+    drive: {
+      facing: 1.1,
+      velocityX: 30,
+      velocityZ: -12,
+      onGround: true,
+      state: createVehicleDrive('rally_loaner'),
+    },
+    tickOffset: 3,
+    tickAlpha: 0.5,
+    ...over,
+  });
+  const draw = (state: SelfRenderPositionState, p: Entity, motion: SelfRenderPrediction | null) =>
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, motion, false);
+
+  it('reads the v2 tick offset over the ack, the v1 budget, and null on the fallback', () => {
+    const state = createSelfRenderPositionState();
+    expect(selfPredictionLeadMs(state)).toBeNull();
+    draw(state, kart, reconciled());
+    // The display shows client tick head - 1 + alpha: 2.5 ticks past the ack.
+    expect(selfPredictionLeadMs(state)).toBeCloseTo(2.5 * 50, 9);
+    draw(state, kart, reconciled({ tickOffset: 1, tickAlpha: 0 }));
+    expect(selfPredictionLeadMs(state)).toBe(0);
+    // A v2 runner's frame carries no tick offset.
+    draw(state, kart, reconciled({ tickOffset: null, tickAlpha: null }));
+    expect(selfPredictionLeadMs(state)).toBeNull();
+    draw(state, kart, reconciled());
+    draw(state, kart, null);
+    expect(state.active).toBe(false);
+    expect(selfPredictionLeadMs(state)).toBeNull();
+  });
+
+  it('keeps the v1 extrapolator budget on a v1 frame, even after a v2 one', () => {
+    const state = createSelfRenderPositionState();
+    const runner = playerAt({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    draw(state, kart, reconciled());
+    state.predictor = stubPredictor(() => ({ x: 1, y: 0, z: 0 }));
+    (state.predictor as unknown as { leadMs: number }).leadMs = 45;
+    draw(state, runner, frame());
+    expect(selfPredictionLeadMs(state)).toBe(45);
+  });
+
+  it('aims from the drawn pose and the predicted heading, and stands down to the mirror', () => {
+    const state = createSelfRenderPositionState();
+    const out = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
+    expect(displayedAimPose(state, 0.2, out)).toBeNull();
+    draw(state, kart, reconciled());
+    expect(displayedAimPose(state, 0.2, out)).toBe(out);
+    expect(out).toEqual({ pos: { ...state.position }, facing: 1.1 });
+    expect(out.pos).not.toBe(state.position);
+    draw(state, kart, null);
+    expect(displayedAimPose(state, 0.2, out)).toBeNull();
+  });
+
+  it('aims a predicted runner from the mirror facing', () => {
+    const state = createSelfRenderPositionState();
+    const runner = playerAt({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    (runner as unknown as { facing: number }).facing = 0.7;
+    draw(state, runner, reconciled({ drive: null, tickOffset: null, tickAlpha: null }));
+    const out = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
+    expect(displayedAimPose(state, 0.7, out)?.facing).toBe(0.7);
+    expect(out.pos).toEqual({ x: 10, y: 0, z: 20 });
   });
 });
