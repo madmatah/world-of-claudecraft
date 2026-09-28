@@ -11,6 +11,8 @@ import {
   createRealmRacersLobbyFailsafe,
   RealmRacersLobby,
   RealmRacersLobbyHold,
+  RealmRacersRaceWarm,
+  type RealmRacersRaceWarmSinks,
   stepRealmRacersLobbyFailsafe,
 } from './hud/realm_racers';
 import { formatNumber, type TranslationKey, t } from './i18n';
@@ -117,6 +119,9 @@ export interface RealmRacersDeps {
   connectionDropped?(): boolean;
   /** The client clock the lobby failsafe runs on; performance.now by default. */
   now?(): number;
+  /** Where the race warm sends the first-use sounds and icons it prepares on
+   *  the commitment trigger; without it nothing is warmed. */
+  raceWarm?: RealmRacersRaceWarmSinks;
 }
 
 const NOT_PREPARED: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
@@ -160,6 +165,7 @@ export class RealmRacersUi {
   private wasInMatch = false;
   private lastCountdown = 0;
   private readonly readySender = createRealmRacersReadySender();
+  private readonly raceWarm: RealmRacersRaceWarm | null;
   /**
    * The practice setup screen's own state, presentation-only: whether the
    * player has stepped into it, and which rival they have picked. Neither ever
@@ -170,6 +176,7 @@ export class RealmRacersUi {
   private setupTier: RallyDriverTier = RALLY_DEFAULT_PRACTICE_TIER;
 
   constructor(private readonly deps: RealmRacersDeps) {
+    this.raceWarm = deps.raceWarm ? new RealmRacersRaceWarm(deps.raceWarm) : null;
     this.standings = new RealmRacersStandingsPanel({
       layer: () => deps.layer(),
       writers: deps.writers,
@@ -225,11 +232,13 @@ export class RealmRacersUi {
   }
 
   /**
-   * The lobby's ready send. It paints nothing, so the HUD calls it above its
-   * paint cut: a hidden window still says it is ready.
+   * The lobby's ready send, and the race warm on the commitment trigger. It
+   * paints nothing, so the HUD calls it above its paint cut: a hidden window
+   * still says it is ready, and still warms.
    */
   sendReady(): void {
     const world = this.deps.world();
+    this.raceWarm?.step(world);
     const info = world.realmRacersInfo;
     const prepared = this.preparedFor(info.match);
     this.preparedThisFrame = prepared;

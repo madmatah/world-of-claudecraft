@@ -8,6 +8,17 @@ sim events' log lines, banners, pickup note and cues), `realm_racers_cast_feedba
 held kit ability) and `realm_racers_hud_parts.ts` (the deps Hud builds the pickup splash
 and `RealmRacersUi` from).
 
+`realm_racers_race_warm.ts` (`RealmRacersRaceWarm`) warms what a race first reaches for
+at speed, on the race GPU preparation's own commitment trigger
+(`takeRealmRacersPrepare` in `src/render/realm_racers_prepare_core.ts`: queue, practice,
+seated, band), once per HUD, from `RealmRacersUi.sendReady` above the paint cut. Sounds:
+the race clips (`src/game/realm_racers_sfx.ts`, the table `sfx.ts` plays them from, plus
+the HUD's apply cues of the race auras) that the manifest leaves lazy, through
+`sfx.preload`. Icons: the splash of every pickup effect, the rally slots at the bar size
+and the buff bar's race auras, through `prewarmIconCache` (`src/ui/icon_prewarm.ts`, one
+worker encode in flight, idle slices). Pinned by `tests/realm_racers_race_warm.test.ts`
+and the online case in `tests/realm_racers_online.test.ts`.
+
 The curtain a race opens under while every pilot's machine prepares the circuit
 (the sim's `loading` phase, `src/sim/social/realm_racers_loading.ts`, read through
 `IWorld.realmRacersInfo`), behind the `index.ts` barrel. `src/ui/realm_racers.ts`

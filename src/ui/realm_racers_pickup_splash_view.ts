@@ -70,6 +70,15 @@ export function rallyPickupSplashView(effect: RallyPickupEffect): RallyPickupSpl
   return SPLASHES[effect];
 }
 
+/** The pixel size the splash composes its icon at. */
+export const RALLY_SPLASH_ICON_SIZE = 128;
+
+/** Every icon a splash can show, one per effect, for the race warm to compose
+ *  before the first pickup. */
+export function rallyPickupSplashIcons(): readonly RallyPickupSplashIcon[] {
+  return Object.values(SPLASHES).map((splash) => splash.icon);
+}
+
 /** How long the splash pops IN, milliseconds: fast enough that it is already
  *  readable by the time a pilot's eye reaches it. */
 export const RALLY_SPLASH_IN_MS = 140;

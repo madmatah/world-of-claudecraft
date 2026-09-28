@@ -295,7 +295,7 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     band: 'frame',
     gate: '',
     surface: 'none',
-    why: 'the race lobby ready send, above the paint cut so a hidden window still readies; no DOM',
+    why: 'the race lobby ready send and the race warm, above the paint cut so a hidden window still readies and warms; no DOM',
   },
   {
     call: 'this.updateRaidLockoutBadge',

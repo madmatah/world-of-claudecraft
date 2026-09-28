@@ -59,6 +59,7 @@ import {
 } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
 import { type Entity, TICK_RATE } from '../src/sim/types';
+import { RealmRacersRaceWarm, realmRacersRaceWarmSfx } from '../src/ui/hud/realm_racers';
 import {
   createRealmRacersReadySender,
   stepRealmRacersReady,
@@ -885,5 +886,47 @@ describe('the ward online', () => {
       expect.objectContaining({ targetId: session.pid, name: 'Racing Ward', gained: false }),
     );
     expect(events(client, 'realmRacersWardBroken')).toEqual([]);
+  });
+});
+
+describe('the race warm online', () => {
+  it('fires once, on the mirrored frame that seats the pilot in the practice lobby', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    const world = bareClient(session.pid);
+    let applied = 0;
+    const mirror = (): void => {
+      const snaps = client.sent.filter((frame) => frame.t === 'snap');
+      for (; applied < snaps.length; applied++) {
+        (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(snaps[applied]);
+      }
+    };
+    const out = { preloadSfx: vi.fn(), prewarmIcons: vi.fn() };
+    const warm = new RealmRacersRaceWarm(out);
+    advance(server);
+    mirror();
+    warm.step(world);
+    expect(world.player.id).toBe(session.pid);
+    expect(out.preloadSfx).not.toHaveBeenCalled();
+
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    mirror();
+    expect(world.realmRacersInfo.match?.phase).toBe('loading');
+    warm.step(world);
+    expect(warm.reason).toBe('practice');
+    expect(out.preloadSfx.mock.calls.map(([key]) => key).sort()).toEqual(
+      realmRacersRaceWarmSfx().sort(),
+    );
+    expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 20; i++) {
+      advance(server);
+      mirror();
+      warm.step(world);
+    }
+    expect(out.preloadSfx).toHaveBeenCalledTimes(realmRacersRaceWarmSfx().length);
+    expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
   });
 });

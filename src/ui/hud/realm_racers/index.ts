@@ -1,6 +1,6 @@
 // HUD domain: Realm Racers. The loading-lobby curtain the rally UI composes
-// while the viewer's race prepares, plus the rally helpers extracted from
-// hud.ts (see CLAUDE.md here).
+// while the viewer's race prepares, the race warm of its first-use sounds and
+// icons, plus the rally helpers extracted from hud.ts (see CLAUDE.md here).
 
 export {
   predictRallyGroundBlastFire,
@@ -29,3 +29,12 @@ export {
   realmRacersLobbyPercent,
   stepRealmRacersLobbyFailsafe,
 } from './realm_racers_lobby_view';
+export type { RealmRacersRaceWarmSinks } from './realm_racers_race_warm';
+export {
+  REALM_RACERS_SELF_AURA_CUES,
+  REALM_RACERS_SELF_AURAS,
+  RealmRacersRaceWarm,
+  realmRacersRaceSfx,
+  realmRacersRaceWarmIcons,
+  realmRacersRaceWarmSfx,
+} from './realm_racers_race_warm';
