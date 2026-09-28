@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import {
+  activeTextureRandomStream,
+  type TextureRandomStream,
+  withTextureRandomStream,
+} from './texture_random_stream';
 
 // Procedurally generated canvas textures — no external assets.
 
@@ -20,6 +25,13 @@ function makeCanvas(
 
 let seedState = 12345;
 function rnd(): number {
+  // A caller painting from its own stream (texture_random_stream.ts) draws the
+  // same LCG from its own position and leaves the shared one where it was.
+  const stream = activeTextureRandomStream();
+  if (stream) {
+    stream.state = (stream.state * 1103515245 + 12345) & 0x7fffffff;
+    return stream.state / 0x7fffffff;
+  }
   seedState = (seedState * 1103515245 + 12345) & 0x7fffffff;
   return seedState / 0x7fffffff;
 }
@@ -237,13 +249,28 @@ const DEFAULT_FLOWER_KINDS: FlowerKind[] = [
  */
 const flowerTuftCache = new Map<string, THREE.Texture>();
 
+/**
+ * `stream` paints the card from a private sequence (see `TextureRandomStream`)
+ * into its own cache entry, so a card never depends on which caller asked first
+ * or on whether the shared entry for the same palette exists.
+ */
 export function flowerTuftTexture(
   kinds: FlowerKind[] = DEFAULT_FLOWER_KINDS,
   balanced = false,
+  stream: TextureRandomStream | null = null,
 ): THREE.Texture {
-  const cacheKey = `${balanced ? 'b' : 'p'}:${JSON.stringify(kinds)}`;
+  const paletteKey = `${balanced ? 'b' : 'p'}:${JSON.stringify(kinds)}`;
+  const cacheKey = stream ? `${stream.id}|${paletteKey}` : paletteKey;
   const cachedTuft = flowerTuftCache.get(cacheKey);
   if (cachedTuft) return cachedTuft;
+  const tex = stream
+    ? withTextureRandomStream(stream, () => paintFlowerTuft(kinds, balanced))
+    : paintFlowerTuft(kinds, balanced);
+  flowerTuftCache.set(cacheKey, tex);
+  return tex;
+}
+
+function paintFlowerTuft(kinds: FlowerKind[], balanced: boolean): THREE.Texture {
   // Ground-cover flowers on a card: green stems with leaf pairs topped by
   // layered petal heads (white daisies, pink cosmos, golden buttercups),
   // drawn realistically enough to read as flowers at tuft scale. Same
@@ -375,7 +402,6 @@ export function flowerTuftTexture(
   tex.magFilter = THREE.LinearFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
-  flowerTuftCache.set(cacheKey, tex);
   return tex;
 }
 
