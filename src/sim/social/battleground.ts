@@ -360,6 +360,13 @@ function bgEmitAll(_ctx: SimContext, match: BgMatch, ev: (pid: number) => void):
   for (const mp of bgAllPids(match)) ev(mp);
 }
 
+/** Seated in a Realm Racers heat, from the loading lobby to the result: the
+ *  seat owns the pilot's movement and return point, so a battleground seat
+ *  would pull them out of the race mid-lap. */
+function inRealmRacersHeat(ctx: SimContext, pid: number): boolean {
+  return (ctx.players.get(pid)?.realmRacersMatchId ?? null) !== null;
+}
+
 export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?: boolean }): void {
   const r = ctx.resolve(pid);
   if (!r) return;
@@ -374,7 +381,7 @@ export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?
   // was the single most common way players lost a spot without noticing. The
   // seat handles both: placeInBg revives and clears the spirit arm, and the pop
   // detaches an instanced fighter through the dungeon door (startBgMatch).
-  if (ctx.arenaMatches.has(id)) {
+  if (ctx.arenaMatches.has(id) || inRealmRacersHeat(ctx, id)) {
     ctx.error(id, 'You cannot queue for Thornhollow Fields while in another match.');
     return;
   }
@@ -427,6 +434,7 @@ export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?
     if (
       ctx.bgMatches.has(m) ||
       ctx.arenaMatches.has(m) ||
+      inRealmRacersHeat(ctx, m) ||
       bgGroupContaining(ctx, m) ||
       bgProposalFor(ctx, m)
     ) {
@@ -692,13 +700,15 @@ function backfillBgMatches(ctx: SimContext): void {
     // the ONE site that unqueues and tells the player why.
     //
     // The rule mirrors matchmakeBg's hygiene, which is now three causes: gone
-    // offline, already seated, or committed to an arena match. Dying and
-    // standing in a dungeon deliberately no longer disqualify anyone (the seat
-    // revives and detaches them), so a corpse in the queue is a valid backfill.
+    // offline, already seated, or committed to an arena match or a Realm
+    // Racers heat. Dying and standing in a dungeon deliberately no longer
+    // disqualify anyone (the seat revives and detaches them), so a corpse in
+    // the queue is a valid backfill.
     const eligible: { index: number; size: number; waited: number }[] = [];
     ctx.bgQueue.forEach((g, i) => {
       const cand = g.pids[0];
       if (!ctx.entities.get(cand) || ctx.bgMatches.has(cand) || ctx.arenaMatches.has(cand)) return;
+      if (inRealmRacersHeat(ctx, cand)) return;
       // ...and never double-offer: a solo already holding a queue-pop offer, or
       // sitting out the lockout from one they just failed, is not available.
       if (bgProposalFor(ctx, cand) || bgRequeueLockedUntil(ctx, cand) > 0) return;
@@ -785,13 +795,14 @@ function matchmakeBg(ctx: SimContext): void {
   // last of them is the player's own doing worth a line of text:
   //   offline        the entity is gone, so there is nobody left to tell
   //   already seated a match claimed them (backfill, /dev); silent by design
-  //   arena match    they committed to a different rated fight
+  //   arena match    they committed to a different rated fight (a Realm
+  //                  Racers heat counts: its seat owns them the same way)
   // Anything else HOLDS the spot, and the pop cleans up after them instead.
   for (const g of ctx.bgQueue) {
     g.pids = g.pids.filter((p) => {
       const e = ctx.entities.get(p);
       if (!e || ctx.bgMatches.has(p)) return false;
-      if (!ctx.arenaMatches.has(p)) return true;
+      if (!ctx.arenaMatches.has(p) && !inRealmRacersHeat(ctx, p)) return true;
       ctx.emit({ type: 'bgUnqueued', pid: p });
       ctx.emit({
         type: 'log',
