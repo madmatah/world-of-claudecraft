@@ -1717,7 +1717,9 @@ const MONOLITHS: MonolithRow[] = [
     // wc -l on the merged tree (release 9827). Exact count, zero slack.
     // LOWERED 9920 -> 9910: the Realm Racers command bodies moved to
     // server/realm_racers_commands.ts behind one case group.
-    ceiling: 9910,
+    // LOWERED 9910 -> 9832: the drive record, the rr/rrt keys and the rrkit key moved to
+    // server/realm_racers_drive_wire.ts and server/realm_racers_self_wire.ts.
+    ceiling: 9832,
     seam: 'a sibling server module; see the hot-path seams in server/CLAUDE.md',
   },
   {

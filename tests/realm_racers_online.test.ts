@@ -35,6 +35,8 @@ vi.mock('../server/db', () => ({
 }));
 
 import { type ClientSession, GameServer } from '../server/game';
+import { driveWire } from '../server/realm_racers_drive_wire';
+import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from '../server/realm_racers_self_wire';
 import { ClientWorld } from '../src/net/online';
 import { decodeDriveWire } from '../src/net/realm_racers_drive_wire';
 import { decodeRealmRacersKit, realmRacersKnownOr } from '../src/net/realm_racers_self_wire';
@@ -661,5 +663,57 @@ describe('Realm Racers net decode siblings', () => {
     expect(known.map((k) => k.def.id)).toEqual(['rally_ground_blast', 'rally_oil_slick']);
     expect(e?.abilityCharges?.rally_ground_blast?.fixed).toBe(true);
     expect(e?.abilityCharges?.rally_oil_slick?.fixed).toBe(true);
+  });
+});
+
+describe('Realm Racers server wire siblings', () => {
+  it('encodes a drive record sparsely, in its wire key order', () => {
+    const drive = {
+      profileKey: 'rally_loaner',
+      speed: 12.345,
+      slip: 0,
+      steerAngle: 0,
+      yawRate: 0.5,
+      spin: 0,
+      handbrake: 0,
+      gripMult: 1,
+      dragMult: 1,
+      speedCap: 1,
+      slipCap: 1,
+      collisionImpact: 0.005,
+      controlsLocked: false,
+    };
+    expect(JSON.stringify(driveWire(drive))).toBe(
+      '{"k":"rally_loaner","sp":12.35,"sl":0,"yr":0.5,"sn":0,"hb":0,"g":1,"dg":1,"c":1,"sc":1}',
+    );
+    expect(
+      JSON.stringify(
+        driveWire({ ...drive, steerAngle: -0.5, collisionImpact: 0.5, controlsLocked: true }),
+      ),
+    ).toBe(
+      '{"k":"rally_loaner","sp":12.35,"sl":0,"yr":0.5,"st":-0.5,"sn":0,"hb":0,"g":1,"dg":1,"c":1,"sc":1,"ci":0.5,"lk":1}',
+    );
+  });
+
+  it('emits rr then rrt, and the kit with its held list or an explicit null', () => {
+    const keys: [string, unknown][] = [];
+    const maybe = (key: string, value: unknown) => keys.push([key, value]);
+    emitRealmRacersSelfKeys(
+      maybe,
+      { realmRacersInfoFor: () => 'info', realmRacersTracksideFor: () => null } as never,
+      7,
+    );
+    const weapon = { def: { id: 'rally_ground_blast' }, charges: 3 };
+    const slick = { def: { id: 'rally_oil_slick' } };
+    emitRealmRacersKitKey(maybe, { realmRacersMatchId: 1, known: [weapon, slick] } as never);
+    emitRealmRacersKitKey(maybe, { realmRacersMatchId: 1, known: [weapon] } as never);
+    emitRealmRacersKitKey(maybe, { realmRacersMatchId: null, known: [weapon] } as never);
+    expect(keys).toEqual([
+      ['rr', 'info'],
+      ['rrt', null],
+      ['rrkit', { active: true, w: 'rally_ground_blast', c: 3, h: ['slick'] }],
+      ['rrkit', { active: true, w: 'rally_ground_blast', c: 3 }],
+      ['rrkit', null],
+    ]);
   });
 });

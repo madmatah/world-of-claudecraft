@@ -15,7 +15,6 @@ import { wireParkedMana } from '../src/sim/combat/form_auto_unshift';
 import { rewindHealAmount } from '../src/sim/combat/rewind';
 import { DEEDS } from '../src/sim/content/deeds';
 import { isFinderListingTag, isFinderRole } from '../src/sim/content/dungeon_finder';
-import { realmRacersHeldEffectOf } from '../src/sim/content/realm_racers';
 import { RELIQUARY_PAGES_BY_ID } from '../src/sim/content/reliquary';
 import { MECH_CHROMAS } from '../src/sim/content/skins';
 import {
@@ -59,7 +58,6 @@ import { effectiveFishingBand } from '../src/sim/professions/fishing';
 import { cancelProfessionSessionOnDisplacement } from '../src/sim/professions/session_teardown';
 import { restoreToolEffectSlotAction } from '../src/sim/professions/tool_effect_actions';
 import type { ToolEffectConfirmMode } from '../src/sim/professions/tools';
-import type { RallyHeldEffect } from '../src/sim/realm_racers_pickup_effects';
 import {
   catalogCharacterCompletion,
   curatorRankFromOwned,
@@ -432,7 +430,9 @@ import {
 } from './quest_snapshot_wire';
 import { REALM, REALM_PUBLIC_ORIGIN, REALM_RESET_TIME_ZONE } from './realm';
 import { dispatchRealmRacersCommand } from './realm_racers_commands';
+import { driveWire } from './realm_racers_drive_wire';
 import { realmRacersInterestParticipantIds } from './realm_racers_interest';
+import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from './realm_racers_self_wire';
 import { createRealmReadoutMemo, realmReadoutJson, realmReadoutObject } from './realm_readout_memo';
 import { RiftAssetCoordinator, riftAssetConfigFromEnv } from './rift_assets';
 import { dispatchRiftCommand } from './rift_forge_dispatch';
@@ -1405,38 +1405,7 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
   // root), so it is actionable and always rides when non-zero.
   if (e.mountCastRemaining) out.mcr = round2(e.mountCastRemaining);
   if (e.mountCastKey) out.mck = e.mountCastKey;
-  // Live vehicle state, for the two seated racers of a running minigame and
-  // nobody else. It is ACTIONABLE, not cosmetic: the v1 self-extrapolator and
-  // the rival projection run the same movement kernel off it (a v2 self record
-  // carries the full-precision `rdv` instead), so without it a race would
-  // rubber-band. The renderer reads the same fields for engine pitch and drift
-  // smoke. Omitted entirely (like mcr/mck) for everyone on foot.
-  if (e.drive) {
-    out.drv = {
-      k: e.drive.profileKey,
-      sp: round2(e.drive.speed),
-      sl: round2(e.drive.slip),
-      yr: round2(e.drive.yawRate),
-      // Where the wheel is, not where the keys are. It rides because the
-      // self-extrapolator RAMPS it from the same flags: re-anchoring onto a
-      // record without it would centre the wheel of a pilot who is mid-corner,
-      // and the prediction would straighten for the length of the ramp every
-      // time a snapshot landed. Sparse like ci/lk: a machine running straight
-      // has a centred wheel and pays nothing.
-      ...(e.drive.steerAngle !== 0 ? { st: round2(e.drive.steerAngle) } : {}),
-      sn: round2(e.drive.spin),
-      hb: round2(e.drive.handbrake),
-      g: round2(e.drive.gripMult),
-      dg: round2(e.drive.dragMult),
-      c: round2(e.drive.speedCap),
-      sc: round2(e.drive.slipCap),
-      ...(e.drive.collisionImpact > 0.01 ? { ci: round2(e.drive.collisionImpact) } : {}),
-      // The activity holding the controls (a racer on the grid). Sent only
-      // while true, so an ordinary driving frame costs nothing: the client
-      // greys the weapon slot off exactly the fact the server refuses on.
-      ...(e.drive.controlsLocked ? { lk: 1 } : {}),
-    };
-  }
+  if (e.drive) out.drv = driveWire(e.drive);
   if (e.sitting || e.eating || e.drinking) out.sit = 1;
   if (e.riftSliding) out.sld = 1; // ice-slide: render a frozen gliding pose
   // Ledge climb: quantized progress (1..99), not the arc. The client never
@@ -8572,15 +8541,7 @@ export class GameServer {
     maybe('trade', tradeWire(this.sim, anchorSession.pid));
     maybe('duel', duelWire(this.sim, anchorSession.pid));
     maybe('cardDuel', this.sim.cardMinigameInfoFor(anchorSession.pid));
-    // Per-tick, bounded by the race grid: at most REALM_RACERS_GRID_SIZE
-    // standings rows plus three queue scalars (one indexOf over the realm queue).
-    maybe('rr', this.sim.realmRacersInfoFor(anchorSession.pid));
-    // The lane the viewer is STANDING on while not seated in its race: null for
-    // almost everyone (the lane test is the same O(1) band check the movement
-    // kernel runs), and the slick/box arrays are bounded by the circuit's own
-    // pickup and slick counts and built once per match per tick, so a stand
-    // full of watchers serializes one build.
-    maybe('rrt', this.sim.realmRacersTracksideFor(anchorSession.pid));
+    emitRealmRacersSelfKeys(maybe, this.sim, anchorSession.pid);
     // Small PvP-ledger scalars, delta-guarded like delve marks (a fresh session gets both).
     maybe('honor', meta.honor);
     maybe('lhonor', meta.lifetimeHonor);
@@ -8855,46 +8816,7 @@ export class GameServer {
       // bound to that frozen text, so lastSent-diffing sends it exactly once and
       // a later client save never round-trips back to clobber an in-flight edit.
       maybeSerialized('hbl', session.initialHotbarLayoutJson);
-      // The Realm Racers kit flag: while set, the client's action bar rebuilds
-      // the race kit instead of the class kit. It rides the wireRev-gated block
-      // because the sim bumps wireRev on BOTH the grid-up swap and the restore,
-      // so maybe() serializes each flip, including the restore's EXPLICIT null
-      // (delta omission means "unchanged" and would strand the client on the
-      // race kit). It names the weapon in the racer's SLOT (`w`) plus that
-      // weapon's per-race budget (`c`), read straight off the kit the sim
-      // actually granted, so a mirror never has to guess which ability a racer
-      // is holding. The live remaining count is not here: it rides `achg`, the
-      // shared charge wire.
-      const rallyWeapon = meta.realmRacersMatchId !== null ? meta.known[0] : undefined;
-      // `h` is the LIST of HELD pickup effects (22b), the abilities the kit
-      // grants beside the weapon. It rides the kit flag rather than a field of
-      // its own because the mirror rebuilds the whole kit from this payload:
-      // sending the weapon alone would leave an online pilot holding an effect
-      // they have no button for.
-      //
-      // A LIST, and read off the whole kit rather than `known[1]`, because a
-      // racer can hold more than one at a time (a dev grant hands out a stack of
-      // each). Reading one slot silently dropped whatever the sim put second:
-      // the oil went missing online exactly this way while the nitro beside it
-      // came through. The COUNTS are not here, they ride `achg` like every other
-      // charge-limited ability.
-      const rallyHeld = rallyWeapon
-        ? meta.known
-            .slice(1)
-            .map((known) => realmRacersHeldEffectOf(known.def.id))
-            .filter((effect): effect is RallyHeldEffect => effect !== null)
-        : [];
-      maybe(
-        'rrkit',
-        rallyWeapon
-          ? {
-              active: true,
-              w: rallyWeapon.def.id,
-              c: rallyWeapon.charges ?? null,
-              ...(rallyHeld.length > 0 ? { h: rallyHeld } : {}),
-            }
-          : null,
-      );
+      emitRealmRacersKitKey(maybe, meta);
     }
     selfLap?.('self.heavy');
     const assembled = extra === '' ? json : `${json.slice(0, -1)}${extra}}`;
