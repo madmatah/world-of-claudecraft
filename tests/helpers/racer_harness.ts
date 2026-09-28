@@ -58,7 +58,7 @@ import {
   realmRacersToCanonical,
 } from '../../src/sim/social/realm_racers';
 import { REALM_RACERS_BACKFILL_TICKS } from '../../src/sim/social/realm_racers_bots';
-import { DT, type SimEvent } from '../../src/sim/types';
+import { DT, type Entity, type SimEvent, type VehicleDrive } from '../../src/sim/types';
 import {
   addVehicleSlip,
   addVehicleSpin,
@@ -96,6 +96,48 @@ export interface RacerHarnessOptions {
   movementWire?: 1 | 2;
   /** Predict the seated pilot on wire v2 (the pipeline flag, off by default). */
   predictDrivers?: boolean;
+  /** Where the house pilots are parked: 'onLine' (default) on the tail of the
+   *  lap, fine for a short run off the grid; 'infield' at the points of the
+   *  circuit's bounding box farthest from its road, for a run that laps. */
+  parking?: 'onLine' | 'infield';
+}
+
+/** The share of a lap each on-line parking spot sits at, or the infield
+ *  points (canonical frame) farthest from the road. */
+function infieldParking(track: RallyTrackModel, count: number): { x: number; z: number }[] {
+  const samples = Array.from({ length: 256 }, (_, i) => track.pointAt((track.length * i) / 256));
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+  for (const p of samples) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z);
+    maxZ = Math.max(maxZ, p.z);
+  }
+  const clearance = (x: number, z: number) => {
+    let best = Number.POSITIVE_INFINITY;
+    for (const p of samples) best = Math.min(best, Math.hypot(p.x - x, p.z - z));
+    return best;
+  };
+  const candidates: { x: number; z: number; clear: number }[] = [];
+  const steps = 40;
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const x = minX + ((maxX - minX) * i) / steps;
+      const z = minZ + ((maxZ - minZ) * j) / steps;
+      candidates.push({ x, z, clear: clearance(x, z) });
+    }
+  }
+  candidates.sort((a, b) => b.clear - a.clear);
+  // Spread apart so the parked machines never touch one another either.
+  const chosen: { x: number; z: number; clear: number }[] = [];
+  for (const c of candidates) {
+    if (chosen.every((o) => Math.hypot(o.x - c.x, o.z - c.z) > 8)) chosen.push(c);
+    if (chosen.length === count) break;
+  }
+  return chosen.map(({ x, z }) => ({ x, z }));
 }
 
 /** A contact-shaped impulse on the local machine. */
@@ -125,6 +167,10 @@ export interface RacerHarness {
   shove(impulse: RacerShove): void;
   /** Advance the virtual clock one server tick at a time until `done` holds. */
   advanceUntil(done: () => boolean, maxMs: number, what: string): void;
+  /** Drive the local pilot closed loop with the house-pilot brain (see
+   *  PilotAutopilot); null releases every key. */
+  autopilot(options: PilotAutopilot | null): void;
+  autopilotDecisions(): AutopilotDecisions;
   dispose(): void;
 }
 
@@ -161,13 +207,17 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
     return found;
   }
 
+  const infield = opts.parking === 'infield' ? infieldParking(track, PARK_SHARES.length) : null;
+
   function parkedPilots(): { pid: number; x: number; z: number }[] {
     const seated = currentMatch();
     if (!seated) return [];
     return seated.pids
       .filter((other) => other !== pid)
       .map((other, i) => {
-        const at = track.pointAt(track.length * PARK_SHARES[i % PARK_SHARES.length]);
+        const at = infield
+          ? infield[i % infield.length]
+          : track.pointAt(track.length * PARK_SHARES[i % PARK_SHARES.length]);
         return { pid: other, x: seated.origin.x + at.x, z: seated.origin.z + at.z };
       });
   }
@@ -207,6 +257,23 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
     return client.entities.has(client.playerId) ? client.player.drive : null;
   }
 
+  const pilotBrain = createAutopilotDriver(
+    {
+      link: harness.link,
+      session: harness.session,
+      client,
+      pid,
+      serverEntity: harness.serverEntity,
+      holdIntent: harness.holdIntent,
+      onFrame: harness.onClientFrame,
+      reconcileOutcomes: harness.reconcileOutcomes,
+      lastSentClientTick: harness.lastSentClientTick,
+      predictionHead: harness.predictionHead,
+    },
+    currentMatch,
+  );
+  harness.onClientFrame(() => pilotBrain.step());
+
   return {
     harness,
     rng,
@@ -245,6 +312,10 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
       });
     },
     advanceUntil,
+    autopilot(options: PilotAutopilot | null): void {
+      pilotBrain.set(options, true);
+    },
+    autopilotDecisions: pilotBrain.decisions,
     dispose(): void {
       try {
         harness.dispose();
@@ -284,9 +355,153 @@ export interface PilotAutopilot {
    * its newest mirrored pose and drive. 'server' reads the authoritative
    * machine instead, a test-side oracle that keeps a scripted line clean
    * under latency; its keys still ride this client's wire, so the server
-   * still acts on them an uplink late.
+   * still acts on them an uplink late. 'predicted' reads the client's own
+   * predicted kart (the v2 pipeline's head, what the screen draws), the way a
+   * human reacts to the screen; it decides once per predicted client tick and
+   * falls back to the mirror while nothing is predicted (a suspend).
    */
-  observe?: 'mirror' | 'server';
+  observe?: 'mirror' | 'server' | 'predicted';
+}
+
+/** How many decisions the brain took, by what it read. */
+export interface AutopilotDecisions {
+  predicted: number;
+  mirror: number;
+  server: number;
+}
+
+interface AutopilotDriver {
+  /** Decide, if there is something new to decide on; run once per frame. */
+  step(): void;
+  /** Arm (or with null disarm) the brain; `releaseKeys` lets go of every key
+   *  on a disarm. */
+  set(options: PilotAutopilot | null, releaseKeys: boolean): void;
+  decisions(): AutopilotDecisions;
+}
+
+/** The pose the brain reads, from whichever source it observes. */
+interface ObservedMachine {
+  key: string;
+  id: number;
+  x: number;
+  z: number;
+  facing: number;
+  drive: VehicleDrive;
+  auras: Entity['auras'];
+  source: keyof AutopilotDecisions;
+}
+
+function observeMachine(self: HarnessClient, options: PilotAutopilot): ObservedMachine | null {
+  const client = self.client;
+  if (!client.entities.has(client.playerId)) return null;
+  if (options.observe === 'predicted') {
+    const head = self.predictionHead();
+    if (head?.state.drive) {
+      return {
+        key: `p${head.ct}`,
+        id: head.state.id,
+        x: head.state.pos.x,
+        z: head.state.pos.z,
+        facing: head.state.facing,
+        drive: head.state.drive,
+        auras: head.state.auras,
+        source: 'predicted',
+      };
+    }
+  }
+  const pe = options.observe === 'server' ? self.serverEntity : client.player;
+  if (!pe.drive) return null;
+  return {
+    key: `s${client.lastSnapAt}`,
+    id: pe.id,
+    x: pe.pos.x,
+    z: pe.pos.z,
+    facing: pe.facing,
+    drive: pe.drive,
+    auras: pe.auras,
+    source: options.observe === 'server' ? 'server' : 'mirror',
+  };
+}
+
+/** The house-pilot brain closed loop on one client, its keys on that
+ *  client's held intent (so they ride its own wire). */
+function createAutopilotDriver(
+  self: HarnessClient,
+  currentMatch: () => RealmRacersMatch | null,
+): AutopilotDriver {
+  let autopilot: PilotAutopilot | null = null;
+  let decidedOn = '';
+  let hintIndex = 0;
+  let tick = 0;
+  const decisions: AutopilotDecisions = { predicted: 0, mirror: 0, server: 0 };
+  return {
+    step(): void {
+      if (!autopilot) return;
+      const heat = currentMatch();
+      if (!heat) return;
+      const seen = observeMachine(self, autopilot);
+      if (!seen || seen.key === decidedOn) return;
+      decidedOn = seen.key;
+      const machine = seen.drive;
+      if (machine.controlsLocked) return;
+      const lap = realmRacersTrack(realmRacersCircuitOf(heat));
+      const here = realmRacersToCanonical(heat, seen.x, seen.z);
+      const onLine = lap.project(here.x, here.z, hintIndex);
+      hintIndex = onLine.index;
+      const offset = autopilot.lineOffsetYd ?? 0;
+      // The left normal is (-tz, tx): the brain sees the machine shifted right
+      // by the offset, and steering that pose onto its line holds the real one
+      // `offset` to the left.
+      const x = here.x + onLine.tangentZ * offset;
+      const z = here.z - onLine.tangentX * offset;
+      const projection = offset === 0 ? onLine : lap.project(x, z, hintIndex);
+      const out = driveRealmRacers({
+        pid: seen.id,
+        x,
+        z,
+        facing: seen.facing,
+        speed: machine.speed,
+        slip: machine.slip,
+        yawRate: machine.yawRate + machine.spin,
+        track: lap,
+        projection,
+        topSpeed:
+          vehicleTopSpeedFor(
+            machine,
+            auraSpeedMult({ auras: seen.auras, ghost: false } as Entity),
+          ) * (autopilot.speedScale ?? 1),
+        steerAngle: machine.steerAngle,
+        steerLockSeconds: 1 / vehicleProfile(machine.profileKey).steerRate,
+        rival: null,
+        incoming: [],
+        weaponReady: false,
+        tier: autopilot.tier ?? 'ace',
+        tick: tick++,
+      });
+      decisions[seen.source]++;
+      self.holdIntent({
+        forward: out.forward,
+        back: out.back,
+        turnLeft: out.turnLeft,
+        turnRight: out.turnRight,
+        jump: out.handbrake,
+      });
+    },
+    set(options: PilotAutopilot | null, releaseKeys: boolean): void {
+      autopilot = options;
+      decidedOn = '';
+      if (!options && releaseKeys) {
+        self.holdIntent({
+          forward: false,
+          back: false,
+          turnLeft: false,
+          turnRight: false,
+          jump: false,
+        });
+      }
+    },
+    decisions: () => ({ ...decisions }),
+  };
 }
 
 export interface DuelPilot {
@@ -298,6 +513,7 @@ export interface DuelPilot {
   keys(keys: PilotKeys): void;
   /** Drive closed loop from the next snapshot on; null releases every key. */
   autopilot(options: PilotAutopilot | null): void;
+  autopilotDecisions(): AutopilotDecisions;
 }
 
 /** One frame of what a pilot's screen showed. */
@@ -437,6 +653,8 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     holdIntent: harness.holdIntent,
     onFrame: harness.onClientFrame,
     reconcileOutcomes: harness.reconcileOutcomes,
+    lastSentClientTick: harness.lastSentClientTick,
+    predictionHead: harness.predictionHead,
   };
   const rng = installScriptedRng(server.sim);
   const goAfterTicks = opts.goAfterTicks ?? 20;
@@ -528,58 +746,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     // every frame the view exists, so this one runs from the start, recorded
     // or not.
     const rivalDisplay = createRemoteVehicleDisplay();
-    let autopilot: PilotAutopilot | null = null;
-    let decidedOnSnapAt = -1;
-    let hintIndex = 0;
-    let decisions = 0;
-
-    function drive(): void {
-      if (!autopilot) return;
-      if (client.lastSnapAt === decidedOnSnapAt) return;
-      decidedOnSnapAt = client.lastSnapAt;
-      const heat = currentMatch();
-      if (!heat || !client.entities.has(client.playerId)) return;
-      const pe = autopilot.observe === 'server' ? self.serverEntity : client.player;
-      const machine = pe.drive;
-      if (!machine || machine.controlsLocked) return;
-      const lap = realmRacersTrack(realmRacersCircuitOf(heat));
-      const here = realmRacersToCanonical(heat, pe.pos.x, pe.pos.z);
-      const onLine = lap.project(here.x, here.z, hintIndex);
-      hintIndex = onLine.index;
-      const offset = autopilot.lineOffsetYd ?? 0;
-      // The left normal is (-tz, tx): the brain sees the machine shifted right
-      // by the offset, and steering that pose onto its line holds the real one
-      // `offset` to the left.
-      const x = here.x + onLine.tangentZ * offset;
-      const z = here.z - onLine.tangentX * offset;
-      const projection = offset === 0 ? onLine : lap.project(x, z, hintIndex);
-      const out = driveRealmRacers({
-        pid: pe.id,
-        x,
-        z,
-        facing: pe.facing,
-        speed: machine.speed,
-        slip: machine.slip,
-        yawRate: machine.yawRate + machine.spin,
-        track: lap,
-        projection,
-        topSpeed: vehicleTopSpeedFor(machine, auraSpeedMult(pe)) * (autopilot.speedScale ?? 1),
-        steerAngle: machine.steerAngle,
-        steerLockSeconds: 1 / vehicleProfile(machine.profileKey).steerRate,
-        rival: null,
-        incoming: [],
-        weaponReady: false,
-        tier: autopilot.tier ?? 'ace',
-        tick: decisions++,
-      });
-      self.holdIntent({
-        forward: out.forward,
-        back: out.back,
-        turnLeft: out.turnLeft,
-        turnRight: out.turnRight,
-        jump: out.handbrake,
-      });
-    }
+    const pilotBrain = createAutopilotDriver(self, currentMatch);
 
     self.onFrame((frame: ClientFrameInfo) => {
       // renderer.sync's remote racing branch, through the same step it calls
@@ -615,7 +782,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
           events: racerEvents(frame.events),
         });
       }
-      drive();
+      pilotBrain.step();
     });
 
     return {
@@ -624,7 +791,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       pid: self.pid,
       client,
       keys(keys: PilotKeys): void {
-        autopilot = null;
+        pilotBrain.set(null, false);
         const steer = keys.steer ?? 0;
         self.holdIntent({
           forward: keys.throttle ?? false,
@@ -635,18 +802,9 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
         });
       },
       autopilot(options: PilotAutopilot | null): void {
-        autopilot = options;
-        decidedOnSnapAt = -1;
-        if (!options) {
-          self.holdIntent({
-            forward: false,
-            back: false,
-            turnLeft: false,
-            turnRight: false,
-            jump: false,
-          });
-        }
+        pilotBrain.set(options, true);
       },
+      autopilotDecisions: pilotBrain.decisions,
     };
   }
 

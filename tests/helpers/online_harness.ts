@@ -81,6 +81,7 @@ import { snapshotAlpha } from '../../src/net/snapshot_alpha';
 import { deckFrameFor, updateSelfRenderOnDeck } from '../../src/render/deck_frame';
 import { advanceSelfFacing, releaseSelfFacing } from '../../src/render/facing_smooth';
 import { MovementPredictionPipeline } from '../../src/render/self_prediction';
+import type { MotionState } from '../../src/render/self_prediction_core';
 import {
   createSelfRenderPositionState,
   noteSelfIdentity,
@@ -294,6 +295,18 @@ export interface HarnessClient {
   /** Register a hook run at the end of every client frame; returns its remover. */
   onFrame(hook: ClientFrameHook): () => void;
   reconcileOutcomes(): ReconcileOutcomeCounts;
+  /** The newest client tick this client put on the wire (-1 before any). */
+  lastSentClientTick(): number;
+  /** The v2 pipeline's predicted head and the client tick it stands at, or
+   *  null while nothing is predicted (a suspend, a stand-down). A test-side
+   *  read of the pipeline's own state: what the display draws at alpha 1. */
+  predictionHead(): PredictionHead | null;
+}
+
+/** The predicted body after the newest predicted client tick. */
+export interface PredictionHead {
+  ct: number;
+  state: Readonly<MotionState>;
 }
 
 /** A second (third...) client joined onto the harness's server. */
@@ -329,6 +342,10 @@ export interface OnlineHarness {
   holdIntent(mi: Partial<MoveInput>): void;
   /** Register a hook run at the end of every primary client frame. */
   onClientFrame(hook: ClientFrameHook): () => void;
+  /** The primary client's newest client tick on the wire. */
+  lastSentClientTick(): number;
+  /** The primary client's predicted head (see HarnessClient). */
+  predictionHead(): PredictionHead | null;
   /** Join another character onto this server behind its own client and link,
    *  its frame pipeline driven on the shared clock. Its movement frames are
    *  consumed and its override epochs updated with the primary's, in join
@@ -459,6 +476,7 @@ function createClientRig(params: ClientRigParams): ClientRig {
   // A frame may omit `facing` (mouselookFacing null), which means UNCHANGED on
   // the server, so the wire heading is carried forward rather than defaulted.
   let wireFacing = startFacing;
+  let lastSentCt = -1;
 
   /** Record one outgoing frame as the server's own parser would read it. */
   function noteClientFrame(payload: string): void {
@@ -474,6 +492,7 @@ function createClientRig(params: ClientRigParams): ClientRig {
     const frame = parseMoveInputFrame(parsed);
     if (frame.facing !== null) wireFacing = frame.facing;
     wireIntent = frame.moveInput;
+    if (frame.ct !== null) lastSentCt = Math.max(lastSentCt, frame.ct);
     if (recording.fromMs === null) return;
     recording.commands.push({
       tMs: clock.now() - recording.fromMs,
@@ -847,6 +866,15 @@ function createClientRig(params: ClientRigParams): ClientRig {
       };
     },
     reconcileOutcomes,
+    lastSentClientTick: () => lastSentCt,
+    predictionHead(): PredictionHead | null {
+      const pipeline = movementPrediction as unknown as {
+        predicted: MotionState | null;
+        lastPredictedClientTick: number;
+      };
+      if (!pipeline.predicted || pipeline.lastPredictedClientTick < 0) return null;
+      return { ct: pipeline.lastPredictedClientTick, state: pipeline.predicted };
+    },
   };
 }
 
@@ -1050,6 +1078,8 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     reconcileOutcomes: primary.reconcileOutcomes,
     holdIntent: primary.holdIntent,
     onClientFrame: primary.onFrame,
+    lastSentClientTick: primary.lastSentClientTick,
+    predictionHead: primary.predictionHead,
     addPeer(peerOpts: PeerClientOptions): HarnessClient {
       if (disposed) throw new Error('the harness is disposed');
       const peerWarmupMs = peerOpts.warmupMs ?? 1000;
