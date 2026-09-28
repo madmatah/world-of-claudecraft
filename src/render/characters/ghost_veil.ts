@@ -24,9 +24,10 @@
 // keeps their mask, drawn after the veiled head, and get no depth sibling.
 //
 // Every veil user wears a palette (spirit_veil_palette_core.ts): uniform
-// values on these same programs. The colour pass also carries its source's
-// colour and outfit dye (armor_dye.ts, count 0 when undyed) for the palettes
-// that keep some of the rig's own colours.
+// values on these same programs, a pulsing palette's read off the world
+// clock. The colour pass also carries its source's colour and outfit dye
+// (armor_dye.ts, count 0 when undyed) for the palettes that keep some of the
+// rig's own colours.
 
 import * as THREE from 'three';
 import { sharedUniforms } from '../gfx';
@@ -49,7 +50,13 @@ import {
   spiritVeilShapeOf,
   spiritVeilTupleKey,
 } from './spirit_veil_family_core';
-import { SPIRIT_VEIL_PALETTES, type SpiritVeilPalette } from './spirit_veil_palette_core';
+import {
+  SPIRIT_VEIL_PALETTES,
+  SPIRIT_VEIL_PULSES,
+  type SpiritVeilPalette,
+  type SpiritVeilPulse,
+  spiritVeilPulseLevel,
+} from './spirit_veil_palette_core';
 
 /** A released spirit's look. */
 export const SPIRIT_VEIL_LOOK = SPIRIT_VEIL_PALETTES.spirit;
@@ -78,17 +85,30 @@ interface PaletteUniforms {
 
 const paletteUniformSets = new Map<SpiritVeilPalette, PaletteUniforms>();
 
+/** A pulsing palette's value, read by three at every upload: no per-frame
+ *  driver, and it holds the trough under reduced motion like the bands. */
+function pulsed(full: number, pulse: SpiritVeilPulse): { value: number } {
+  return {
+    get value(): number {
+      return (
+        full * spiritVeilPulseLevel(pulse, motionAllowed() ? sharedUniforms.uTime.value : null)
+      );
+    },
+  };
+}
+
 /** One uniform set per palette, shared by every material of that palette. */
 function paletteUniforms(palette: SpiritVeilPalette): PaletteUniforms {
   let set = paletteUniformSets.get(palette);
   if (!set) {
     const p = SPIRIT_VEIL_PALETTES[palette];
+    const pulse = SPIRIT_VEIL_PULSES[palette];
     set = {
       uVeilTint: { value: new THREE.Color(p.tint) },
       uVeilDeep: { value: new THREE.Color(p.deep) },
       uVeilRim: { value: new THREE.Color(p.rim) },
-      uVeilRimStrength: { value: p.rimStrength },
-      uVeilOpacity: { value: p.opacity },
+      uVeilRimStrength: pulse ? pulsed(p.rimStrength, pulse) : { value: p.rimStrength },
+      uVeilOpacity: pulse ? pulsed(p.opacity, pulse) : { value: p.opacity },
       uVeilRise: { value: p.rise },
       uVeilShimmer: { value: p.shimmer },
       uVeilKeepColor: { value: p.keepColor },

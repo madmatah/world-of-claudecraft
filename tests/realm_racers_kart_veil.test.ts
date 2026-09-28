@@ -142,15 +142,20 @@ function farMeshOf(visual: CharacterVisual): THREE.Mesh | null {
 /** A presented mount, the view slice syncCharacterVeils reads. */
 const presented = (mountVisual: CharacterVisual) => ({ mountVisual, mountCompilePending: false });
 
-/** A racer holding `kind` (rally_ward or rally_ghost), as the entity loop reads it. */
-const racerWith = (kind: string | null) =>
+/** A racer holding `kind` (rally_ward or rally_ghost), as the entity loop
+ *  reads it; `remaining` is the aura clock the ward's ending reads. */
+const racerWith = (kind: string | null, remaining = 5) =>
   ({
     id: 2,
     kind: 'player',
     ghost: false,
     templateId: 'player',
-    auras: kind ? [{ id: kind, kind }] : [],
+    auras: kind ? [{ id: kind, kind, remaining }] : [],
   }) as never;
+
+/** The racer each veil state reads off. */
+const racerIn = (state: string) =>
+  state === 'ward-ending' ? racerWith('rally_ward', 1) : racerWith(`rally_${state}`);
 
 /** The tuple keys the boot entry links: one stand-in unit per key. */
 function preparedKeys(m: Modules): Set<string> {
@@ -185,10 +190,12 @@ function linkFamily(m: Modules): void {
 
 function racerPalettes(m: Modules): [string, SpiritVeilPalette][] {
   const ward = m.style.rallyVeilLook('ward');
+  const ending = m.style.rallyVeilLook('ward-ending');
   const ghost = m.style.rallyVeilLook('ghost');
-  if (!ward || !ghost) throw new Error('a racer veil wears no palette');
+  if (!ward || !ending || !ghost) throw new Error('a racer veil wears no palette');
   return [
     ['ward', ward],
+    ['ward-ending', ending],
     ['ghost', ghost],
   ];
 }
@@ -253,9 +260,9 @@ describe('the racer kart wears its veil on the family the boot entry prepares', 
     for (const [state, palette] of racerPalettes(m)) {
       m.effects.syncCharacterVeils(
         1,
-        racerWith(`rally_${state}`),
+        racerIn(state),
         false,
-        state as never,
+        m.style.characterVeilboundState(racerIn(state)),
         rider,
         presented(m.visual),
       );
@@ -361,6 +368,12 @@ describe('the kart is never veiled while its creation gate links it', () => {
     const veiled = kartBodies(kart).flatMap((mesh) => [mesh.material].flat());
     expect(new Set(veiled.map((mat) => m.veil.spiritVeilPaletteOf(mat)))).toEqual(
       new Set(['rally-ward']),
+    );
+    // Its last two seconds: the whole kart swaps to the pulsing palette at once.
+    m.effects.syncCharacterVeils(1, racerIn('ward-ending'), false, 'ward-ending', pilot, v);
+    const ending = kartBodies(kart).flatMap((mesh) => [mesh.material].flat());
+    expect(new Set(ending.map((mat) => m.veil.spiritVeilPaletteOf(mat)))).toEqual(
+      new Set(['rally-ward-ending']),
     );
     // The ward ends: every part draws a material the gate already compiled.
     m.effects.syncCharacterVeils(1, racerWith(null), false, 'none', pilot, v);

@@ -51,14 +51,19 @@ export function characterGhostLook(
  * The veil family: the paladin's Veilbound March and Mark, and the Realm
  * Racers ward and recovery ghost, which wear the spirit veil in palettes of
  * their own (a denser March gold, a cold pale) on the pilot and on the whole
- * machine.
+ * machine. A ward in its last `RALLY_WARD_ENDING_SECONDS` is `ward-ending`: the
+ * same gold, pulsing, so its holder and every rival see it is about to go.
  *
  * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
  * ghosted one will not block you), so they are read off the entity aura every
  * client mirrors and drawn on every graphics tier; nothing here takes a tier.
  * Each is matched by its own aura kind, which nothing else in the game carries.
  */
-export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ghost';
+export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ward-ending' | 'ghost';
+
+/** When a ward starts to read as ending, seconds of its aura clock left (the
+ *  mirrored `remaining`, which both worlds count down). */
+export const RALLY_WARD_ENDING_SECONDS = 2;
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   // The racer reads first: a class veil must never mask one. The ghost wins
@@ -66,7 +71,8 @@ export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   // is clear) and the one a rival arriving at speed acts on; the gold is back
   // the tick it ends, and the ward stays in the aura row meanwhile.
   if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
-  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
+  const ward = e.auras.find((a) => a.kind === 'rally_ward');
+  if (ward) return ward.remaining <= RALLY_WARD_ENDING_SECONDS ? 'ward-ending' : 'ward';
   if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
   if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
   return 'none';
@@ -74,7 +80,7 @@ export function characterVeilboundState(e: Entity): CharacterVeilboundState {
 
 /** The class veil a state carries into characterGhostLook: a racer's is none. */
 export function classVeilboundState(state: CharacterVeilboundState): 'march' | 'mark' | 'none' {
-  return state === 'ward' || state === 'ghost' ? 'none' : state;
+  return state === 'ward' || state === 'ward-ending' || state === 'ghost' ? 'none' : state;
 }
 
 /**
@@ -93,6 +99,7 @@ export function classVeilActive(state: CharacterVeilboundState): boolean {
  */
 export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
   if (state === 'ward') return 'rally-ward';
+  if (state === 'ward-ending') return 'rally-ward-ending';
   return state === 'ghost' ? 'rally-ghost' : null;
 }
 

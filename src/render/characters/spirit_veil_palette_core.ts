@@ -17,6 +17,7 @@ export type SpiritVeilPalette =
   | 'moonkin'
   | 'soul-rend'
   | 'rally-ward'
+  | 'rally-ward-ending'
   | 'rally-ghost';
 
 export interface SpiritVeilPaletteValues {
@@ -39,6 +40,18 @@ export interface SpiritVeilPaletteValues {
   /** Depth of the rising bands: 0 is a still body. */
   band: number;
 }
+
+const RALLY_WARD_LOOK: Readonly<SpiritVeilPaletteValues> = {
+  tint: 0xffd35a,
+  deep: 0x8a6418,
+  rim: 0xfeb50b,
+  rimStrength: 1.93,
+  opacity: 0.9,
+  rise: 1.22,
+  shimmer: 0,
+  keepColor: 1,
+  band: 0.42,
+};
 
 export const SPIRIT_VEIL_PALETTES: Readonly<
   Record<SpiritVeilPalette, Readonly<SpiritVeilPaletteValues>>
@@ -130,17 +143,11 @@ export const SPIRIT_VEIL_PALETTES: Readonly<
   // A Realm Racers machine carrying the ward, which a Ground Blast will not
   // touch: the March's look, far denser, with a hot gold rim, so it reads on
   // a kart at racing distance. Tuned live on the machine.
-  'rally-ward': {
-    tint: 0xffd35a,
-    deep: 0x8a6418,
-    rim: 0xfeb50b,
-    rimStrength: 1.93,
-    opacity: 0.9,
-    rise: 1.22,
-    shimmer: 0,
-    keepColor: 1,
-    band: 0.42,
-  },
+  'rally-ward': RALLY_WARD_LOOK,
+  // The same ward in its last seconds: the same values, pulsed
+  // (SPIRIT_VEIL_PULSES), so the rig swaps palette once when the ward starts
+  // to run out and every ending ward shares the one pulsing uniform set.
+  'rally-ward-ending': RALLY_WARD_LOOK,
   // A Realm Racers machine just recovered onto the road, which rivals drive
   // through: its own colours under a pale, still, see-through body, never the
   // released spirit's blue. Tuned live on the machine.
@@ -159,13 +166,48 @@ export const SPIRIT_VEIL_PALETTES: Readonly<
 
 /**
  * The veils a player ACTS on (docs/design/graphics-settings-fairness.md): Soul
- * Rend, and a Realm Racers rival's ward and recovery ghost. They mount on the
- * frame their state lands, never staged behind the effect gate: a staged veil
- * that never proves its link would leave the state unread while it holds. A
- * tuple the boot family has not linked yet links live instead, once.
+ * Rend, and a Realm Racers rival's ward (ending or not) and recovery ghost.
+ * They mount on the frame their state lands, never staged behind the effect
+ * gate: a staged veil that never proves its link would leave the state unread
+ * while it holds. A tuple the boot family has not linked yet links live
+ * instead, once.
  */
 export const SPIRIT_VEIL_NEVER_DEFERRED: ReadonlySet<SpiritVeilPalette> =
-  new Set<SpiritVeilPalette>(['soul-rend', 'rally-ward', 'rally-ghost']);
+  new Set<SpiritVeilPalette>(['soul-rend', 'rally-ward', 'rally-ward-ending', 'rally-ghost']);
+
+/** A palette whose rim strength and body opacity pulse on the world clock. */
+export interface SpiritVeilPulse {
+  /** Full-to-dim-to-full cycles per second. */
+  hz: number;
+  /** The trough, as a fraction of the palette's own rim strength and body
+   *  opacity. Above 0: the veil dims, it never goes out. */
+  dim: number;
+}
+
+/** How fast an ending ward pulses, cycles per second. Kept under three a
+ *  second, the flash-safety ceiling. */
+export const RALLY_WARD_ENDING_PULSE_HZ = 2.5;
+/** How far an ending ward dims at the trough, as a fraction of the full
+ *  ward's rim and body: a dimmer gold, still plainly a ward. */
+export const RALLY_WARD_ENDING_DIM = 0.4;
+
+export const SPIRIT_VEIL_PULSES: Readonly<
+  Partial<Record<SpiritVeilPalette, Readonly<SpiritVeilPulse>>>
+> = {
+  'rally-ward-ending': { hz: RALLY_WARD_ENDING_PULSE_HZ, dim: RALLY_WARD_ENDING_DIM },
+};
+
+/**
+ * The pulse's level at `timeSec` on the world clock: 1 at the crest, `dim` at
+ * the trough, a raised cosine between. Null time (reduced motion) holds the
+ * trough, a still look that differs from the full palette, so the read
+ * survives without the motion.
+ */
+export function spiritVeilPulseLevel(pulse: SpiritVeilPulse, timeSec: number | null): number {
+  if (timeSec === null) return pulse.dim;
+  const crest = 0.5 + 0.5 * Math.cos(2 * Math.PI * pulse.hz * timeSec);
+  return pulse.dim + (1 - pulse.dim) * crest;
+}
 
 /** What a veiled rig keeps. The class halo is hidden under every palette. */
 export interface SpiritVeilPolicy {
@@ -184,5 +226,6 @@ export const SPIRIT_VEIL_POLICY: Readonly<Record<SpiritVeilPalette, Readonly<Spi
   moonkin: { castsShadow: true, weaponVfx: true },
   'soul-rend': { castsShadow: false, weaponVfx: true },
   'rally-ward': { castsShadow: false, weaponVfx: false },
+  'rally-ward-ending': { castsShadow: false, weaponVfx: false },
   'rally-ghost': { castsShadow: false, weaponVfx: false },
 };

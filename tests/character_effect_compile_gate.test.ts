@@ -565,7 +565,7 @@ describe('a transparent character effect swaps in only once its programs are lin
     const { rallyVeilLook } = await import('../src/render/ghost_style_core');
     const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    for (const state of ['ward', 'ghost'] as const) {
+    for (const state of ['ward', 'ward-ending', 'ghost'] as const) {
       const look = rallyVeilLook(state);
       if (!look) throw new Error(`the ${state} wears no veil`);
       const visual = await makeVisual();
@@ -594,10 +594,12 @@ describe('a transparent character effect swaps in only once its programs are lin
     it(`wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads, ${tier}`, async () => {
       const { rallyVeilLook } = await import('../src/render/ghost_style_core');
       const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
-      for (const state of ['ghost', 'ward'] as const) {
+      for (const state of ['ghost', 'ward', 'ward-ending'] as const) {
         const look = rallyVeilLook(state);
         if (!look) throw new Error(`the ${state} wears no veil`);
-        expect(look).toBe(state === 'ward' ? 'rally-ward' : 'rally-ghost');
+        expect(look).toBe(
+          state === 'ward' ? 'rally-ward' : state === 'ghost' ? 'rally-ghost' : 'rally-ward-ending',
+        );
         const visual = await makeVisual(tier);
         const gateCalls: GateCall[] = [];
         visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));

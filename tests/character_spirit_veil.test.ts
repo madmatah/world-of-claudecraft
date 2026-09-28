@@ -789,6 +789,7 @@ describe('no effect state reaches a lit transparent twin', () => {
         'moonkin',
         'soul-rend',
         'rally-ward',
+        'rally-ward-ending',
         'rally-ghost',
       ] as const
     ).map((palette) => ({

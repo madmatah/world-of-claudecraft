@@ -55,13 +55,14 @@ import {
 import {
   SPIRIT_VEIL_PALETTES,
   SPIRIT_VEIL_POLICY,
+  SPIRIT_VEIL_PULSES,
   type SpiritVeilPalette,
 } from '../../src/render/characters/spirit_veil_palette_core';
 import { buildStubbleDecal } from '../../src/render/characters/stubble';
 import { CharacterVisual, type FarBakeGate } from '../../src/render/characters/visual';
 import { type CompileArmHost, linkColorPrograms } from '../../src/render/compile_arms';
 import { compileTargetPrepared } from '../../src/render/compile_target_readiness';
-import { gfxInternalsForTest } from '../../src/render/gfx';
+import { gfxInternalsForTest, sharedUniforms } from '../../src/render/gfx';
 import { rallyVeilLook } from '../../src/render/ghost_style_core';
 import { mountVisualSpecFor } from '../../src/render/mount_visuals';
 import { settleProgramVariants } from '../../src/render/program_variant_settle';
@@ -855,6 +856,52 @@ describe('the veil palettes on a real driver', () => {
       expect(new Set(pixels.values()).size).toBe(pixels.size);
     });
 
+    it(`pulses an ending ward between the ward's own gold and a dimmer one, zero new programs, ${arm}`, async () => {
+      const w = world(offscreen);
+      await linkFamily(w);
+      w.draw();
+      const before = w.programs();
+      const pulse = SPIRIT_VEIL_PULSES['rally-ward-ending'];
+      if (!pulse) throw new Error('the ending ward does not pulse');
+      const source = new THREE.MeshStandardMaterial({ map: greyMap(), color: 0x6699cc });
+      const clock = sharedUniforms.uTime.value;
+      const at = (palette: SpiritVeilPalette, t: number): number[] => {
+        sharedUniforms.uTime.value = t;
+        const body = veiledBody(w, source, palette);
+        w.draw();
+        w.draw();
+        const out = w.pixel();
+        body.removeFromParent();
+        return out;
+      };
+      const brightness = (px: number[]): number => px[0] + px[1] + px[2];
+      try {
+        // with motion on, the pulse runs off the clock
+        installSpiritVeil(w.renderer, () => false);
+        const crest = 0;
+        const trough = 1 / (2 * pulse.hz);
+        expect(at('rally-ward-ending', crest)).toEqual(at('rally-ward', crest));
+        const dim = at('rally-ward-ending', trough);
+        const full = at('rally-ward', trough);
+        expect(brightness(dim)).toBeLessThan(brightness(full));
+        // dimmer, never out: the ward is still plainly drawn at the trough
+        expect(brightness(dim)).toBeGreaterThan(brightness(full) * pulse.dim * 0.5);
+        // a whole cycle of the pulse links nothing
+        for (let t = 0; t < 1 / pulse.hz; t += 0.05) at('rally-ward-ending', t);
+        expect(w.programs()).toBe(before);
+        // reduced motion holds the trough, still distinct from the full ward
+        installSpiritVeil(w.renderer, () => true);
+        expect(at('rally-ward-ending', crest)).toEqual(at('rally-ward-ending', 0.7));
+        expect(brightness(at('rally-ward-ending', crest))).toBeLessThan(
+          brightness(at('rally-ward', crest)),
+        );
+        expect(w.programs()).toBe(before);
+      } finally {
+        installSpiritVeil(w.renderer, () => true);
+        sharedUniforms.uTime.value = clock;
+      }
+    });
+
     it(`casts a kept shadow from a single-sided source with zero new programs, ${arm}`, async () => {
       const w = world(offscreen);
       const floor = new THREE.Mesh(
@@ -1284,15 +1331,31 @@ describe('the racer kart veil on a real CharacterVisual', () => {
           };
           const presented = { mountVisual: kart, mountCompilePending: false };
           kart.root.visible = true;
-          for (const state of ['ward', 'ghost'] as const) {
+          // The in-race order: the ward, its last seconds, then a recovery ghost.
+          for (const state of ['ward', 'ward-ending', 'ghost'] as const) {
             const palette = rallyVeilLook(state);
             if (!palette) throw new Error(`the ${state} wears no veil`);
-            syncCharacterVeils(1, racer(`rally_${state}`), false, state, pilot, presented);
+            const kind = state === 'ghost' ? 'rally_ghost' : 'rally_ward';
+            syncCharacterVeils(1, racer(kind), false, state, pilot, presented);
             w.draw();
             w.draw();
             expect(worn(kart), state).toEqual(new Set([palette]));
             expect(worn(pilot), state).toContain(palette);
             expect(w.programs(), state).toBe(before);
+            if (state === 'ward-ending') {
+              // The pulse is uniform values on the clock: a cycle of it with
+              // motion on draws the same programs.
+              const clock = sharedUniforms.uTime.value;
+              installSpiritVeil(w.renderer, () => false);
+              for (let t = 0; t < 0.5; t += 0.05) {
+                sharedUniforms.uTime.value = t;
+                w.draw();
+              }
+              installSpiritVeil(w.renderer, () => true);
+              sharedUniforms.uTime.value = clock;
+              expect(w.programs(), 'ward-ending pulse').toBe(before);
+              expect(worn(kart), 'ward-ending pulse').toEqual(new Set([palette]));
+            }
             // The pilot at distance: its composed far bake mints veiled.
             for (let i = 0; i < 20 && !pilot.displayedFarBody; i++) {
               pilot.setFar(true);

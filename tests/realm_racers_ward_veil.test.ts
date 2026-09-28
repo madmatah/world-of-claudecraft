@@ -21,8 +21,10 @@ import {
   spiritVeilPassOf,
 } from '../src/render/characters/ghost_veil';
 import {
+  SPIRIT_VEIL_NEVER_DEFERRED,
   SPIRIT_VEIL_PALETTES,
   SPIRIT_VEIL_POLICY,
+  SPIRIT_VEIL_PULSES,
   type SpiritVeilPalette,
 } from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
@@ -30,18 +32,22 @@ import {
   characterVeilboundState,
   classVeilActive,
   classVeilboundState,
+  RALLY_WARD_ENDING_SECONDS,
   rallyVeilLook,
   riderVeilLook,
 } from '../src/render/ghost_style_core';
-import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
+import {
+  REALM_RACERS_WARD_AURA,
+  REALM_RACERS_WARD_AURA_SECONDS,
+} from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
 
 const ward: Aura = {
   id: REALM_RACERS_WARD_AURA,
   name: 'Racing Ward',
   kind: 'rally_ward',
-  remaining: 9999,
-  duration: 9999,
+  remaining: REALM_RACERS_WARD_AURA_SECONDS,
+  duration: REALM_RACERS_WARD_AURA_SECONDS,
   value: 0,
   sourceId: 7,
   school: 'physical',
@@ -189,6 +195,59 @@ describe('the ward veil decision', () => {
       ].join('\n'),
     );
     expect(renderer.match(/syncCharacterVeils\(/g)).toHaveLength(1);
+  });
+});
+
+describe('the ward in its last seconds', () => {
+  const at = (remaining: number): Aura => ({ ...ward, remaining });
+
+  it('reads as ending from two seconds of its clock left, on pilot and machine', () => {
+    expect(RALLY_WARD_ENDING_SECONDS).toBe(2);
+    expect(characterVeilboundState(racer([at(REALM_RACERS_WARD_AURA_SECONDS)]))).toBe('ward');
+    expect(characterVeilboundState(racer([at(RALLY_WARD_ENDING_SECONDS + 0.05)]))).toBe('ward');
+    expect(characterVeilboundState(racer([at(RALLY_WARD_ENDING_SECONDS)]))).toBe('ward-ending');
+    expect(characterVeilboundState(racer([at(0.05)]))).toBe('ward-ending');
+    expect(characterVeilboundState(racer([march, at(1)]))).toBe('ward-ending');
+    expect(rallyVeilLook('ward-ending')).toBe('rally-ward-ending');
+    expect(veilsFor(racer([at(1)]))).toEqual({
+      rider: 'rally-ward-ending',
+      kart: 'rally-ward-ending',
+    });
+    // the pilot's precedence is unchanged: a spirit still claims the rider
+    expect(veilsFor(racer([at(1)], { ghost: true }))).toEqual({
+      rider: 'spirit',
+      kart: 'rally-ward-ending',
+    });
+    // the recovery ghost still wins over any ward, ending or not
+    const ghost = { ...ward, id: 'rally_ghost', kind: 'rally_ghost' } as Aura;
+    expect(characterVeilboundState(racer([at(1), ghost]))).toBe('ghost');
+    // a kart behind its creation gate stays bare, the pilot carrying the read
+    expect(veilsFor(racer([at(1)]), { pending: true })).toEqual({
+      rider: 'rally-ward-ending',
+      kart: null,
+    });
+  });
+
+  it('is still the veil only, never deferred, and pulses: it never goes out', () => {
+    expect(classVeilboundState('ward-ending')).toBe('none');
+    expect(classVeilActive('ward-ending')).toBe(false);
+    expect(SPIRIT_VEIL_NEVER_DEFERRED.has('rally-ward-ending')).toBe(true);
+    expect(SPIRIT_VEIL_POLICY['rally-ward-ending']).toEqual(SPIRIT_VEIL_POLICY['rally-ward']);
+    // the full ward's gold at the crest, and a dim floor above zero
+    expect(SPIRIT_VEIL_PALETTES['rally-ward-ending']).toEqual(SPIRIT_VEIL_PALETTES['rally-ward']);
+    expect(SPIRIT_VEIL_PULSES['rally-ward-ending']?.dim).toBeGreaterThan(0);
+    expect(SPIRIT_VEIL_PULSES['rally-ward']).toBeUndefined();
+  });
+
+  it('mounts over every rig material family on the same shared program keys', () => {
+    for (const source of tierMaterials()) {
+      const veil = createSpiritVeilMaterial(source, 'rally-ward-ending');
+      expect(spiritVeilPassOf(veil), source.type).toBe('color');
+      expect(spiritVeilPaletteOf(veil), source.type).toBe('rally-ward-ending');
+      expect(veil.customProgramCacheKey()).toBe(
+        createSpiritVeilMaterial(source, 'rally-ward').customProgramCacheKey(),
+      );
+    }
   });
 });
 
