@@ -29,7 +29,10 @@ import {
   rallyVeilLook,
 } from '../src/render/ghost_style_core';
 import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
-import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
+import {
+  REALM_RACERS_WARD_AURA,
+  REALM_RACERS_WARD_AURA_SECONDS,
+} from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
 
 const ghost: Aura = {
@@ -47,6 +50,8 @@ const ward: Aura = {
   id: REALM_RACERS_WARD_AURA,
   name: 'Racing Ward',
   kind: 'rally_ward',
+  remaining: REALM_RACERS_WARD_AURA_SECONDS,
+  duration: REALM_RACERS_WARD_AURA_SECONDS,
 };
 
 const racer = (auras: Aura[], over: Partial<Entity> = {}): Entity =>

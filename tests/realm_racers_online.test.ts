@@ -52,7 +52,9 @@ import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
   REALM_RACERS_WARD_AURA,
+  REALM_RACERS_WARD_AURA_SECONDS,
   realmRacersMatchOf,
+  realmRacersWarded,
 } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
 import { TICK_RATE } from '../src/sim/types';
@@ -765,5 +767,106 @@ describe('the recovery ghost online', () => {
     const ownSnap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
     (ownWorld as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(ownSnap);
     expect(realmRacersGhosted(ownWorld.entities.get(session.pid))).toBe(true);
+  });
+});
+
+describe('the ward online', () => {
+  it('runs out on every mirror ten seconds after the take: the pilot own and a rival', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    advance(server);
+    const racer = server.sim.entities.get(session.pid);
+    const progress = match.progress.get(session.pid);
+    if (!racer || !progress) throw new Error('missing racer');
+
+    // A rival standing beside the machine, so the racer is in its interest set.
+    const rivalClient = fakeClient();
+    const rivalSession = join(server, rivalClient, 2, 'Briar');
+    const rivalEntity = server.sim.entities.get(rivalSession.pid);
+    if (!rivalEntity) throw new Error('missing rival');
+
+    // Granted through the real path: a scripted ward draw at a box.
+    const rng = installScriptedRng(server.sim);
+    rng.script(rallyPickupRollFor('leader', 'ward'));
+    const box = realmRacersPickupBoxes(GARDEN_CIRCUIT)[4];
+    racer.pos.x = match.origin.x + box.x;
+    racer.pos.z = match.origin.z + box.z;
+    racer.prevPos = { ...racer.pos };
+    rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
+    rivalEntity.prevPos = { ...rivalEntity.pos };
+    const projection = realmRacersTrack(GARDEN_CIRCUIT).project(box.x, box.z);
+    progress.lastS = projection.s;
+    progress.trackIndex = projection.index;
+    advance(server);
+    expect(rng.consumed).toBe(1);
+    expect(realmRacersWarded(racer)).toBe(true);
+    const grantedAt = server.sim.tickCount;
+
+    // Both mirrors replay every frame they were sent, in order, the way a live
+    // client does; nothing but the wire tells them the ward is gone.
+    const ownWorld = bareClient(session.pid);
+    const rivalWorld = bareClient(rivalSession.pid);
+    let ownRead = 0;
+    let rivalRead = 0;
+    const catchUp = (): void => {
+      const own = client.sent.filter((frame) => frame.t === 'snap');
+      for (; ownRead < own.length; ownRead++) {
+        (ownWorld as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(
+          own[ownRead],
+        );
+      }
+      const rival = rivalClient.sent.filter((frame) => frame.t === 'snap');
+      for (; rivalRead < rival.length; rivalRead++) {
+        (rivalWorld as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(
+          rival[rivalRead],
+        );
+      }
+    };
+    const wardOn = (world: ClientWorld) =>
+      world.entities.get(session.pid)?.auras.find((aura) => aura.id === REALM_RACERS_WARD_AURA);
+    catchUp();
+    // The clock rides the ordinary aura wire: a rival reads the same ten
+    // seconds the pilot does, not a mode with no end.
+    for (const world of [ownWorld, rivalWorld]) {
+      const seen = wardOn(world);
+      expect(seen?.duration).toBe(REALM_RACERS_WARD_AURA_SECONDS);
+      expect(seen?.remaining).toBeGreaterThan(REALM_RACERS_WARD_AURA_SECONDS - 0.5);
+      expect(seen?.remaining).toBeLessThanOrEqual(REALM_RACERS_WARD_AURA_SECONDS);
+    }
+    expect(ownWorld.realmRacersInfo.match?.warded).toBe(true);
+
+    // Keep the rival beside the racer while the clock runs down, whatever the
+    // machine does meanwhile.
+    const wardTicks = REALM_RACERS_WARD_AURA_SECONDS * TICK_RATE;
+    while (server.sim.tickCount < grantedAt + wardTicks - 1) {
+      rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
+      rivalEntity.prevPos = { ...rivalEntity.pos };
+      advance(server);
+    }
+    catchUp();
+    expect(realmRacersWarded(racer)).toBe(true);
+    expect(wardOn(rivalWorld)).toBeDefined();
+    expect(wardOn(ownWorld)).toBeDefined();
+
+    rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
+    rivalEntity.prevPos = { ...rivalEntity.pos };
+    advance(server);
+    expect(server.sim.tickCount).toBe(grantedAt + wardTicks);
+    expect(realmRacersWarded(racer)).toBe(false);
+    catchUp();
+    expect(wardOn(rivalWorld)).toBeUndefined();
+    expect(wardOn(ownWorld)).toBeUndefined();
+    expect(ownWorld.realmRacersInfo.match?.warded).toBe(false);
+    // The pilot is told the aura faded, as for any other buff; nothing broke it.
+    expect(events(client, 'aura')).toContainEqual(
+      expect.objectContaining({ targetId: session.pid, name: 'Racing Ward', gained: false }),
+    );
+    expect(events(client, 'realmRacersWardBroken')).toEqual([]);
   });
 });

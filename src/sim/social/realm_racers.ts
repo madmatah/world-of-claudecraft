@@ -238,16 +238,21 @@ export const REALM_RACERS_OFF_TRACK_AURA = 'realm_racers_soft_verge';
 export const REALM_RACERS_WARD_AURA = 'rally_ward';
 const REALM_RACERS_WARD_AURA_NAME = 'Racing Ward';
 /**
- * How long the ward is written for, seconds.
- *
- * The permanent-until-removed arm the aura system already supports (the Drowned
- * Litany's cantor shield is the precedent): the per-tick pass decrements
- * `remaining` and drops an aura at zero, so "until something spends it" is spelled
- * as a duration no race can outlive. The buff bar hides the countdown for this id
- * (`TOGGLE_IDS` in `src/ui/auras_view.ts`), so nobody is shown a three-hour clock
- * that decides nothing.
+ * How long the ward lasts, seconds, on the aura clock: the per-tick pass takes
+ * DT off `remaining` and drops the aura at zero with the same fade the spend
+ * path emits, so every client clears it alike. Inside that window it absorbs
+ * the next Ground Blast hit or oil crossing and is spent by it (operator call,
+ * 2026-09-28; it used to last until something spent it). Granted in the rally
+ * phase, which runs after the aura pass, it covers every hit the rally phase
+ * resolves over the next 10 s of ticks and is gone before the one 10 s on.
  */
-export const REALM_RACERS_WARD_AURA_SECONDS = 9999;
+export const REALM_RACERS_WARD_AURA_SECONDS = 10;
+
+/** The duration the race writes on an aura it ends itself (the recovery
+ *  ghost): the permanent-until-removed arm the aura system already supports
+ *  (the Drowned Litany's cantor shield is the precedent), a clock no race can
+ *  outlive. */
+const REALM_RACERS_UNTIMED_AURA_SECONDS = 9999;
 
 /** Is this machine carrying a ward right now? The one question every ward site
  *  asks, so nothing re-implements the lookup. */
@@ -256,7 +261,8 @@ export function realmRacersWarded(racer: Entity | undefined | null): boolean {
 }
 
 /** Grant the ward. Refreshing an existing one is a no-op by construction: the
- *  draw that would have granted a second falls back to the refill instead. */
+ *  draw that would have granted a second falls back to the refill instead, so
+ *  a second box never restarts the clock either. */
 function applyRealmRacersWard(ctx: SimContext, racer: Entity): void {
   ctx.applyAura(racer, {
     id: REALM_RACERS_WARD_AURA,
@@ -321,10 +327,9 @@ function applyRealmRacersGhost(
     id: REALM_RACERS_GHOST_AURA,
     name: REALM_RACERS_GHOST_AURA_NAME,
     kind: 'rally_ghost',
-    // Removed by the race, never by the clock (see the ward's duration): the
-    // cap above is what bounds it.
-    remaining: REALM_RACERS_WARD_AURA_SECONDS,
-    duration: REALM_RACERS_WARD_AURA_SECONDS,
+    // Removed by the race, never by the clock: the cap above is what bounds it.
+    remaining: REALM_RACERS_UNTIMED_AURA_SECONDS,
+    duration: REALM_RACERS_UNTIMED_AURA_SECONDS,
     value: 0,
     sourceId: racer.id,
     school: 'physical',

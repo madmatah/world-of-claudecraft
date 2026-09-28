@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eventAnchor } from '../server/event_delivery';
-import { isDebuffAura } from '../src/sim/aura_classify';
+import { isDebuffAura, isToggleAura } from '../src/sim/aura_classify';
 import {
   REALM_RACERS_ABILITY_ID,
   REALM_RACERS_EFFECT_ABILITIES,
@@ -680,30 +680,30 @@ describe('the ward', () => {
     });
   }
 
-  it('is a real AURA on the machine, classified as a buff and shown without a clock', () => {
+  it('is a real AURA on the machine, classified as a buff and shown with its countdown', () => {
     const { sim, pids } = racingGrid();
     const [a] = pids;
     takeWithEffect(sim, a, 0, 'ward');
     const aura = required(wardAuraOf(sim, a), 'ward aura');
     // The shape, spelled out: a marker kind of its own (nothing borrowed that
     // would drag mechanics in), no stat effect, physical so no dispel in the
-    // game can strip it, and the permanent-until-removed duration.
+    // game can strip it, and the ten-second clock it runs out on.
+    expect(REALM_RACERS_WARD_AURA_SECONDS).toBe(10);
     expect(aura).toMatchObject({
       id: REALM_RACERS_WARD_AURA,
       name: 'Racing Ward',
       kind: 'rally_ward',
       value: 0,
       school: 'physical',
+      remaining: REALM_RACERS_WARD_AURA_SECONDS,
       duration: REALM_RACERS_WARD_AURA_SECONDS,
     });
-    expect(aura.remaining).toBeGreaterThan(60);
     // BUFF, through the one classifier the HUD and the sim share.
     expect(isDebuffAura(aura.kind, aura.value)).toBe(false);
     expect(isAuraDebuff(aura)).toBe(false);
+    // A timed buff, not a mode: the countdown the pilot plans around is shown.
+    expect(isToggleAura(aura.kind, aura.id)).toBe(false);
 
-    // And the buff bar shows it with NO countdown: it is not timed, it lasts
-    // until something spends it, so a clock ticking down from three hours would
-    // be telling a pilot about a number that decides nothing.
     const units = { s: 's', m: 'm', h: 'h', d: 'd' };
     const view = createAurasView('buffs', {
       iconId: (input) => `aura_${input.kind}`,
@@ -717,12 +717,16 @@ describe('the ward', () => {
     expect(painted.count).toBe(1);
     expect(painted.slots[0]).toMatchObject({
       isDebuff: false,
-      durationText: '',
+      durationText: '10s',
       expiring: false,
+      toggle: false,
       // The icon the pickup splash asks for by name, so the two surfaces cannot
       // draw different wards.
       iconKey: 'aura_rally_ward',
     });
+    // And it blinks as it runs out, like every other timed buff.
+    const ending = view.tick({ auras: [{ ...aura, remaining: 2.5 }] });
+    expect(ending.slots[0]).toMatchObject({ durationText: '3s', expiring: true });
   });
 
   it('absorbs exactly one Ground Blast, then breaks', () => {
@@ -871,6 +875,121 @@ describe('the ward', () => {
         expect(required(sim.entities.get(pid)?.drive, 'drive').speedCap).toBe(1);
       }
     }
+  });
+});
+
+describe('the ward runs out on its own', () => {
+  /** The ward's whole life in ticks, off the live constant. */
+  const WARD_TICKS = REALM_RACERS_WARD_AURA_SECONDS * TICK_RATE;
+
+  /** A shell whose impact lands on the NEXT tick, centred just inside the blast
+   *  on the racer (the twin of the ward suite's helper). */
+  function shellOn(sim: Sim, victim: number, owner: number): void {
+    const racer = required(sim.entities.get(victim), 'racer');
+    const leg = (GROUND_BLAST_RADIUS - 0.01) / Math.hypot(1, 0.999);
+    match(sim).groundBlasts.push({
+      ownerPid: owner,
+      x: racer.pos.x + leg,
+      z: racer.pos.z + leg * 0.999,
+      impactTick: sim.tickCount + 1,
+    });
+  }
+
+  /** Take a ward, then tick until `ticksAfterGrant` ticks have passed since the
+   *  tick that granted it. Returns every event those ticks emitted. */
+  function wardedFor(ticksAfterGrant: number): {
+    sim: Sim;
+    pids: number[];
+    grantedAt: number;
+    events: SimEvent[];
+  } {
+    const { sim, pids } = racingGrid();
+    takeWithEffect(sim, pids[0], 0, 'ward');
+    const grantedAt = sim.tickCount;
+    expect(wardedOf(sim, pids[0])).toBe(true);
+    const events: SimEvent[] = [];
+    while (sim.tickCount < grantedAt + ticksAfterGrant) events.push(...sim.tick());
+    return { sim, pids, grantedAt, events };
+  }
+
+  it('ends exactly ten seconds after the take, with the fade every client clears it on', () => {
+    expect(WARD_TICKS).toBe(200);
+    const { sim, pids, grantedAt } = wardedFor(WARD_TICKS - 1);
+    const [a] = pids;
+    // The last tick of the window: still up, a tick's worth of clock left.
+    expect(wardedOf(sim, a)).toBe(true);
+    expect(required(wardAuraOf(sim, a), 'ward aura').remaining).toBeCloseTo(1 / TICK_RATE, 9);
+    const expiry = sim.tick();
+    expect(sim.tickCount).toBe(grantedAt + WARD_TICKS);
+    expect(wardedOf(sim, a)).toBe(false);
+    // The aura system's own expiry, which emits the same fade the spend path
+    // does, so the buff bar, the aura log and every mirror drop it alike.
+    expect(expiry.filter((event) => event.type === 'aura' && event.targetId === a)).toEqual([
+      { type: 'aura', targetId: a, name: 'Racing Ward', gained: false },
+    ]);
+    // Running out is not breaking: nothing hit it, so nothing announces it.
+    expect(expiry.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
+    // And the readout the race strip reads follows the aura it is derived from.
+    expect(sim.realmRacersInfoFor(a).match?.warded).toBe(false);
+  });
+
+  it('never announces a break for a ward that ran out, however long the race goes on', () => {
+    const { sim, pids, events } = wardedFor(WARD_TICKS + TICK_RATE);
+    expect(wardedOf(sim, pids[0])).toBe(false);
+    expect(events.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
+    expect(
+      events.filter(
+        (event) => event.type === 'aura' && event.targetId === pids[0] && !event.gained,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('still absorbs a Ground Blast landing on its last tick, 9.95 s in', () => {
+    const { sim, pids, grantedAt } = wardedFor(WARD_TICKS - 2);
+    const [a, shooter] = pids;
+    const progress = progressOf(sim, a);
+    shellOn(sim, a, shooter);
+    const absorbed = sim.tick();
+    expect(sim.tickCount).toBe(grantedAt + WARD_TICKS - 1);
+    expect(absorbed.filter((event) => event.type === 'realmRacersWardBroken')).toMatchObject([
+      { pid: a },
+    ]);
+    expect(progress.groundBlastShockUntilTick).toBe(0);
+    expect(wardedOf(sim, a)).toBe(false);
+  });
+
+  it('is gone once the clock runs out: a Ground Blast at 10.05 s lands in full', () => {
+    const { sim, pids, grantedAt } = wardedFor(WARD_TICKS);
+    const [a, shooter] = pids;
+    const progress = progressOf(sim, a);
+    expect(wardedOf(sim, a)).toBe(false);
+    shellOn(sim, a, shooter);
+    const landed = sim.tick();
+    expect(sim.tickCount).toBe(grantedAt + WARD_TICKS + 1);
+    expect(landed.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
+    expect(landed.filter((event) => event.type === 'realmRacersGroundBlastHit')).toMatchObject([
+      { targetId: a },
+    ]);
+    expect(progress.groundBlastShockUntilTick).toBe(sim.tickCount + GROUND_BLAST_SHOCK_TICKS);
+  });
+
+  it('keeps its first clock when a second ward is drawn: the draw falls back to the refill', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const grantedAt = sim.tickCount;
+    for (let i = 0; i < 21; i++) sim.tick();
+    takeWithEffect(sim, a, 1, 'ward');
+    // No refresh: the ward still ends ten seconds after the FIRST take.
+    const aura = required(wardAuraOf(sim, a), 'ward aura');
+    expect(aura.remaining).toBeCloseTo(
+      REALM_RACERS_WARD_AURA_SECONDS - (sim.tickCount - grantedAt) / TICK_RATE,
+      9,
+    );
+    while (sim.tickCount < grantedAt + WARD_TICKS - 1) sim.tick();
+    expect(wardedOf(sim, a)).toBe(true);
+    sim.tick();
+    expect(wardedOf(sim, a)).toBe(false);
   });
 });
 

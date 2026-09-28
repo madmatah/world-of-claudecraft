@@ -158,18 +158,15 @@ export const TOGGLE_AURA_KINDS: ReadonlySet<AuraKind> = new Set<AuraKind>([
 // under the carry. Beacon of Light is the paladin's maintained link: it persists
 // until it is moved to another target, so a countdown under it would read as
 // "this is about to leave me" for a bond that never expires on its own.
-// The Realm Racers ward hides its countdown for a related reason: it is not a
-// mode and not timed, it lasts until something SPENDS it (or the race ends), and
-// the sim backs that with the long finite duration the aura system uses for
-// permanent effects. A countdown ticking down from three hours would be telling
-// a pilot about a clock that decides nothing. The recovery ghost hides it for the
-// same reason: it ends when the machine is unlocked and clear of every rival, not
-// when a clock runs out.
+// The Realm Racers recovery ghost hides it for a related reason: it ends when
+// the machine is unlocked and clear of every rival, not when a clock runs out,
+// and the sim backs that with the long finite duration the aura system uses for
+// permanent effects. (The racer's ward is NOT here: it runs out after ten
+// seconds, and that countdown is what its holder plans around.)
 export const TOGGLE_AURA_IDS: ReadonlySet<string> = new Set([
   'ghost_wolf',
   'beacon_of_light',
   'bg_carried_flag',
-  'rally_ward',
   'rally_ghost',
 ]);
 

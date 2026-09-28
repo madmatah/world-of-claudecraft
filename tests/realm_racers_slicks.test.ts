@@ -48,6 +48,7 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
+import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
@@ -801,6 +802,63 @@ describe('oil slicks, in a race', () => {
     standAt(sim, rival, slick.x, slick.z);
     sim.tick();
     expect(rivalProgress.slickGripUntilTick).toBe(sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS);
+  });
+
+  /** The ward exactly as a box writes it, on a rival that has not touched the
+   *  patch yet: the aura clock runs from the next tick. */
+  function wardRival(sim: Sim, rival: number): void {
+    required(sim.entities.get(rival), 'rival').auras.push({
+      id: REALM_RACERS_WARD_AURA,
+      name: 'Racing Ward',
+      kind: 'rally_ward',
+      remaining: REALM_RACERS_WARD_AURA_SECONDS,
+      duration: REALM_RACERS_WARD_AURA_SECONDS,
+      value: 0,
+      sourceId: rival,
+      school: 'physical',
+    });
+  }
+
+  it('lets a ward eat the oil on the last tick of its ten seconds', () => {
+    const { sim, pids } = racingGrid();
+    const [dropper, rival] = pids;
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const point = track.pointAt(track.length * 0.25);
+    const slick = dropSlickAt(sim, dropper, point.x, point.z);
+    const rivalProgress = required(match(sim).progress.get(rival), 'rival progress');
+    wardRival(sim, rival);
+    const wardTicks = REALM_RACERS_WARD_AURA_SECONDS * TICK_RATE;
+    for (let i = 0; i < wardTicks - 2; i++) sim.tick();
+    expect(slick.expiresTick).toBeGreaterThan(sim.tickCount + 1);
+    standAt(sim, rival, slick.x, slick.z);
+    const absorbed = sim.tick();
+    expect(realmRacersWarded(required(sim.entities.get(rival), 'rival'))).toBe(false);
+    expect(rivalProgress.slickGripUntilTick).toBe(0);
+    expect(absorbed.filter((event) => event.type === 'realmRacersWardBroken')).toMatchObject([
+      { pid: rival },
+    ]);
+  });
+
+  it('leaves the oil to a ward that has run out: the crossing after ten seconds slides', () => {
+    const { sim, pids } = racingGrid();
+    const [dropper, rival] = pids;
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const point = track.pointAt(track.length * 0.25);
+    const slick = dropSlickAt(sim, dropper, point.x, point.z);
+    const rivalProgress = required(match(sim).progress.get(rival), 'rival progress');
+    wardRival(sim, rival);
+    const wardTicks = REALM_RACERS_WARD_AURA_SECONDS * TICK_RATE;
+    const ran: SimEvent[] = [];
+    for (let i = 0; i < wardTicks; i++) ran.push(...sim.tick());
+    expect(realmRacersWarded(required(sim.entities.get(rival), 'rival'))).toBe(false);
+    expect(slick.expiresTick).toBeGreaterThan(sim.tickCount + 1);
+    standAt(sim, rival, slick.x, slick.z);
+    const crossed = sim.tick();
+    expect(rivalProgress.slickGripUntilTick).toBe(sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS);
+    // A ward that ran out broke on nothing, then or since.
+    expect([...ran, ...crossed].filter((event) => event.type === 'realmRacersWardBroken')).toEqual(
+      [],
+    );
   });
 
   it('offers no grip loss to a racer who has pulled off', () => {
