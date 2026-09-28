@@ -60,12 +60,6 @@ export const REALM_RACERS_THEME_IDS: readonly string[] = [
   'farshore',
 ];
 
-/** The theme id a world-map zone's circuits wear: the zone id with its article
- *  dropped, the naming rule above. */
-export function realmRacersThemeIdForZone(zoneId: string): string {
-  return zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
-}
-
 /** The theme a circuit wears unless it says otherwise, and what a bad id falls
  *  back to at draw time. */
 export const REALM_RACERS_DEFAULT_THEME_ID = 'evergarden';

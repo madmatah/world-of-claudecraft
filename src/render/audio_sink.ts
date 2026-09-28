@@ -225,11 +225,12 @@ export interface SpatialAudioSink {
   ): void;
   /** Per-frame ambience state around the player; the engine cross-fades loops.
    *  `biome` is the full `BiomeId` union (covers both the grid-world biomes and
-   *  the beach/desert/volcano/cave set). `crowd` is the Sowfield crowd-murmur
+   *  the beach/desert/volcano/cave set), or null where no zone bed plays (a
+   *  Realm Racers circuit). `crowd` is the Sowfield crowd-murmur
    *  level (0 away from the stadium, about 0.4 on the grounds, 1 while a Vale
    *  Cup match is live). */
   ambience(
-    biome: BiomeId,
+    biome: BiomeId | null,
     inDungeon: boolean,
     precip: 'snow' | 'rain' | null,
     nearWater: boolean,

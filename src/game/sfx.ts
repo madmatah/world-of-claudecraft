@@ -2030,9 +2030,10 @@ class Sfx {
 
   /** Cross-fade the global ambience loops to match the player's surroundings.
    *  These are continuous background beds, kept well under the foreground
-   *  footstep/jump/combat one-shots so movement always reads clearly over them. */
+   *  footstep/jump/combat one-shots so movement always reads clearly over them.
+   *  A null `biome` (a Realm Racers circuit) matches no zone bed. */
   ambience(
-    biome: BiomeId,
+    biome: BiomeId | null,
     inDungeon: boolean,
     precip: 'snow' | 'rain' | null,
     nearWater: boolean,

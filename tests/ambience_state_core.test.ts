@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sfx } from '../src/game/sfx';
 import {
@@ -9,7 +11,6 @@ import {
 import {
   REALM_RACERS_PRACTICE_CIRCUIT,
   REALM_RACERS_THEME_IDS,
-  realmRacersThemeIdForZone,
 } from '../src/sim/content/realm_racers_circuits';
 import {
   arenaOrigin,
@@ -33,7 +34,6 @@ import {
   realmRacersLaneOrigin,
   realmRacersPublicLane,
 } from '../src/sim/realm_racers_layout';
-import type { BiomeId } from '../src/sim/types';
 import { groundHeight, waterLevelAt, zoneBiomeAt } from '../src/sim/world';
 
 describe('ambience_state_core', () => {
@@ -64,7 +64,7 @@ describe('ambience_state_core', () => {
       const inDungeon = x > DUNGEON_X_THRESHOLD;
       expect(s.inDungeon).toBe(inDungeon);
       expect(s.biome).toBe(zoneBiomeAt(x, z));
-      expect(s.precip).toBe(biomePrecipitation(s.biome, inDungeon, true));
+      expect(s.precip).toBe(biomePrecipitation(zoneBiomeAt(x, z), inDungeon, true));
       expect(s.nearWater).toBe(
         !inDungeon && groundHeight(x, z, seed) < waterLevelAt(x, z, seed) + 0.4,
       );
@@ -79,21 +79,15 @@ describe('ambience_state_core', () => {
 });
 
 // A circuit stands on the flat instance plane, so the plain x test called the
-// whole visit a dungeon: amb_dungeon under the race music and the outdoor beds
-// off. A circuit is dressed as its zone, so it plays that zone's outdoors.
+// whole visit a dungeon and played amb_dungeon under the race music. By the
+// developer's listening test a circuit plays no bed at all, from the lobby to
+// the results: its music, engines and effects are the whole mix.
 describe('ambience on a Realm Racers circuit', () => {
   const SEED = 1234;
 
   afterEach(() => {
     clearRealmRacersDraftCircuits();
   });
-
-  // Stated as literals, so the pin cannot read its answer back out of the code
-  // under test. A circuit on a theme missing here fails until it is added.
-  const ZONE_BIOME_BY_THEME: Record<string, BiomeId> = {
-    evergarden: 'garden',
-    nightbloom: 'night',
-  };
 
   const sampleAt = (x: number, z: number): AmbienceState =>
     sampleAmbienceInto(createAmbienceState(), x, z, SEED, true);
@@ -104,74 +98,56 @@ describe('ambience on a Realm Racers circuit', () => {
     return realmRacersLaneOrigin(realmRacersPublicLane(draft));
   }
 
-  it('reads the literal zone table the pins below are written against', () => {
-    expect(ZONES.find((zone) => zone.id === 'evergarden')?.biome).toBe('garden');
-    expect(ZONES.find((zone) => zone.id === 'nightbloom')?.biome).toBe('night');
-  });
+  // The centre and two opposite corners of a lane's region.
+  function lanePoints(index: number): { x: number; z: number }[] {
+    const lane = REALM_RACERS_LANES[index] ?? null;
+    const origin = realmRacersLaneOrigin(index);
+    const hx = (lane?.circuit.regionHalfX ?? 1) - 1;
+    const hz = (lane?.circuit.regionHalfZ ?? 1) - 1;
+    return [
+      { x: origin.x, z: origin.z },
+      { x: origin.x + hx, z: origin.z + hz },
+      { x: origin.x - hx, z: origin.z - hz },
+    ];
+  }
 
-  it('samples every authored lane as its circuit zone outdoors, never a dungeon', () => {
-    // Every lane, practice copies included: the world under the band reads a
-    // different zone per lane (vale, marsh, jungle, night, amber, ember), and
-    // none of those is where the circuit is meant to be.
+  // Every instance the band sits beside, and the empty band between two lanes.
+  const instancePoints = (): { x: number; z: number }[] => [
+    ...Object.values(DUNGEONS).map((dungeon) => instanceOrigin(dungeon.index, 0)),
+    arenaOrigin(0),
+    delveOrigin(0, 0),
+    riftOriginAt(0),
+    bgOriginAt(0),
+    { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z + REALM_RACERS_LANE_DZ / 2 },
+  ];
+
+  it('samples every authored lane as nowhere a bed plays', () => {
+    // Every lane, practice copies included: the Express Tour, the Moonwell
+    // Run and each Evergarden practice copy.
+    const ids = new Set(REALM_RACERS_LANES.map((lane) => lane.circuit.id));
+    for (const id of [
+      'evergarden_practice',
+      'evergarden_express_tour',
+      'nightbloom_moonwell_run',
+    ]) {
+      expect(ids.has(id), id).toBe(true);
+    }
+    expect(REALM_RACERS_LANES.some((lane) => lane.practice)).toBe(true);
     for (const lane of REALM_RACERS_LANES) {
-      const expected = ZONE_BIOME_BY_THEME[lane.circuit.theme];
-      expect(expected, lane.circuit.theme).toBeDefined();
-      const origin = realmRacersLaneOrigin(lane.index);
-      const hx = lane.circuit.regionHalfX - 1;
-      const hz = lane.circuit.regionHalfZ - 1;
-      for (const [dx, dz] of [
-        [0, 0],
-        [hx, hz],
-        [-hx, -hz],
-      ]) {
-        const s = sampleAt(origin.x + dx, origin.z + dz);
-        expect(s.inDungeon, `${lane.circuit.id} lane ${lane.index}`).toBe(false);
-        expect(s.biome, `${lane.circuit.id} lane ${lane.index}`).toBe(expected);
-        // The band draws no weather, and world water knows nothing of a pond.
-        expect(s.precip).toBeNull();
-        expect(s.nearWater).toBe(false);
+      for (const point of lanePoints(lane.index)) {
+        expect(realmRacersLaneAt(point.x, point.z)?.index).toBe(lane.index);
+        expect(sampleAt(point.x, point.z), `${lane.circuit.id} lane ${lane.index}`).toEqual({
+          inDungeon: false,
+          biome: null,
+          precip: null,
+          nearWater: false,
+        });
       }
     }
   });
 
-  it('takes the zone biome over the ground tint, with no rain on the band', () => {
-    // Farshore paints its lawn beach, but a player on the isle hears the vale.
-    const farshore = draftLaneOrigin('farshore');
-    expect(sampleAt(farshore.x, farshore.z)).toMatchObject({ inDungeon: false, biome: 'vale' });
-    // Mirefen is a rain realm; the band draws no rain, so it plays none.
-    const mirefen = draftLaneOrigin('mirefen');
-    expect(sampleAt(mirefen.x, mirefen.z)).toMatchObject({
-      inDungeon: false,
-      biome: 'marsh',
-      precip: null,
-    });
-    // An unknown theme wears the default theme's art, so it hears that zone.
-    const typo = draftLaneOrigin('no_such_theme');
-    expect(sampleAt(typo.x, typo.z)).toMatchObject({ inDungeon: false, biome: 'garden' });
-  });
-
-  it('resolves every theme a circuit may name to its own zone biome', () => {
-    for (const theme of REALM_RACERS_THEME_IDS) {
-      expect(ZONES.map((zone) => realmRacersThemeIdForZone(zone.id))).toContain(theme);
-      // Derived independently of the helper: the zone id is the theme id, or
-      // the theme id plus its dropped article.
-      const zone = ZONES.find((z) => z.id === theme || z.id.startsWith(`${theme}_`));
-      expect(zone, theme).toBeDefined();
-      const origin = draftLaneOrigin(theme);
-      expect(sampleAt(origin.x, origin.z).biome, theme).toBe(zone?.biome);
-    }
-  });
-
   it('keeps every other instance, and the empty band between lanes, on the dungeon bed', () => {
-    const points: { x: number; z: number }[] = [
-      ...Object.values(DUNGEONS).map((dungeon) => instanceOrigin(dungeon.index, 0)),
-      arenaOrigin(0),
-      delveOrigin(0, 0),
-      riftOriginAt(0),
-      bgOriginAt(0),
-      { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z + REALM_RACERS_LANE_DZ / 2 },
-    ];
-    for (const point of points) {
+    for (const point of instancePoints()) {
       expect(realmRacersLaneAt(point.x, point.z)).toBeNull();
       const s = sampleAt(point.x, point.z);
       expect(s.inDungeon, JSON.stringify(point)).toBe(true);
@@ -184,8 +160,24 @@ describe('ambience on a Realm Racers circuit', () => {
   describe('what the audio engine plays from the sample', () => {
     type BedSink = { ambient(key: string, target: number): void };
 
+    // Named as literals so a bed the engine stops driving fails here, and
+    // checked against the engine's own calls so a bed it starts driving is
+    // held to the same rule without an edit to this list.
+    const GLOBAL_BEDS = [
+      'amb_dungeon',
+      'amb_crowd',
+      'amb_wind_vale',
+      'amb_birds',
+      'amb_wind_marsh',
+      'amb_wind_peaks',
+      'amb_rain',
+      'amb_snow',
+      'amb_water',
+    ];
+
     // The engine's bed decision, read at its one seam: every global bed goes
-    // through ambient(key, target) once per ambience() call.
+    // through ambient(key, target) once per ambience() call. The arguments are
+    // the renderer's own call, pinned below.
     function bedsFor(sample: AmbienceState): Map<string, number> {
       const beds = new Map<string, number>();
       const spy = vi
@@ -201,11 +193,9 @@ describe('ambience on a Realm Racers circuit', () => {
       return beds;
     }
 
-    function bedsAtLaneOf(circuitId: string): Map<string, number> {
-      const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === circuitId);
-      expect(lane, circuitId).toBeDefined();
-      const origin = realmRacersLaneOrigin(lane?.index ?? -1);
-      return bedsFor(sampleAt(origin.x, origin.z));
+    function expectSilent(beds: Map<string, number>, where: string): void {
+      expect([...beds.keys()].sort(), where).toEqual([...GLOBAL_BEDS].sort());
+      for (const [key, target] of beds) expect(target, `${where} ${key}`).toBe(0);
     }
 
     function bedsAtHubOf(zoneId: string): Map<string, number> {
@@ -214,32 +204,53 @@ describe('ambience on a Realm Racers circuit', () => {
       return bedsFor(sampleAt(hub?.x ?? 0, hub?.z ?? 0));
     }
 
-    it('plays the Evergarden beds on an Evergarden circuit, and no dungeon bed', () => {
-      for (const circuitId of ['evergarden_practice', 'evergarden_express_tour']) {
-        const beds = bedsAtLaneOf(circuitId);
-        expect(beds.get('amb_dungeon'), circuitId).toBe(0);
-        expect(beds.get('amb_birds'), circuitId).toBe(0.12);
-        expect(beds.get('amb_wind_marsh'), circuitId).toBe(0.07);
-        // ...exactly what a player standing in the Evergarden itself hears.
-        expect(beds, circuitId).toEqual(bedsAtHubOf('evergarden'));
+    it('replays exactly what the renderer hands the audio sink', () => {
+      const renderer = readFileSync(path.join(__dirname, '..', 'src/render/renderer.ts'), 'utf8');
+      expect(renderer).toContain(
+        'sink.ambience(amb.biome, amb.inDungeon, amb.precip, amb.nearWater, 0, points);',
+      );
+    });
+
+    it('plays no bed on any authored lane, the dungeon bed included', () => {
+      for (const lane of REALM_RACERS_LANES) {
+        for (const point of lanePoints(lane.index)) {
+          expectSilent(
+            bedsFor(sampleAt(point.x, point.z)),
+            `${lane.circuit.id} lane ${lane.index}`,
+          );
+        }
       }
     });
 
-    it('plays the Nightbloom beds on the Moonwell Run, and no dungeon bed', () => {
-      const beds = bedsAtLaneOf('nightbloom_moonwell_run');
-      expect(beds.get('amb_dungeon')).toBe(0);
-      expect(beds.get('amb_birds')).toBe(0);
-      expect(beds.get('amb_wind_marsh')).toBe(0.06);
-      expect(beds).toEqual(bedsAtHubOf('nightbloom'));
+    it('plays no bed on a draft circuit, whatever theme it wears', () => {
+      // A rain realm, a shore isle, the dungeon-dark hollow and a typo: the
+      // theme dresses the circuit and never reaches the mix.
+      for (const theme of [...REALM_RACERS_THEME_IDS, 'no_such_theme']) {
+        const origin = draftLaneOrigin(theme);
+        expectSilent(bedsFor(sampleAt(origin.x, origin.z)), theme);
+      }
     });
 
-    it('still plays the dungeon bed inside a real dungeon', () => {
-      const dungeon = Object.values(DUNGEONS)[0];
-      const origin = instanceOrigin(dungeon.index, 0);
-      const beds = bedsFor(sampleAt(origin.x, origin.z));
-      expect(beds.get('amb_dungeon')).toBe(0.3);
-      expect(beds.get('amb_birds')).toBe(0);
-      expect(beds.get('amb_wind_marsh')).toBe(0);
+    it('still plays the dungeon bed alone in a dungeon, delve, rift, arena, battleground and between lanes', () => {
+      for (const point of instancePoints()) {
+        const where = JSON.stringify(point);
+        const beds = bedsFor(sampleAt(point.x, point.z));
+        expect([...beds.keys()].sort(), where).toEqual([...GLOBAL_BEDS].sort());
+        for (const [key, target] of beds) {
+          expect(target, `${where} ${key}`).toBe(key === 'amb_dungeon' ? 0.3 : 0);
+        }
+      }
+    });
+
+    it('still plays each zone its own outdoor beds', () => {
+      const evergarden = bedsAtHubOf('evergarden');
+      expect(evergarden.get('amb_dungeon')).toBe(0);
+      expect(evergarden.get('amb_birds')).toBe(0.12);
+      expect(evergarden.get('amb_wind_marsh')).toBe(0.07);
+      const nightbloom = bedsAtHubOf('nightbloom');
+      expect(nightbloom.get('amb_dungeon')).toBe(0);
+      expect(nightbloom.get('amb_birds')).toBe(0);
+      expect(nightbloom.get('amb_wind_marsh')).toBe(0.06);
     });
   });
 });
