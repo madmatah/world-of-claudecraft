@@ -2184,6 +2184,7 @@ export const zh_CN: EnTranslations = {
       "circuitName_evergarden_express_tour": "永恒花园特快巡回赛",
       "circuitName_nightbloom_moonwell_run": "夜绽花野月泉竞速赛",
       "circuitName_drakelands_rampart_run": "龙裔荒原城垒竞速赛",
+      "circuitName_palmreach_lagoon_run": "棕榈湾潟湖竞速赛",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "排名 {position}/{total}",
       "lap": "圈数 {lap}/{total}",

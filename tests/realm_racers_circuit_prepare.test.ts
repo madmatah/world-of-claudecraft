@@ -852,6 +852,99 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     expect([...drawn].filter((key) => !calls[0].keys.has(key))).toEqual([]);
   });
 
+  it.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
+    'prepares the shipped Lagoon Run exactly on its public lane on %s, the strand and the sea included',
+    async (tier) => {
+      loaderControl.deferred = true;
+      vi.resetModules();
+      const { activateTier: activateFresh } = await import('./helpers/gfx_tier');
+      activateFresh(tier);
+      expect((await import('../src/render/gfx')).GFX.tier).toBe(tier);
+      const fresh = await import('../src/render/realm_racers_track');
+      const { realmRacersFills: freshFills } = await import('../src/render/realm_racers_fills');
+      const { RealmRacersCircuitPrepare: FreshClient } = await import(
+        '../src/render/realm_racers_circuit_prepare'
+      );
+      const route = await import('../src/render/realm_racers_dressing_material');
+      const { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } = await import('../src/render/jungle_prop_urls');
+      const { CIRCUIT_THEMES } = await import('../src/render/realm_racers_themes');
+      const records = await import('../src/sim/content/realm_racers_circuits');
+      const layout = await import('../src/sim/realm_racers_layout');
+      const circuit = records.realmRacersCircuitById('palmreach_lagoon_run');
+      if (!circuit) throw new Error('the Lagoon Run ships');
+      const theme = CIRCUIT_THEMES.palmreach;
+      const view = fresh.buildRealmRacersTrack(circuit);
+      const fills = freshFills(view.group);
+      expect(fills.total).toBeGreaterThan(1);
+      const sky = fakeSky();
+      const client = new FreshClient(
+        {
+          circuitId: circuit.id,
+          group: view.group,
+          skyBiome: theme.sky.biome,
+          drawnOnce: view.drawnOnce,
+          onViewerLane: view.onViewerLane,
+        },
+        sky.sky,
+      );
+      expect(client.prepareId).toBe(realmRacersCircuitPrepareId('palmreach_lagoon_run'));
+      const { gate, calls } = fakeGate();
+      let verdict: boolean | null = null;
+      void client.run(gate, NEVER).then((ok) => {
+        verdict = ok;
+      });
+      for (let round = 0; round < 8 && loaderControl.pending.length > 0; round++) {
+        const ready = loaderControl.pending;
+        loaderControl.pending = [];
+        for (const fill of ready) fill.resolve();
+        await flush();
+      }
+      await flush();
+      expect(fills.done).toBe(fills.total);
+      expect(gate).toHaveBeenCalledTimes(1);
+      expect(calls[0].target).toBe(view.group);
+      // Every strand model the record places stood under the group when it was
+      // gated, and so did the sea around the island.
+      const strand = new Set<string>([...JUNGLE_PALM_URLS, JUNGLE_PROP_URLS.coconuts]);
+      const seen = new Set<string>();
+      let water = 0;
+      for (const { object, material } of drawsUnder(view.group)) {
+        const mesh = object as THREE.Mesh;
+        if (mesh.geometry?.getAttribute('aShoreDepth') !== undefined) {
+          for (const key of keysOf(object, material)) expect(calls[0].keys.has(key)).toBe(true);
+          water++;
+        }
+        if (!object.userData.realmRacersDressing) continue;
+        const url = object.name.slice('realm-racers-dressing:'.length);
+        if (route.realmRacersDressingRoute(url) !== 'worldRaw') continue;
+        for (const key of keysOf(object, material)) expect(calls[0].keys.has(key), url).toBe(true);
+        seen.add(url);
+      }
+      expect(seen).toEqual(strand);
+      // Three ponds and the sea.
+      expect(water).toBe(4);
+      const origin = layout.realmRacersLaneOrigin(layout.realmRacersPublicLane(circuit));
+      const drawn = new Set<string>();
+      const drawOn = (time: number, match: RealmRacersLaneView) => {
+        view.update(origin.x, origin.z, time, match);
+        for (const { object, material } of drawsUnder(view.group)) {
+          if (!object.visible) continue;
+          for (const key of keysOf(object, material)) drawn.add(key);
+        }
+      };
+      drawOn(0, laneMatch(circuit, { phase: 'countdown', countdownTicks: 20 }));
+      calls[0].resolve();
+      sky.finish(true);
+      await flush();
+      drawOn(1, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.1 }));
+      await flush();
+      expect(verdict).toBe(true);
+      expect(sky.asked).toEqual(['jungle']);
+      expect(drawn.size).toBeGreaterThan(0);
+      expect([...drawn].filter((key) => !calls[0].keys.has(key))).toEqual([]);
+    },
+  );
+
   it('lands a kit fill whose template never bakes, draws the rest, and never loads the kit twice', async () => {
     loaderControl.deferred = true;
     vi.resetModules();

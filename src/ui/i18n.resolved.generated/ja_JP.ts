@@ -2184,6 +2184,7 @@ export const ja_JP: EnTranslations = {
       "circuitName_evergarden_express_tour": "エバーガーデン・エクスプレスツアー",
       "circuitName_nightbloom_moonwell_run": "ナイトブルーム・ムーンウェルラン",
       "circuitName_drakelands_rampart_run": "ドレイクランド・ランパートラン",
+      "circuitName_palmreach_lagoon_run": "パームリーチ・ラグーンラン",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "順位 {position}/{total}",
       "lap": "ラップ {lap}/{total}",

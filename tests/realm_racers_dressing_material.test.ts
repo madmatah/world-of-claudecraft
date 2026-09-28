@@ -131,6 +131,7 @@ const OUTSIDE_LOW_TIER_URLS = [
   '/models/dungeon/crates_stacked.glb',
   '/models/dungeon/pillar.glb',
   '/models/foliage/oak_4.glb',
+  '/models/foliage/twisted_1.glb',
   '/models/props/crystal_amethyst_cluster.glb',
   '/models/props/crystal_mound_cave.glb',
   '/models/props/fen_lilies.glb',
@@ -148,6 +149,7 @@ const OUTSIDE_LOW_TIER_URLS = [
   '/models/props/pixie_mushroom_house.glb',
   '/models/props/shrub_flowering.glb',
   '/models/props/star_heart_crystal.glb',
+  '/models/props/statue_block.glb',
   '/models/props/statue_head.glb',
 ];
 
@@ -157,6 +159,7 @@ const RACE_ONLY_URLS = [
   '/models/dungeon/banner_patterna_red.glb',
   '/models/dungeon/banner_patterna_white.glb',
   '/models/dungeon/banner_patterna_yellow.glb',
+  '/models/dungeon/banner_patternb_green.glb',
 ];
 
 type Draw = { object: THREE.Object3D; material: THREE.Material };
@@ -412,19 +415,24 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
     expect(outside).toEqual(OUTSIDE_LOW_TIER_URLS);
   });
 
-  it('keeps the hedge and the ember set raw as the world draws them, and names every race-only model', async () => {
+  it('keeps the hedge, the ember set and the strand raw as the world draws them, and names every race-only model', async () => {
     const byUrl = await rallyDrawsByUrl();
     const routes = new Map<string, string[]>();
     for (const url of byUrl.keys()) {
       const route = realmRacersDressingRoute(url);
       routes.set(route, [...(routes.get(route) ?? []), url]);
     }
-    // The hedge, and the ember set the Drakelands Rampart Run places, which
-    // rides the parse ember_features keeps.
+    // The hedge, the ember set the Drakelands Rampart Run places, which rides
+    // the parse ember_features keeps, and the palms and coconuts the Palmreach
+    // Lagoon Run places, which ride the parse jungle_features keeps.
     expect([...(routes.get('worldRaw') ?? [])].sort()).toEqual([
+      '/models/biome/beach_palm_1.glb',
+      '/models/biome/beach_palm_2.glb',
+      '/models/biome/beach_palm_3.glb',
       '/models/props/dragon_eggs.glb',
       '/models/props/dragon_hoard.glb',
       '/models/props/ember_lily.glb',
+      '/models/props/fallen_coconuts.glb',
       '/models/props/lava_pool.glb',
       '/models/props/maze_hedge_wall.glb',
     ]);

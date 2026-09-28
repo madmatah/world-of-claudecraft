@@ -1306,18 +1306,19 @@ export function buildRealmRacersTrack(
  * Node with the procedural textures stubbed (so the numbers are the CPU cost of
  * generating and packing geometry, not of uploading it), re-measured when the
  * third circuit landed (the first build of each also pays the spline memo),
- * and again with the fourth, on another host:
+ * and again with the fourth and the fifth, on another host:
  *
- *   evergarden_practice        20 to 49 ms    (18 to 41 with the fourth)
- *   evergarden_express_tour   163 to 179 ms   (144 to 152)
- *   nightbloom_moonwell_run   195 to 304 ms   (158 to 263)
- *   drakelands_rampart_run                   (158 to 192)
+ *   evergarden_practice        20 to 49 ms    (18 to 41 at four, 16 to 41 at five)
+ *   evergarden_express_tour   163 to 179 ms   (144 to 152, 145 to 188)
+ *   nightbloom_moonwell_run   195 to 304 ms   (158 to 263, 161 to 303)
+ *   drakelands_rampart_run                   (158 to 192, 159 to 213)
+ *   palmreach_lagoon_run                                 (163 to 206)
  *
- * So the whole pool is about half a second (480 to 650 ms at four), paid once
- * during world build, behind the loading screen, for every player whether or
- * not they ever race. The fourth circuit was added without revisiting the eager
- * decision. Three things decided eager when the pool was two, and two of them
- * still hold:
+ * So the whole pool is over half a second (480 to 650 ms at four, 640 to 950
+ * at five), paid once during world build, behind the loading screen, for every
+ * player whether or not they ever race. The fourth and fifth circuits were
+ * added without revisiting the eager decision. Three things decided eager when
+ * the pool was two, and two of them still hold:
  *
  *  - Lazy moves the LARGEST of those onto the frame a viewer arrives at a
  *    circuit, and that frame is the countdown. A fifth of a second of hitch as

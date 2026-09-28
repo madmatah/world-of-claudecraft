@@ -223,7 +223,17 @@ describe('Realm Racers circuits: every record is well formed', () => {
 });
 
 describe('Realm Racers circuits: the ground under them', () => {
-  it.each(REALM_RACERS_CIRCUIT_LIST.map((c) => [c.id, c] as const))(
+  // Every shipped circuit but the one island, which authors its land on purpose
+  // and is held to its own shore in its own case below.
+  const MAINLAND = REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== 'palmreach_lagoon_run');
+  it('names the one island by id, so a second one is a decision rather than a drift', () => {
+    expect(MAINLAND).toHaveLength(REALM_RACERS_CIRCUIT_LIST.length - 1);
+    expect(REALM_RACERS_CIRCUIT_LIST.filter((c) => c.groundOutline).map((c) => c.id)).toEqual([
+      'palmreach_lagoon_run',
+    ]);
+  });
+
+  it.each(MAINLAND.map((c) => [c.id, c] as const))(
     '%s authors no ground shape, so its land is exactly the rectangle it always was',
     (_id, circuit) => {
       // The whole promise of the authored ground: a field the shipped records do
@@ -555,8 +565,9 @@ describe('Realm Racers circuits: the Drakelands Rampart Run', () => {
     );
     if (!moonwell) throw new Error('the Moonwell Run');
     expect(realmRacersPublicLane(RAMPART)).toBe(realmRacersPublicLane(moonwell) + 1);
-    expect(realmRacersPublicLane(RAMPART)).toBe(REALM_RACERS_LANES.length - 1);
-    expect(REALM_RACERS_LANES.slice(0, -1).map((lane) => lane.circuit.id)).toEqual([
+    expect(
+      REALM_RACERS_LANES.slice(0, realmRacersPublicLane(RAMPART)).map((lane) => lane.circuit.id),
+    ).toEqual([
       ...Array.from(
         { length: REALM_RACERS_PRACTICE_CIRCUIT.practiceCopies },
         () => 'evergarden_practice',
@@ -612,6 +623,142 @@ describe('Realm Racers circuits: the Drakelands Rampart Run', () => {
       const inStrip = prop.x > 60 && prop.x < 160 && prop.z > 60 && prop.z < 95;
       if (inStrip) expect(strip.has(prop.asset), `${prop.asset} at ${prop.x},${prop.z}`).toBe(true);
     }
+  });
+});
+
+describe('Realm Racers circuits: the Palmreach Lagoon Run', () => {
+  const LAGOON = realmRacersCompetitionCircuits().find(
+    (circuit) => circuit.id === 'palmreach_lagoon_run',
+  );
+  if (!LAGOON) throw new Error('the Lagoon Run is the competition circuit this pins');
+  const track = realmRacersTrack(LAGOON);
+  const metrics = realmRacersCircuitMetrics(LAGOON);
+
+  it('is a competition circuit wearing its own zone, raced at noon to its own track', () => {
+    expect(LAGOON.roles).toEqual(['competition']);
+    expect(LAGOON.practiceCopies).toBe(0);
+    expect(LAGOON.theme).toBe('palmreach');
+    expect(LAGOON.timeOfDay).toBe('noon');
+    expect(LAGOON.musicTrack).toBe('realm_racers_palmreach');
+    expect(realmRacersCircuitErrors(metrics)).toEqual([]);
+  });
+
+  it('takes the next lane after the Rampart Run, and moves none of the lanes before it', () => {
+    const rampart = realmRacersCompetitionCircuits().find((c) => c.id === 'drakelands_rampart_run');
+    if (!rampart) throw new Error('the Rampart Run');
+    expect(realmRacersPublicLane(LAGOON)).toBe(realmRacersPublicLane(rampart) + 1);
+    expect(realmRacersPublicLane(LAGOON)).toBe(REALM_RACERS_LANES.length - 1);
+    expect(REALM_RACERS_LANES.slice(0, -1).map((lane) => lane.circuit.id)).toEqual([
+      ...Array.from(
+        { length: REALM_RACERS_PRACTICE_CIRCUIT.practiceCopies },
+        () => 'evergarden_practice',
+      ),
+      'evergarden_express_tour',
+      'nightbloom_moonwell_run',
+      'drakelands_rampart_run',
+    ]);
+    // Its region stands in its own lane: nothing of it reaches the lane below.
+    const origin = realmRacersLaneOffset(realmRacersPublicLane(LAGOON));
+    expect(
+      realmRacersLaneAt(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z + origin.z)?.circuit.id,
+    ).toBe(LAGOON.id);
+    expect(LAGOON.regionHalfZ * 2 + REALM_RACERS_LANE_CLEARANCE).toBeLessThanOrEqual(
+      REALM_RACERS_LANE_DZ,
+    );
+  });
+
+  it('carries ONE pickup row, on the Causeway straight and off the start line', () => {
+    const rows = LAGOON.pickupRows ?? [];
+    expect(rows).toHaveLength(1);
+    const s = rows[0].s * track.length;
+    expect(Math.abs(track.pointAt(s).turnRadius)).toBeGreaterThan(200);
+    expect(rows[0].s).toBeGreaterThan(0.05);
+    expect(rows[0].s).toBeLessThan(0.95);
+  });
+
+  it('runs the Causeway head on against the Lagoon Return, in Ground Blast reach', () => {
+    expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
+    expect(metrics.nearestApproach.tangentDot).toBeLessThan(-0.8);
+    expect(metrics.nearestApproach.distance).toBeGreaterThanOrEqual(
+      REALM_RACERS_MIN_STRETCH_SEPARATION,
+    );
+    // The row stands on the same straight the pinch is on, just short of it,
+    // so the road between the boxes and the pinch is straight all the way.
+    const row = (LAGOON.pickupRows ?? [])[0].s * track.length;
+    const pinch = Math.min(metrics.nearestApproach.s, metrics.nearestApproach.otherS);
+    expect(row).toBeLessThan(pinch);
+    for (let at = row; at <= pinch; at += 5) {
+      expect(Math.abs(track.pointAt(at).turnRadius), `s ${at}`).toBeGreaterThan(150);
+    }
+  });
+
+  it('keeps the lagoon between the two opposed stretches open water', () => {
+    // Nothing solid stands in the strip a shell is fired across, and the only
+    // pieces on it are the lily rafts floating on the lagoon.
+    for (const prop of realmRacersPlacements(LAGOON).props) {
+      const inStrip = prop.x > 60 && prop.x < 90 && prop.z > 14 && prop.z < 62;
+      if (!inStrip) continue;
+      expect(prop.asset, `${prop.asset} at ${prop.x},${prop.z}`).toBe('lilyRaft');
+      expect(prop.solid).toBe(false);
+    }
+    const strip = realmRacersPlacedPonds(LAGOON).find(
+      (pond) => Math.hypot(pond.x - 75, pond.z - 38) < 1,
+    );
+    expect(strip, 'the lagoon strip pond').toBeDefined();
+  });
+
+  it('stands the Sunken Idol in its own pool, inside the Idol hairpin', () => {
+    const pool = realmRacersPlacedPonds(LAGOON).find(
+      (pond) => Math.hypot(pond.x - 75, pond.z - 74) < 1,
+    );
+    if (!pool) throw new Error('the idol pool');
+    const ring = realmRacersPlacements(LAGOON).props.filter(
+      (prop) => prop.asset === 'column' || prop.asset === 'columnBroken',
+    );
+    expect(ring).toHaveLength(6);
+    for (const column of ring) {
+      expect(
+        polygonContainsPoint(pool.outline, column.x, column.z),
+        `${column.x},${column.z}`,
+      ).toBe(true);
+    }
+  });
+
+  it('is an island: its road on its own land, the sea past the shore, no water on the race', () => {
+    const shape = realmRacersGroundShape(LAGOON);
+    expect(shape.authored).toBe(true);
+    for (const sample of track.samples) {
+      expect(
+        polygonContainsPoint(
+          shape.outline,
+          sample.x - REALM_RACERS_ORIGIN.x,
+          sample.z - REALM_RACERS_ORIGIN.z,
+        ),
+      ).toBe(true);
+    }
+    // The water is decoration the race never runs on, on every tier: the
+    // readout says nothing at all about the ponds, the shore or its reach.
+    const waterCodes = metrics.problems
+      .map((problem) => problem.code)
+      .filter((code) => /pond|ground/.test(code));
+    expect(waterCodes).toEqual([]);
+    expect(LAGOON.basin).toBeDefined();
+    expect((LAGOON.ponds ?? []).length).toBe(3);
+  });
+
+  it('is lit by the Palmreach totem and by nothing else', () => {
+    const lamps = realmRacersPlacements(LAGOON).props.filter((prop) =>
+      prop.asset.startsWith('lamp'),
+    );
+    expect(lamps.length).toBeGreaterThan(0);
+    for (const lamp of lamps) expect(lamp.asset).toBe('lampPalmreachTotem');
+  });
+
+  it('keeps its dressing inside the budget the eager build was priced at', () => {
+    const placements = realmRacersPlacements(LAGOON);
+    expect(placements.scattered).toHaveLength(0);
+    expect(placements.props.filter((prop) => prop.solid).length).toBeLessThanOrEqual(170);
+    expect(placements.props.length).toBeLessThanOrEqual(260);
   });
 });
 

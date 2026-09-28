@@ -862,6 +862,30 @@ describe('Realm Racers circuit themes', () => {
       }
     });
 
+    it('dresses the shipped Lagoon Run from the zone own vocabulary, one banner in the boot lane', () => {
+      // The one shipped Palmreach circuit places only what this theme offers and
+      // walls with nothing: its edge is the island's own shore.
+      const lagoon = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === 'palmreach_lagoon_run');
+      if (!lagoon) throw new Error('the Lagoon Run ships');
+      const offered = new Set(theme.props);
+      for (const prop of lagoon.props ?? []) {
+        expect(offered.has(prop.asset), prop.asset).toBe(true);
+      }
+      expect(lagoon.fences ?? []).toEqual([]);
+      expect(lagoon.groundOutline?.length ?? 0).toBeGreaterThan(0);
+      // What shipping it adds to the boot lane every player pays for: the green
+      // grid banner, and nothing else (the arch and the rim reed ride it already).
+      const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+      const others = new Set(
+        REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== lagoon.id).flatMap((c) =>
+          themeUrls(c.theme),
+        ),
+      );
+      const added = themeUrls('palmreach').filter((url) => !others.has(url));
+      expect(added).toEqual([theme.startFixture.bannerUrl]);
+      for (const url of added) expect(lane.has(url), url).toBe(true);
+    });
+
     it('walls with timber rails, because the zone itself lays no wall at all', () => {
       expect(PALMREACH_PROPS.fences).toEqual([]);
       expect(theme.barriers).toEqual(['paddockRail', 'woodPaling']);

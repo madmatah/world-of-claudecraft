@@ -69,7 +69,7 @@ describe('Realm Racers water: the shore line carries none of it any more', () =>
   it('covers every shipped circuit, and every one but the dry Rampart Run places its water', () => {
     // The cardinality floor for everything below: an `it.each` over a list that
     // quietly emptied registers no cases at all.
-    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(4);
+    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(5);
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
       // The Drakelands Rampart Run is the one DRY circuit, which the record
       // allows: the waste's melt is lava, a modelled solid piece, and a
@@ -249,12 +249,27 @@ describe('Realm Racers water: the sea outside an authored shore', () => {
 
   it('draws none at all where the land is the rectangle it has always been', () => {
     // The default ground covers the region and then some, so there is no shore
-    // for a sea to lap at: every shipped circuit keeps exactly its two pools.
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    // for a sea to lap at: every shipped circuit but the one island keeps
+    // exactly its own pools.
+    const mainland = REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== 'palmreach_lagoon_run');
+    expect(mainland).toHaveLength(REALM_RACERS_CIRCUIT_LIST.length - 1);
+    for (const circuit of mainland) {
       expect(circuit.groundOutline, circuit.id).toBeUndefined();
       expect(rallySeaMesh(circuit), circuit.id).toBeNull();
       expect(rallyShoreSpots(circuit), circuit.id).toEqual([]);
     }
+  });
+
+  it('draws the sea all round the one shipped island, on the bank its lagoon authors', () => {
+    const lagoon = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === 'palmreach_lagoon_run');
+    if (!lagoon) throw new Error('the Lagoon Run ships');
+    expect(realmRacersGroundShape(lagoon).authored).toBe(true);
+    const sea = rallySeaMesh(lagoon);
+    if (!sea) throw new Error('an authored shore has a sea outside it');
+    expect(rallySeaBasin(lagoon)).toBe(lagoon.basin);
+    expect(Math.min(...Array.from(sea.depths))).toBe(0);
+    expect(Math.max(...Array.from(sea.depths))).toBeCloseTo(lagoon.basin?.depthMax ?? 0, 6);
+    expect(rallyShoreSpots(lagoon).length).toBeGreaterThan(0);
   });
 
   it('covers the ground from the shore out to the edge of the region', () => {

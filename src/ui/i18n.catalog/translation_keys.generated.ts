@@ -12906,6 +12906,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.rally.circuitName_evergarden_express_tour'
   | 'hudChrome.rally.circuitName_evergarden_practice'
   | 'hudChrome.rally.circuitName_nightbloom_moonwell_run'
+  | 'hudChrome.rally.circuitName_palmreach_lagoon_run'
   | 'hudChrome.rally.close'
   | 'hudChrome.rally.controlBrake'
   | 'hudChrome.rally.controlBrakeHint'

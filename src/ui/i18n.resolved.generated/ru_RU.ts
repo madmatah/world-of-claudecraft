@@ -2184,6 +2184,7 @@ export const ru_RU: EnTranslations = {
       "circuitName_evergarden_express_tour": "Экспресс-тур Эвергардена",
       "circuitName_nightbloom_moonwell_run": "Гонка у Лунного колодца Ночецветья",
       "circuitName_drakelands_rampart_run": "Гонка вдоль крепостного вала Земель Драконов",
+      "circuitName_palmreach_lagoon_run": "Гонка по лагуне Пальмового Берега",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "Позиция {position}/{total}",
       "lap": "Круг {lap}/{total}",
