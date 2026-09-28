@@ -552,7 +552,8 @@ function meshPalette(mesh: THREE.Mesh): SpiritVeilPalette | null {
  * far-bake or weapon-VFX walk ever meets one.
  */
 export class SpiritVeilRig {
-  private readonly unit: SpiritVeilSortUnit = createSpiritVeilSortUnit();
+  private readonly ownUnit: SpiritVeilSortUnit = createSpiritVeilSortUnit();
+  private unit: SpiritVeilSortUnit = this.ownUnit;
   private readonly siblings = new Map<THREE.Mesh, THREE.Mesh>();
   private readonly tagged = new Set<THREE.Object3D>();
   private readonly hidden = new Map<THREE.Object3D, boolean>();
@@ -619,6 +620,18 @@ export class SpiritVeilRig {
           : hide;
     this.syncHidden(hidden);
     return this.isMounted;
+  }
+
+  /**
+   * Draw this rig's veil in `other`'s sort unit (null: its own again), so two
+   * rigs that read as one body (a kart and its pilot) lay down every depth
+   * pre-pass before either colour pass and neither shows through the other.
+   */
+  shareUnit(other: SpiritVeilRig | null): void {
+    const unit = other ? other.unit : this.ownUnit;
+    if (unit === this.unit) return;
+    this.unit = unit;
+    for (const object of this.tagged) object.userData[SPIRIT_VEIL_UNIT_KEY] = unit;
   }
 
   /** Take every depth sibling off its body (they come back at the next

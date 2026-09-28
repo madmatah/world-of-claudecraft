@@ -1,30 +1,38 @@
-// The Realm Racers ward drawn as a veil on any racer carrying it: the shared
-// spirit veil (ghost_veil.ts) in the Veilbound March's gold palette, an interim
-// look until the ward gets a palette of its own.
+// The Realm Racers ward drawn as a veil on any racer carrying it, on the pilot
+// and on the whole machine: the shared spirit veil (ghost_veil.ts) in the
+// ward's own palette, a denser March gold tuned live on the kart.
 //
 // Three contracts. The veil follows the entity aura every client mirrors, so a
 // rival sees it too. It is ACTIONABLE (a shell fired at a warded rival is
 // wasted), so it draws on every graphics tier: the decision takes no tier, and
 // the veil mounts over every material family a rig wears across the presets.
 // And it links nothing new during play: a palette is uniform values on the
-// veil's shared program family, which the boot manifest links.
+// veil's shared program family, which the boot manifest links. The ward is the
+// veil alone: the paladin's class look (the ascension tint, the holy motes
+// over the head) stays with the March and the Mark.
 
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
+  type CharacterVeilRig,
   characterVeilboundState,
+  classVeilActive,
   classVeilboundState,
   rallyVeilLook,
+  syncCharacterVeils,
 } from '../src/render/character_effects';
 import {
   createSpiritVeilMaterial,
   spiritVeilPaletteOf,
   spiritVeilPassOf,
 } from '../src/render/characters/ghost_veil';
-import { SPIRIT_VEIL_PALETTES } from '../src/render/characters/spirit_veil_palette_core';
+import {
+  SPIRIT_VEIL_PALETTES,
+  SPIRIT_VEIL_POLICY,
+  type SpiritVeilPalette,
+} from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
-import { characterGhostLook } from '../src/render/ghost_style_core';
 import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
 
@@ -38,6 +46,8 @@ const ward: Aura = {
   sourceId: 7,
   school: 'physical',
 };
+const march = { ...ward, id: 'veilbound_march', kind: 'buff_speed' } as Aura;
+const mark = { ...ward, id: 'veilbound_mark', kind: 'dot' } as Aura;
 
 const racer = (auras: Aura[], over: Partial<Entity> = {}): Entity =>
   ({ id: 2, kind: 'player', auras, ghost: false, templateId: 'player', ...over }) as Entity;
@@ -54,57 +64,112 @@ function tierMaterials(): THREE.Material[] {
   return [standard, lambert, basic];
 }
 
-/** The look renderer.ts hands a racer's rig, composed the same way. */
-function lookFor(e: Entity): string | null {
-  const state = characterVeilboundState(e);
-  return characterGhostLook(1, e, false, classVeilboundState(state)) ?? rallyVeilLook(state);
+/** A rig that records what the veil decision hands it. */
+function recordingRig(): CharacterVeilRig & {
+  look: SpiritVeilPalette | null;
+  unitOf: CharacterVeilRig | null;
+} {
+  const rig = {
+    look: null as SpiritVeilPalette | null,
+    unitOf: null as CharacterVeilRig | null,
+    setGhost(on: boolean, look?: SpiritVeilPalette) {
+      rig.look = on ? (look ?? 'spirit') : null;
+    },
+    shareVeilUnit(other: CharacterVeilRig | null) {
+      rig.unitOf = other;
+    },
+  };
+  return rig;
+}
+
+/** The veils renderer.ts hands a racer's pilot and machine, the same call. */
+function veilsFor(e: Entity): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
+  const rider = recordingRig();
+  const kart = recordingRig();
+  syncCharacterVeils(1, e, false, characterVeilboundState(e), rider, kart);
+  expect(kart.unitOf).toBe(rider);
+  return { rider: rider.look, kart: kart.look };
 }
 
 describe('the ward veil decision', () => {
-  it('reads the ward off the racer aura and wears the gold March palette', () => {
+  it('reads the ward off the racer aura and wears the ward palette on pilot and machine', () => {
     expect(characterVeilboundState(racer([ward]))).toBe('ward');
     expect(characterVeilboundState(racer([]))).toBe('none');
     // The actionable read wins over any class veil a racer could carry.
-    const march = { ...ward, id: 'veilbound_march', kind: 'buff_speed' } as Aura;
-    const mark = { ...ward, id: 'veilbound_mark', kind: 'dot' } as Aura;
     expect(characterVeilboundState(racer([march, ward]))).toBe('ward');
     expect(characterVeilboundState(racer([mark, ward]))).toBe('ward');
     expect(classVeilboundState('ward')).toBe('none');
     expect(classVeilboundState('march')).toBe('march');
     expect(classVeilboundState('mark')).toBe('mark');
     expect(classVeilboundState('none')).toBe('none');
-    expect(rallyVeilLook('ward')).toBe('march');
+    expect(rallyVeilLook('ward')).toBe('rally-ward');
     expect(rallyVeilLook('march')).toBeNull();
     expect(rallyVeilLook('mark')).toBeNull();
     expect(rallyVeilLook('none')).toBeNull();
-    expect(lookFor(racer([ward]))).toBe('march');
-    expect(lookFor(racer([]))).toBeNull();
-    // A real spirit wins over the ward (a ghost run is a spirit first).
-    expect(lookFor(racer([ward], { ghost: true }))).toBe('spirit');
+    expect(veilsFor(racer([ward]))).toEqual({ rider: 'rally-ward', kart: 'rally-ward' });
+    expect(veilsFor(racer([march, ward]))).toEqual({ rider: 'rally-ward', kart: 'rally-ward' });
+    expect(veilsFor(racer([]))).toEqual({ rider: null, kart: null });
+    // A real spirit wins on the pilot (a ghost run is a spirit first); the
+    // machine still carries the ward a rival reads.
+    expect(veilsFor(racer([ward], { ghost: true }))).toEqual({
+      rider: 'spirit',
+      kart: 'rally-ward',
+    });
   });
 
-  it('takes no graphics tier, and the renderer mounts it on every rig it draws', () => {
+  it('keeps the March on the pilot alone: a mounted March veils no mount', () => {
+    expect(veilsFor(racer([march]))).toEqual({ rider: 'march', kart: null });
+    expect(veilsFor(racer([mark]))).toEqual({ rider: null, kart: null });
+  });
+
+  it('is the veil only: no ascension tint and no holy motes over the head', () => {
+    expect(classVeilActive('ward')).toBe(false);
+    expect(classVeilActive('ghost')).toBe(false);
+    // the class looks stay exactly where they were
+    expect(classVeilActive('march')).toBe(true);
+    expect(classVeilActive('mark')).toBe(true);
+    expect(classVeilActive('none')).toBe(false);
+    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    expect(renderer).toContain('active.setAscended(classVeilActive(veilboundState));');
+    expect(renderer).toContain(
+      "if (classVeilActive(veilboundState)) this.vfx.castSparkle(e.id, 'holy', dt * 2.4);",
+    );
+    expect(renderer).not.toContain("veilboundState !== 'none'");
+  });
+
+  it('takes no graphics tier, and the renderer dresses every rig and its mount with it', () => {
     // Fairness: nothing between the aura and the rig may read a preset.
     expect(characterVeilboundState.length).toBe(1);
     expect(classVeilboundState.length).toBe(1);
+    expect(classVeilActive.length).toBe(1);
     expect(rallyVeilLook.length).toBe(1);
+    expect(syncCharacterVeils.length).toBe(6);
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain(
-      'characterGhostLook(this.sim.playerId, e, ghostWolf, classVeilboundState(veilboundState)) ??',
+      'syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v.mountVisual);',
     );
-    expect(renderer).toContain('rallyVeilLook(veilboundState);');
-    expect(renderer).toContain("active.setGhost(ghostLook !== null, ghostLook ?? 'spirit');");
+  });
+});
+
+describe('the ward palette', () => {
+  it('is gold, far denser than the March, and keeps neither shadow nor weapon skin', () => {
+    const p = SPIRIT_VEIL_PALETTES['rally-ward'];
+    for (const hex of [p.tint, p.rim]) {
+      // Gold: red and green lifted over blue.
+      expect(hex >> 16).toBeGreaterThan(hex & 0xff);
+      expect((hex >> 8) & 0xff).toBeGreaterThan(hex & 0xff);
+    }
+    expect(p.opacity).toBeGreaterThanOrEqual(0.9);
+    expect(p.opacity).toBeGreaterThan(SPIRIT_VEIL_PALETTES.march.opacity * 5);
+    expect(p.rimStrength).toBeGreaterThan(SPIRIT_VEIL_PALETTES.march.rimStrength);
+    expect(SPIRIT_VEIL_POLICY['rally-ward']).toEqual({ castsShadow: false, weaponVfx: false });
   });
 });
 
 describe('the ward veil draws on every tier with the shared veil programs', () => {
-  it('mounts the gold palette over every rig material family', () => {
+  it('mounts the ward palette over every rig material family', () => {
     const look = rallyVeilLook('ward');
     if (!look) throw new Error('the ward wears no veil');
-    const tint = SPIRIT_VEIL_PALETTES[look].tint;
-    // Gold: red and green lifted over blue.
-    expect(tint >> 16).toBeGreaterThan(tint & 0xff);
-    expect((tint >> 8) & 0xff).toBeGreaterThan(tint & 0xff);
     for (const source of tierMaterials()) {
       const veil = createSpiritVeilMaterial(source, look);
       expect(veil.transparent, source.type).toBe(true);

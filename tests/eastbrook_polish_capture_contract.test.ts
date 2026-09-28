@@ -717,7 +717,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
-  '5784958561582f48223cb5f3fc6473fb8ad6f042f6df423647fa9185f1ccaf2d';
+  // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
+  '8f12f579434cc3835f75499482c559cf1df2c26e143e1084072a33da7eaefe01';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

@@ -129,6 +129,28 @@ describe('the veil palettes', () => {
         keepColor: 0,
         band: 1,
       },
+      'rally-ward': {
+        tint: 0xffd35a,
+        deep: 0x8a6418,
+        rim: 0xfeb50b,
+        rimStrength: 1.93,
+        opacity: 0.9,
+        rise: 1.22,
+        shimmer: 0,
+        keepColor: 1,
+        band: 0.42,
+      },
+      'rally-ghost': {
+        tint: 0xeef3f8,
+        deep: 0x9aa6b4,
+        rim: 0xf2f7ff,
+        rimStrength: 0.29,
+        opacity: 0.42,
+        rise: 0.56,
+        shimmer: 0,
+        keepColor: 1,
+        band: 0,
+      },
     };
     expect(SPIRIT_VEIL_PALETTES).toEqual(expected);
     expect(SPIRIT_VEIL_LOOK).toBe(SPIRIT_VEIL_PALETTES.spirit);
@@ -143,6 +165,8 @@ describe('the veil palettes', () => {
       'stealth-other': { castsShadow: false, weaponVfx: false },
       moonkin: { castsShadow: true, weaponVfx: true },
       'soul-rend': { castsShadow: false, weaponVfx: true },
+      'rally-ward': { castsShadow: false, weaponVfx: false },
+      'rally-ghost': { castsShadow: false, weaponVfx: false },
     });
   });
 });

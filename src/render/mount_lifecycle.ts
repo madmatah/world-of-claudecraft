@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { CharacterVisual } from './characters';
 import { createMountVisual } from './characters';
 import { mountAssetsReady, preloadMountAssets } from './characters/assets';
+import type { FarBakeGate } from './characters/visual';
 import { GoblinRocketSledFx } from './goblin_rocket_sled_fx';
 import { attachMountGlows, disposeMountGlows, type MountGlows } from './mount_glow';
 import { attachMountLamps, disposeMountLamps, type MountLamps } from './mount_lamps';
@@ -60,6 +61,9 @@ export interface MountViewHost {
   /** Hold the compile-pending flag until the new rig's materials have linked,
    *  so a summon does not freeze the frame it lands on (#2571). */
   gateSwapFlagOnCompile(root: THREE.Object3D, done: () => void): void;
+  /** The renderer's effect gate, so a veil the mount wears with its rider
+   *  stages behind it while any of its programs is still unlinked. */
+  effectGate: FarBakeGate;
   /** Account the rig build to the renderer's build ledger (`view:mount`). */
   recordBuild(ms: number, startedAt: number): void;
 }
@@ -138,6 +142,7 @@ export function syncMountVisual(
   const started = performance.now();
   v.mountVisual = createMountVisual(spec.visualKey);
   host.recordBuild(performance.now() - started, started);
+  v.mountVisual.setFarBakeGate(host.effectGate);
   v.group.add(v.mountVisual.root); // group.scale already carries e.scale
   v.mountVisualKey = spec.visualKey;
   attachPullerIfRickshaw(v, spec.visualKey, v.mountVisual.root);

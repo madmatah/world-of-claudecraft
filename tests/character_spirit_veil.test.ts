@@ -780,7 +780,17 @@ describe('no effect state reaches a lit transparent twin', () => {
   type Toggle = { name: string; on(v: CharacterVisual): void };
   const TOGGLES: Toggle[] = [
     ...(
-      ['spirit', 'wolf', 'march', 'stealth-rogue', 'stealth-other', 'moonkin', 'soul-rend'] as const
+      [
+        'spirit',
+        'wolf',
+        'march',
+        'stealth-rogue',
+        'stealth-other',
+        'moonkin',
+        'soul-rend',
+        'rally-ward',
+        'rally-ghost',
+      ] as const
     ).map((palette) => ({
       name: `ghost:${palette}`,
       on: (v: CharacterVisual) => v.setGhost(true, palette),

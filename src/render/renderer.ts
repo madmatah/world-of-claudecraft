@@ -146,13 +146,13 @@ import {
   characterVeilboundState,
   characterWeaponAuraInto,
   characterWeaponAuraMode,
-  classVeilboundState,
+  classVeilActive,
   hunterPetFerocityStage,
   hunterPetFrenzyActive,
   hunterPetVisualScale,
   isOathChainAura,
   isPaladinWingAura,
-  rallyVeilLook,
+  syncCharacterVeils,
   tithefiendEmpoweredActive,
 } from './character_effects';
 import {
@@ -387,7 +387,6 @@ import {
   sharedUniforms,
   urlForcedTier,
 } from './gfx';
-import { characterGhostLook } from './ghost_style_core';
 import { GlacialFrontVisual } from './glacial_front_visual';
 import { GoblinRocketSledFx } from './goblin_rocket_sled_fx';
 import { createGpuPrepAdmission } from './gpu_prep_admission';
@@ -8798,6 +8797,7 @@ export class Renderer {
   private readonly mountHost: MountViewHost = {
     reconcileViewLights: (v) => this.reconcileViewLights(v as EntityView),
     gateSwapFlagOnCompile: (root, done) => this.gateSwapFlagOnCompile(root, done),
+    effectGate: this.farBakeGate,
     recordBuild: (ms, startedAt) => this.buildLedger.record('view:mount', ms, startedAt),
   };
 
@@ -10903,10 +10903,7 @@ export class Renderer {
         v.clickTarget = active.clickProxy;
       }
       v.height = active.height;
-      const ghostLook =
-        characterGhostLook(this.sim.playerId, e, ghostWolf, classVeilboundState(veilboundState)) ??
-        rallyVeilLook(veilboundState);
-      active.setGhost(ghostLook !== null, ghostLook ?? 'spirit');
+      syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v.mountVisual);
       active.setSoulRend(hasSoulRend);
       // Shadowform tints the base priest rig shadow-purple (no rig swap); Moonkin Form wears
       // the spirit veil in its violet palette on the same body. Metamorphosis grows the
@@ -10915,7 +10912,7 @@ export class Renderer {
       active.setMoonkin(hasMoonkin);
       // Metamorphosis is no longer a tint on the base rig: it has its own lazy
       // CharacterVisual driven by formVisibility.metamorph above.
-      active.setAscended(veilboundState !== 'none');
+      active.setAscended(classVeilActive(veilboundState));
       active.setRuneTint(characterRuneTintColor(e));
       // saddle lift: the rider (click proxy included, a root child) sits at
       // the seat height while mounted; 0 whenever the mount is absent/hidden.
@@ -11622,7 +11619,7 @@ export class Renderer {
         if (hasSoulRend) {
           this.vfx.castSparkle(e.id, 'shadow', dt * 3.2);
         }
-        if (veilboundState !== 'none') this.vfx.castSparkle(e.id, 'holy', dt * 2.4);
+        if (classVeilActive(veilboundState)) this.vfx.castSparkle(e.id, 'holy', dt * 2.4);
         if (!e.dead && (ferocityStage > 0 || petFrenzy)) {
           this.vfx.castSparkle(
             e.id,

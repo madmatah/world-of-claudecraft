@@ -1021,7 +1021,10 @@ const MONOLITHS: MonolithRow[] = [
     // veil): every translucent look moved onto the veil, deleting the lit
     // twin group's slot, the local self warm and the Soul Rend live arm, wc
     // -l on the carried tree. Exact count.
-    ceiling: 13133,
+    // LOWERED 13133 -> 13130: the pilot's and the kart's veils moved to
+    // syncCharacterVeils in character_effects.ts, which the entity loop calls
+    // once. Exact count.
+    ceiling: 13130,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

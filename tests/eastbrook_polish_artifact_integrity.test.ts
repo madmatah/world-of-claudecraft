@@ -1411,7 +1411,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
-  '73785621d67f4250ae7080933302b527753d5ca4b09ed03c628012ef05a7a77c';
+  // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
+  '897c3fe6cf08263e7ea56dc81b79a7ba769499ac733d9b0cdfd4f5a43e75ea98';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1451,7 +1452,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
-  '5784958561582f48223cb5f3fc6473fb8ad6f042f6df423647fa9185f1ccaf2d';
+  // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
+  '8f12f579434cc3835f75499482c559cf1df2c26e143e1084072a33da7eaefe01';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2849,7 +2851,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers own shell launched on the input frame.
       // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
       // Re-minted for the carry of PR 4229, the shared spirit veil.
-    ).toBe('79a8a8f041faf06b06d6dcd088aa33a4d218a04ba0f96018c11fe356103436a1');
+      // Re-minted for the Realm Racers ward and ghost veils on pilot and kart.
+    ).toBe('3000893d8af8cef95b31b918470069b91d88c12e7e4b8e8e42996167ca9c2692');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

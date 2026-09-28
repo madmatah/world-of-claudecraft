@@ -14,7 +14,13 @@ vi.mock('../src/render/characters', async () => {
         socket.name = `Socket_Exhaust_${side}`;
         root.add(socket);
       }
-      return { root, dispose: () => {} };
+      return {
+        root,
+        dispose: () => {},
+        setFarBakeGate: (gate: unknown) => {
+          root.userData.effectGate = gate;
+        },
+      };
     },
   };
 });
@@ -184,6 +190,7 @@ describe('mount compile ownership', () => {
       gateSwapFlagOnCompile: (_root: THREE.Object3D, done: () => void): void => {
         callbacks.push(done);
       },
+      effectGate: vi.fn(),
       recordBuild: vi.fn(),
     };
 
@@ -202,6 +209,23 @@ describe('mount compile ownership', () => {
     expect(v.mountCompilePending, 'the bear callback owns the production reveal').toBe(false);
   });
 
+  it('hands every new mount the renderer effect gate, so a veil it wears never links live', () => {
+    const { v } = rig();
+    v.mountVisual = null;
+    v.mountVisualKey = '';
+    const effectGate = vi.fn();
+    const host = {
+      reconcileViewLights: vi.fn(),
+      gateSwapFlagOnCompile: (_root: THREE.Object3D, done: () => void): void => done(),
+      effectGate,
+      recordBuild: vi.fn(),
+    };
+    syncMountVisual(v, horse(), host);
+    expect(mountRoot(v).userData.effectGate).toBe(effectGate);
+    syncMountVisual(v, bear(), host);
+    expect(mountRoot(v).userData.effectGate).toBe(effectGate);
+  });
+
   it('attaches and disposes the shipped glow through the production lifecycle', () => {
     const { v } = rig();
     v.mountVisual = null;
@@ -212,6 +236,7 @@ describe('mount compile ownership', () => {
     const host = {
       reconcileViewLights: vi.fn(),
       gateSwapFlagOnCompile: (_root: THREE.Object3D, done: () => void): void => done(),
+      effectGate: vi.fn(),
       recordBuild: vi.fn(),
     };
     const spec = tortoise();
@@ -236,6 +261,7 @@ describe('mount compile ownership', () => {
     const host = {
       reconcileViewLights: vi.fn(),
       gateSwapFlagOnCompile: (_root: THREE.Object3D, done: () => void): void => done(),
+      effectGate: vi.fn(),
       recordBuild: vi.fn(),
     };
 
@@ -295,6 +321,7 @@ describe('the rocket sled plume inside the mount gate', () => {
         );
         done();
       },
+      effectGate: vi.fn(),
       recordBuild: vi.fn(),
     };
     return { host, listed };

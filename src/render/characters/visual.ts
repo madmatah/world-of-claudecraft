@@ -2252,6 +2252,12 @@ export class CharacterVisual {
     this.applyVisualMaterials();
   }
 
+  /** Draw this rig's veil as one body with `other`'s (a mount under its rider);
+   *  null gives it back its own. */
+  shareVeilUnit(other: CharacterVisual | null): void {
+    this.spiritVeil.shareUnit(other ? other.spiritVeil : null);
+  }
+
   /** Ability VFX body glow (buff/cast rim): tint the rig's emissive toward the
    *  spec color at the given intensity (0 restores the shared originals). The
    *  material swap runs only on the off/on edge; while on, per-frame calls just

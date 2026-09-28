@@ -17,6 +17,7 @@ import {
   hasCharacterEffect,
 } from './character_effects_core';
 import type { SpiritVeilPalette } from './characters/spirit_veil_palette_core';
+import { characterGhostLook } from './ghost_style_core';
 
 export function isAvengingWrathAura(aura: Pick<Aura, 'id' | 'kind'>): boolean {
   return aura.id === 'avenging_wrath' && aura.kind === 'buff_dmg_done';
@@ -148,8 +149,9 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
 
 /**
  * The veil family: the paladin's Veilbound March and Mark, and the Realm
- * Racers ward and recovery ghost, which wear the spirit veil (the ward the
- * March's gold palette, the ghost the released spirit's).
+ * Racers ward and recovery ghost, which wear the spirit veil in palettes of
+ * their own (a denser March gold, a cold pale) on the pilot and on the whole
+ * machine.
  *
  * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
  * ghosted one will not block you), so they are read off the entity aura every
@@ -176,12 +178,50 @@ export function classVeilboundState(state: CharacterVeilboundState): 'march' | '
 }
 
 /**
- * The spirit veil palette a racer's ward or recovery ghost wears, when no
- * spirit, stealth, wolf or class veil read claims the rig first.
+ * Whether the paladin's class look rides the state: the ascension tint and the
+ * holy motes rising over the head. A racer's ward and ghost wear their veil
+ * only; the tint would also stand in, gold, for a ghost whose veil stages.
+ */
+export function classVeilActive(state: CharacterVeilboundState): boolean {
+  return classVeilboundState(state) !== 'none';
+}
+
+/**
+ * The spirit veil palette a racer's ward or recovery ghost wears: on the pilot
+ * when no spirit, stealth, wolf or class veil read claims the rig first, and
+ * on the machine always.
  */
 export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
-  if (state === 'ward') return 'march';
-  return state === 'ghost' ? 'spirit' : null;
+  if (state === 'ward') return 'rally-ward';
+  return state === 'ghost' ? 'rally-ghost' : null;
+}
+
+/** A rig the veil decision dresses: the rider's active body, or its mount. */
+export interface CharacterVeilRig {
+  setGhost(on: boolean, look?: SpiritVeilPalette): void;
+  shareVeilUnit(other: CharacterVeilRig | null): void;
+}
+
+/**
+ * This frame's veils on a character and on the mount under it. The mount wears
+ * the racer veil alone, so the machine a rival reads always carries the ward or
+ * the ghost while a class veil keeps its precedence on the pilot, and a mounted
+ * March veils no horse. The mount draws in the rider's sort unit, one body.
+ */
+export function syncCharacterVeils(
+  viewerId: number,
+  e: Entity,
+  ghostWolf: boolean,
+  state: CharacterVeilboundState,
+  rider: CharacterVeilRig,
+  mount: CharacterVeilRig | null,
+): void {
+  const racer = rallyVeilLook(state);
+  const look = characterGhostLook(viewerId, e, ghostWolf, classVeilboundState(state)) ?? racer;
+  rider.setGhost(look !== null, look ?? 'spirit');
+  if (!mount) return;
+  mount.shareVeilUnit(rider);
+  mount.setGhost(racer !== null, racer ?? 'spirit');
 }
 
 /** The whole-body tint color for an active Thornhollow Fields rune buff (null = none). */

@@ -1,6 +1,7 @@
 // The recovery ghost drawn as a veil on any ghosted racer, the local one
-// included: the shared spirit veil (ghost_veil.ts) in the released spirit's
-// palette, an interim look until the ghost gets a palette of its own.
+// included, on the pilot and on the whole machine: the shared spirit veil
+// (ghost_veil.ts) in the ghost's own pale palette, tuned live on the kart and
+// never the released spirit's blue.
 //
 // A ghost will not block you, which is actionable, so the veil follows the
 // entity aura every client mirrors and draws on every graphics tier. And it
@@ -10,17 +11,24 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
+  type CharacterVeilRig,
   characterVeilboundState,
+  classVeilActive,
   classVeilboundState,
   rallyVeilLook,
+  syncCharacterVeils,
 } from '../src/render/character_effects';
 import {
   createSpiritVeilMaterial,
   spiritVeilPaletteOf,
   spiritVeilPassOf,
 } from '../src/render/characters/ghost_veil';
+import {
+  SPIRIT_VEIL_PALETTES,
+  SPIRIT_VEIL_POLICY,
+  type SpiritVeilPalette,
+} from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
-import { characterGhostLook } from '../src/render/ghost_style_core';
 import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
@@ -57,10 +65,17 @@ function tierMaterials(): THREE.Material[] {
   return [standard, lambert, basic];
 }
 
-/** The look renderer.ts hands a racer's rig, composed the same way. */
-function lookFor(e: Entity): string | null {
-  const state = characterVeilboundState(e);
-  return characterGhostLook(1, e, false, classVeilboundState(state)) ?? rallyVeilLook(state);
+/** The veils renderer.ts hands a racer's pilot and machine, the same call. */
+function veilsFor(e: Entity): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
+  const looks = { rider: null as SpiritVeilPalette | null, kart: null as SpiritVeilPalette | null };
+  const rig = (slot: 'rider' | 'kart'): CharacterVeilRig => ({
+    setGhost(on: boolean, look?: SpiritVeilPalette) {
+      looks[slot] = on ? (look ?? 'spirit') : null;
+    },
+    shareVeilUnit() {},
+  });
+  syncCharacterVeils(1, e, false, characterVeilboundState(e), rig('rider'), rig('kart'));
+  return looks;
 }
 
 describe('the ghost veil decision', () => {
@@ -73,9 +88,11 @@ describe('the ghost veil decision', () => {
     // The gold is back the moment the ghost ends.
     expect(characterVeilboundState(racer([ward]))).toBe('ward');
     expect(classVeilboundState('ghost')).toBe('none');
-    expect(rallyVeilLook('ghost')).toBe('spirit');
-    expect(lookFor(racer([ghost]))).toBe('spirit');
-    expect(lookFor(racer([ward, ghost]))).toBe('spirit');
+    expect(classVeilActive('ghost')).toBe(false);
+    expect(rallyVeilLook('ghost')).toBe('rally-ghost');
+    expect(veilsFor(racer([ghost]))).toEqual({ rider: 'rally-ghost', kart: 'rally-ghost' });
+    expect(veilsFor(racer([ward, ghost]))).toEqual({ rider: 'rally-ghost', kart: 'rally-ghost' });
+    expect(veilsFor(racer([ward]))).toEqual({ rider: 'rally-ward', kart: 'rally-ward' });
     // The ghost and the ward never share a palette.
     expect(rallyVeilLook('ghost')).not.toBe(rallyVeilLook('ward'));
   });
@@ -84,6 +101,31 @@ describe('the ghost veil decision', () => {
     expect(characterVeilboundState.length).toBe(1);
     expect(classVeilboundState.length).toBe(1);
     expect(rallyVeilLook.length).toBe(1);
+  });
+});
+
+describe('the ghost palette', () => {
+  it('is pale, still and see-through, and never the released spirit', () => {
+    const p = SPIRIT_VEIL_PALETTES['rally-ghost'];
+    const spirit = SPIRIT_VEIL_PALETTES.spirit;
+    const channels = (hex: number) => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
+    for (const hex of [p.tint, p.rim]) {
+      // near-white, a cold lean at most: no channel far below the others
+      const [r, g, b] = channels(hex);
+      expect(Math.min(r, g, b)).toBeGreaterThanOrEqual(0xe0);
+      expect(b).toBeGreaterThanOrEqual(r);
+    }
+    // the released spirit is a saturated blue monochrome with a blooming rim;
+    // the recovery ghost keeps the machine's own colours under a dim edge
+    const [sr, , sb] = channels(spirit.tint);
+    expect(sb - sr).toBeGreaterThan(80);
+    expect(p.keepColor).toBe(1);
+    expect(spirit.keepColor).toBe(0);
+    expect(p.rimStrength).toBeLessThan(1);
+    expect(p.band).toBe(0);
+    expect(p.shimmer).toBe(0);
+    expect(p.opacity).toBeLessThan(SPIRIT_VEIL_PALETTES['rally-ward'].opacity);
+    expect(SPIRIT_VEIL_POLICY['rally-ghost']).toEqual({ castsShadow: false, weaponVfx: false });
   });
 });
 
