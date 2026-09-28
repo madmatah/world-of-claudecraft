@@ -76,12 +76,14 @@ export const ZONE_STREAM_URLS: Record<MusicZone, string | null> = {
 export type AreaTrackId =
   | 'realm_racers_evergarden'
   | 'realm_racers_nightbloom'
-  | 'realm_racers_drakelands';
+  | 'realm_racers_drakelands'
+  | 'realm_racers_palmreach';
 
 export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
   realm_racers_evergarden: '/audio/realm-racers-evergarden.mp3',
   realm_racers_nightbloom: '/audio/realm-racers-nightbloom.mp3',
   realm_racers_drakelands: '/audio/realm-racers-drakelands.mp3',
+  realm_racers_palmreach: '/audio/realm-racers-palmreach.mp3',
 };
 
 /** Which tracks belong to the same place. Activating one warms every track of
@@ -98,6 +100,7 @@ export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
   realm_racers_evergarden: 'realm_racers_evergarden',
   realm_racers_nightbloom: 'realm_racers_nightbloom',
   realm_racers_drakelands: 'realm_racers_drakelands',
+  realm_racers_palmreach: 'realm_racers_palmreach',
 };
 
 /** The tracks a Realm Racers circuit may name, one per zone that has a
@@ -108,6 +111,7 @@ export const REALM_RACERS_AREA_TRACKS: ReadonlySet<AreaTrackId> = new Set<AreaTr
   'realm_racers_evergarden',
   'realm_racers_nightbloom',
   'realm_racers_drakelands',
+  'realm_racers_palmreach',
 ]);
 
 /** Whether a plain string names an area track. The Realm Racers circuit records

@@ -50,6 +50,7 @@ describe('remastered soundtrack catalog', () => {
       'realm_racers_evergarden',
       'realm_racers_nightbloom',
       'realm_racers_drakelands',
+      'realm_racers_palmreach',
     ];
     expect(Object.keys(AREA_TRACK_URLS).sort()).toEqual([...ids].sort());
     for (const [id, url] of Object.entries(AREA_TRACK_URLS)) {
@@ -73,6 +74,10 @@ describe('remastered soundtrack catalog', () => {
       realm_racers_drakelands: [
         '/audio/realm-racers-drakelands.mp3',
         '4c336156b8a8f5f2dc839e6ec26486a8d6b68a9939d6506ccbefa68769785132',
+      ],
+      realm_racers_palmreach: [
+        '/audio/realm-racers-palmreach.mp3',
+        '0803e090f0d349641f79309327fa4afc4bf1d279bba55567fdd6ae64ed23d8aa',
       ],
     } as const;
     for (const [id, [url, expected]] of Object.entries(supplied)) {

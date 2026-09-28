@@ -460,6 +460,13 @@ describe('MusicDirector area file tracks', () => {
       'realm_racers_evergarden',
       'realm_racers_nightbloom',
     ]);
+    director.setAreaTrack('realm_racers_palmreach');
+    expect(Object.keys(areaEls()).sort()).toEqual([
+      'realm_racers_drakelands',
+      'realm_racers_evergarden',
+      'realm_racers_nightbloom',
+      'realm_racers_palmreach',
+    ]);
   });
 
   it('hands the mix back to the zone streams when the player leaves', () => {
@@ -487,6 +494,7 @@ describe('MusicDirector area file tracks', () => {
       'realm_racers_evergarden',
       'realm_racers_nightbloom',
       'realm_racers_drakelands',
+      'realm_racers_palmreach',
       null,
     ] as const) {
       director.setAreaTrack(track);
