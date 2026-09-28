@@ -322,6 +322,8 @@ export const SELF_RENDER_SMOOTH_RATE = 30;
  * Advance the renderer's non-predictive self pose. A completed authoritative
  * recovery is a semantic discontinuity even when it moves less than the usual
  * six-yard teleport threshold, so it always replaces the prior display pose.
+ * `snapLimitSq` is the frame's teleport limit (teleportGapLimitSq), widened
+ * for a seated driver.
  */
 export function updateSelfRenderFallback(
   current: Vec3Like,
@@ -332,6 +334,7 @@ export function updateSelfRenderFallback(
   dt: number,
   smooth: boolean,
   authoritativeDiscontinuity: boolean,
+  snapLimitSq = SELF_MOTION_SNAP_DIST_SQ,
 ): void {
   const dx = targetX - current.x;
   const dy = targetY - current.y;
@@ -340,7 +343,7 @@ export function updateSelfRenderFallback(
     !smooth ||
     !ready ||
     authoritativeDiscontinuity ||
-    dx * dx + dy * dy + dz * dz > SELF_MOTION_SNAP_DIST_SQ
+    dx * dx + dy * dy + dz * dz > snapLimitSq
   ) {
     current.x = targetX;
     current.y = targetY;
@@ -391,6 +394,14 @@ export class SelfMotionPredictor {
   get velocityZ(): number {
     const actor = this.actor;
     return actor?.drive ? vehicleVelocityZ(actor.drive, actor.facing) : 0;
+  }
+
+  get vy(): number {
+    return this.actor?.vy ?? 0;
+  }
+
+  get drive(): VehicleDrive | null {
+    return this.actor?.drive ?? null;
   }
 
   private readonly deps: PlayerMotionDeps;

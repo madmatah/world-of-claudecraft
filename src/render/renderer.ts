@@ -1635,9 +1635,7 @@ export class Renderer {
    *  camera follower. Null on foot, while inactive, and on the first vehicle
    *  frame before the predictor has adopted the drive state. */
   get selfMotionFacing(): number | null {
-    return this.selfRender.active && this.selfRender.predictor?.driving
-      ? this.selfRender.predictor.facing
-      : null;
+    return this.selfRender.drive.source === 'predicted' ? this.selfRender.drive.facing : null;
   }
 
   private readonly selfAimPoseOut = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
@@ -7258,11 +7256,9 @@ export class Renderer {
     // provisional that same half-tick of travel BEHIND the display halves the
     // typical handoff shift.
     const lag =
-      this.selfRender.active && this.selfRender.predictor?.driving
-        ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC
-        : 0;
-    const vx = this.selfRender.predictor?.velocityX ?? 0;
-    const vz = this.selfRender.predictor?.velocityZ ?? 0;
+      this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;
+    const vx = this.selfRender.drive.velocityX;
+    const vz = this.selfRender.drive.velocityZ;
     this.realmRacersTrack.dropProvisionalSlick(
       match.circuitId,
       (pose ? pose.pos.x : p.pos.x) - vx * lag,
@@ -10480,8 +10476,7 @@ export class Renderer {
         // circle misses simply plays through the unsuppressed server event.
         const race = this.sim.realmRacersInfo.match;
         if (
-          this.selfRender.active &&
-          this.selfRender.predictor?.driving &&
+          this.selfRender.drive.source === 'predicted' &&
           p.drive &&
           race?.phase === 'racing' &&
           race.participantIds.includes(id)
@@ -10495,8 +10490,8 @@ export class Renderer {
             const closing = bumpClosingSpeed(
               dx,
               dz,
-              this.selfRender.predictor.velocityX - vehicleVelocityX(e.drive, facing),
-              this.selfRender.predictor.velocityZ - vehicleVelocityZ(e.drive, facing),
+              this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),
+              this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),
             );
             if (
               closing >= LOCAL_BUMP_MIN_CLOSING &&
@@ -10518,13 +10513,13 @@ export class Renderer {
       }
       v.group.position.set(x, y, z);
       if (ignivarBossFacingLocked(e)) facing = e.facing;
-      if (id === p.id && this.selfRender.active && this.selfRender.predictor?.driving) {
+      if (id === p.id && this.selfRender.drive.source === 'predicted') {
         // Driving, the heading is not camera-driven input: it is steered, and
         // the predictor integrates it with the same kernel the server runs. Its
         // value is the zero-latency truth, so the model reads it directly
         // instead of the interpolated mirror (a full echo behind on every
         // corner) or the camera override (which is null while driving).
-        facing = this.selfRender.predictor.facing;
+        facing = this.selfRender.drive.facing;
         this.selfFacingOverride = null;
         this.selfFacingLastTarget = null;
       } else if (id === p.id && renderFacingOverride !== null) {
@@ -11167,8 +11162,8 @@ export class Renderer {
       const airborne =
         !visuallyDead &&
         !swimming &&
-        (animFromDisplay && this.selfRender.predictor && !inRift
-          ? !this.selfRender.predictor.onGround
+        (animFromDisplay && this.selfRender.drive.kernelOnGround !== null && !inRift
+          ? !this.selfRender.drive.kernelOnGround
           : !e.onGround || v.airborneHeurFrames >= 2);
       // Grounded presentation polish, both display-only (see the cores).
       // Vertical smoothing absorbs the step-up the solver performs inside a
@@ -12748,13 +12743,8 @@ export class Renderer {
     let velX = 0;
     let velZ = 0;
     if (p.drive) {
-      if (this.selfRender.active && this.selfRender.predictor?.driving) {
-        velX = this.selfRender.predictor.velocityX;
-        velZ = this.selfRender.predictor.velocityZ;
-      } else {
-        velX = vehicleVelocityX(p.drive, p.facing);
-        velZ = vehicleVelocityZ(p.drive, p.facing);
-      }
+      velX = this.selfRender.drive.velocityX;
+      velZ = this.selfRender.drive.velocityZ;
     } else if (this.lastLocalPos && dt > 1e-4) {
       velX = (selfPos.x - this.lastLocalPos.x) / dt;
       velZ = (selfPos.z - this.lastLocalPos.z) / dt;

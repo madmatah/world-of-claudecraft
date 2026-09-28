@@ -707,7 +707,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
   // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
   // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
-  '875dff5d1c9661ec901ab7987780aff6aab9ba43193b67947db9cf76151874e2';
+  // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
+  '5e576f1cc1490e7fcf5e7c89fd644f2f201790703eb22af24b965d7cb9c96ac8';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

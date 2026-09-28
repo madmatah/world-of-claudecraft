@@ -4,7 +4,16 @@
 // without a camera step. Pure ({x,y,z} in and out, no Three), so the renderer
 // is a thin consumer and a headless latency harness can drive the same math.
 
-import type { Entity } from '../sim/types';
+import { vehicleProfile } from '../sim/content/vehicles';
+import { type Entity, RUN_SPEED } from '../sim/types';
+import {
+  createSelfDriveView,
+  driveViewFromMirror,
+  driveViewFromPredictor,
+  driveViewFromReconciled,
+  type ReconciledDrive,
+  type SelfDriveView,
+} from './self_drive_view_core';
 import {
   displaySpeedBudget,
   SELF_MOTION_SNAP_DIST_SQ,
@@ -19,8 +28,21 @@ import {
 const SELF_MOTION_HANDOFF_RATE = 15;
 export const MAX_SELF_REWIND_YD_PER_SEC = 12;
 
+/** The fallback's rewind cap: a runner's, or scaled by a seated driver's
+ *  profile top speed over run speed, so a kart sheds its lead at the same
+ *  share of its own pace. */
+export function selfRewindCapYdPerSec(p: Entity): number {
+  if (!p.drive) return MAX_SELF_REWIND_YD_PER_SEC;
+  const scale = vehicleProfile(p.drive.profileKey).maxSpeed / RUN_SPEED;
+  return MAX_SELF_REWIND_YD_PER_SEC * Math.max(1, scale);
+}
+
+function handoffDecayShare(dt: number): number {
+  return 1 - Math.exp(-SELF_MOTION_HANDOFF_RATE * Math.max(0, dt));
+}
+
 function decayOffset(offset: Vec3Like, dt: number, maxDistance = Number.POSITIVE_INFINITY): void {
-  const decayShare = 1 - Math.exp(-SELF_MOTION_HANDOFF_RATE * Math.max(0, dt));
+  const decayShare = handoffDecayShare(dt);
   const decayDistance = Math.hypot(offset.x, offset.y, offset.z) * decayShare;
   const appliedShare =
     decayDistance > maxDistance && decayDistance > 0
@@ -111,7 +133,10 @@ function captureHandoffOffset(offset: Vec3Like, from: Vec3Like, to: Vec3Like): v
 export interface ReconciledSelfPrediction {
   kind: 'reconciled';
   position: Vec3Like;
-  residual: Vec3Like | null;
+  /** `yaw` rides while the replayed head drives. */
+  residual: (Vec3Like & { yaw?: number }) | null;
+  /** The predicted kart at the frame's alpha, null on foot. */
+  drive?: ReconciledDrive | null;
   /** Set while the prediction runs in a sailing ship's frame (the route
    *  index): position and residual are then deck-relative (x port, z bow; the
    *  height stays world yards, the hull never heaves), and
@@ -139,6 +164,8 @@ export interface SelfRenderPositionState {
   active: boolean;
   lastSelfId: number | null;
   predictor: SelfMotionPredictor | null;
+  /** The local kart on either wire (self_drive_view_core.ts). */
+  drive: SelfDriveView;
 }
 
 export function createSelfRenderPositionState(
@@ -151,6 +178,7 @@ export function createSelfRenderPositionState(
     active: false,
     lastSelfId: null,
     predictor: null,
+    drive: createSelfDriveView(),
   };
 }
 
@@ -218,9 +246,11 @@ export function updateSelfRenderPosition(
         captureHandoffOffset(state.offset, state.position, predicted);
       }
       const residual = reconciled.kind === 'reconciled' ? reconciled.residual : null;
+      let snap = discontinuity;
       if (residual) {
         if (discontinuity || isTeleportGap(residual.x, residual.y, residual.z, teleportLimitSq)) {
           clearOffset(state.offset);
+          snap = true;
         } else {
           state.offset.x += residual.x;
           state.offset.y += residual.y;
@@ -228,6 +258,20 @@ export function updateSelfRenderPosition(
         }
       }
       decayOffset(state.offset, dt);
+      if (reconciled.kind !== 'reconciled' && state.predictor) {
+        driveViewFromPredictor(state.drive, state.predictor, p, alpha);
+      } else {
+        driveViewFromReconciled(
+          state.drive,
+          reconciled.drive ?? null,
+          p,
+          alpha,
+          state.predictor,
+          residual?.yaw ?? 0,
+          snap,
+          handoffDecayShare(dt),
+        );
+      }
       state.position.x = predicted.x + state.offset.x;
       state.position.y = predicted.y + state.offset.y;
       state.position.z = predicted.z + state.offset.z;
@@ -238,6 +282,7 @@ export function updateSelfRenderPosition(
   }
   const predictorWasActive = state.active;
   state.active = false;
+  driveViewFromMirror(state.drive, p, alpha, state.predictor);
   const playerAlpha = selfSnapshotAlpha(alpha, selfAlphaLead);
   const px = p.prevPos.x + (p.pos.x - p.prevPos.x) * playerAlpha;
   const py = p.prevPos.y + (p.pos.y - p.prevPos.y) * playerAlpha;
@@ -245,7 +290,7 @@ export function updateSelfRenderPosition(
   // The same teleport rule as the predictor path: a handoff gap (prediction
   // suspending on the teleport frame) or a mid-decay target jump of teleport
   // size adopts the authoritative pose outright instead of rewinding toward
-  // it at MAX_SELF_REWIND_YD_PER_SEC.
+  // it at the rewind cap.
   const discontinuity =
     authoritativeDiscontinuity || targetJumpedTeleport(state, px, py, pz, teleportLimitSq);
   if (discontinuity) {
@@ -264,7 +309,8 @@ export function updateSelfRenderPosition(
     const rewindX = offsetLength > 0 ? state.offset.x / offsetLength : 0;
     const rewindY = offsetLength > 0 ? state.offset.y / offsetLength : 0;
     const rewindZ = offsetLength > 0 ? state.offset.z / offsetLength : 0;
-    decayOffset(state.offset, dt, MAX_SELF_REWIND_YD_PER_SEC * Math.max(0, dt));
+    const maxRewind = selfRewindCapYdPerSec(p) * Math.max(0, dt);
+    decayOffset(state.offset, dt, maxRewind);
     const tentativeX = px + state.offset.x;
     const tentativeY = py + state.offset.y;
     const tentativeZ = pz + state.offset.z;
@@ -272,7 +318,6 @@ export function updateSelfRenderPosition(
       (previousX - tentativeX) * rewindX +
       (previousY - tentativeY) * rewindY +
       (previousZ - tentativeZ) * rewindZ;
-    const maxRewind = MAX_SELF_REWIND_YD_PER_SEC * Math.max(0, dt);
     if (totalRewind > maxRewind) {
       const excess = totalRewind - maxRewind;
       state.offset.x += rewindX * excess;
@@ -294,6 +339,7 @@ export function updateSelfRenderPosition(
     dt,
     selfAlphaLead > 0,
     discontinuity,
+    teleportLimitSq,
   );
   state.ready = true;
   return state.position;

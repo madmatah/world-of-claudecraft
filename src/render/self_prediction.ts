@@ -11,6 +11,7 @@ import {
 import { type ClientDelveMotionState, createClientPlayerMotionDeps } from './client_player_motion';
 import { createDeckAwareStep } from './deck_prediction';
 import { drivePredictionRequested } from './render_dev_flags';
+import { fillReconciledDrive, type ReconciledDrive } from './self_drive_view_core';
 import {
   copyMotionState,
   type MotionState,
@@ -172,6 +173,16 @@ export class MovementPredictionPipeline {
     residual: null,
     deck: null,
     tickOffset: null,
+    drive: null,
+  };
+  private readonly driveOutput: ReconciledDrive = {
+    facing: 0,
+    velocityX: 0,
+    velocityZ: 0,
+    vy: 0,
+    onGround: true,
+    handbrake: 0,
+    collisionImpact: 0,
   };
 
   constructor(seed: number, riftCollisionToken = 0) {
@@ -280,6 +291,7 @@ export class MovementPredictionPipeline {
       this.predicted.prevPos.z + (this.predicted.pos.z - this.predicted.prevPos.z) * alpha;
     output.residual = this.pendingResidual;
     output.deck = this.predicted.deck ?? null;
+    output.drive = fillReconciledDrive(this.driveOutput, this.predicted, alpha);
     output.tickOffset =
       this.predicted.drive && wire.reconAckClientTick >= 0
         ? this.lastPredictedClientTick - wire.reconAckClientTick

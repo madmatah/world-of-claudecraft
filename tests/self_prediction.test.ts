@@ -20,9 +20,10 @@ import {
   type Entity,
   emptyMoveInput,
   type MoveInput,
+  normAngle,
   type VehicleDrive,
 } from '../src/sim/types';
-import { createVehicleDrive } from '../src/sim/vehicle_motion';
+import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
 import { groundHeight } from '../src/sim/world';
 import type { DelveRunInfo } from '../src/world_api/delves';
 
@@ -581,6 +582,43 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     drivePredictionFrame(runner.pipeline, 1);
     runner.wire.reconAckClientTick = 0;
     expect(runner.pipeline.display()?.tickOffset).toBeNull();
+  });
+
+  it('hands the display the predicted kart at the interpolation alpha, and none on foot', () => {
+    const { pipeline, wire, self } = seatedDriver({ speed: 18, yawRate: 1.2, handbrake: 0.3 });
+    for (let ct = 0; ct < 4; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    const head = internals(pipeline).predicted as MotionState;
+    const drive = head.drive as VehicleDrive;
+    const alpha = 0.35;
+    const glue = (pipeline as unknown as { wireGlue: object }).wireGlue;
+    Object.defineProperty(glue, 'interpolationAlpha', { value: alpha });
+    const turn = normAngle(head.facing - (head.prevFacing as number));
+    expect(turn).not.toBe(0);
+    const shown = pipeline.display()?.drive;
+    expect(shown?.facing).toBeCloseTo(normAngle((head.prevFacing as number) + turn * alpha), 12);
+    expect(shown?.velocityX).toBe(vehicleVelocityX(drive, head.facing));
+    expect(shown?.velocityZ).toBe(vehicleVelocityZ(drive, head.facing));
+    expect(shown?.vy).toBe(head.vy);
+    expect(shown?.onGround).toBe(head.onGround);
+    expect(shown?.handbrake).toBe(drive.handbrake);
+    expect(shown?.collisionImpact).toBe(drive.collisionImpact);
+
+    // stood down (driver prediction off), the display hands over no kart
+    pipeline.predictDrivers = false;
+    expect(pipeline.display()).toBeNull();
+    pipeline.predictDrivers = true;
+
+    self.drive = null;
+    setAuthoritativePose(wire, 30, 26, 0.75);
+    wire.reconDrive = null;
+    wire.reconOverrideEpoch = 1;
+    wire.reconAckClientTick = 5;
+    pipeline.display();
+    drivePredictionFrame(pipeline, 7);
+    wire.reconAckClientTick = 6;
+    const onFoot = pipeline.display();
+    expect(onFoot).not.toBeNull();
+    expect(onFoot?.drive).toBeNull();
   });
 
   it('adopts a shoved drive with the snapshot auras and replays to an exact match', () => {

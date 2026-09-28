@@ -1001,7 +1001,11 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13249 -> 13235: a remote racer's projection step (the age
     // formula, the gate and the reset) moved to stepRemoteRacerView in
     // remote_vehicle_display_core.ts, shared with the latency harness.
-    ceiling: 13235,
+    // LOWERED 13235 -> 13225: the self kart's reads (model yaw, chase camera,
+    // speed FOV, look-ahead, oil drop, local bump bang, airborne pose) moved
+    // to one drive view filled by self_drive_view_core.ts on either wire.
+    // Exact count.
+    ceiling: 13225,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

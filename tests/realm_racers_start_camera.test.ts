@@ -550,9 +550,13 @@ describe('Realm Racers start camera', () => {
     expect(renderer).toContain(`const CAMERA_BASE_FOV = ${CAMERA_BASE_FOV};`);
     expect(renderer).toContain('stepCameraBoomForDriving(');
     expect(renderer).toContain('stepCameraFeelForDriving(');
-    expect(renderer).toContain('this.selfRender.predictor.velocityX');
-    expect(renderer).toContain('this.selfRender.predictor.velocityZ');
-    expect(renderer).toContain('vehicleVelocityX(p.drive, p.facing)');
-    expect(renderer).toContain('vehicleVelocityZ(p.drive, p.facing)');
+    expect(renderer).toContain('velX = this.selfRender.drive.velocityX;');
+    expect(renderer).toContain('velZ = this.selfRender.drive.velocityZ;');
+    const driveView = readFileSync(
+      new URL('../src/render/self_drive_view_core.ts', import.meta.url),
+      'utf8',
+    );
+    expect(driveView).toContain('vehicleVelocityX(drive, p.facing)');
+    expect(driveView).toContain('vehicleVelocityZ(drive, p.facing)');
   });
 });

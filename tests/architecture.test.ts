@@ -1045,6 +1045,7 @@ const RENDER_PURE_CORES = [
   'src/render/hill_ring_core.ts',
   'src/render/scene_census_core.ts',
   'src/render/sea_mist_core.ts',
+  'src/render/self_drive_view_core.ts',
   'src/render/self_prediction_core.ts',
   'src/render/self_render_position_core.ts',
   'src/render/shadow_pass_gate_core.ts',
