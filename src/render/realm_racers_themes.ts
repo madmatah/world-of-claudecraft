@@ -930,20 +930,29 @@ const WILLOWFEN: RallyCircuitTheme = {
 };
 
 /**
- * The Palmreach: a tropical shore behind rough timber.
+ * The Palmreach, dressed as the world builds the zone today: Drifthaven on the
+ * strand, the palms and fallen coconuts of the beach shelf, the banyans of the
+ * Vinefall, and the drowned columns of the Sunken Idol.
  *
- * The stockade this record was first written around is gone: it was the hex
- * wall module at a larger scale, and that module is one kit (`stoneWall`) whose
- * size a record sets. The zone itself lays no fence, so the paling, the log
- * palisade and the timber posts offered here are picks for the look, and the
- * shore's own pieces are its rowboats, its dock and its banyans.
+ * Every piece offered is one the zone places (`PALMREACH_PROPS` and the jungle
+ * zone's own set, `jungle_features.ts`), drawn through the route that shares
+ * the zone's material: the palms and coconuts ride `worldRaw` on the parse the
+ * jungle build keeps, the rest are world props.
+ *
+ * The zone walls nothing: its edges are its beaches, and the only timber it
+ * builds is Drifthaven's railed decks and its fishing dock. So the barriers are
+ * the two timber rails, the village rail leading because it is the nearest
+ * module to a deck rail, and a circuit here is best bounded by its own shore.
  */
 const PALMREACH: RallyCircuitTheme = {
   ground: 'jungle',
-  // Coral sand against lagoon teal.
-  kerb: { base: 0xf4ecd0, stripe: 0x1f8a72 },
-  startGrid: { light: 0xf6f0d8, dark: 0x123028 },
-  barriers: ['woodPaling', 'paddockRail', 'stoneWall'],
+  // The zone's own coral sand (`BIOME_PALETTE.jungle.sand`, terrain_palette.ts)
+  // under the world's shallow-water tint (`SHALLOW_COLOR`, water.ts), which is
+  // the colour the Sapphire Lagoon is drawn with.
+  kerb: { base: 0xf2e2b4, stripe: 0x2d8077 },
+  // The same sand, over the deep shade under the banyans.
+  startGrid: { light: 0xf2e2b4, dark: 0x123028 },
+  barriers: ['paddockRail', 'woodPaling'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternb_green.glb',
@@ -963,35 +972,50 @@ const PALMREACH: RallyCircuitTheme = {
     // AUTHORED off that card: the jungle has no bloom-tint table of its own.
     colours: [0xf5783c, 0x6496f0, 0xfaf8f0, 0xf082aa, 0xf5c84c],
   },
+  // The zone's lakes are ringed with reeds (`jungle_features.ts` plants them at
+  // every lake's waterline), so a pond here is planted with the shared rim.
   reedUrl: REEDS_URL,
   props: [
     'lampPalmreachTotem',
-    'hexnPalisade',
-    'timberPillar',
-    'rowboat',
-    'dockPlatform',
-    'hexShipGreen',
-    'hexBoat',
-    'hexAnchor',
-    'hexCrateBig',
-    'hexCrateOpen',
-    'hexSack',
-    'barrel',
-    'crateWooden',
-    'bonfire',
-    'banner',
-    'rockLargeF',
-    'mushroomRed',
-    'oak',
-    // the vine-hung banyans of the strand: `jungle_features.ts` raises the same
-    // elder model at the Palmreach's own greatTrees spots
+    // The strand: the three beach palms and the coconuts fallen round them.
+    'beachPalm1',
+    'beachPalm2',
+    'beachPalm3',
+    'fallenCoconuts',
+    // The Vinefall and the Tangle: the banyans are the same elder model the
+    // zone raises at its greatTrees spots, and the broadleaf canopy is one of
+    // the oaks the zone's foliage grows.
     'greatTree',
-    'shrub',
+    'oak',
+    // Drifthaven and its hamlets: the inn, the two house models its pool draws
+    // that a circuit can seat, the village well, the campfires, the camp crates
+    // and barrels, the fishing dock and its rowboats, and the mud huts (a giant
+    // mushroom with a toadstool at its foot).
+    'inn',
+    'house1',
+    'blacksmith',
+    'well',
+    'bonfire',
+    'crateWooden',
+    'barrel',
+    'dockPlatform',
+    'rowboat',
+    'mushroomRed',
+    'mushroomTan',
+    // The Sunken Idol: the drowned ring and the relics at its heart.
+    'column',
+    'columnBroken',
+    'statueHead',
+    'statueBlock',
+    // The still water: the lily rafts the zone floats on its lakes, and the rim.
+    'lilyRaft',
+    'reeds',
   ],
-  water: { shallow: 0x2fa8a0, deep: 0x0d3a4a },
   sky: {
+    // The zone's own dome, under its own haze colour (`Renderer.BIOME_FOG.jungle`);
+    // the depth is the band's, as for every theme.
     biome: 'jungle',
-    fog: { color: 0x8fc4a8, near: 85, far: 430 },
+    fog: { color: 0xc2e0d0, near: 85, far: 430 },
   },
 };
 

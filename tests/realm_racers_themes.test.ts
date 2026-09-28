@@ -15,6 +15,7 @@ import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
 import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
 import { ignivarEnvPropKeyOfUrl } from '../src/render/ignivar_env_props';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from '../src/render/jungle_prop_urls';
 import { PROP_ASSET_DEFS } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
 import {
@@ -32,9 +33,11 @@ import {
 } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { rallyBorderFlowerSpots } from '../src/render/realm_racers_track_core';
+import { BIOME_PALETTE } from '../src/render/terrain_palette';
 import { WATER_FLORA_SKIP_BIOMES } from '../src/render/water_flora_core';
 import { DEEP_COLOR, SHALLOW_COLOR } from '../src/render/water_surface_material';
 import { DRAKELANDS_PROPS, DRAKELANDS_ZONE } from '../src/sim/content/drakelands';
+import { PALMREACH_PROPS, PALMREACH_ZONE } from '../src/sim/content/palmreach';
 import { REALM_RACERS_BARRIERS } from '../src/sim/content/realm_racers_barriers';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
@@ -765,6 +768,120 @@ describe('Realm Racers circuit themes', () => {
       // The zone's lakes are the world's own water, and bare.
       expect(theme.water).toBeUndefined();
       expect(theme.reedUrl).toBeNull();
+    });
+  });
+
+  describe('the Palmreach, as the world builds the zone today', () => {
+    // The record was rewritten against the zone itself, and these hold it
+    // there: every piece it offers is one the zone draws, through a route that
+    // shares the zone's own material, so a borrowed harbour or a stockade the
+    // zone never built cannot creep back in as "Palmreach".
+    const theme = CIRCUIT_THEMES.palmreach;
+    const decorKeys = new Set((PALMREACH_PROPS.decorProps ?? []).map((prop) => prop.key));
+    const propsSource = readFileSync(new URL('../src/render/props.ts', import.meta.url), 'utf8');
+    const builderPlaces = (section: string, key: string): boolean => {
+      const start = propsSource.indexOf(`  // ---- ${section}`);
+      const end = propsSource.indexOf('  // ---- ', start + 1);
+      return start >= 0 && propsSource.slice(start, end).includes(`'${key}'`);
+    };
+    // The village's houses draw from one pool, keyed per building: the two
+    // members a circuit can seat (house2 carries a yaw correction) are offered.
+    const housePool = /const HOUSE_POOL: PropKey\[\] = \[([^\]]*)\]/.exec(propsSource)?.[1] ?? '';
+    const houses = (PALMREACH_PROPS.buildings ?? []).filter((b) => b.kind === 'house');
+    const jungleSource = readFileSync(
+      new URL('../src/render/jungle_features.ts', import.meta.url),
+      'utf8',
+    );
+    const foliageSource = readFileSync(
+      new URL('../src/render/foliage.ts', import.meta.url),
+      'utf8',
+    );
+    /** The catalog pieces the zone places itself, each with WHERE it does. */
+    const PLACED_BY_THE_ZONE: Record<string, () => boolean> = {
+      lampPalmreachTotem: () => STREETLAMP_STYLE_BY_ZONE.palmreach === 'palmreach_totem',
+      inn: () => (PALMREACH_PROPS.buildings ?? []).some((b) => b.kind === 'inn'),
+      house1: () => houses.length > 0 && housePool.includes("'house1'"),
+      blacksmith: () => houses.length > 0 && housePool.includes("'blacksmith'"),
+      well: () => PALMREACH_PROPS.wells.length > 0 && builderPlaces('wells', 'well'),
+      bonfire: () => PALMREACH_PROPS.campfires.length > 0 && builderPlaces('campfires', 'bonfire'),
+      crateWooden: () =>
+        PALMREACH_PROPS.crates.length > 0 && builderPlaces('crates', 'crateWooden'),
+      barrel: () => PALMREACH_PROPS.crates.length > 0 && builderPlaces('crates', 'barrel'),
+      dockPlatform: () =>
+        PALMREACH_PROPS.docks.length > 0 && builderPlaces('fishing docks', 'dockPlatform'),
+      rowboat: () => decorKeys.has('rowboat'),
+      mushroomRed: () =>
+        PALMREACH_PROPS.mudHuts.length > 0 && builderPlaces('murloc mud huts', 'mushroomRed'),
+      mushroomTan: () =>
+        PALMREACH_PROPS.mudHuts.length > 0 && builderPlaces('murloc mud huts', 'mushroomTan'),
+      column: () => PALMREACH_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'column'),
+      columnBroken: () =>
+        PALMREACH_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'columnBroken'),
+      statueHead: () =>
+        PALMREACH_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'statueHead'),
+      statueBlock: () =>
+        PALMREACH_PROPS.ruinRings.length > 0 && builderPlaces('ruin rings', 'statueBlock'),
+      // The banyans: the zone raises the very elder model at its greatTrees spots.
+      greatTree: () =>
+        (PALMREACH_PROPS.greatTrees ?? []).length > 0 &&
+        jungleSource.includes(`GREAT_TREE_URL = '${PROP_ASSET_DEFS.greatTree.url}'`),
+      // The broadleaf canopy: an oak model the foliage grows, tinted for the jungle.
+      oak: () =>
+        /^\/models\/foliage\/oak_[1-5]\.glb$/.test(PROP_ASSET_DEFS.oakTree.url) &&
+        /jungle: 0x[0-9a-f]{6}, \/\/ lush broadleaf canopy/.test(foliageSource),
+      // The lily rafts the zone floats on its lakes are that very model.
+      lilyRaft: () =>
+        PALMREACH_ZONE.lakes.length > 0 &&
+        PROP_ASSET_DEFS.fenLilies.url === JUNGLE_PROP_URLS.lilies,
+      // The rim: the zone's lakes are ringed with reeds.
+      reeds: () => PALMREACH_ZONE.lakes.length > 0 && theme.reedUrl !== null,
+    };
+    const jungleUrls = new Set<string>([...JUNGLE_PALM_URLS, JUNGLE_PROP_URLS.coconuts]);
+
+    it('offers only pieces the zone draws, each through a route that shares its material', () => {
+      let strand = 0;
+      for (const key of theme.props) {
+        const visual = REALM_RACERS_PROP_VISUALS[key];
+        expect(visual, key).toBeDefined();
+        if (visual.kind === 'gltf' && jungleUrls.has(visual.url)) {
+          // The jungle build's own parse, drawn raw as jungle_features draws it.
+          expect(realmRacersDressingRoute(visual.url), key).toBe('worldRaw');
+          strand++;
+          continue;
+        }
+        const placed = PLACED_BY_THE_ZONE[key];
+        expect(placed, `${key} is offered with no evidence the zone places it`).toBeDefined();
+        expect(placed?.(), key).toBe(true);
+      }
+      // The three palms and the coconuts carry the strand; all four are offered.
+      expect(strand).toBe(4);
+      // ...and every piece the evidence table names is offered, so the table
+      // cannot quietly outgrow the vocabulary it vouches for.
+      for (const key of Object.keys(PLACED_BY_THE_ZONE)) {
+        expect(theme.props.includes(key), key).toBe(true);
+      }
+    });
+
+    it('walls with timber rails, because the zone itself lays no wall at all', () => {
+      expect(PALMREACH_PROPS.fences).toEqual([]);
+      expect(theme.barriers).toEqual(['paddockRail', 'woodPaling']);
+    });
+
+    it('takes its kerb and grid from the zone sand and the lagoon water', () => {
+      expect(theme.kerb.base).toBe(BIOME_PALETTE.jungle.sand);
+      expect(theme.kerb.stripe).toBe(SHALLOW_COLOR.getHex());
+      expect(theme.startGrid.light).toBe(BIOME_PALETTE.jungle.sand);
+    });
+
+    it('flies the jungle dome under the zone own haze, over the world own water', () => {
+      expect(theme.ground).toBe('jungle');
+      expect(theme.sky.biome).toBe('jungle');
+      const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+      const fog = /\bjungle: \{ color: (0x[0-9a-f]{6}), near:/.exec(renderer);
+      expect(fog, 'the jungle row of BIOME_FOG').not.toBeNull();
+      expect(theme.sky.fog.color).toBe(Number(fog?.[1]));
+      // The Sapphire Lagoon is the world's own water, so no ramp of its own.
+      expect(theme.water).toBeUndefined();
     });
   });
 });

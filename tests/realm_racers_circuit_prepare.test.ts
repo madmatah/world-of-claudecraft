@@ -624,6 +624,129 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     }
   });
 
+  // The whole Palmreach vocabulary, on every tier: every piece its theme
+  // offers placed and both of its rails run, raced from a draft lane through the
+  // same client. The palms and the coconuts are the jungle build's own files,
+  // fetched and filled like any model, so the gate must wait for them and must
+  // then see them.
+  it.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
+    'prepares a Palmreach circuit exactly on %s: every program it draws was under its gate, the strand included',
+    async (tier) => {
+      loaderControl.deferred = true;
+      vi.resetModules();
+      const { activateTier: activateFresh } = await import('./helpers/gfx_tier');
+      activateFresh(tier);
+      // The fresh modules below read the tier just activated, not the suite's.
+      expect((await import('../src/render/gfx')).GFX.tier).toBe(tier);
+      const fresh = await import('../src/render/realm_racers_track');
+      const { realmRacersFills: freshFills } = await import('../src/render/realm_racers_fills');
+      const { RealmRacersCircuitPrepare: FreshClient } = await import(
+        '../src/render/realm_racers_circuit_prepare'
+      );
+      const route = await import('../src/render/realm_racers_dressing_material');
+      const { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } = await import('../src/render/jungle_prop_urls');
+      const { CIRCUIT_THEMES } = await import('../src/render/realm_racers_themes');
+      const registry = await import('../src/sim/realm_racers_draft_registry');
+      const layout = await import('../src/sim/realm_racers_layout');
+      const theme = CIRCUIT_THEMES.palmreach;
+      const circuit: RealmRacersCircuit = {
+        ...REALM_RACERS_CIRCUIT_LIST[0],
+        id: 'palmreach_prepare_probe',
+        theme: 'palmreach',
+        props: theme.props.map((asset, i) => ({
+          asset,
+          at: { x: -260 + (i % 12) * 20, z: 120 + Math.floor(i / 12) * 10 },
+          scale: 3,
+        })),
+        fences: theme.barriers.map((kit, i) => ({
+          kit,
+          points: [
+            { x: -280, z: -120 + i * 20 },
+            { x: -240, z: -120 + i * 20 },
+          ],
+        })),
+      };
+      registry.putRealmRacersDraftCircuit(circuit);
+      try {
+        const view = fresh.buildRealmRacersTrack(circuit);
+        const fills = freshFills(view.group);
+        expect(fills.total).toBeGreaterThan(1);
+        const sky = fakeSky();
+        const client = new FreshClient(
+          {
+            circuitId: circuit.id,
+            group: view.group,
+            skyBiome: theme.sky.biome,
+            drawnOnce: view.drawnOnce,
+            onViewerLane: view.onViewerLane,
+          },
+          sky.sky,
+        );
+        const { gate, calls } = fakeGate();
+        let verdict: boolean | null = null;
+        void client.run(gate, NEVER).then((ok) => {
+          verdict = ok;
+        });
+        // Land every fetch but the strand's: the circuit is not gated while the
+        // palms and the coconuts are still loading.
+        const strand = new Set<string>([...JUNGLE_PALM_URLS, JUNGLE_PROP_URLS.coconuts]);
+        const land = async (which: (url: string) => boolean): Promise<void> => {
+          for (let round = 0; round < 8; round++) {
+            const ready = loaderControl.pending.filter((fill) => which(fill.url));
+            if (ready.length === 0) break;
+            loaderControl.pending = loaderControl.pending.filter((fill) => !which(fill.url));
+            for (const fill of ready) fill.resolve();
+            await flush();
+          }
+        };
+        await land((url) => !strand.has(url));
+        await flush();
+        expect(loaderControl.pending.some((fill) => strand.has(fill.url))).toBe(true);
+        expect(gate).not.toHaveBeenCalled();
+        await land((url) => strand.has(url));
+        await flush();
+        expect(fills.done).toBe(fills.total);
+        expect(gate).toHaveBeenCalledTimes(1);
+        expect(calls[0].target).toBe(view.group);
+        // Every strand model stood under the group when it was gated.
+        const seen = new Set<string>();
+        for (const { object, material } of drawsUnder(view.group)) {
+          if (!object.userData.realmRacersDressing) continue;
+          const url = object.name.slice('realm-racers-dressing:'.length);
+          if (route.realmRacersDressingRoute(url) !== 'worldRaw') continue;
+          for (const programKey of keysOf(object, material)) {
+            expect(calls[0].keys.has(programKey), url).toBe(true);
+          }
+          seen.add(url);
+        }
+        expect(seen).toEqual(strand);
+        // Through the countdown and the start on its own lane: every program the
+        // view draws, dressing and procedural pieces alike, was under the gate.
+        const origin = layout.realmRacersLaneOrigin(layout.realmRacersPublicLane(circuit));
+        const drawn = new Set<string>();
+        const drawOn = (time: number, match: RealmRacersLaneView) => {
+          view.update(origin.x, origin.z, time, match);
+          for (const { object, material } of drawsUnder(view.group)) {
+            if (!object.visible) continue;
+            for (const key of keysOf(object, material)) drawn.add(key);
+          }
+        };
+        drawOn(0, laneMatch(circuit, { phase: 'countdown', countdownTicks: 20 }));
+        calls[0].resolve();
+        sky.finish(true);
+        await flush();
+        drawOn(1, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.1 }));
+        await flush();
+        expect(verdict).toBe(true);
+        expect(sky.asked).toEqual(['jungle']);
+        expect(drawn.size).toBeGreaterThan(0);
+        expect([...drawn].filter((key) => !calls[0].keys.has(key))).toEqual([]);
+      } finally {
+        registry.clearRealmRacersDraftCircuits();
+      }
+    },
+  );
+
   it('prepares the shipped Rampart Run exactly on its public lane, kit templates included', async () => {
     loaderControl.deferred = true;
     vi.resetModules();

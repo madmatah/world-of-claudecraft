@@ -58,6 +58,7 @@ import {
   ignivarEnvPropTemplate,
   prepareIgnivarEnvProps,
 } from '../src/render/ignivar_env_props';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from '../src/render/jungle_prop_urls';
 import { materialProgramSignature } from '../src/render/prewarm_policy';
 import {
   PROP_ASSET_DEFS,
@@ -201,6 +202,42 @@ function drakelandsCircuit(): RealmRacersCircuit {
       ],
     })),
   };
+}
+
+/**
+ * A Palmreach circuit: the garden's curve wearing the palmreach theme, with
+ * EVERY piece its vocabulary offers placed once and both of its rails run.
+ */
+function palmreachCircuit(): RealmRacersCircuit {
+  const theme = CIRCUIT_THEMES.palmreach;
+  return {
+    ...REALM_RACERS_PRACTICE_CIRCUIT,
+    id: 'palmreach_dressing_probe',
+    theme: 'palmreach',
+    props: theme.props.map((asset, i) => ({
+      asset,
+      at: { x: -260 + (i % 12) * 20, z: 120 + Math.floor(i / 12) * 10 },
+      scale: 3,
+    })),
+    fences: theme.barriers.map((kit, i) => ({
+      kit,
+      points: [
+        { x: -280, z: -120 + i * 20 },
+        { x: -240, z: -120 + i * 20 },
+      ],
+    })),
+  };
+}
+
+/** Every model draw under a view, by the url it instances. */
+function dressingDrawsByUrl(root: THREE.Object3D): Map<string, Draw[]> {
+  const byUrl = new Map<string, Draw[]>();
+  for (const draw of drawsUnder(root)) {
+    if (!draw.object.userData.realmRacersDressing) continue;
+    const url = draw.object.name.slice(PREFIX.length);
+    byUrl.set(url, [...(byUrl.get(url) ?? []), draw]);
+  }
+  return byUrl;
 }
 
 /** Every model draw of the shipped circuits, by the url it instances. */
@@ -485,6 +522,55 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
     // ponds for it to be a claim about.
     expect(REALM_RACERS_PRACTICE_CIRCUIT.ponds?.length ?? 0).toBeGreaterThan(0);
     expect(byUrl.has('/models/props/reeds.glb')).toBe(false);
+  });
+
+  it('draws a Palmreach circuit with the jungle own parse, the world props and two race-only models', async () => {
+    const view = buildRealmRacersTrack(palmreachCircuit());
+    await realmRacersFills(view.group).landed();
+    const byUrl = dressingDrawsByUrl(view.group);
+    const routes = new Map<string, string[]>();
+    for (const url of byUrl.keys()) {
+      const route = realmRacersDressingRoute(url);
+      routes.set(route, [...(routes.get(route) ?? []), url]);
+    }
+    // The palms and the coconuts wear their own raw materials, as
+    // jungle_features draws them, and nothing else rides that route here.
+    const strand = [...JUNGLE_PALM_URLS, JUNGLE_PROP_URLS.coconuts].sort();
+    expect([...(routes.get('worldRaw') ?? [])].sort()).toEqual(strand);
+    for (const url of strand) {
+      expect(keysOf(byUrl.get(url) ?? []), url).toEqual(keysOf(rawDraws(url)));
+    }
+    // The world bakes a palm down to its position, normal and uv before it
+    // instances it (`bakePalmParts`), which is the whole attribute set the file
+    // carries, so the raw draw's program is the baked one's.
+    for (const url of JUNGLE_PALM_URLS) {
+      mirrorGltfScene(url, 'public').traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        expect(Object.keys(mesh.geometry.attributes).sort(), url).toEqual([
+          'normal',
+          'position',
+          'uv',
+        ]);
+      });
+    }
+    // The rest are world props on the world's own converted material...
+    expect((routes.get('worldProp') ?? []).length).toBeGreaterThan(15);
+    for (const url of routes.get('worldProp') ?? []) {
+      const worldMaterials = new Set(worldPropDraws(url).map(({ material }) => material));
+      for (const { material } of byUrl.get(url) ?? []) {
+        expect(worldMaterials.has(material), `${url} ${material.name}`).toBe(true);
+      }
+    }
+    // ...and what the circuit alone draws is its start banner and the paling
+    // panel, which no zone of the world builds with.
+    expect([...(routes.get('raceOnly') ?? [])].sort()).toEqual(
+      [
+        CIRCUIT_THEMES.palmreach.startFixture.bannerUrl,
+        REALM_RACERS_BARRIER_VISUALS.woodPaling.panelUrl,
+      ].sort(),
+    );
+    expect(routes.has('worldKit')).toBe(false);
   });
 
   it('survives the editor preview rebuild: the dispose core frees no shared material or geometry', async () => {
