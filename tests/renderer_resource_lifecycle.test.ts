@@ -171,22 +171,10 @@ describe('renderer resource lifecycle', () => {
   });
 
   it('releases the Realm Racers circuits and shell pool, each other failing', () => {
-    const minted = { dispose: vi.fn() };
-    const shared = { dispose: vi.fn() };
-    const lawn = { type: 'Mesh', isMesh: true, geometry: minted };
-    const boxes = {
-      type: 'InstancedMesh',
-      isMesh: true,
-      isInstancedMesh: true,
-      geometry: shared,
-      dispose: vi.fn(),
-    };
-    const group = {
-      traverse: (visit: (object: typeof lawn | typeof boxes) => void) => {
-        visit(lawn);
-        visit(boxes);
-      },
-      clear: vi.fn(() => {
+    // The pool's own dispose (what its builds minted, the palette, a build in
+    // flight) is pinned in tests/realm_racers_track_build.test.ts.
+    const track = {
+      dispose: vi.fn(() => {
         throw new Error('track teardown failed');
       }),
     };
@@ -197,7 +185,7 @@ describe('renderer resource lifecycle', () => {
     disposeRendererPrewarmAndGroundFx(
       {
         prewarmDepthMaterials: new Map(),
-        realmRacers: { track: { group }, groundBlasts, fieldCues },
+        realmRacers: { track, groundBlasts, fieldCues },
       },
       (cleanup) => {
         try {
@@ -208,11 +196,8 @@ describe('renderer resource lifecycle', () => {
       },
     );
 
-    // A circuit gives back what its build minted and never the shared cache
-    // under an instanced prop; the shell pool still goes when the track throws.
-    expect(minted.dispose).toHaveBeenCalledOnce();
-    expect(shared.dispose).not.toHaveBeenCalled();
-    expect(boxes.dispose).toHaveBeenCalledOnce();
+    // The shell pool and the spray pool still go when the circuits throw.
+    expect(track.dispose).toHaveBeenCalledOnce();
     expect(groundBlasts.dispose).toHaveBeenCalledOnce();
     expect(fieldCues.dispose).toHaveBeenCalledOnce();
     expect(errors).toHaveLength(1);

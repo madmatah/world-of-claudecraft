@@ -21,9 +21,11 @@
 //    first frame (see the core), so the only scale that ever moves is the
 //    soak-away of a patch the race has already removed.
 //  - The pool is FIXED (`RALLY_SLICK_POOL`) and minted once per build, geometry
-//    and material shared across it. That is what keeps the track group's dispose
-//    contract intact (one material per build, never one per piece), and it is why
-//    a patch spreads and soaks by SCALE rather than by opacity.
+//    shared across it; the two materials are shared by every circuit, like the
+//    pickup sparkle, and never disposed. That keeps the track group's dispose
+//    contract intact (no material per piece), lets the race preparation's
+//    representative draw the very material a circuit draws, and is why a patch
+//    spreads and soaks by SCALE rather than by opacity.
 //  - FAIRNESS: no tier, no governor, no distance cull. A slick is a thing a pilot
 //    steers around, so every preset draws every patch. The only cap is the pool,
 //    which sits far above what a race can produce.
@@ -85,6 +87,34 @@ interface SlickSlot {
   drawnScale: number;
 }
 
+let sharedSlickMaterials: {
+  oilMaterial: THREE.MeshBasicMaterial;
+  sheenMaterial: THREE.MeshBasicMaterial;
+} | null = null;
+
+function slickMaterials(): NonNullable<typeof sharedSlickMaterials> {
+  if (sharedSlickMaterials) return sharedSlickMaterials;
+  const oilMaterial = new THREE.MeshBasicMaterial({
+    color: REALM_RACERS_SLICK_COLOR,
+    transparent: true,
+    opacity: RALLY_SLICK_OPACITY,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const sheenMaterial = new THREE.MeshBasicMaterial({
+    color: REALM_RACERS_SLICK_SHEEN_COLOR,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+  oilMaterial.name = 'realmRacersSlicks:oil';
+  sheenMaterial.name = 'realmRacersSlicks:sheen';
+  sharedSlickMaterials = { oilMaterial, sheenMaterial };
+  return sharedSlickMaterials;
+}
+
 /** The slicks of one circuit: a fixed pool of patches, parked until a race puts
  *  one somewhere. */
 export function buildRealmRacersSlicks(): RealmRacersSlicksView {
@@ -106,23 +136,7 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
     Math.PI * 1.15,
   );
   sheenGeometry.rotateX(-Math.PI / 2);
-  const oilMaterial = new THREE.MeshBasicMaterial({
-    color: REALM_RACERS_SLICK_COLOR,
-    transparent: true,
-    opacity: RALLY_SLICK_OPACITY,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const sheenMaterial = new THREE.MeshBasicMaterial({
-    color: REALM_RACERS_SLICK_SHEEN_COLOR,
-    transparent: true,
-    opacity: 0.45,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-  });
-  oilMaterial.name = 'realmRacersSlicks:oil';
-  sheenMaterial.name = 'realmRacersSlicks:sheen';
+  const { oilMaterial, sheenMaterial } = slickMaterials();
 
   const slots: SlickSlot[] = [];
   for (let i = 0; i < RALLY_SLICK_POOL; i++) {

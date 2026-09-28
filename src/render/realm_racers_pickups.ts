@@ -166,6 +166,53 @@ function buildCrateTemplate(size: number): THREE.Group | null {
   return template;
 }
 
+/** One box's body (the crate, or the fallback cube, and its glint), from one
+ *  template per call: the geometry is minted ONCE per factory and shared by the
+ *  bodies it makes, the multiplicity rule `realm_racers_track_dispose_core.ts`
+ *  rests on. */
+function pickupBodyFactory(size: number): () => THREE.Group {
+  const crate = buildCrateTemplate(size);
+  const fallbackGeometry = crate ? null : new THREE.BoxGeometry(size, size, size);
+  const fallbackMaterial = crate
+    ? null
+    : surfaceMat({
+        color: REALM_RACERS_PICKUP_COLOR,
+        emissive: 0x6a4a08,
+        emissiveIntensity: 0.7,
+        roughness: 0.4,
+        metalness: 0.1,
+        flatShading: true,
+      });
+  if (fallbackMaterial) fallbackMaterial.name = 'realmRacersPickups:fallback';
+  const sparkleMaterial = pickupSparkleMaterial();
+  return () => {
+    const body = new THREE.Group();
+    if (crate) {
+      body.add(crate.clone(true));
+    } else {
+      const mesh = new THREE.Mesh(
+        fallbackGeometry as THREE.BoxGeometry,
+        fallbackMaterial as THREE.Material,
+      );
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      body.add(mesh);
+    }
+    const sparkle = new THREE.Sprite(sparkleMaterial);
+    sparkle.scale.set(SPARKLE_SCALE, SPARKLE_SCALE, 1);
+    sparkle.position.y = size * 0.5 + SPARKLE_LIFT;
+    body.add(sparkle);
+    return body;
+  };
+}
+
+/** One box, standing nowhere: what the race preparation's representative
+ *  links for every circuit's boxes, the very materials they draw
+ *  (realm_racers_common_pieces.ts). */
+export function buildRealmRacersPickupSample(): THREE.Group {
+  return pickupBodyFactory(REALM_RACERS_PICKUP_BOX_HALF * 2)();
+}
+
 /**
  * The boxes of one circuit.
  *
@@ -188,39 +235,9 @@ export function buildRealmRacersPickups(circuit: RealmRacersCircuit): RealmRacer
   const visuals: RallyPickupVisual[] = [];
   const drawnScale: number[] = [];
   if (boxes.length > 0) {
-    const crate = buildCrateTemplate(size);
-    // Both minted ONCE per build and shared across this build's boxes, which is
-    // the multiplicity rule `realm_racers_track_dispose_core.ts` rests on.
-    const fallbackGeometry = crate ? null : new THREE.BoxGeometry(size, size, size);
-    const fallbackMaterial = crate
-      ? null
-      : surfaceMat({
-          color: REALM_RACERS_PICKUP_COLOR,
-          emissive: 0x6a4a08,
-          emissiveIntensity: 0.7,
-          roughness: 0.4,
-          metalness: 0.1,
-          flatShading: true,
-        });
-    if (fallbackMaterial) fallbackMaterial.name = 'realmRacersPickups:fallback';
-    const sparkleMaterial = pickupSparkleMaterial();
+    const bodyOf = pickupBodyFactory(size);
     for (const box of boxes) {
-      const body = new THREE.Group();
-      if (crate) {
-        body.add(crate.clone(true));
-      } else {
-        const mesh = new THREE.Mesh(
-          fallbackGeometry as THREE.BoxGeometry,
-          fallbackMaterial as THREE.Material,
-        );
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        body.add(mesh);
-      }
-      const sparkle = new THREE.Sprite(sparkleMaterial);
-      sparkle.scale.set(SPARKLE_SCALE, SPARKLE_SCALE, 1);
-      sparkle.position.y = size * 0.5 + SPARKLE_LIFT;
-      body.add(sparkle);
+      const body = bodyOf();
       body.position.set(box.x, REST_HEIGHT, box.z);
       group.add(body);
       bodies.push(body);

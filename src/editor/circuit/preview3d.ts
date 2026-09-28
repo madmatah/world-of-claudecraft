@@ -38,6 +38,10 @@ import { realmRacersAuthoredPhase } from '../../render/realm_racers_daylight_cor
 import { rallySkyDayNightBiome, realmRacersTheme } from '../../render/realm_racers_themes';
 import { buildRealmRacersTrack } from '../../render/realm_racers_track';
 import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
+import {
+  createRealmRacersTrackPalette,
+  type RealmRacersTrackPalette,
+} from '../../render/realm_racers_track_palette';
 import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
 import { VEHICLE_PROFILES } from '../../sim/content/vehicles';
 import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
@@ -100,6 +104,7 @@ export class CircuitPreview {
    *  world origin (see the header). */
   private readonly stage = new THREE.Group();
   private trackGroup: THREE.Group | null = null;
+  private trackPalette: RealmRacersTrackPalette | null = null;
 
   private readonly orbit = createPreviewOrbit();
   /** Where the fly-through is looking, relative to straight down the road. */
@@ -274,12 +279,12 @@ export class CircuitPreview {
   private rebuildNow(): void {
     const circuit = this.pending;
     if (!circuit || this.disposed) return;
-    if (this.trackGroup) {
-      this.stage.remove(this.trackGroup);
-      disposeRealmRacersTrackGroup(this.trackGroup);
-      this.trackGroup = null;
-    }
-    const view = buildRealmRacersTrack(circuit);
+    this.releaseTrack();
+    // A palette per rebuild, given back with the group: the rebuild reads the
+    // tier arm (the splat set may have landed since) the way the game's first
+    // build does, and one edit never leaks the last one's ground material.
+    this.trackPalette = createRealmRacersTrackPalette();
+    const view = buildRealmRacersTrack(circuit, undefined, this.trackPalette);
     // The builder hides its group for the lane gate it will never be asked
     // about here (see the header); a preview has one circuit and shows it.
     view.group.visible = true;
@@ -466,16 +471,22 @@ export class CircuitPreview {
     renderer.render(this.scene, this.camera);
   };
 
-  dispose(): void {
-    this.disposed = true;
-    this.visible = false;
-    cancelAnimationFrame(this.raf);
-    window.clearTimeout(this.rebuildTimer);
+  private releaseTrack(): void {
     if (this.trackGroup) {
       this.stage.remove(this.trackGroup);
       disposeRealmRacersTrackGroup(this.trackGroup);
       this.trackGroup = null;
     }
+    this.trackPalette?.dispose();
+    this.trackPalette = null;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.visible = false;
+    cancelAnimationFrame(this.raf);
+    window.clearTimeout(this.rebuildTimer);
+    this.releaseTrack();
     this.renderer?.dispose();
     this.renderer = null;
   }

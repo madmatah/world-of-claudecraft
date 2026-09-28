@@ -2,33 +2,46 @@
 // is the seam, realm_racers_track.ts the views).
 //
 // `rallyCommon` links, at the commitment trigger and before any circuit is
-// drawn, one representative draw per procedural program the authored circuits
-// carry (ground, road, kerb, grid, start lights, flowers, blade grass, water,
-// pickups, slicks, lamps): a program depends on the material and the mesh
-// shape, not on the circuit, so every circuit's own copy is a cache hit once
-// its representative linked. A representative is a proxy node sharing the real
-// node's material and geometry, of the same program variant (instancing and
-// its colour buffer, the geometry attributes), grouped by the material's
-// program signature plus that variant. Theme dressing models are not in it:
-// their materials depend on the model (the world's converted prop material,
-// or the file's own; realm_racers_dressing_material.ts).
+// known or built, one representative draw per procedural program the authored
+// circuits carry (ground, road, kerb, grid, start lights, flowers, blade grass,
+// water, pickups, slicks, lamps, the procedural props): a program depends on
+// the material and the mesh shape, not on the circuit, so every circuit's own
+// copy is a cache hit once its representative linked. The representatives are
+// made from the circuit RECORDS and the pool's palette
+// (realm_racers_common_pieces.ts), in pieces on the GPU work queue, then gated,
+// grouped by the material's program signature plus its variant (instancing
+// and its colour buffer, the geometry attributes). Theme dressing models are
+// not in it: their materials depend on the model (the world's converted prop
+// material, or the file's own; realm_racers_dressing_material.ts).
 //
-// `rallyCircuit:<id>` prepares the drawn circuit once it is known: it waits
-// for the circuit's fetch-and-fill models to land (realm_racers_fills.ts),
-// then gates the circuit's view, textures included, and re-gates if a fill was
-// started meanwhile, while its theme sky prepares beside it on the GPU queue
-// (realm_racers_sky.ts). Its linked view is then released to the reveal hold
-// and the verdict waits for its first visible frame on the viewer's lane, the
-// frame that uploads its vertex and instance buffers, so that too lands under
-// the curtain. A cover that ends first (the curtain falls, the arrival cover
-// lifts) settles it on what exists: a fetch that never lands never holds a
-// verdict. Its steps (each fill, the gate, the first draw, the sky) are the
-// lobby bar's units, and its verdict joins the seam's settle, so the lobby's
-// ready waits for it.
+// `rallyCircuit:<id>` prepares the drawn circuit once it is known. Its FIRST
+// step is to build it: nothing of a circuit exists before this client runs.
+// The build's pieces (realm_racers_track.ts `realmRacersTrackBuild`) ride the
+// renderer's GPU work queue one unit each, labelled by what they do so the
+// budget prices a memo and a band apart, with a task turn between two pieces:
+// under the lobby's cover the admission takes every unit at once and the queue
+// drains synchronous units back to back, so without the turn the whole build
+// would still be one long task and the lobby would freeze. The seam says when
+// the build must instead run to the end at once (`buildNow`: the viewer's own
+// race past its lobby, a viewer standing on the lane). Each piece is recorded
+// in the renderer's build ledger. Then it waits for the circuit's
+// fetch-and-fill models to land (realm_racers_fills.ts), gates the circuit's
+// view, textures included, and re-gates if a fill was started meanwhile, while
+// its theme sky prepares beside it on the GPU queue (realm_racers_sky.ts). Its
+// linked view is then released to the reveal hold and the verdict waits for its
+// upload frame on the viewer's lane (drawn unculled, so every buffer of the
+// circuit uploads), so that too lands under the curtain. A cover that ends
+// first (the curtain falls, the arrival cover lifts) settles it on what exists:
+// a fetch that never lands never holds a verdict. Its steps (each build piece,
+// each fill, the gate, the upload frame, the sky) are the lobby bar's units,
+// and its verdict joins the seam's settle, so the lobby's ready waits for it.
 
 import * as THREE from 'three';
+import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
+import { GPU_WORK_PRIORITY, isGpuQueueShutdown } from './background_gpu_queue';
 import { programVariantOf } from './compile_gate_pieces';
 import { materialProgramSignature } from './prewarm_policy';
+import { type RallyCommonBuild, realmRacersCommonBuild } from './realm_racers_common_pieces';
 import { type RealmRacersFills, realmRacersFills } from './realm_racers_fills';
 import type {
   RealmRacersCircuitClients,
@@ -37,12 +50,18 @@ import type {
   RealmRacersPrepareUnits,
 } from './realm_racers_prepare';
 import {
+  addRealmRacersBuildUnits,
   REALM_RACERS_COMMON_PREPARE_ID,
   realmRacersCircuitPrepareId,
   realmRacersCircuitUnits,
 } from './realm_racers_prepare_core';
 import type { RealmRacersSky } from './realm_racers_sky';
-import type { RealmRacersCircuitView, RealmRacersTracksView } from './realm_racers_track';
+import type {
+  RealmRacersCircuitView,
+  RealmRacersLazyCircuitView,
+  RealmRacersTrackBuild,
+  RealmRacersTracksView,
+} from './realm_racers_track';
 
 type Drawable = THREE.Object3D & {
   isMesh?: boolean;
@@ -85,18 +104,107 @@ export function buildRealmRacersCommonRoot(groups: readonly THREE.Object3D[]): T
   return root;
 }
 
+/** What a build piece runs on: the renderer's GPU work queue, one task turn
+ *  between two pieces, its build ledger and clock. */
+export interface RealmRacersBuildHost {
+  run(work: () => unknown, priority: number, label: string): Promise<unknown>;
+  yieldTask(): Promise<void>;
+  record(kind: string, ms: number, atMs: number): void;
+  now(): number;
+}
+
+/** A build host with no queue: every piece at once (a suite, a headless host). */
+export const IMMEDIATE_BUILD_HOST: RealmRacersBuildHost = {
+  run: async (work) => work(),
+  yieldTask: () => Promise.resolve(),
+  record: () => undefined,
+  now: () => 0,
+};
+
+/**
+ * One task turn, on a message port rather than a timer: a timer chain is
+ * clamped to 4 ms a turn after five nested turns and to a second a turn in a
+ * background tab, and a build is a few dozen turns. Each piece is its own
+ * task, so the browser paints (the lobby bar, chat) between two of them.
+ */
+export function messageTaskTurn(): Promise<void> {
+  if (typeof MessageChannel === 'undefined') {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
+/** Run `step` and file its main-thread time under `kind` in the build ledger
+ *  (`zone:` lane: a piece is a scene construction, the hitch tracker's
+ *  zone-build cause). Returns the time. */
+function timedPiece(host: RealmRacersBuildHost, kind: string, step: () => void): number {
+  const startedAt = host.now();
+  step();
+  const ms = host.now() - startedAt;
+  host.record(`zone:${kind}`, ms, startedAt);
+  return ms;
+}
+
 export class RealmRacersCommonPrepare implements RealmRacersPrepareClient {
   readonly prepareId = REALM_RACERS_COMMON_PREPARE_ID;
   readonly built = false;
   readonly gateOnly = true;
-  private root: THREE.Group | null = null;
+  private readonly root = new THREE.Group();
+  private readonly steps: RealmRacersPrepareUnits = { done: 0, total: 1 };
 
-  constructor(private readonly groups: readonly THREE.Object3D[]) {}
+  constructor(
+    private readonly source: () => RallyCommonBuild,
+    private readonly host: RealmRacersBuildHost = IMMEDIATE_BUILD_HOST,
+  ) {
+    this.root.name = 'realmRacersCommon';
+  }
 
+  /** Empty until `run` has made the representatives. */
   prepare(): THREE.Object3D {
-    this.root ??= buildRealmRacersCommonRoot(this.groups);
     return this.root;
   }
+
+  units(): RealmRacersPrepareUnits {
+    return this.steps;
+  }
+
+  async run(gate: (target: THREE.Object3D) => Promise<unknown>): Promise<boolean> {
+    const build = this.source();
+    this.steps.total = build.pieces.length + 1;
+    try {
+      for (const piece of build.pieces) {
+        // At the queue join this runs in town, live: the ordinary budget paces it.
+        await this.host.run(
+          () => timedPiece(this.host, `rally-common-${piece.kind}`, () => piece.run()),
+          GPU_WORK_PRIORITY.VISIBLE_PREWARM,
+          `rally-common-${piece.kind}`,
+        );
+        this.steps.done++;
+        await this.host.yieldTask();
+      }
+    } catch (error) {
+      // Dev-channel English, per the render i18n carve-out.
+      if (!isGpuQueueShutdown(error)) console.warn('Realm Racers: common pieces failed', error);
+      return false;
+    }
+    for (const proxy of [...buildRealmRacersCommonRoot([build.sampler]).children]) {
+      this.root.add(proxy);
+    }
+    await gate(this.root).catch(() => undefined);
+    this.steps.done++;
+    return true;
+  }
+}
+
+function lazyOf(view: RealmRacersCircuitView): RealmRacersLazyCircuitView | null {
+  return 'build' in view ? (view as RealmRacersLazyCircuitView) : null;
 }
 
 export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
@@ -104,24 +212,39 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   readonly built = false;
   private readonly fills: RealmRacersFills;
   private readonly steps: RealmRacersPrepareUnits = { done: 0, total: 0 };
+  private job: RealmRacersTrackBuild | null = null;
   private gated = false;
   private drawn = false;
   private skyReady = false;
+  /** The build's main-thread and wall milliseconds once it ran, null before
+   *  (and for a view built elsewhere): the local readout that keeps building
+   *  apart from linking, which the verdict's age mixes. */
+  buildMs: number | null = null;
+  buildWallMs: number | null = null;
 
+  /**
+   * `view` is the pool's lazy view, which this client builds first, or a view
+   * built elsewhere (the editor preview's, a suite's). `buildNow` is the
+   * seam's rule for running the build to the end at once.
+   */
   constructor(
     private readonly view: RealmRacersCircuitView,
     private readonly sky: Pick<RealmRacersSky, 'ensure'>,
+    private readonly host: RealmRacersBuildHost = IMMEDIATE_BUILD_HOST,
+    private readonly buildNow: () => boolean = () => true,
   ) {
     this.prepareId = realmRacersCircuitPrepareId(view.circuitId);
     this.fills = realmRacersFills(view.group);
   }
 
+  /** The view's group, empty until `run` has built it: the root the settle
+   *  proof reads once the steps are done. */
   prepare(): THREE.Object3D {
     return this.view.group;
   }
 
   units(): RealmRacersPrepareUnits {
-    return realmRacersCircuitUnits(
+    realmRacersCircuitUnits(
       this.steps,
       this.fills.done,
       this.fills.total,
@@ -129,6 +252,10 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       this.drawn,
       this.skyReady,
     );
+    if (lazyOf(this.view)) {
+      addRealmRacersBuildUnits(this.steps, this.job?.done ?? 0, this.job?.total ?? 1);
+    }
+    return this.steps;
   }
 
   revealReady(): boolean {
@@ -148,6 +275,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       this.skyReady = true;
       return ok;
     });
+    if (!(await this.build())) return false;
     // `want` is read before the wait, so a fill started during it is gated by
     // the next round. Once the cover is gone, what exists is gated and a fill
     // landing later rides its own gated attach (realm_racers_track.ts).
@@ -158,13 +286,50 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       if (!covered || (this.fills.total === want && this.fills.done === want)) break;
     }
     this.gated = true;
-    // The linked view's first visible frame uploads its vertex and instance
-    // buffers: held until it happened, so that lands under the curtain too.
+    // The linked view's upload frame (drawn unculled, see `uploadFrame`)
+    // uploads every vertex and instance buffer it shows: held until it
+    // happened, so that lands under the curtain too. A view built elsewhere
+    // proves its first visible frame, which uploads what the camera saw.
     if (covered && this.view.onViewerLane()) {
-      await Promise.race([this.view.drawnOnce(), lifted]);
+      const lazy = lazyOf(this.view);
+      await Promise.race([lazy ? lazy.uploadFrame() : this.view.drawnOnce(), lifted]);
     }
     this.drawn = true;
     return Promise.race([sky, lifted]);
+  }
+
+  /** The view's build, a piece per queue unit and task, or to the end at once
+   *  when the seam says so; false when it did not finish (the queue shut down
+   *  under a renderer teardown, a piece threw). */
+  private async build(): Promise<boolean> {
+    const lazy = lazyOf(this.view);
+    if (!lazy) return true;
+    const job = lazy.build();
+    this.job = job;
+    const id = this.view.circuitId;
+    const startedAt = this.host.now();
+    let cpu = 0;
+    const step = (): void => {
+      cpu += timedPiece(this.host, `rally-${job.nextKind ?? 'finish'}`, () => job.step());
+    };
+    try {
+      while (!job.finished) {
+        if (this.buildNow()) {
+          while (!job.finished) step();
+          break;
+        }
+        await this.host.run(step, GPU_WORK_PRIORITY.LIVE_VIEW, `rally-build-${job.nextKind}:${id}`);
+        if (!job.finished) await this.host.yieldTask();
+      }
+    } catch (error) {
+      // Dev-channel English, per the render i18n carve-out.
+      if (!isGpuQueueShutdown(error)) console.warn('Realm Racers: circuit build failed', id, error);
+      return false;
+    }
+    if (!lazy.built) return false;
+    this.buildMs = cpu;
+    this.buildWallMs = this.host.now() - startedAt;
+    return true;
   }
 }
 
@@ -172,17 +337,17 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
 export function realmRacersCircuitClients(
   views: readonly RealmRacersCircuitView[],
   sky: Pick<RealmRacersSky, 'ensure'>,
+  host: RealmRacersBuildHost = IMMEDIATE_BUILD_HOST,
+  buildNow: (circuitId: string) => boolean = () => true,
 ): RealmRacersCircuitClients {
   const clients = new Map<string, RealmRacersCircuitPrepare>();
-  const ids = views.map((view) => view.circuitId);
   return {
-    circuitIds: () => ids,
     circuitClient(circuitId) {
       const known = clients.get(circuitId);
       if (known) return known;
       const view = views.find((candidate) => candidate.circuitId === circuitId);
       if (!view) return null;
-      const client = new RealmRacersCircuitPrepare(view, sky);
+      const client = new RealmRacersCircuitPrepare(view, sky, host, () => buildNow(circuitId));
       clients.set(circuitId, client);
       return client;
     },
@@ -192,12 +357,23 @@ export function realmRacersCircuitClients(
 /** The renderer's one call: the common client, the circuit clients, the
  *  reveal hold the tracks consult, and the gate a late model fill rides. */
 export function prepareRealmRacersCircuits(
-  seam: Pick<RealmRacersPrepare, 'addClient' | 'useCircuits' | 'revealHeld' | 'worldGate'>,
-  tracks: Pick<RealmRacersTracksView, 'circuits' | 'holdReveal' | 'gateFills'>,
+  seam: Pick<
+    RealmRacersPrepare,
+    'addClient' | 'useCircuits' | 'revealHeld' | 'worldGate' | 'buildNow'
+  >,
+  tracks: Pick<RealmRacersTracksView, 'circuits' | 'palette' | 'holdReveal' | 'gateFills'>,
   sky: Pick<RealmRacersSky, 'ensure'>,
+  host: RealmRacersBuildHost = IMMEDIATE_BUILD_HOST,
 ): void {
-  seam.addClient(new RealmRacersCommonPrepare(tracks.circuits.map((view) => view.group)));
-  seam.useCircuits(realmRacersCircuitClients(tracks.circuits, sky));
+  seam.addClient(
+    new RealmRacersCommonPrepare(
+      () => realmRacersCommonBuild(REALM_RACERS_CIRCUIT_LIST, tracks.palette),
+      host,
+    ),
+  );
+  seam.useCircuits(
+    realmRacersCircuitClients(tracks.circuits, sky, host, (id) => seam.buildNow(id)),
+  );
   tracks.holdReveal((circuitId) => seam.revealHeld(circuitId));
   tracks.gateFills(() => seam.worldGate());
 }

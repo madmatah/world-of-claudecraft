@@ -1,9 +1,10 @@
 // What the race preparation compiles of the circuits
-// (src/render/realm_racers_circuit_prepare.ts): the common client's proxies
-// cover every procedural program any shipped circuit draws, the per-circuit
-// client gates its view only once the theme dressing has filled in, and the
-// seam asks for the drawn circuit from the lobby on (and on a reconnect or a
-// login at the fence), holding its reveal only under a cover. The oracle is
+// (src/render/realm_racers_circuit_prepare.ts): the common client's
+// representatives, made from the circuit records with no circuit built, cover
+// every procedural program any shipped circuit draws, the per-circuit client
+// builds its circuit first and gates its view only once the theme dressing has
+// filled in, and the seam asks for the drawn circuit from the lobby on (and on
+// a reconnect or a login at the fence), holding its reveal only under a cover. The oracle is
 // three's own program cache key (tests/helpers/three_program_keys.ts); the
 // dressing models are mirrored from each shipped GLB's own material slots
 // (tests/helpers/gltf_material_mirror.ts).
@@ -94,6 +95,7 @@ import {
   RealmRacersCircuitPrepare,
   realmRacersCircuitClients,
 } from '../src/render/realm_racers_circuit_prepare';
+import { realmRacersCommonBuild } from '../src/render/realm_racers_common_pieces';
 import { realmRacersFills, recordRealmRacersFill } from '../src/render/realm_racers_fills';
 import {
   RealmRacersPrepare,
@@ -118,7 +120,9 @@ import {
 } from '../src/sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_LANES,
+  REALM_RACERS_LANE_DZ as REALM_RACERS_LANES_DZ_FOR_TEST,
   REALM_RACERS_ORIGIN,
+  realmRacersLaneAt,
   realmRacersLaneOrigin,
 } from '../src/sim/realm_racers_layout';
 import type { RealmRacersLaneView } from '../src/world_api/realm_racers';
@@ -228,10 +232,19 @@ function drawnThroughStart(
   return drawn;
 }
 
+/** The pool with every circuit built, as races would build them, fills landed. */
 async function builtTracks(): Promise<RealmRacersTracksView> {
   const tracks = track.buildRealmRacersTracks();
+  for (const view of tracks.circuits) view.build().finish();
   await Promise.all(tracks.circuits.map((view) => realmRacersFills(view.group).landed()));
   return tracks;
+}
+
+/** The common client's root over `tracks`' palette, from the records alone. */
+function commonRootOf(tracks: RealmRacersTracksView): THREE.Group {
+  const build = realmRacersCommonBuild(REALM_RACERS_CIRCUIT_LIST, tracks.palette);
+  for (const piece of build.pieces) piece.run();
+  return buildRealmRacersCommonRoot([build.sampler]);
 }
 
 describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
@@ -246,7 +259,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       expect(tracks.circuits.map((view) => view.circuitId)).toEqual(
         REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.id),
       );
-      const common = buildRealmRacersCommonRoot(tracks.circuits.map((view) => view.group));
+      const common = commonRootOf(tracks);
       const prepared = programKeys(common);
       const union = new Set<string>();
       for (const [i, view] of tracks.circuits.entries()) {
@@ -294,7 +307,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       for (const view of tracks.circuits) {
         for (const { material } of drawsUnder(view.group)) real.add(material);
       }
-      const common = buildRealmRacersCommonRoot(tracks.circuits.map((view) => view.group));
+      const common = commonRootOf(tracks);
       const proxies = drawsUnder(common);
       expect(proxies.length).toBeGreaterThan(0);
       for (const { material, object } of proxies) {
@@ -308,7 +321,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
 
     it('keeps the drawn instanced variants (instancing, and its colour buffer on the flowers)', async () => {
       const tracks = await builtTracks();
-      const common = buildRealmRacersCommonRoot(tracks.circuits.map((view) => view.group));
+      const common = commonRootOf(tracks);
       const variants = new Set<string>();
       common.traverse((object) => {
         const mesh = object as THREE.InstancedMesh;
@@ -1130,14 +1143,13 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     expect(client.units()).toEqual({ done: 3, total: 3 });
   });
 
-  it('mints one client per authored circuit, lists them, and none for a draft', () => {
+  it('mints one client per authored circuit, and none for a draft', () => {
     const { view } = probeView();
     const clients = realmRacersCircuitClients([view], fakeSky().sky);
     const probe = clients.circuitClient('probe');
     expect(probe?.prepareId).toBe('rallyCircuit:probe');
     expect(clients.circuitClient('probe')).toBe(probe);
     expect(clients.circuitClient('draft_probe')).toBeNull();
-    expect(clients.circuitIds()).toEqual(['probe']);
   });
 });
 
@@ -1235,7 +1247,6 @@ function seamWithCircuit() {
   const seam = new RealmRacersPrepare();
   seam.useCircuits({
     circuitClient: (id) => (id === CIRCUIT.id ? staged.client : null),
-    circuitIds: () => [CIRCUIT.id],
   });
   return { seam, ...staged };
 }
@@ -1297,7 +1308,7 @@ describe('the seam asks for the drawn circuit', () => {
     });
   }
 
-  it('prepares every authored circuit for a walker in the band, the lane underfoot first', () => {
+  it('asks a walker in the band for the lane underfoot only, and builds it at once', () => {
     const host = fakeHost();
     const runs: string[] = [];
     const staged = new Map(
@@ -1309,13 +1320,30 @@ describe('the seam asks for the drawn circuit', () => {
     const seam = new RealmRacersPrepare();
     seam.useCircuits({
       circuitClient: (id) => staged.get(id) ?? null,
-      circuitIds: () => REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.id),
     });
-    seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
-    expect(runs[0]).toBe(CIRCUIT.id);
-    expect([...runs].sort()).toEqual(REALM_RACERS_CIRCUIT_LIST.map((c) => c.id).sort());
-    for (let i = 0; i < 3; i++) seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
-    expect(runs).toHaveLength(REALM_RACERS_CIRCUIT_LIST.length);
+    const walker = { queued: false, match: null };
+    seam.frame(host, walker, LANE.x, LANE.z);
+    expect(runs).toEqual([CIRCUIT.id]);
+    // Standing on it: nothing covers a lane a walker stands on, so its build
+    // runs to the end at once rather than leave a hedge undrawn.
+    expect(seam.buildNow(CIRCUIT.id)).toBe(true);
+    for (let i = 0; i < 3; i++) seam.frame(host, walker, LANE.x, LANE.z);
+    expect(runs).toEqual([CIRCUIT.id]);
+    // Between two lanes is not the band: nothing more is asked there.
+    const onward = REALM_RACERS_LANES.find(
+      (lane) => lane.index > laneOf(CIRCUIT) && lane.circuit.id !== CIRCUIT.id,
+    );
+    if (!onward) throw new Error('no lane of another circuit after the probe circuit');
+    const target = realmRacersLaneOrigin(onward.index);
+    const between = target.z - REALM_RACERS_LANES_DZ_FOR_TEST / 2;
+    expect(realmRacersLaneAt(LANE.x, between)).toBeNull();
+    seam.frame(host, walker, LANE.x, between);
+    expect(runs).toEqual([CIRCUIT.id]);
+    expect(seam.buildNow(CIRCUIT.id)).toBe(false);
+    // Stepping onto the next circuit's lane asks it, and builds it at once.
+    seam.frame(host, walker, target.x, target.z);
+    expect(runs).toEqual([CIRCUIT.id, onward.circuit.id]);
+    expect(seam.buildNow(onward.circuit.id)).toBe(true);
   });
 
   it('asks only the drawn circuit for a seated pilot', () => {
@@ -1330,7 +1358,6 @@ describe('the seam asks for the drawn circuit', () => {
     const seam = new RealmRacersPrepare();
     seam.useCircuits({
       circuitClient: (id) => staged.get(id) ?? null,
-      circuitIds: () => REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.id),
     });
     seam.frame(host, loading(), LANE.x, LANE.z);
     expect(runs).toEqual([CIRCUIT.id]);
@@ -1384,7 +1411,6 @@ describe('the seam asks for the drawn circuit', () => {
     const seam = new RealmRacersPrepare();
     seam.useCircuits({
       circuitClient: (id) => (id === CIRCUIT.id ? client : null),
-      circuitIds: () => [CIRCUIT.id],
     });
     setArrivalCover(true);
     seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
@@ -1440,6 +1466,7 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
     const tracks = track.buildRealmRacersTracks();
     const index = REALM_RACERS_CIRCUIT_LIST.indexOf(CIRCUIT);
     const view = tracks.circuits[index];
+    view.build().finish();
     let held = true;
     const asked: string[] = [];
     tracks.holdReveal((id) => {
@@ -1564,6 +1591,7 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
     const { gate, calls } = fakeGate();
     tracks.gateFills(() => gate);
     const view = tracks.circuits[0];
+    view.build().finish();
     const before = view.group.children.length;
     loaderControl.pending[0].resolve();
     await flush();

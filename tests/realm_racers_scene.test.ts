@@ -248,6 +248,7 @@ describe('the renderer delegates, welded', () => {
       'private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);',
       'private skyView!: SkyView;',
       'readonly backgroundGpuWork = createBackgroundGpuQueue({',
+      'private readonly buildLedger = createBuildLedger();',
       'private lowGfx: boolean;',
       'private envRTs = new Map<SkyKey, THREE.WebGLRenderTarget>();',
       'private prewarmTextureInIdle(',

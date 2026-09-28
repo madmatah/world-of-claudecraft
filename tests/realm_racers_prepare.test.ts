@@ -447,13 +447,26 @@ describe('race preparation seam (renderer wiring)', () => {
         "readonly prepare: Pick<RealmRacersPrepare, 'progress'> = this.prepareSeam;",
       ),
     ).toBe(1);
-    // The circuits join the seam once the tracks exist, and the seam runs
-    // before the tracks so a reveal hold reads this frame's viewer.
+    // The circuits join the seam once the (lazy) tracks exist, with the host
+    // their builds run on, and the seam runs before the tracks so a reveal
+    // hold reads this frame's viewer and a circuit built this frame shows.
     expect(
       scene.match(
-        /this\.track = buildRealmRacersTracks\(\);\s*prepareRealmRacersCircuits\(this\.prepareSeam, this\.track, this\.sky\);/g,
+        /this\.track = buildRealmRacersTracks\(\);\s*prepareRealmRacersCircuits\(this\.prepareSeam, this\.track, this\.sky, this\.buildHost\(\)\);/g,
       ),
     ).toHaveLength(1);
+    // A build rides the renderer's own GPU work queue and records into its
+    // build ledger: no queue of its own.
+    const hostAt = scene.indexOf('private buildHost(): RealmRacersBuildHost {');
+    expect(hostAt).toBeGreaterThan(0);
+    const buildHost = scene.slice(hostAt, scene.indexOf('\n  }\n', hostAt));
+    expect(buildHost).toContain(
+      'run: (work, priority, label) => h.backgroundGpuWork.run(work, priority, label),',
+    );
+    expect(buildHost).toContain(
+      'record: (kind, ms, atMs) => h.buildLedger.record(kind, ms, atMs),',
+    );
+    expect(buildHost).toContain('yieldTask: messageTaskTurn,');
     const frameAt = scene.indexOf('this.prepareSeam.frame(');
     const tracksAt = scene.indexOf('this.track.update(');
     expect(frameAt).toBeGreaterThan(0);

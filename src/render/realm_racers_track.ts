@@ -38,7 +38,7 @@ import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
-import { GFX, surfaceMat } from './gfx';
+import { GFX } from './gfx';
 import {
   ignivarEnvPropCastsShadow,
   ignivarEnvPropKeyOfUrl,
@@ -65,6 +65,7 @@ import {
   REALM_RACERS_GRASS_TILE_RADIUS,
   REALM_RACERS_GRASS_Y,
   type RealmRacersGrassTile,
+  realmRacersGrassPieces,
   realmRacersGrassTiles,
   realmRacersGrassTint,
 } from './realm_racers_grass_core';
@@ -100,14 +101,19 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from './realm_racers_track_core';
+import { disposeRealmRacersTrackGroup } from './realm_racers_track_dispose_core';
 import {
   createRealmRacersTrackPalette,
   type RallyStartLightMaterials,
   type RealmRacersTrackPalette,
 } from './realm_racers_track_palette';
+import {
+  prepareUploadFrame,
+  restoreAfterUploadFrame,
+  type UploadFrameNode,
+} from './realm_racers_upload_frame_core';
 import { renderLayerDisabled } from './render_dev_flags';
 import { textureRandomStream, withTextureRandomStream } from './texture_random_stream';
-import { rallyKerbTexture } from './textures';
 import { layLowTierWaterUv, usesShaderWater } from './water';
 
 export interface RealmRacersTrackView {
@@ -123,15 +129,21 @@ export interface RealmRacersTrackView {
  *  in the editor into the band beside the authored ones. */
 export interface RealmRacersTracksView extends RealmRacersTrackView {
   registerDraft(circuit: RealmRacersCircuit): void;
-  /** One view per authored circuit, never a draft: what the race preparation
-   *  compiles. */
-  readonly circuits: readonly RealmRacersCircuitView[];
+  /** One LAZY view per authored circuit, never a draft: built only when the
+   *  race preparation asks it (realm_racers_circuit_prepare.ts). */
+  readonly circuits: readonly RealmRacersLazyCircuitView[];
+  /** The materials every circuit of this pool shares, and the race
+   *  preparation's representatives link (realm_racers_common_pieces.ts). */
+  readonly palette: RealmRacersTrackPalette;
   /** Hold an authored circuit hidden on its own lane while `held` says so
    *  (realm_racers_prepare.ts decides: only under a cover). */
   holdReveal(held: (circuitId: string) => boolean): void;
   /** The compile gate a model fill landing on an authored circuit attaches
    *  through (hidden until linked), or undefined to add it plainly. */
   gateFills(gate: () => FillGate | undefined): void;
+  /** Give back every built circuit's owned geometry and the palette's
+   *  materials, and stop any build still in flight. Idempotent. */
+  dispose(): void;
 }
 
 type FillGate = (target: THREE.Object3D) => Promise<unknown>;
@@ -148,9 +160,27 @@ export interface RealmRacersCircuitView {
   onViewerLane(): boolean;
 }
 
+/** The pool's view of an authored circuit: nothing built until asked. */
+export interface RealmRacersLazyCircuitView extends RealmRacersCircuitView {
+  /** Empty and hidden until the circuit is built; the build fills it. */
+  readonly group: THREE.Group;
+  /** Whether its build has run to the end. */
+  readonly built: boolean;
+  /** Its build: one per circuit per pool, minted on the first ask. */
+  build(): RealmRacersTrackBuild;
+  /**
+   * Resolves after the built view's first frame shown on the viewer's lane
+   * since the first call: that frame is drawn with every mesh unculled and
+   * casting no shadow, so every vertex and instance buffer a visible mesh holds
+   * uploads there, then each mesh's own culling and shadow flags come back.
+   */
+  uploadFrame(): Promise<void>;
+}
+
 /** The authored view plus what the race preparation reads of it. */
 type AuthoredTrackView = RealmRacersTrackView &
-  Pick<RealmRacersCircuitView, 'drawnOnce' | 'onViewerLane'>;
+  Pick<RealmRacersCircuitView, 'drawnOnce' | 'onViewerLane'> &
+  Pick<RealmRacersLazyCircuitView, 'uploadFrame'>;
 
 /** The reveal hold a view consults when it is on the viewer's lane. */
 interface RevealHold {
@@ -532,9 +562,7 @@ function buildStartLights(
   fixture.name = 'realm-racers-start-lights';
   const housingGeo = new THREE.BoxGeometry(0.72, 0.68, 0.48);
   const lensGeo = new THREE.CircleGeometry(0.24, 16);
-  const housingMat = surfaceMat({ color: 0x171816, roughness: 0.72 });
-  housingMat.name = 'realmRacersTrack:startLightHousing';
-  const offMat = palette.startLights().off;
+  const { housing: housingMat, off: offMat } = palette.startLights();
   const lenses: THREE.Mesh[] = [];
   for (const [index, place] of rallyStartLightPlacements(circuit).entries()) {
     const housing = new THREE.Mesh(housingGeo, housingMat);
@@ -613,7 +641,7 @@ function drawFlowers(
  */
 let flowerCardGeo: THREE.BufferGeometry | null = null;
 
-function rallyFlowerCardGeo(): THREE.BufferGeometry {
+export function rallyFlowerCardGeo(): THREE.BufferGeometry {
   if (flowerCardGeo) return flowerCardGeo;
   const card = new THREE.PlaneGeometry(FLOWER_WIDTH, FLOWER_HEIGHT);
   card.translate(0, FLOWER_HEIGHT / 2, 0);
@@ -679,7 +707,7 @@ function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
  * shore whether the land is inside it or outside it, and two builders would be
  * two answers to how deep the water is a yard off the bank.
  */
-function waterSheet(
+export function waterSheet(
   mesh: RallyBasinMesh,
   waterY: number,
   bankSlope: number,
@@ -958,30 +986,13 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Dr
  * `?bladegrass=off` is the dev perf-attribution switch.
  */
 function rallyGrassTilesOnTier(circuit: RealmRacersCircuit): readonly RealmRacersGrassTile[] {
-  if (GFX.bladeCarpetRadius <= 0 || renderLayerDisabled('bladegrass')) return [];
+  if (!rallyBladeGrassOnTier()) return [];
   return realmRacersGrassTiles(circuit);
 }
 
-/** Blade clusters one piece of the lobby build instances. */
-const RALLY_GRASS_CLUSTERS_PER_PIECE = 20_000;
-
-/** The grass tiles cut into build pieces of about `RALLY_GRASS_CLUSTERS_PER_PIECE`
- *  clusters each, a tile never split, in tile order. */
-function rallyGrassPieces(tiles: readonly RealmRacersGrassTile[]): RealmRacersGrassTile[][] {
-  const pieces: RealmRacersGrassTile[][] = [];
-  let piece: RealmRacersGrassTile[] = [];
-  let clusters = 0;
-  for (const tile of tiles) {
-    piece.push(tile);
-    clusters += tile.clusters.length;
-    if (clusters >= RALLY_GRASS_CLUSTERS_PER_PIECE) {
-      pieces.push(piece);
-      piece = [];
-      clusters = 0;
-    }
-  }
-  if (piece.length > 0) pieces.push(piece);
-  return pieces;
+/** Whether this tier keeps blade grass at all (the gate above). */
+export function rallyBladeGrassOnTier(): boolean {
+  return GFX.bladeCarpetRadius > 0 && !renderLayerDisabled('bladegrass');
 }
 
 function drawGrassTiles(
@@ -1039,7 +1050,7 @@ function drawGrassTiles(
 let grassGeometry: THREE.BufferGeometry | null = null;
 const grassMaterials = new Map<number, THREE.Material>();
 
-function rallyGrassCluster(tint: number): {
+export function rallyGrassCluster(tint: number): {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
 } {
@@ -1100,6 +1111,8 @@ export interface RealmRacersTrackBuild {
   step(): void;
   /** Run every piece left and return the view. */
   finish(): AuthoredTrackView;
+  /** Stop: no piece runs any more (the pool was given back). */
+  cancel(): void;
 }
 
 export function realmRacersTrackBuild(
@@ -1216,8 +1229,7 @@ export function realmRacersTrackBuild(
         ),
       );
 
-      const kerbMat = surfaceMat({ map: rallyKerbTexture(theme.kerb), roughness: 0.7 });
-      kerbMat.name = 'realmRacersTrack:kerb';
+      const kerbMat = palette.kerb(theme.kerb);
       for (const run of rallyKerbRuns(circuit)) {
         for (const side of [1, -1]) {
           group.add(
@@ -1277,7 +1289,7 @@ export function realmRacersTrackBuild(
     piece('grass', () => {
       const tiles = rallyGrassTilesOnTier(circuit);
       plan(
-        rallyGrassPieces(tiles).map((band) =>
+        realmRacersGrassPieces(tiles).map((band) =>
           piece('grass', () => drawGrassTiles(circuit, band, group)),
         ),
       );
@@ -1345,6 +1357,9 @@ export function realmRacersTrackBuild(
       if (!view) throw new Error(`Realm Racers: circuit build ${circuit.id} ended without a view`);
       return view;
     },
+    cancel() {
+      next = pieces.length;
+    },
   };
   return job;
 }
@@ -1382,9 +1397,18 @@ function authoredTrackView(
   const drawn = new Promise<void>((resolve) => {
     markDrawn = resolve;
   });
+  let uploadAsked: Promise<void> | null = null;
+  let markUploaded: (() => void) | null = null;
+  let unculled: UploadFrameNode[] | null = null;
   return {
     group,
     drawnOnce: () => drawn,
+    uploadFrame() {
+      uploadAsked ??= new Promise<void>((resolve) => {
+        markUploaded = resolve;
+      });
+      return uploadAsked;
+    },
     onViewerLane: () => onLane,
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {
       if (circuitId !== circuit.id) return;
@@ -1411,13 +1435,21 @@ function authoredTrackView(
       const lane = realmRacersLaneAt(px, pz);
       const mine = lane?.circuit.id === circuit.id;
       onLane = mine;
-      // Visible at the last update means drawn by the frame between the two.
+      // Visible (or unculled) at the last update means drawn so by the frame
+      // between the two.
       if (markDrawn && shownLastUpdate) {
         markDrawn();
         markDrawn = null;
       }
+      if (unculled) {
+        restoreAfterUploadFrame(unculled);
+        unculled = null;
+        markUploaded?.();
+        markUploaded = null;
+      }
       group.visible = mine && !reveal.held(circuit.id);
       shownLastUpdate = group.visible;
+      if (markUploaded && group.visible) unculled = prepareUploadFrame(group);
       if (!lane || !mine) {
         // The lights are WORLD positions, so a copy that is not being drawn has
         // to give its slots back: left registered, this circuit's lamps would go
@@ -1461,97 +1493,53 @@ function authoredTrackView(
 }
 
 /**
- * Every authored circuit, drawn: one view per circuit under one parent group,
+ * Every authored circuit, one LAZY view per circuit under one parent group,
  * each hiding itself unless the viewer stands on a lane of its own circuit.
  *
- * Built EAGERLY, all of them, which is what the single-circuit band did before
- * lanes existed. The lazy build plus LRU eviction the multi-circuit plan
- * reserved for the second circuit was MEASURED here rather than assumed, and
- * eager still wins on the pool as it stands. Per circuit, three builds each, in
- * Node with the procedural textures stubbed (so the numbers are the CPU cost of
- * generating and packing geometry, not of uploading it), re-measured when the
- * third circuit landed (the first build of each also pays the spline memo),
- * and again with the fourth and the fifth, on another host:
+ * NOTHING is built here. A circuit is built only when a pilot commits to it,
+ * as the first step of its race preparation (`rallyCircuit:<id>`,
+ * realm_racers_circuit_prepare.ts): in the race lobby while the other pilots
+ * load, on the first frame of a login or a graphics rebuild mid-race, or for a
+ * walker in the band, the lane underfoot or the one being approached. It used
+ * to be the other way round, every circuit at renderer construction, which by
+ * four circuits cost 0.7 to 0.9 s of main thread per boot on a fast desktop
+ * and some 40 MB for a player who never races, both linear in the circuit
+ * count (tmp measurements, EAGER_BUILD.md). A built circuit stays for the life
+ * of the pool: disposing its last material would free its programs, and the
+ * next race there would link them again.
  *
- *   evergarden_practice        20 to 49 ms    (18 to 41 at four, 16 to 41 at five)
- *   evergarden_express_tour   163 to 179 ms   (144 to 152, 145 to 188)
- *   nightbloom_moonwell_run   195 to 304 ms   (158 to 263, 161 to 303)
- *   drakelands_rampart_run                   (158 to 192, 159 to 213)
- *   palmreach_lagoon_run                                 (163 to 206)
- *
- * So the whole pool is over half a second (480 to 650 ms at four, 640 to 950
- * at five), paid once during world build, behind the loading screen, for every
- * player whether or not they ever race. The fourth and fifth circuits were
- * added without revisiting the eager decision. Three things decided eager when
- * the pool was two, and two of them still hold:
- *
- *  - Lazy moves the LARGEST of those onto the frame a viewer arrives at a
- *    circuit, and that frame is the countdown. A fifth of a second of hitch as
- *    the lights come on is the one place this cost must not land.
- *  - Eviction has little to evict. The policy worth having is "keep at most
- *    two", and a pool of three keeps one out; that mechanism is still not
- *    worth its reachable-path count at three.
- *  - A few megabytes of resident attribute data is not a budget anyone is
- *    fighting over out here.
- *
- * Where the time goes, so the next circuit can be judged before it is drawn:
- * the road ribbons are cheap and the cost tracks TWO fills, both priced by the
- * spline projection they pay per candidate point. The border flowers follow
- * the area inside the perimeter rather than the lap: `rallyFlowerSpots` is
- * 113 ms for 10 424 tufts on the Express Tour and 138 ms for 7 475 on the
- * Moonwell Run. The authored SCATTERS (`RallyScatter`, resolved sim-side in
- * `realm_racers_props_resolve.ts`) walk a grid of the perimeter box at their
- * own spacing and project every cell, whether or not a piece lands: the
- * Moonwell Run's six scatters are about 6 700 projections for 1 599 pieces,
- * 86 ms, and the Evergarden circuits author none. The water surfaces are
- * about 15 ms a pool; everything else together is under 10 ms.
- *
- * The GRASS is in the Moonwell Run's number and not in the Evergarden's: the
- * garden is mown lawn (`GRASS_BIOME_DENSITY.garden` is 0) while the Nightbloom
- * grows blades. The Moonwell Run resolves about 131 000 clusters over 128
- * tiles (`realmRacersGrassTiles`), 1.8x the 74 000 the two-circuit probe of
- * this zone was priced at (about 25 ms then: 4 ms to bake the mask, 11 ms to
- * place the clusters, the rest in the instancing), and at 64 bytes of instance
- * matrix a cluster it is also the largest RESIDENT term on the circuit, about
- * 8 MB on the tiers that draw it. The mask is a grid stamped off the
- * centerline rather than a projection per candidate, which is why the placing
- * half is cheap.
- *
- * The build is superlinear in circuit size, so the half-second line the
- * two-circuit revision set for revisiting this decision is now ONE more
- * circuit of the Moonwell Run's size away. The next circuit of that size
- * should either bring the lazy build with it or shrink its fills. The cheapest
- * levers, in order: the record's own scatter `spacing` (each scatter costs its
- * grid, not its pieces; a span-limited scatter still projects the whole box,
- * so it should be sparse), `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` for a grassy
- * zone, then the flower patch pitch. `tests/realm_racers_circuits.test.ts`
- * pins the Moonwell Run's scatter count as a ceiling for the same reason.
+ * Where a build's time goes, so the next circuit can be judged before it is
+ * drawn: the flower FIELD (one spline projection per candidate, about half of
+ * a build, walked in bands), the resolver's placements (a sim memo, the one
+ * piece that cannot be cut: about 67 ms on the Moonwell Run on a fast desktop),
+ * the grass on a grassy zone (a stamped mask, then the instancing in bands),
+ * the dressing. The cheapest levers are the record's scatter `spacing`,
+ * `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` and the flower patch pitch;
+ * `tests/realm_racers_circuits.test.ts` pins the largest circuits' scatter
+ * counts as the lobby-build budget.
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();
-  // Every circuit sits hidden under this group from boot, and three's compile
+  // The circuits sit hidden under this group once built, and three's compile
   // walks hidden children: a whole-scene compile (the blocking arrival's zone
-  // prewarm) would link every circuit's programs for a player who never races.
+  // prewarm) would link a built circuit's programs for a player done racing.
   // The race preparation seam (realm_racers_prepare.ts) is their owner; only a
   // blocking arrival that lands in the band lifts this (`rallyArrivalLifts`).
   excludeFromParentCompile(group, REALM_RACERS_COMPILE_OWNER);
   const reveal: RevealHold = { held: NEVER_HELD.held };
   let fillGate: () => FillGate | undefined = () => undefined;
   const palette = createRealmRacersTrackPalette();
-  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) =>
-    buildRealmRacersTrack(circuit, reveal, palette),
+  let disposed = false;
+  const circuits = REALM_RACERS_CIRCUIT_LIST.map((circuit) =>
+    lazyCircuitView(
+      circuit,
+      reveal,
+      palette,
+      () => fillGate(),
+      () => disposed,
+    ),
   );
-  const circuits = REALM_RACERS_CIRCUIT_LIST.map(
-    (circuit, i): RealmRacersCircuitView => ({
-      circuitId: circuit.id,
-      group: views[i].group,
-      skyBiome: realmRacersTheme(circuit).sky.biome,
-      drawnOnce: views[i].drawnOnce,
-      onViewerLane: views[i].onViewerLane,
-    }),
-  );
-  for (const view of views) fillGates.set(view.group, () => fillGate());
-  for (const view of views) group.add(view.group);
+  for (const view of circuits) group.add(view.group);
   // Dev drafts get their own lifecycle beside the authored ones (built on
   // registration, replaced on re-registration); the map stays empty in every
   // session where no dev command filled it.
@@ -1561,6 +1549,7 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   return {
     group,
     circuits,
+    palette,
     holdReveal(held) {
       reveal.held = held;
     },
@@ -1569,12 +1558,83 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
     },
     registerDraft: (circuit) => drafts.register(circuit),
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {
-      for (const view of views) view.dropProvisionalSlick(circuitId, worldX, worldZ, time);
+      for (const view of circuits) view.dropProvisionalSlick(circuitId, worldX, worldZ, time);
       drafts.dropProvisionalSlick(circuitId, worldX, worldZ, time);
     },
     update(px, pz, time, match) {
-      for (const view of views) view.update(px, pz, time, match);
+      for (const view of circuits) view.update(px, pz, time, match);
       drafts.update(px, pz, time, match);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const view of circuits) view.cancel();
+      disposeRealmRacersTrackGroup(group);
+      palette.dispose();
     },
   };
 }
+
+type LazyPoolView = RealmRacersLazyCircuitView &
+  Pick<RealmRacersTrackView, 'update' | 'dropProvisionalSlick'> & { cancel(): void };
+
+/** One authored circuit in the pool: an empty hidden group until its build
+ *  finishes, then the built view drives it. */
+function lazyCircuitView(
+  circuit: RealmRacersCircuit,
+  reveal: RevealHold,
+  palette: RealmRacersTrackPalette,
+  fillGate: () => FillGate | undefined,
+  disposed: () => boolean,
+): LazyPoolView {
+  const group = new THREE.Group();
+  group.name = 'realm-racers-track';
+  group.visible = false;
+  fillGates.set(group, fillGate);
+  let job: RealmRacersTrackBuild | null = null;
+  let view: AuthoredTrackView | null = null;
+  let onLane = false;
+  const builtView = (): AuthoredTrackView | null => {
+    if (!view && job?.finished && !disposed()) view = job.finish();
+    return view;
+  };
+  return {
+    circuitId: circuit.id,
+    group,
+    skyBiome: realmRacersTheme(circuit).sky.biome,
+    get built() {
+      return builtView() !== null;
+    },
+    build() {
+      if (!job) {
+        job = realmRacersTrackBuild(circuit, reveal, palette, group);
+        if (disposed()) job.cancel();
+      }
+      return job;
+    },
+    cancel() {
+      job?.cancel();
+    },
+    drawnOnce() {
+      return builtView()?.drawnOnce() ?? NEVER_UPLOADED;
+    },
+    uploadFrame() {
+      return builtView()?.uploadFrame() ?? NEVER_UPLOADED;
+    },
+    onViewerLane: () => onLane,
+    dropProvisionalSlick(circuitId, worldX, worldZ, time) {
+      builtView()?.dropProvisionalSlick(circuitId, worldX, worldZ, time);
+    },
+    update(px, pz, time, match) {
+      // Tracked here, built or not: the race preparation reads it to decide
+      // when to build, and a view built since the last frame has not been
+      // updated yet.
+      onLane = realmRacersLaneAt(px, pz)?.circuit.id === circuit.id;
+      // Unbuilt, or still building: nothing is drawn.
+      builtView()?.update(px, pz, time, match);
+    },
+  };
+}
+
+/** What `drawnOnce` and `uploadFrame` answer for a circuit not built yet. */
+const NEVER_UPLOADED: Promise<void> = new Promise<void>(() => undefined);

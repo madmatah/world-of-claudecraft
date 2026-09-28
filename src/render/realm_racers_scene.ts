@@ -39,7 +39,11 @@ import {
 } from './own_shot_feedback_core';
 import { ownShotMuzzle } from './own_shot_launch_core';
 import { playRealmRacersEventAudio, type RealmRacersRuntimeAudioSink } from './realm_racers_audio';
-import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
+import {
+  messageTaskTurn,
+  prepareRealmRacersCircuits,
+  type RealmRacersBuildHost,
+} from './realm_racers_circuit_prepare';
 import { RealmRacersFieldCues } from './realm_racers_field_cues';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { RealmRacersPrepare, type RealmRacersPrepareHost } from './realm_racers_prepare';
@@ -108,6 +112,7 @@ interface RealmRacersSceneHost extends RealmRacersPrepareHost {
   readonly backgroundGpuWork: {
     run(work: () => unknown, priority: number, label: string): Promise<unknown>;
   };
+  readonly buildLedger: { record(kind: string, ms: number, atMs: number): void };
   readonly lowGfx: boolean;
   readonly envRTs: { readonly size: number };
   prewarmTextureInIdle(texture: THREE.Texture | null): Promise<unknown>;
@@ -138,7 +143,8 @@ type RallyEvent = Extract<
 // the draft hook.
 export class RealmRacersScene {
   readonly sky: RealmRacersSky;
-  /** Every circuit's view, built at `attach` (the renderer's scene exists by then). */
+  /** Every circuit's LAZY view, made at `attach` (the renderer's scene exists by
+   *  then); a circuit is built only when the race preparation asks it. */
   track!: RealmRacersTracksView;
   readonly groundBlasts = new RealmRacersGroundBlastVisuals();
   private readonly prepareSeam = new RealmRacersPrepare([this.groundBlasts]);
@@ -171,10 +177,11 @@ export class RealmRacersScene {
     this.fieldCues = new RealmRacersFieldCues(h.views, h.groundSample);
   }
 
-  /** Build the circuits and put every rally group straight on the scene, once. */
+  /** Put every rally group straight on the scene, once. No circuit is built
+   *  here: the race preparation builds the one a pilot commits to. */
   attach(scene: THREE.Scene): void {
     this.track = buildRealmRacersTracks();
-    prepareRealmRacersCircuits(this.prepareSeam, this.track, this.sky);
+    prepareRealmRacersCircuits(this.prepareSeam, this.track, this.sky, this.buildHost());
     setRenderCategory(this.track.group, 'props');
     scene.add(this.track.group);
     scene.add(this.groundBlasts.group);
@@ -182,8 +189,20 @@ export class RealmRacersScene {
     scene.add(this.fieldCues.sprays.group);
   }
 
+  /** Where a circuit build runs: the renderer's GPU work queue, a message task
+   *  turn between pieces, its build ledger. */
+  private buildHost(): RealmRacersBuildHost {
+    const h = this.host as RealmRacersSceneHost;
+    return {
+      run: (work, priority, label) => h.backgroundGpuWork.run(work, priority, label),
+      yieldTask: messageTaskTurn,
+      record: (kind, ms, atMs) => h.buildLedger.record(kind, ms, atMs),
+      now: () => performance.now(),
+    };
+  }
+
   /** One world frame. The seam runs before the tracks, so a reveal hold reads
-   *  this frame's viewer. */
+   *  this frame's viewer and a circuit built this frame shows on it. */
   frame(info: RealmRacersInfo, px: number, pz: number, dt: number): void {
     const h = this.host as RealmRacersSceneHost;
     this.prepareSeam.frame(h, info, px, pz);

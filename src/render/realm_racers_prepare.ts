@@ -24,17 +24,23 @@
 // (`run`): it waits for the fill, then gates.
 //
 // Two kinds of client join the ones built with the seam: the procedural
-// programs every circuit draws (`rallyCommon`, added by the renderer once its
-// tracks exist, so it starts at the commitment trigger), and one client per
-// circuit (`rallyCircuit:<id>`), asked of `RealmRacersCircuitClients` on the
-// first frame that circuit is known: the viewer's own match from its loading
-// lobby on, or the lane they stand on in the band. A mid-race reconnect or a
-// login at the fence asks on its first frame, so the arrival hold below covers
-// it. While a circuit's client has no verdict and a curtain covers the world
-// (the arrival cover, or the viewer's own race still loading), its view stays
-// hidden on the viewer's lane (`revealHeld`), so its first hidden-to-visible
-// flip draws linked programs; uncovered it draws cold, never late. A walker in
-// the band with no race asks every authored circuit, the lane underfoot first.
+// programs every circuit draws (`rallyCommon`, whose representatives are made
+// from the circuit records, so it starts at the commitment trigger with no
+// circuit known or built), and one client per circuit (`rallyCircuit:<id>`),
+// asked of `RealmRacersCircuitClients` on the first frame that circuit is
+// known: the viewer's own match from its loading lobby on, or, for a walker in
+// the band with no race, the lane underfoot. NOTHING of a circuit exists
+// before its client runs: building it is that client's first step
+// (realm_racers_circuit_prepare.ts), spread across tasks only while the
+// viewer's own lobby covers the world, and run to the end at once everywhere
+// else (`buildNow`, `realmRacersBuildNow`): a login, a reconnect or a graphics
+// rebuild mid-race builds on the renderer's first frame, still under the
+// world-entry loading screen or the graphics curtain. Online, that login's gate
+// then runs uncovered and links cold, as it always has. While a circuit's
+// client has no verdict and a curtain covers the world (the arrival cover, or
+// the viewer's own race still loading), its view stays hidden on the viewer's
+// lane (`revealHeld`), so its first hidden-to-visible flip draws linked
+// programs; uncovered it draws cold, never late.
 //
 // The race lobby reads `progress()` through the HUD's current renderer (so a
 // graphics rebuild hands it the new seam): its progress bar is the unit tally,
@@ -57,6 +63,7 @@ import {
   type RealmRacersPrepareReason,
   type RealmRacersPrepareState,
   type RealmRacersPrepareUnits,
+  realmRacersBuildNow,
   realmRacersPrepareCircuit,
   realmRacersPrepareHolds,
   realmRacersRevealHeld,
@@ -98,8 +105,6 @@ export interface RealmRacersPrepareClient {
  *  null for a circuit with no view to prepare (a dev draft). */
 export interface RealmRacersCircuitClients {
   circuitClient(circuitId: string): RealmRacersPrepareClient | null;
-  /** Every circuit with a view to prepare, in authoring order. */
-  circuitIds(): readonly string[];
 }
 
 /** What the seam needs of the renderer: its world gate (undefined without a
@@ -141,7 +146,10 @@ export class RealmRacersPrepare {
   private holding = false;
   private circuits: RealmRacersCircuitClients | null = null;
   private readonly askedCircuits = new Set<string>();
-  private everyCircuitAsked = false;
+  /** The viewer's match and the circuit of the lane underfoot, as of the last
+   *  frame: what `buildNow` reads. */
+  private viewerMatch: RealmRacersPrepareViewer['match'] = null;
+  private laneCircuit: string | null = null;
   /** Circuit id to its client's id, and back. */
   private readonly circuitClientIds = new Map<string, string>();
   private readonly clientCircuits = new Map<string, string>();
@@ -216,19 +224,28 @@ export class RealmRacersPrepare {
     return this.holding ? this.inFlight : 0;
   }
 
+  /** Whether the circuit's build must run to the end now rather than a piece
+   *  per task (`realmRacersBuildNow`): read by its client at every piece. */
+  buildNow(circuitId: string): boolean {
+    return realmRacersBuildNow(
+      circuitId,
+      this.viewerMatch,
+      this.laneCircuit,
+      this.coveredFor(circuitId),
+    );
+  }
+
   /** Per frame: one band test, plus a lane lookup in the band; a no-op past
-   *  that once started with nothing in flight and every due circuit asked. */
+   *  that once started with nothing in flight and the due circuit asked. */
   frame(host: RealmRacersPrepareHost, viewer: RealmRacersPrepareViewer, x: number, z: number) {
     const match = viewer.match;
     this.noteLobby(match?.phase === 'loading' ? (match.circuitId ?? null) : null);
     const inBand = isAtRealmRacersXZ(x, z);
-    const matchCircuit = match?.circuitId ?? null;
-    const circuitId = realmRacersPrepareCircuit(
-      matchCircuit,
-      inBand ? (realmRacersLaneAt(x, z)?.circuit.id ?? null) : null,
-    );
-    const everyDue = matchCircuit === null && inBand && !this.everyCircuitAsked;
-    const circuitDue = everyDue || (circuitId !== null && !this.askedCircuits.has(circuitId));
+    const underfoot = inBand ? (realmRacersLaneAt(x, z)?.circuit.id ?? null) : null;
+    this.viewerMatch = match;
+    this.laneCircuit = underfoot;
+    const circuitId = realmRacersPrepareCircuit(match?.circuitId ?? null, underfoot);
+    const circuitDue = circuitId !== null && !this.askedCircuits.has(circuitId);
     if (this.latch.reason !== null && this.inFlight === 0 && !circuitDue) return;
     const commitment = this.commitment;
     commitment.queued = viewer.queued;
@@ -247,12 +264,6 @@ export class RealmRacersPrepare {
     }
     if (!circuitDue || this.latch.reason === null) return;
     if (circuitId !== null) this.askCircuit(circuitId);
-    // A walker in the band can step onto any lane: every authored circuit is
-    // prepared, the one underfoot first.
-    if (everyDue) {
-      this.everyCircuitAsked = true;
-      for (const id of this.circuits?.circuitIds() ?? []) this.askCircuit(id);
-    }
   }
 
   /** The lobby arm of the cover: from the frame the viewer's race is loading
@@ -292,9 +303,9 @@ export class RealmRacersPrepare {
   private start(host: RealmRacersPrepareHost, client: RealmRacersPrepareClient): void {
     const id = client.prepareId;
     const compile = host.worldCompileGate();
-    if (!compile && !client.run) {
+    if (!compile && (client.gateOnly || !client.run)) {
       // Without a parallel compile every first draw links anyway: a client
-      // that builds only for the gate has nothing to build.
+      // that builds only for the gate has nothing to build, whatever its steps.
       if (!client.gateOnly) client.prepare();
       this.states.set(id, 'unproven');
       return;
@@ -320,10 +331,18 @@ export class RealmRacersPrepare {
     };
     let work: Promise<boolean>;
     if (client.run) {
-      const uncovered = new Promise<void>((release) => {
-        this.uncoverWaits.set(id, release);
+      let release: () => void = () => undefined;
+      const uncovered = new Promise<void>((resolve) => {
+        release = resolve;
       });
+      this.uncoverWaits.set(id, release);
       work = client.run(gate, uncovered);
+      // Started in the open (a walker, a login once its cover is gone): it
+      // races no cover, so it is told at once rather than a frame later.
+      if (this.uncoverWaits.has(id) && !this.coveredFor(this.clientCircuits.get(id) ?? null)) {
+        this.uncoverWaits.delete(id);
+        release();
+      }
     } else {
       work = gate(root).then(TRUE, TRUE);
     }

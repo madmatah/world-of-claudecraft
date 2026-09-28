@@ -1,21 +1,25 @@
-// A player who never races pays none of the race-only GPU work at boot.
+// A player who never races pays none of the race-only work at boot, CPU, memory
+// or GPU.
 //
-// Every circuit view is built at boot (realm_racers_track.ts,
-// buildRealmRacersTracks) and attached to the scene HIDDEN, and the Ground
-// Blast pool is attached EMPTY. The world-entry compile walk
-// (initial_scene_compile_units.ts) collects the live scene with
-// traverseVisible, so neither is a root of the boot, post-paint or resume
-// units, and the race preparation seam (realm_racers_prepare.ts) is what
-// links them, on its commitment trigger. These pins keep both halves true:
-// the boot units built over a scene holding the rally groups the way the
-// renderer holds them compile nothing under them, on every tier, and a
-// session that never commits never calls the world gate at all.
+// NO circuit is built at boot: `buildRealmRacersTracks` (realm_racers_track.ts)
+// makes one empty, hidden group per authored circuit and nothing else, not even
+// the spline or the placements a build would resolve, and a circuit is built
+// only by its race preparation client when a pilot commits to it
+// (realm_racers_circuit_prepare.ts). The Ground Blast pool is attached EMPTY.
+// These pins keep that true: after boot and a long session that never
+// commits, no circuit is built, the pool holds no drawable and no buffer, the
+// sim resolvers a build reads were never asked, and the world gate was never
+// called.
 //
-// The blocking arrival's zone prewarm is the one compile that hands three the
-// whole scene, whose walk takes hidden children too. The rally groups declare
-// `excludeFromParentCompile` (compile_exclusion.ts), so that compile links none
-// of their programs while every other hidden group still links as before, and
-// the seam's own gates, rooted at a circuit or at the pool, still link it all.
+// A circuit a player DID race stays built, hidden, for the session. The
+// world-entry compile walk (initial_scene_compile_units.ts) collects the live
+// scene with traverseVisible, so it is never a root of the boot, post-paint or
+// resume units. The blocking arrival's zone prewarm is the one compile that
+// hands three the whole scene, whose walk takes hidden children too: the rally
+// groups declare `excludeFromParentCompile` (compile_exclusion.ts), so that
+// compile links none of their programs while every other hidden group still
+// links as before, and the seam's own gates, rooted at a circuit or at the pool,
+// still link it all.
 
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
@@ -52,6 +56,17 @@ vi.mock('../src/render/textures', () => {
   };
 });
 
+// The sim resolvers a circuit build is the first to ask: counted, so a boot that
+// builds nothing is seen to resolve nothing.
+vi.mock('../src/sim/realm_racers_spline', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/sim/realm_racers_spline')>();
+  return { ...actual, realmRacersTrack: vi.fn(actual.realmRacersTrack) };
+});
+vi.mock('../src/sim/realm_racers_props_resolve', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/sim/realm_racers_props_resolve')>();
+  return { ...actual, realmRacersPlacedProps: vi.fn(actual.realmRacersPlacedProps) };
+});
+
 vi.mock('../src/render/assets/loader', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/render/assets/loader')>()),
   // The dressing fills land, so the hidden views carry everything a circuit
@@ -81,7 +96,10 @@ import {
   rallyArrivalLifts,
 } from '../src/render/realm_racers_prepare';
 import { setRenderCategory } from '../src/render/renderer_diagnostics';
+import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
+import { realmRacersPlacedProps } from '../src/sim/realm_racers_props_resolve';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 type TrackModule = typeof import('../src/render/realm_racers_track');
 
@@ -115,8 +133,9 @@ function under(object: THREE.Object3D, roots: readonly THREE.Object3D[]): boolea
 }
 
 /** The rally groups attached the way the renderer attaches them, beside a
- *  visible world mesh and a staged hidden catalog. */
-async function bootScene() {
+ *  visible world mesh and a staged hidden catalog. `raced` builds every
+ *  circuit first, as a session that raced each of them once has. */
+async function bootScene(raced = true) {
   const scene = new THREE.Scene();
   const world = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial());
   world.name = 'world';
@@ -129,6 +148,7 @@ async function bootScene() {
   scene.add(catalog);
 
   const tracks = track.buildRealmRacersTracks();
+  if (raced) for (const view of tracks.circuits) view.build().finish();
   await Promise.all(tracks.circuits.map((view) => realmRacersFills(view.group).landed()));
   const blasts = new RealmRacersGroundBlastVisuals();
   const sprays = new RealmRacersOilSprayVisuals();
@@ -152,11 +172,44 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
     activateTier(tier);
   });
 
+  it('builds no circuit, retains no circuit buffer and resolves nothing at boot', async () => {
+    vi.mocked(realmRacersTrack).mockClear();
+    vi.mocked(realmRacersPlacedProps).mockClear();
+    const { tracks, seam } = await bootScene(false);
+    const host: RealmRacersPrepareHost = {
+      worldCompileGate: () => () => Promise.resolve(),
+      webgl: { properties: { get: () => undefined } },
+    };
+    for (let frame = 0; frame < 600; frame++) {
+      tracks.update(TOWN.x + frame, TOWN.z, frame / 20, null);
+      seam.frame(host, IDLE, TOWN.x + frame, TOWN.z);
+    }
+    expect(tracks.circuits.map((view) => view.circuitId)).toEqual(
+      REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.id),
+    );
+    for (const view of tracks.circuits) {
+      expect(view.built, view.circuitId).toBe(false);
+      expect(view.group.children, view.circuitId).toEqual([]);
+      expect(view.group.visible, view.circuitId).toBe(false);
+    }
+    // Nothing under the pool draws, so nothing holds a vertex, index or
+    // instance buffer.
+    expect(drawsUnder(tracks.group)).toEqual([]);
+    let buffers = 0;
+    tracks.group.traverse((object) => {
+      if ((object as THREE.Mesh).geometry) buffers++;
+    });
+    expect(buffers).toBe(0);
+    // The sim resolvers a build is the first caller of were never asked.
+    expect(realmRacersTrack).not.toHaveBeenCalled();
+    expect(realmRacersPlacedProps).not.toHaveBeenCalled();
+  });
+
   it('links no rally program in the boot, post-paint or resume compile units', async () => {
     const { scene, world, catalog, staged, tracks, blasts, sprays } = await bootScene();
     const rallyRoots = [tracks.group, blasts.group, sprays.group];
-    // What the walk has to skip is real: every circuit's view is built, filled
-    // and hidden.
+    // What the walk has to skip is real: a session that raced keeps every
+    // circuit it raced built, filled and hidden.
     for (const view of tracks.circuits) {
       expect(view.group.visible, view.circuitId).toBe(false);
       expect(drawsUnder(view.group).length, view.circuitId).toBeGreaterThan(0);
@@ -205,7 +258,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
   });
 
   it('never calls the world gate for a session that never commits to racing', async () => {
-    const { tracks, blasts, sprays, seam } = await bootScene();
+    const { tracks, blasts, sprays, seam } = await bootScene(false);
     const gate = vi.fn(() => Promise.resolve());
     const host: RealmRacersPrepareHost = {
       worldCompileGate: () => gate,
@@ -218,7 +271,10 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
     expect(gate).not.toHaveBeenCalled();
     expect(seam.reason).toBeNull();
     expect(seam.worldGate()).toBeUndefined();
-    for (const view of tracks.circuits) expect(view.group.visible, view.circuitId).toBe(false);
+    for (const view of tracks.circuits) {
+      expect(view.group.visible, view.circuitId).toBe(false);
+      expect(view.built, view.circuitId).toBe(false);
+    }
     expect(blasts.group.children).toEqual([]);
     expect(sprays.group.children).toEqual([]);
   });

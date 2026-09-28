@@ -329,9 +329,19 @@ export interface RealmRacersGrassTile {
  * Deterministic: every point comes out of `hash2` over the mask's own grid, so
  * a circuit looks the same on every client and in every session.
  */
+/** How thickly the circuit's zone grows blades, off the overworld's table. */
+function grassDensityOf(circuit: RealmRacersCircuit): number {
+  return GRASS_BIOME_DENSITY[realmRacersTheme(circuit).ground] ?? 1;
+}
+
+/** Whether the circuit grows blades at all, read off its theme alone: no mask,
+ *  no tile, no spline (the race preparation asks it of circuits never built). */
+export function realmRacersGrowsGrass(circuit: RealmRacersCircuit): boolean {
+  return grassDensityOf(circuit) > 0;
+}
+
 function buildTiles(circuit: RealmRacersCircuit): RealmRacersGrassTile[] {
-  const theme = realmRacersTheme(circuit);
-  const density = GRASS_BIOME_DENSITY[theme.ground] ?? 1;
+  const density = grassDensityOf(circuit);
   if (density <= 0) return [];
   const mask = realmRacersGrassMask(circuit);
   const perCell = (MASK_CELL * MASK_CELL * density) / REALM_RACERS_GRASS_YARDS_PER_CLUSTER;
@@ -394,4 +404,30 @@ export const realmRacersGrassTiles = memoizePerCircuit(buildTiles);
  *  same way the world lifts it (blades catch more sky than the soil). */
 export function realmRacersGrassTint(circuit: RealmRacersCircuit): number {
   return biomeGrassTint(realmRacersTheme(circuit).ground);
+}
+
+/** Blade clusters one piece of a circuit's lobby build instances: structural,
+ *  a count of clusters rather than a time. */
+export const REALM_RACERS_GRASS_CLUSTERS_PER_PIECE = 20_000;
+
+/** The tiles cut into build pieces of about `REALM_RACERS_GRASS_CLUSTERS_PER_PIECE`
+ *  clusters each, a tile never split, in tile order. */
+export function realmRacersGrassPieces(
+  tiles: readonly RealmRacersGrassTile[],
+  clustersPerPiece = REALM_RACERS_GRASS_CLUSTERS_PER_PIECE,
+): RealmRacersGrassTile[][] {
+  const pieces: RealmRacersGrassTile[][] = [];
+  let piece: RealmRacersGrassTile[] = [];
+  let clusters = 0;
+  for (const tile of tiles) {
+    piece.push(tile);
+    clusters += tile.clusters.length;
+    if (clusters >= clustersPerPiece) {
+      pieces.push(piece);
+      piece = [];
+      clusters = 0;
+    }
+  }
+  if (piece.length > 0) pieces.push(piece);
+  return pieces;
 }

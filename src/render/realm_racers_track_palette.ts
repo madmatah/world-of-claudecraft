@@ -22,29 +22,45 @@
 
 import * as THREE from 'three';
 import { REALM_RACERS_ORIGIN } from '../sim/realm_racers_layout';
-import { configureMaskedDoubleSidedVegetationMaterial, GFX } from './gfx';
+import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import { buildInstanceGroundMaterial } from './instance_surface';
-import type { RallyCircuitTheme, RallyThemeStartGrid } from './realm_racers_themes';
+import type { RallyCircuitTheme, RallyThemeKerb, RallyThemeStartGrid } from './realm_racers_themes';
 import { textureRandomStream, withTextureRandomStream } from './texture_random_stream';
-import { type FlowerKind, flowerTuftTexture, rallyStartGridTexture } from './textures';
+import {
+  type FlowerKind,
+  flowerTuftTexture,
+  rallyKerbTexture,
+  rallyStartGridTexture,
+} from './textures';
 import { lowTierWaterMaterial, usesShaderWater } from './water';
 import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_material';
 
 export interface RallyStartLightMaterials {
+  housing: THREE.Material;
   off: THREE.Material;
   red: THREE.Material;
   green: THREE.Material;
 }
 
+/**
+ * Every procedural material a circuit draws, by recipe. The circuit build and
+ * the race preparation's representatives (realm_racers_common_pieces.ts) both
+ * ask here, so the program a representative links is the program a circuit
+ * draws, by construction rather than by a copied recipe.
+ */
 export interface RealmRacersTrackPalette {
   /** The one ground material every ground surface of every circuit draws. */
   ground(): THREE.Material;
+  kerb(colours: RallyThemeKerb): THREE.Material;
   startGrid(colours: RallyThemeStartGrid): THREE.Material;
   flower(card: FlowerKind[]): THREE.Material;
   startLights(): RallyStartLightMaterials;
   /** The water on the tier's arm: the theme's ramp on the world's shader, or
    *  the world's own low-tier plane material. */
   water(theme: RallyCircuitTheme): THREE.Material;
+  /** Give back what this palette minted (never the world's shared materials
+   *  it hands out: the kerb's `surfaceMat`, the low-tier water). Idempotent. */
+  dispose(): void;
 }
 
 /** The stream every rally flower card is painted from: scoped to the rally so a
@@ -53,6 +69,7 @@ const FLOWER_STREAM_ID = 'realm-racers:flower';
 
 export function createRealmRacersTrackPalette(): RealmRacersTrackPalette {
   let ground: THREE.Material | null = null;
+  const kerbs = new Map<string, THREE.Material>();
   const grids = new Map<string, THREE.Material>();
   const flowers = new Map<string, THREE.Material>();
   let lights: RallyStartLightMaterials | null = null;
@@ -68,6 +85,16 @@ export function createRealmRacersTrackPalette(): RealmRacersTrackPalette {
       );
       ground.name = 'realmRacersTrack:ground';
       return ground;
+    },
+    kerb(colours) {
+      const key = `${colours.base}:${colours.stripe}`;
+      const known = kerbs.get(key);
+      if (known) return known;
+      // A shared `surfaceMat` (the world's cache), so it is never disposed here.
+      const material = surfaceMat({ map: rallyKerbTexture(colours), roughness: 0.7 });
+      material.name = 'realmRacersTrack:kerb';
+      kerbs.set(key, material);
+      return material;
     },
     startGrid(colours) {
       const key = `${colours.light}:${colours.dark}`;
@@ -99,13 +126,15 @@ export function createRealmRacersTrackPalette(): RealmRacersTrackPalette {
     },
     startLights() {
       if (lights) return lights;
+      const housing = surfaceMat({ color: 0x171816, roughness: 0.72 });
+      housing.name = 'realmRacersTrack:startLightHousing';
       const off = new THREE.MeshBasicMaterial({ color: 0x241c12 });
       off.name = 'realmRacersTrack:startLightOff';
       const red = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
       red.name = 'realmRacersTrack:startLightRed';
       const green = new THREE.MeshBasicMaterial({ color: 0x45e06f });
       green.name = 'realmRacersTrack:startLightGreen';
-      lights = { off, red, green };
+      lights = { housing, off, red, green };
       return lights;
     },
     water(theme) {
@@ -132,6 +161,23 @@ export function createRealmRacersTrackPalette(): RealmRacersTrackPalette {
       material.name = 'realmRacersTrack:water';
       waters.set(key, material);
       return material;
+    },
+    dispose() {
+      ground?.dispose();
+      ground = null;
+      for (const material of [...grids.values(), ...flowers.values(), ...waters.values()]) {
+        material.dispose();
+      }
+      kerbs.clear();
+      grids.clear();
+      flowers.clear();
+      waters.clear();
+      if (lights) {
+        lights.off.dispose();
+        lights.red.dispose();
+        lights.green.dispose();
+        lights = null;
+      }
     },
   };
 }

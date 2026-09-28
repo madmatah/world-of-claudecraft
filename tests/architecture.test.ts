@@ -976,6 +976,7 @@ const RENDER_PURE_CORES = [
   'src/render/realm_racers_barrier_visuals.ts',
   'src/render/realm_racers_themes.ts',
   'src/render/realm_racers_track_core.ts',
+  'src/render/realm_racers_upload_frame_core.ts',
   'src/render/realm_racers_track_dispose_core.ts',
   'src/render/realm_racers_visibility_core.ts',
   'src/render/ignivar_encounter_core.ts',

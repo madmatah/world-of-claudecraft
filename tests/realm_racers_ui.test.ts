@@ -1940,7 +1940,6 @@ describe('Realm Racers lobby ready waits for the drawn circuit', () => {
     const seam = new RealmRacersPrepare([common]);
     seam.useCircuits({
       circuitClient: (id) => (id === REALM_RACERS_PRACTICE_CIRCUIT_ID ? circuit : null),
-      circuitIds: () => [REALM_RACERS_PRACTICE_CIRCUIT_ID],
     });
     h.source.progress = (out, circuitId) => seam.progress(out, circuitId);
     const flush = () => new Promise((done) => setTimeout(done, 0));
@@ -1993,7 +1992,6 @@ describe('Realm Racers lobby ready waits for the drawn circuit', () => {
       const seam = new RealmRacersPrepare();
       seam.useCircuits({
         circuitClient: (id) => (id === REALM_RACERS_PRACTICE_CIRCUIT_ID ? circuit : null),
-        circuitIds: () => [REALM_RACERS_PRACTICE_CIRCUIT_ID],
       });
       return { seam, finish };
     };

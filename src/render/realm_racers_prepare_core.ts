@@ -152,7 +152,8 @@ export const REALM_RACERS_COMMON_PREPARE_ID = 'rallyCommon';
 
 const CIRCUIT_PREPARE_PREFIX = 'rallyCircuit:';
 
-/** The client of one drawn circuit: its dressing models, its view, its sky. */
+/** The client of one drawn circuit: its build, its dressing models, its view,
+ *  its sky. */
 export function realmRacersCircuitPrepareId(circuitId: string): string {
   return `${CIRCUIT_PREPARE_PREFIX}${circuitId}`;
 }
@@ -168,6 +169,29 @@ export function realmRacersPrepareCircuit(
 }
 
 /**
+ * Whether a circuit's build runs to the end at once rather than a piece per
+ * task. Only one wait is worth spreading a build over: the viewer's own race
+ * lobby while its curtain still covers the world (the pilots load, the bar
+ * moves, chat stays live). Everywhere else the circuit is on screen, or about
+ * to be, for someone who reads it: the viewer's own race past its lobby (a
+ * login, a reconnect or a graphics rebuild mid-race, a lobby whose curtain fell
+ * at its cap or on a lost connection) and a viewer standing on the lane (the
+ * band IS the lanes: a login at the fence, an arrival, a step onto a lane).
+ * There one long task beats a road, a wall or a hedge that is not drawn yet.
+ * The first frame of a renderer still runs under the world-entry loading
+ * screen or the graphics curtain.
+ */
+export function realmRacersBuildNow(
+  circuitId: string,
+  match: { circuitId?: string; phase?: string } | null,
+  laneCircuitId: string | null,
+  lobbyCovered: boolean,
+): boolean {
+  if (match?.circuitId === circuitId) return match.phase !== 'loading' || !lobbyCovered;
+  return laneCircuitId === circuitId;
+}
+
+/**
  * Whether a circuit's view stays hidden on the viewer's own lane: only while
  * its preparation has no verdict AND something covers the world (an arrival
  * cover, or the viewer's own race still in its loading lobby). Hiding the road
@@ -178,8 +202,8 @@ export function realmRacersRevealHeld(state: RealmRacersPrepareState, covered: b
   return covered && !realmRacersPrepareSettledState(state);
 }
 
-/** A circuit client's steps: each dressing fill, the gate, the first draw of
- *  the linked view (its buffer uploads), the sky. */
+/** A circuit client's steps after its build: each dressing fill, the gate,
+ *  the upload frame of the linked view (its buffer uploads), the sky. */
 export function realmRacersCircuitUnits(
   out: RealmRacersPrepareUnits,
   fillsDone: number,
@@ -195,5 +219,18 @@ export function realmRacersCircuitUnits(
     (gated ? 1 : 0) +
     (drawn ? 1 : 0) +
     (skyReady ? 1 : 0);
+  return out;
+}
+
+/** Add a build's pieces to a client's steps: a build not started yet counts
+ *  as one piece, and a build grows as its loops plan their bands. */
+export function addRealmRacersBuildUnits(
+  out: RealmRacersPrepareUnits,
+  buildDone: number,
+  buildTotal: number,
+): RealmRacersPrepareUnits {
+  const pieces = Math.max(1, wholeUnits(buildTotal));
+  out.total += pieces;
+  out.done += Math.min(pieces, wholeUnits(buildDone));
   return out;
 }

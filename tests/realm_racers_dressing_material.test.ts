@@ -246,6 +246,7 @@ function dressingDrawsByUrl(root: THREE.Object3D): Map<string, Draw[]> {
 /** Every model draw of the shipped circuits, by the url it instances. */
 async function rallyDrawsByUrl(): Promise<Map<string, Draw[]>> {
   const tracks = buildRealmRacersTracks();
+  for (const view of tracks.circuits) view.build().finish();
   await Promise.all(tracks.circuits.map((view) => realmRacersFills(view.group).landed()));
   const byUrl = new Map<string, Draw[]>();
   for (const view of tracks.circuits) {

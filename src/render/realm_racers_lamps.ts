@@ -124,11 +124,67 @@ export const realmRacersLampInternalsForTest = {
   reset: (): void => {
     rallyGlowStates.clear();
     rallyPoolMaterials.clear();
+    poolMaterials.clear();
     rallyPoolMeshes.length = 0;
     rallyLampsDarkened = false;
     rallyPoolsShown = false;
   },
 };
+
+/** The Lambert tier's pool material, one per light colour for every circuit:
+ *  the glow drives every pool alike, so a per-build copy bought nothing. */
+const poolMaterials = new Map<number, THREE.MeshBasicMaterial>();
+
+function lampPoolMaterial(colour: number): THREE.MeshBasicMaterial {
+  const known = poolMaterials.get(colour);
+  if (known) return known;
+  const material = new THREE.MeshBasicMaterial({
+    map: radialGlowTexture(),
+    color: colour,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  material.name = 'realmRacersLamps:pool';
+  poolMaterials.set(colour, material);
+  rallyPoolMaterials.add(material);
+  return material;
+}
+
+/**
+ * One instance of every fixture part of `styles` and, on the tier that draws
+ * them, one glow pool: the very materials and variants a circuit's lamps draw,
+ * registering no light site and driving no glow. What the race preparation's
+ * representative links (realm_racers_common_pieces.ts). A style whose model has
+ * not resolved is skipped, exactly as a circuit build skips it.
+ */
+export function buildRealmRacersLampSample(styles: Iterable<StreetlampStyleId>): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'realm-racers-lamps-sample';
+  let colour: number | null = null;
+  for (const style of styles) {
+    const asset = streetlampAsset(style);
+    if (!asset) continue;
+    colour ??= STREETLAMP_ASSET_DEFS[style].lightColor;
+    for (const part of asset.parts) {
+      const body = new THREE.InstancedMesh(part.geometry, part.material, 1);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+    }
+  }
+  if (colour !== null && !hasNightLightField() && typeof document !== 'undefined') {
+    const site: GlowPatchSite = { x: 0, z: 0, radius: LAMP_POOL_RADIUS };
+    group.add(
+      new THREE.Mesh(
+        buildDrapedGlowGeometry([site], () => 0),
+        lampPoolMaterial(colour),
+      ),
+    );
+  }
+  return group;
+}
 
 /**
  * Instance a circuit's lamps and prepare their lights.
@@ -223,23 +279,13 @@ export function buildRealmRacersLamps(
       z: site.z,
       radius: LAMP_POOL_RADIUS,
     }));
-    const poolMaterial = new THREE.MeshBasicMaterial({
-      map: radialGlowTexture(),
-      color: poolColour,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    poolMaterial.name = 'realmRacersLamps:pool';
     const pools = new THREE.Mesh(
       buildDrapedGlowGeometry(patches, () => groundY),
-      poolMaterial,
+      lampPoolMaterial(poolColour),
     );
     pools.geometry.computeBoundingSphere();
     pools.renderOrder = floorVfxRenderOrder('ground', 0);
     pools.visible = false;
-    rallyPoolMaterials.add(poolMaterial);
     rallyPoolMeshes.push(pools);
     group.add(pools);
   }
