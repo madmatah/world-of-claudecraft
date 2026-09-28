@@ -33,13 +33,22 @@
 // interval (now mostly the rival's own INPUT changes), and the glide absorbs
 // it.
 //
+// The HORIZON is where the local kart is drawn: while that kart is predicted
+// (wire v2), every rival is carried into the same instant, read off the
+// predictor's own tick bookkeeping (`remoteRacerHorizon`), so a touch, a lead
+// or a box race on screen is the one the server resolves. Otherwise it is the
+// pose's age since arrival, the frame the stood-down self is drawn in.
+//
 // Display-only, like self_motion.ts: the projected pose feeds the mesh and
 // nothing else. Targeting, range checks and every server decision keep using
 // authoritative positions (src/net/CLAUDE.md), and the projection is bounded:
 // the horizon is capped, and a target far from the drawn pose snaps outright
 // (teleports, track resets, respawns must not glide).
 
+import { resolveMovement } from '../sim/colliders';
 import { vehicleProfile } from '../sim/content/vehicles';
+import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../sim/realm_racers_ground_blast';
+import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { DT, type VehicleDrive } from '../sim/types';
 import {
   advanceVehicleDrive,
@@ -47,7 +56,7 @@ import {
   vehicleVelocityX,
   vehicleVelocityZ,
 } from '../sim/vehicle_motion';
-import type { SelfRenderPrediction } from './self_render_position_core';
+import { SELF_MOTION_HANDOFF_RATE, type SelfRenderPrediction } from './self_render_position_core';
 
 export interface RemoteVehiclePose {
   x: number;
@@ -61,8 +70,29 @@ export interface RemoteVehiclePose {
  * arrival, so ordinary racing sits well under this. The cap only bites on a
  * broadcast stall, where projecting further would run the machine through a
  * corner it never took; past it the target holds and the glide settles.
+ *
+ * In the local kart's time frame (`remoteRacerHorizon`) this stays the budget
+ * for the pose's OWN age, and the self frame's lead rides on top of it: the
+ * cap scales with the horizon instead of freezing a rival short of the self.
  */
 export const REMOTE_VEHICLE_AGE_CAP_MS = 250;
+/**
+ * The most a rival is carried ahead of its snapshot to meet the local kart,
+ * ms. A healthy link leads by about its round trip plus up to a tick of phase
+ * (measured 190 to 250 ms at a 200 ms RTT, about 290 at 300). Past that the
+ * held-wheel guess costs more than the frame agreement buys (its p95 error is
+ * already 2.5 yd at 300 ms against a 3.4 yd contact reach), so the lead stops
+ * here and a slower link sees its rivals slightly behind its own kart; a
+ * starved uplink (the ack stuck while the head runs on) stops here too.
+ */
+export const REMOTE_VEHICLE_LEAD_CAP_MS = 350;
+/**
+ * How fast a lead the horizon drops or gains in one frame (the local kart
+ * switching between predicted and stood down mid-race) is slewed in, 1/s: the
+ * self pose's own handoff rate, so the rivals move with the kart they are
+ * drawn beside instead of jumping back or ahead by the lead in one frame.
+ */
+export const REMOTE_VEHICLE_LEAD_SLEW_RATE = SELF_MOTION_HANDOFF_RATE;
 /**
  * Pull rate of the drawn pose toward the projected target (1/s). The target
  * is continuous between arrivals, so this rate only shows on the per-arrival
@@ -82,6 +112,12 @@ export interface RemoteVehicleDisplayState extends RemoteVehiclePose {
    *  projection never allocates and never writes into the mirrored object. */
   scratch: VehicleDrive;
   input: VehicleStepInput;
+  /** The part of a horizon switch still being slewed in, ms (0 at rest). */
+  leadCarryMs: number;
+  /** Last frame's horizon over the pose age, and whether it was the self
+   *  frame's (null before the first projected frame). */
+  lastLeadMs: number;
+  lastSelfFrame: boolean | null;
 }
 
 export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
@@ -111,12 +147,38 @@ export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
     // glide absorbs the correction. Grounded always: the wire carries no
     // vertical state, and airborne machines are rare and brief.
     input: { throttle: 1, steer: 0, handbrake: false, onGround: true, auraMult: 1 },
+    leadCarryMs: 0,
+    lastLeadMs: 0,
+    lastSelfFrame: null,
   };
 }
 
 export function resetRemoteVehicleDisplay(s: RemoteVehicleDisplayState): void {
   s.active = false;
+  s.leadCarryMs = 0;
+  s.lastSelfFrame = null;
 }
+
+/** Where a projected hull may go: the swept move from one pose to the next,
+ *  against the colliders the server drives the machine through. */
+export type RemoteVehicleResolve = (
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius: number,
+) => { x: number; z: number };
+
+/**
+ * The rally lanes' static collision (the garden wall, the authored barriers and
+ * solid dressing), swept the way the sim moves a machine through an instanced
+ * region. Outside a lane the move passes through: a racing machine only ever
+ * drives in one, and the lane branch of the resolve reads no world seed.
+ */
+export const rallyLaneResolve: RemoteVehicleResolve = (fromX, fromZ, toX, toZ, radius) =>
+  realmRacersLaneAt(toX, toZ) === null
+    ? { x: toX, z: toZ }
+    : resolveMovement(0, fromX, fromZ, toX, toZ, radius);
 
 function wrapAngle(d: number): number {
   while (d > Math.PI) d -= 2 * Math.PI;
@@ -144,8 +206,15 @@ export function stepRemoteVehicleDisplay(
   drive: Readonly<VehicleDrive>,
   ageMs: number,
   dt: number,
+  /** Where the horizon stops (`remoteRacerHorizon`); the arrival-age cap by default. */
+  capMs = REMOTE_VEHICLE_AGE_CAP_MS,
+  /** Collision for the projected path; none by default. */
+  resolve: RemoteVehicleResolve | null = null,
+  /** How much the horizon itself moved this frame beyond the frame's own time,
+   *  ms (a slewed lead decaying): the drawn pose rides it like the projection. */
+  horizonShiftMs = 0,
 ): RemoteVehicleDisplayState {
-  let remaining = Math.min(Math.max(ageMs, 0), REMOTE_VEHICLE_AGE_CAP_MS) / 1000;
+  let remaining = Math.min(Math.max(ageMs, 0), capMs) / 1000;
   const d = s.scratch;
   d.profileKey = drive.profileKey;
   d.speed = drive.speed;
@@ -164,21 +233,39 @@ export function stepRemoteVehicleDisplay(
   let tx = wireX;
   let tz = wireZ;
   let tf = wireFacing;
-  // Whole kernel ticks over the horizon (at most 5 at the cap), then a linear
-  // tail for the sub-tick remainder: the same integration order as the
-  // composing half in player_motion (rotate the body, then move at the
-  // rotated velocity).
+  // Whole kernel ticks over the horizon (the cap over DT, 5 on the arrival
+  // age and up to 12 in the self frame), then a linear tail for the sub-tick
+  // remainder: the same integration order as the composing half in
+  // player_motion (rotate the body, then move at the rotated velocity), each
+  // step swept against the colliders so a long lead cannot carry a rival
+  // through the garden wall.
   while (remaining >= DT) {
     input.steer = d.steerAngle; // hold the wheel where the wire last saw it
     tf = wrapAngle(tf + advanceVehicleDrive(d, profile, input));
-    tx += vehicleVelocityX(d, tf) * DT;
-    tz += vehicleVelocityZ(d, tf) * DT;
+    const nx = tx + vehicleVelocityX(d, tf) * DT;
+    const nz = tz + vehicleVelocityZ(d, tf) * DT;
+    if (resolve) {
+      const at = resolve(tx, tz, nx, nz, profile.bodyRadius);
+      tx = at.x;
+      tz = at.z;
+    } else {
+      tx = nx;
+      tz = nz;
+    }
     remaining -= DT;
   }
   if (remaining > 0) {
     tf = wrapAngle(tf + (d.yawRate + d.spin) * remaining);
-    tx += vehicleVelocityX(d, tf) * remaining;
-    tz += vehicleVelocityZ(d, tf) * remaining;
+    const nx = tx + vehicleVelocityX(d, tf) * remaining;
+    const nz = tz + vehicleVelocityZ(d, tf) * remaining;
+    if (resolve) {
+      const at = resolve(tx, tz, nx, nz, profile.bodyRadius);
+      tx = at.x;
+      tz = at.z;
+    } else {
+      tx = nx;
+      tz = nz;
+    }
   }
   const step = Math.max(0, Math.min(dt, 1 / 30));
   if (!s.active) {
@@ -193,10 +280,11 @@ export function stepRemoteVehicleDisplay(
   // the horizon is at the cap (a broadcast stall) the target is frozen, so
   // the carry stops too: otherwise the pose would keep sailing speed/rate
   // past the cap before the decay caught it.
-  const carrying = ageMs < REMOTE_VEHICLE_AGE_CAP_MS;
-  const carriedX = s.x + (carrying ? vehicleVelocityX(d, tf) * step : 0);
-  const carriedZ = s.z + (carrying ? vehicleVelocityZ(d, tf) * step : 0);
-  const carriedF = wrapAngle(s.facing + (carrying ? (d.yawRate + d.spin) * step : 0));
+  const carrying = ageMs < capMs;
+  const carry = carrying ? step + horizonShiftMs / 1000 : 0;
+  const carriedX = s.x + vehicleVelocityX(d, tf) * carry;
+  const carriedZ = s.z + vehicleVelocityZ(d, tf) * carry;
+  const carriedF = wrapAngle(s.facing + (d.yawRate + d.spin) * carry);
   const offX = carriedX - tx;
   const offZ = carriedZ - tz;
   const offF = wrapAngle(carriedF - tf);
@@ -226,20 +314,80 @@ export interface RemoteRacerMirror {
 }
 
 /**
- * The projection horizon of a remote racer, ms: the age of its newest wire
- * pose since ARRIVAL, plus half the uplink echo when the display frame carries
- * one (a v1 SelfMotionFrame). The v2 reconciled prediction has no echo
- * channel of its own, so a v2 session projects the rival off the arrival age
- * alone, which leaves it about one downlink in the past.
+ * How far ahead of the snapshot its acknowledgement came in the local kart is
+ * drawn, ms, or null when the local kart is not predicted (on foot, stood down,
+ * suspended, or a v1 frame). The display lerps the predicted head between the
+ * tick before it and the head itself at `tickAlpha`, so it shows client tick
+ * `head - 1 + alpha`; the snapshot's poses are the server's state after it
+ * consumed tick `ack`, and every later server tick consumes the next one. The
+ * gap is therefore `(tickOffset - 1 + alpha)` ticks, read off the predictor's
+ * own bookkeeping: no ping estimate and no clock of its own.
  */
+export function selfFrameLeadMs(selfMotion: SelfRenderPrediction | null): number | null {
+  if (!selfMotion || !('kind' in selfMotion)) return null;
+  const offset = selfMotion.tickOffset;
+  const alpha = selfMotion.tickAlpha;
+  if (offset == null || alpha == null) return null;
+  return (offset - 1 + alpha) * DT * 1000;
+}
+
+export interface RemoteRacerHorizon {
+  /** How far the newest wire pose is projected, ms. */
+  ageMs: number;
+  /** Where that projection stops (a stall), ms. */
+  capMs: number;
+}
+
+/**
+ * The projection horizon of a remote racer and its cap, written into `out`.
+ *
+ * While the local kart is predicted the rival is drawn in the SAME time frame:
+ * its pose age since arrival plus the self frame's lead over the snapshot the
+ * self pose arrived in (`selfFrameLeadMs` minus the self pose's own age). When
+ * both came in one snapshot, as they do while racing, the two ages cancel and
+ * the horizon is the self lead exactly, jitter-free; a rival pose older than
+ * the self's keeps projecting over the difference. The cap is that lead plus
+ * the arrival-age budget (`REMOTE_VEHICLE_AGE_CAP_MS`), so it grows with the
+ * horizon and a stall still holds the pose's own age to the old budget.
+ *
+ * Otherwise the horizon is today's: the age since ARRIVAL, plus half the
+ * uplink echo when the display frame carries one (a v1 SelfMotionFrame), under
+ * the fixed cap. A v2 frame that is not predicting has no echo channel, which
+ * leaves the rival about one downlink in the past, the frame the stood-down
+ * self is drawn in.
+ */
+export function remoteRacerHorizon(
+  nowMs: number,
+  netUpdatedAt: number,
+  selfMotion: SelfRenderPrediction | null,
+  /** Arrival time of the local player's newest wire pose, ms. */
+  selfArrivedAt: number | undefined,
+  out: RemoteRacerHorizon,
+): RemoteRacerHorizon {
+  const poseAgeMs = nowMs - netUpdatedAt;
+  const leadMs = selfFrameLeadMs(selfMotion);
+  if (leadMs === null) {
+    out.ageMs = poseAgeMs + (selfMotion && 'echoMs' in selfMotion ? selfMotion.echoMs * 0.5 : 0);
+    out.capMs = REMOTE_VEHICLE_AGE_CAP_MS;
+    return out;
+  }
+  const selfAgeMs = selfArrivedAt === undefined ? poseAgeMs : nowMs - selfArrivedAt;
+  const leadOverArrivalMs = Math.min(Math.max(leadMs - selfAgeMs, 0), REMOTE_VEHICLE_LEAD_CAP_MS);
+  out.ageMs = poseAgeMs + leadOverArrivalMs;
+  out.capMs = leadOverArrivalMs + REMOTE_VEHICLE_AGE_CAP_MS;
+  return out;
+}
+
+const horizonScratch: RemoteRacerHorizon = { ageMs: 0, capMs: REMOTE_VEHICLE_AGE_CAP_MS };
+
+/** `remoteRacerHorizon`'s age alone (the latency harness records it). */
 export function remoteRacerProjectionAgeMs(
   nowMs: number,
   netUpdatedAt: number,
   selfMotion: SelfRenderPrediction | null,
+  selfArrivedAt?: number,
 ): number {
-  return (
-    nowMs - netUpdatedAt + (selfMotion && 'echoMs' in selfMotion ? selfMotion.echoMs * 0.5 : 0)
-  );
+  return remoteRacerHorizon(nowMs, netUpdatedAt, selfMotion, selfArrivedAt, horizonScratch).ageMs;
 }
 
 /**
@@ -254,19 +402,97 @@ export function stepRemoteRacerView<E extends RemoteRacerMirror>(
   selfMotion: SelfRenderPrediction | null,
   nowMs: number,
   dt: number,
+  /** Arrival time of the local player's newest wire pose, ms. */
+  selfArrivedAt?: number,
+  resolve: RemoteVehicleResolve | null = rallyLaneResolve,
 ): e is E & { drive: VehicleDrive; netUpdatedAt: number } {
   if (e.drive && e.netUpdatedAt !== undefined) {
+    const horizon = remoteRacerHorizon(
+      nowMs,
+      e.netUpdatedAt,
+      selfMotion,
+      selfArrivedAt,
+      horizonScratch,
+    );
+    // A switch between the self frame and the arrival age moves the horizon
+    // by the whole lead at once; carry that jump and let it decay.
+    const selfFrame = selfFrameLeadMs(selfMotion) !== null;
+    const leadMs = horizon.ageMs - (nowMs - e.netUpdatedAt);
+    let shiftMs = 0;
+    if (s.active) {
+      const before = s.leadCarryMs;
+      s.leadCarryMs *= Math.exp(-REMOTE_VEHICLE_LEAD_SLEW_RATE * Math.max(0, Math.min(dt, 1 / 30)));
+      if (Math.abs(s.leadCarryMs) < 0.01) s.leadCarryMs = 0;
+      // The decay moves the horizon; the switch itself does not (it is carried).
+      shiftMs = s.leadCarryMs - before;
+      if (s.lastSelfFrame !== null && s.lastSelfFrame !== selfFrame) {
+        s.leadCarryMs += s.lastLeadMs - leadMs;
+      }
+    } else {
+      s.leadCarryMs = 0;
+    }
+    s.lastSelfFrame = selfFrame;
+    s.lastLeadMs = leadMs;
     stepRemoteVehicleDisplay(
       s,
       e.pos.x,
       e.pos.z,
       e.facing,
       e.drive,
-      remoteRacerProjectionAgeMs(nowMs, e.netUpdatedAt, selfMotion),
+      horizon.ageMs + s.leadCarryMs,
       dt,
+      horizon.capMs + Math.max(0, s.leadCarryMs),
+      resolve,
+      shiftMs,
     );
     return true;
   }
   if (s.active) resetRemoteVehicleDisplay(s);
   return false;
+}
+
+/**
+ * The drawn height of a projected machine. The wire's vertical stays on the
+ * interpolated segment (no vy rides for a rival), so the ground change between
+ * that pose and the drawn one is added to it, every frame, on both horizons: a
+ * grounded machine follows the surface under where it is drawn, and an airborne
+ * one keeps its height above it.
+ */
+export function remoteRacerDrawnY(
+  wireX: number,
+  wireY: number,
+  wireZ: number,
+  drawnX: number,
+  drawnZ: number,
+  ground: (x: number, z: number) => number,
+): number {
+  return wireY + ground(drawnX, drawnZ) - ground(wireX, wireZ);
+}
+
+/** The muzzle's height over the ground under it, yd: where the flash plays. */
+export const REMOTE_RACER_MUZZLE_LIFT_YD = 1.1;
+
+/**
+ * Where a Ground Blast leaves the barrel, as the viewer draws it. A rival's
+ * shell leaves the machine as DRAWN: the event's muzzle is the server pose at
+ * the shot, which a projected rival has already driven past (by the lead in the
+ * self frame, by the downlink stood down). The local pilot's own shot, and a
+ * shooter with no live projection, keep the event's own muzzle. The target is
+ * ground and stays where the server put it; `y` is the flash height over the
+ * ground at the muzzle.
+ */
+export function remoteRacerMuzzle<S extends { x: number; z: number; sourceId: number }>(
+  views: ReadonlyMap<number, { remoteVehicle: Readonly<RemoteVehicleDisplayState> }>,
+  shot: S,
+  selfId: number,
+  ground: (x: number, z: number) => number,
+): S & { y: number } {
+  const display = shot.sourceId === selfId ? undefined : views.get(shot.sourceId)?.remoteVehicle;
+  const x = display?.active
+    ? display.x + Math.sin(display.facing) * GROUND_BLAST_MUZZLE_NOSE_YD
+    : shot.x;
+  const z = display?.active
+    ? display.z + Math.cos(display.facing) * GROUND_BLAST_MUZZLE_NOSE_YD
+    : shot.z;
+  return { ...shot, x, z, y: ground(x, z) + REMOTE_RACER_MUZZLE_LIFT_YD };
 }

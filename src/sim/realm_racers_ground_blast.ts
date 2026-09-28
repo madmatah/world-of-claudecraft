@@ -60,6 +60,9 @@ export const GROUND_BLAST_MAX_FLIGHT = 0.9;
  *  the prediction error a rival holding a straight line may carry and still be
  *  caught. */
 export const GROUND_BLAST_RADIUS = 6;
+/** Where a shell leaves the machine, yards up its nose: the Fired event's
+ *  muzzle, and where a client draws a rival's shot from its drawn hull. */
+export const GROUND_BLAST_MUZZLE_NOSE_YD = 2;
 /**
  * Upward velocity a dead-centre hit adds, yd/s. THE knob for how big a hit
  * feels, and the arithmetic is simple enough to tune against directly: at

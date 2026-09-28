@@ -684,6 +684,8 @@ import {
 import {
   createRemoteVehicleDisplay,
   type RemoteVehicleDisplayState,
+  remoteRacerDrawnY,
+  remoteRacerMuzzle,
   resetRemoteVehicleDisplay,
   stepRemoteRacerView,
 } from './remote_vehicle_display_core';
@@ -7894,15 +7896,14 @@ export class Renderer {
         });
         if (ev.entityId === this.sim.playerId) this.addShake(0.5);
         break;
-      case 'realmRacersGroundBlastFired':
-        // Muzzle flash and smoke at the barrel, then the arc and the ground
-        // marker the shot is dodged off. The marker's own richness never scales:
-        // only this burst does, and it is the pooled cloud's business.
-        this.realmRacersGroundBlasts.fire(ev, this.groundSample(ev.targetX, ev.targetZ));
+      case 'realmRacersGroundBlastFired': {
+        // Muzzle flash at the barrel as DRAWN, then the arc and the dodge marker.
+        // The marker never scales: only this burst does (the pooled cloud's).
+        const shot = remoteRacerMuzzle(this.views, ev, this.sim.playerId, this.groundSample);
+        this.realmRacersGroundBlasts.fire(shot, this.groundSample(ev.targetX, ev.targetZ));
         // The local pilot's own muzzle flash and report already played at the
-        // press (predictOwnGroundBlastFire); replaying them one round trip
-        // later reads as a double shot. The arc and the marker above are not
-        // duplicated locally, so they always run.
+        // press (predictOwnGroundBlastFire): replaying them reads as a double
+        // shot. The arc and the marker are not duplicated locally.
         if (
           !consumeOwnShotFeedback(
             this.ownShotFeedback,
@@ -7910,10 +7911,11 @@ export class Renderer {
             performance.now(),
           )
         ) {
-          this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
-          playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
+          this.vfx.burst(new THREE.Vector3(shot.x, shot.y, shot.z), 'arcane', 14, 0.65);
+          playRealmRacersEventAudio(this.audioSink, this.groundSample, shot);
         }
         break;
+      }
       case 'realmRacersGroundBlastHit': {
         // The crater fires whether or not anyone was caught: a miss that lands
         // silently is most of what made the first version read as nothing
@@ -10446,22 +10448,20 @@ export class Renderer {
       // entities interpolate on their own measured cadence via
       // remoteEntityAlpha (unknown-cadence fallback).
       const rp = entityRenderPose(sim, e, ea, isSelf ? selfPos : null, v);
-      const { y, deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
-      let { x, z } = rp;
+      const { deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
+      let { x, y, z } = rp;
       let facing = rp.facing;
-      if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt)) {
-        // A remote racing machine is projected to the PRESENT off its newest
-        // wire pose, by integrating the real vehicle kernel over the pose's
-        // age, instead of interpolating the past two snapshots: the interp
-        // clock chases arrival gaps, so link jitter froze and lunged every
-        // rival, and the ~(downlink + interval) display lag put the drawn
-        // hull yards behind the server's, which is why a visually clean lunge
-        // never bumped anyone. Display-only, like the self predictor: server
-        // decisions keep using authoritative positions. The vertical stays on
-        // the interpolated wire segment (no vy on the wire; a blast arc
-        // interpolates acceptably at snapshot rate).
+      if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt, p.netUpdatedAt)) {
+        // A remote racing machine is projected off its newest wire pose with
+        // the real vehicle kernel instead of interpolated, into the frame the
+        // local kart is drawn in while that kart is predicted (so contacts,
+        // leads and box races read true at any ping), else by its arrival age
+        // (remote_vehicle_display_core.ts). Display-only: server decisions
+        // keep using authoritative positions. The wire's vertical follows the
+        // ground under the projected hull (no vy rides for a rival).
         x = v.remoteVehicle.x;
         z = v.remoteVehicle.z;
+        y = remoteRacerDrawnY(rp.x, rp.y, rp.z, x, z, this.groundSample);
         facing = v.remoteVehicle.facing;
         // The local bump bang: the DISPLAYED hulls are accurate now, so when
         // they touch with a real closing speed the player sees a collision a

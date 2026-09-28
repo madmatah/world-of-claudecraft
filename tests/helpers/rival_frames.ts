@@ -169,6 +169,10 @@ export interface ViewerScores {
   selfAlongP95Yd: number;
   /** |drawn separation - server separation| at the same instant, yd. */
   separationErr: Stats;
+  /** The drawn rival against the server's rival at the instant the drawn SELF
+   *  shows (the frame's instant plus the median self offset), yd, p95: how
+   *  well the rival sits in the local kart's frame, whatever frame that is. */
+  rivalInSelfFrameP95Yd: number;
   /** Mean rival ground speed over the window, yd/s. */
   rivalSpeed: number;
 }
@@ -211,6 +215,17 @@ export function scoreViewer(
   }
   const selfOffsetMs = median(selfOffsets);
   const rivalOffsetMs = median(rivalOffsets);
+  const inSelfFrame: number[] = [];
+  for (const f of rec.screens[viewerPid] ?? []) {
+    if (f.tMs < fromMs || f.tMs > toMs || f.rivalX === null || f.rivalZ === null) continue;
+    const self = serverPoseAt(rec.ticks, viewerPid, f.tMs);
+    const rival = serverPoseAt(rec.ticks, rivalPid, f.tMs);
+    if (!self || !rival) continue;
+    if (Math.hypot(rival.vx, rival.vz) < SCORE_MIN_SPEED) continue;
+    if (Math.hypot(self.vx, self.vz) < SCORE_MIN_SPEED) continue;
+    const there = serverPoseAt(rec.ticks, rivalPid, f.tMs + selfOffsetMs);
+    if (there) inSelfFrame.push(Math.hypot(f.rivalX - there.x, f.rivalZ - there.z));
+  }
   const abs = (values: number[]) => values.map(Math.abs);
   return {
     frames,
@@ -223,6 +238,7 @@ export function scoreViewer(
     selfAlongMeanYd: stats(selfAlong).mean,
     selfAlongP95Yd: stats(abs(selfAlong)).p95,
     separationErr: stats(sepErr),
+    rivalInSelfFrameP95Yd: stats(inSelfFrame).p95,
     rivalSpeed: stats(speeds).mean,
   };
 }
@@ -245,6 +261,11 @@ export interface ViewerContact {
   minDrawnGapYd: number;
   /** When the bump event reached this client, ms after the server bump. */
   eventArrivalMs: number | null;
+  /** First frame the drawn centres came as close as the server's were at its
+   *  bump, ms after that bump (negative: the screen got there first), or null
+   *  when they never did: the screen's view of the contact against the
+   *  server's, whatever made the server fire it. */
+  drawnAtBumpGapVsServerMs: number | null;
 }
 
 export interface ContactOutcome {
@@ -272,10 +293,12 @@ function viewerContact(
   screens: readonly ScreenFrame[],
   fromMs: number,
   bumpTMs: number,
+  serverGapAtBumpYd: number,
   a: number,
   b: number,
 ): ViewerContact {
   let drawnTouch: number | null = null;
+  let drawnAtBumpGap: number | null = null;
   let gapAtBump = Number.NaN;
   let minGap = Number.POSITIVE_INFINITY;
   let arrival: number | null = null;
@@ -284,6 +307,7 @@ function viewerContact(
     const gap = Math.hypot(f.rivalX - f.selfX, f.rivalZ - f.selfZ);
     if (!(f.tMs > bumpTMs + CONTACT_WATCH_MS)) minGap = Math.min(minGap, gap);
     if (drawnTouch === null && gap < CONTACT_REACH_YD) drawnTouch = f.tMs;
+    if (drawnAtBumpGap === null && gap <= serverGapAtBumpYd) drawnAtBumpGap = f.tMs;
     if (f.tMs <= bumpTMs) gapAtBump = gap;
     if (arrival === null && f.events.some((ev) => isPairBump(ev, a, b))) arrival = f.tMs;
   }
@@ -292,6 +316,7 @@ function viewerContact(
     drawnGapAtServerBumpYd: gapAtBump,
     minDrawnGapYd: minGap,
     eventArrivalMs: arrival === null ? null : arrival - bumpTMs,
+    drawnAtBumpGapVsServerMs: drawnAtBumpGap === null ? null : drawnAtBumpGap - bumpTMs,
   };
 }
 
@@ -313,15 +338,16 @@ export function contactOutcome(
   const bumpEvent = bumpRow?.events.find((ev) => isPairBump(ev, a, b)) as
     | (SimEvent & { impact: number })
     | undefined;
+  const serverGapAtBumpYd = bumpRow ? gapOf(bumpRow) : Number.NaN;
   return {
     serverBumped: bumpRow !== undefined,
     serverBumpTMs: bumpTMs,
     impact: bumpEvent?.impact ?? 0,
-    serverGapAtBumpYd: bumpRow ? gapOf(bumpRow) : Number.NaN,
+    serverGapAtBumpYd,
     serverOverlapVsBumpMs: overlapRow && bumpRow ? overlapRow.tMs - bumpTMs : null,
     serverMinGapYd: Math.min(...rec.ticks.filter((row) => row.poses[a] && row.poses[b]).map(gapOf)),
-    a: viewerContact(rec.screens[a] ?? [], fromMs, bumpTMs, a, b),
-    b: viewerContact(rec.screens[b] ?? [], fromMs, bumpTMs, a, b),
+    a: viewerContact(rec.screens[a] ?? [], fromMs, bumpTMs, serverGapAtBumpYd, a, b),
+    b: viewerContact(rec.screens[b] ?? [], fromMs, bumpTMs, serverGapAtBumpYd, a, b),
   };
 }
 
@@ -541,10 +567,23 @@ const SWIPE_AT_MS = 2000;
  *   sideSwipe   side by side, then at 2 s A takes B's lane.
  *   blast       one line, A 1 s behind; at 4 s A fires at its drawn B.
  */
-export function runDuel(scenario: DuelScenario, rttA: number, rttB = rttA): DuelResult {
+export interface DuelOptions {
+  /** Predict both seated pilots on wire v2 (the `?drivepredict=1` pipeline
+   *  flag): each self is drawn ahead of the server, and each rival in that
+   *  self's frame. Off: both stood down, today's default. */
+  predictDrivers?: boolean;
+}
+
+export function runDuel(
+  scenario: DuelScenario,
+  rttA: number,
+  rttB = rttA,
+  options: DuelOptions = {},
+): DuelResult {
   const d: RacerDuelHarness = createRacerDuelHarness({
     latencyA: racerLink(rttA, 1337),
     latencyB: racerLink(rttB, 7331),
+    predictDrivers: options.predictDrivers,
   });
   try {
     d.seat();

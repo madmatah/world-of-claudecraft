@@ -91,6 +91,36 @@ import {
 //
 //   Drawing the raw mirrored pose instead of the projection fails the display
 //   ceilings at every RTT and the blast ceilings at 120 and 200 ms.
+//
+// The same runs with driver prediction on (`predictDrivers`, the
+// `?drivepredict=1` flag): each self is drawn ahead of the server and each
+// rival in that self's frame (remote_vehicle_display_core.ts
+// remoteRacerHorizon), measured at the R1 commit:
+//
+//   Display, every scenario (both screens):
+//     RTT   self frame    rival frame   gap         rival in the self frame p95
+//      60    +12/+14 ms    +10/+14 ms    0 to 2 ms   0.1 to 0.4 yd
+//     120    +34/+82 ms    +34/+82 ms    0 to 4 ms   0.3 to 1.1 yd
+//     200    +92/+94 ms    +88/+94 ms    0 to 4 ms   0.2 to 1.9 yd
+//   (A and B differ at 120 ms by the arrival phase of their own links.) The
+//   stood-down arm puts the same rival 1.5 to 1.7 yd off the self's frame at
+//   every RTT, 42 ms of rival travel. A tailgate at 300 ms holds the gap at 0
+//   to 2 ms (rival 2.5 to 2.6 yd off the self frame, p95); the fixed 250 ms
+//   arrival-age cap would leave it 84 ms behind at 260 ms and 140 at 300.
+//
+//   Contacts: every screen reaches the separation the server bumped at from
+//   0 to 99 ms BEFORE the server's bump (the self frame's lead), against 16 to
+//   2466 ms after it stood down (the rammer 300 to 600 ms after); its drawn
+//   gap at the bump sits 0.02 to 1.4 yd off the server's (2.0 to 3.5 yd for the
+//   stood-down rammer). At 60 ms the rear ram fires at 4.15 yd and both screens
+//   stay above the reach (3.53 / 3.59 yd): with the display right, the forward
+//   window's early bump is what shows as a bounce off air.
+//
+//   Ground Blast, the same visual lead: hit at every RTT, falloff 0.45 / 0.65 /
+//   0.01, miss 3.3 / 2.1 / 5.9 yd with its along part -0.07 / -1.8 / -2.8 yd
+//   (stood down: -1.7 / -5.1 / -8.4). What is left at 200 ms is mostly across
+//   (-5.2 yd): the lead rule's straight line through a bend, which misses by
+//   4.3 yd there with no latency at all.
 
 const RTTS = [60, 120, 200] as const;
 type Rtt = (typeof RTTS)[number];
@@ -112,30 +142,72 @@ const SEPARATION_P95_CEIL: Record<Rtt, number> = { 60: 3.0, 120: 3.1, 200: 3.8 }
 const BUMP_GAP_ERR_CEIL: Record<Rtt, number> = { 60: 2.5, 120: 2.5, 200: 4.0 };
 const BLAST_MISS_CEIL: Record<Rtt, number> = { 60: 4.0, 120: 6.5, 200: 9.2 };
 
+// Self-frame ceilings (driver prediction on): the measured worst case over
+// every scenario and both screens plus about a fifth, rounded up.
+/** How far the rival may be drawn from the server's rival at the instant the
+ *  drawn self shows, p95, yd. */
+const SELF_FRAME_RIVAL_P95_CEIL: Record<Rtt, number> = { 60: 0.5, 120: 1.4, 200: 2.3 };
+/** The same at a 300 ms round trip (tailgate only, measured 2.52 / 2.58). */
+const SELF_FRAME_RIVAL_P95_CEIL_300 = 3.1;
+const SELF_FRAME_SEPARATION_P95_CEIL: Record<Rtt, number> = { 60: 0.7, 120: 3.2, 200: 3.4 };
+const SELF_FRAME_BUMP_GAP_ERR_CEIL: Record<Rtt, number> = { 60: 0.2, 120: 1.0, 200: 1.7 };
+/** The part of the blast miss along the rival's motion, |yd|: what latency
+ *  costs a visual lead. */
+const SELF_FRAME_BLAST_ALONG_CEIL: Record<Rtt, number> = { 60: 0.5, 120: 2.2, 200: 3.4 };
+/** The two frames agree to the offset search's resolution (2 ms steps) plus
+ *  the arrival-phase wobble, ms. */
+const SELF_FRAME_GAP_CEIL_MS = 10;
+/** One server tick, ms: a screen reaching the bump's separation later than
+ *  this after the server's bump is drawing a past frame again. */
+const TICK_MS = 1000 / TICK_RATE;
+
 const results = new Map<string, DuelResult>();
+const predicted = new Map<string, DuelResult>();
 const key = (scenario: DuelScenario, rttA: number, rttB = rttA) => `${scenario}:${rttA}:${rttB}`;
-function result(scenario: DuelScenario, rttA: number, rttB = rttA): DuelResult {
-  const found = results.get(key(scenario, rttA, rttB));
-  if (!found) throw new Error(`no run for ${key(scenario, rttA, rttB)}`);
-  return found;
+function found(
+  runs: Map<string, DuelResult>,
+  scenario: DuelScenario,
+  rttA: number,
+  rttB = rttA,
+): DuelResult {
+  const run = runs.get(key(scenario, rttA, rttB));
+  if (!run) throw new Error(`no run for ${key(scenario, rttA, rttB)}`);
+  return run;
 }
-function contactOf(scenario: DuelScenario, rtt: number): ContactOutcome {
-  const contact = result(scenario, rtt).contact;
-  if (!contact) throw new Error(`${scenario} at ${rtt} ms recorded no contact outcome`);
-  return contact;
+const result = (scenario: DuelScenario, rttA: number, rttB = rttA) =>
+  found(results, scenario, rttA, rttB);
+/** The same run with driver prediction on. */
+const predictedResult = (scenario: DuelScenario, rttA: number, rttB = rttA) =>
+  found(predicted, scenario, rttA, rttB);
+function contactIn(run: DuelResult): ContactOutcome {
+  if (!run.contact) throw new Error(`${run.scenario} at ${run.rttA} ms recorded no contact`);
+  return run.contact;
 }
-function blastOf(rtt: number): NonNullable<DuelResult['blast']> {
-  const blast = result('blast', rtt).blast;
-  if (!blast) throw new Error(`the blast at ${rtt} ms recorded no outcome`);
-  return blast;
+function blastIn(run: DuelResult): NonNullable<DuelResult['blast']> {
+  if (!run.blast) throw new Error(`the blast at ${run.rttA} ms recorded no outcome`);
+  return run.blast;
 }
+const contactOf = (scenario: DuelScenario, rtt: number) => contactIn(result(scenario, rtt));
+const blastOf = (rtt: number) => blastIn(result('blast', rtt));
+const predictedContactOf = (scenario: DuelScenario, rtt: number) =>
+  contactIn(predictedResult(scenario, rtt));
+const predictedBlastOf = (rtt: number) => blastIn(predictedResult('blast', rtt));
 
 beforeAll(() => {
-  for (const scenario of SCENARIOS) {
-    for (const rtt of RTTS) results.set(key(scenario, rtt), runDuel(scenario, rtt));
+  for (const [runs, predictDrivers] of [
+    [results, false],
+    [predicted, true],
+  ] as const) {
+    for (const scenario of SCENARIOS) {
+      for (const rtt of RTTS) {
+        runs.set(key(scenario, rtt), runDuel(scenario, rtt, rtt, { predictDrivers }));
+      }
+    }
+    runs.set(key('sideBySide', 60, 200), runDuel('sideBySide', 60, 200, { predictDrivers }));
   }
-  results.set(key('sideBySide', 60, 200), runDuel('sideBySide', 60, 200));
-}, 120_000);
+  // Past the arrival-age cap: only the scaled cap keeps this rival in frame.
+  predicted.set(key('tailgate', 300), runDuel('tailgate', 300, 300, { predictDrivers: true }));
+}, 240_000);
 
 /** The ceilings on how far a screen may sit from the server. */
 function expectDisplayCeilings(screen: ViewerScores, rtt: Rtt): void {
@@ -148,6 +220,27 @@ function expectDisplayCeilings(screen: ViewerScores, rtt: Rtt): void {
   expect(screen.rivalAcrossP95Yd).toBeLessThan(0.5);
   expect(screen.separationErr.p95).toBeLessThanOrEqual(SEPARATION_P95_CEIL[rtt]);
   expect(screen.separationErr.max).toBeLessThan(5);
+}
+
+/** The ceilings with driver prediction on: every rival in the self's frame. */
+function expectSelfFrameCeilings(screen: ViewerScores, rtt: Rtt): void {
+  expect(screen.frames).toBeGreaterThan(20);
+  expect(Math.abs(screen.frameGapMs)).toBeLessThanOrEqual(SELF_FRAME_GAP_CEIL_MS);
+  // The self leads the server by about the uplink, never more than it plus a
+  // tick (the frame the input buffer holds).
+  expect(screen.selfOffsetMs).toBeLessThanOrEqual(rtt / 2 + TICK_MS);
+  expect(screen.rivalInSelfFrameP95Yd).toBeLessThanOrEqual(SELF_FRAME_RIVAL_P95_CEIL[rtt]);
+  expect(screen.separationErr.p95).toBeLessThanOrEqual(SELF_FRAME_SEPARATION_P95_CEIL[rtt]);
+  expect(screen.separationErr.max).toBeLessThan(5);
+}
+
+/** The frames R1 draws: the flip of expectStoodDownFrames. */
+function expectSelfFrames(screen: ViewerScores): void {
+  // Both drawn ahead of the server, the rival in the self's own frame.
+  expect(screen.selfOffsetMs).toBeGreaterThan(0);
+  expect(screen.rivalOffsetMs).toBeGreaterThan(0);
+  expect(Math.abs(screen.frameGapMs)).toBeLessThanOrEqual(SELF_FRAME_GAP_CEIL_MS);
+  expect(screen.rivalAlongMeanYd).toBeGreaterThan(0);
 }
 
 /** Today's frames: what drawing rivals in the local kart's frame changes. */
@@ -300,5 +393,157 @@ describe('baseline R1 is expected to flip', () => {
     expect(miss[1]).toBeLessThan(miss[2]);
     expect(blastOf(60).hit).toBe(true);
     expect(blastOf(200).hit).toBe(false);
+  });
+});
+
+describe('two human racers under latency, driver prediction on', () => {
+  it('predicts both racers through the approach on every screen', () => {
+    for (const scenario of SCENARIOS) {
+      for (const rtt of RTTS) {
+        const run = predictedResult(scenario, rtt);
+        expect(run.circuitId).toBe('evergarden_express_tour');
+        // Both screens' racing frames, bar the suspends at GO and race end.
+        expect(run.predictedFrames).toBeGreaterThan(run.a.frames + run.b.frames);
+      }
+    }
+  });
+
+  it.each([
+    ['rearRam', 120],
+    ['blast', 200],
+  ] as const)('replays %s at %i ms identically for the same seeds and links', (s, rtt) => {
+    expect(runDuel(s, rtt, rtt, { predictDrivers: true })).toEqual(predictedResult(s, rtt));
+  });
+});
+
+describe.each(RTTS)('rival frames at RTT %i ms, driver prediction on', (rtt) => {
+  it.each(SCENARIOS)('%s: each screen stays within the self-frame ceilings', (s) => {
+    const run = predictedResult(s, rtt);
+    expectSelfFrameCeilings(run.a, rtt);
+    expectSelfFrameCeilings(run.b, rtt);
+  });
+
+  it.each(['rearRam', 'sideSwipe'] as const)(
+    '%s: each screen shows the bump where and when the server makes it',
+    (s) => {
+      const contact = predictedContactOf(s, rtt);
+      expect(contact.serverBumped).toBe(true);
+      for (const screen of [contact.a, contact.b]) {
+        expect(screen.eventArrivalMs).toBeGreaterThanOrEqual(rtt / 2);
+        expect(screen.eventArrivalMs).toBeLessThanOrEqual(rtt / 2 + 60);
+        expect(
+          Math.abs(screen.drawnGapAtServerBumpYd - contact.serverGapAtBumpYd),
+        ).toBeLessThanOrEqual(SELF_FRAME_BUMP_GAP_ERR_CEIL[rtt]);
+        // The screen reaches the separation the server bumped at within the
+        // self frame's lead before the bump, and never a tick after it.
+        const at = screen.drawnAtBumpGapVsServerMs;
+        expect(at).not.toBeNull();
+        expect(at as number).toBeGreaterThanOrEqual(-(rtt / 2 + TICK_MS));
+        expect(at as number).toBeLessThanOrEqual(TICK_MS);
+      }
+    },
+  );
+
+  it('Ground Blast: a visual lead on the drawn rival hits, within the along ceiling', () => {
+    const blast = predictedBlastOf(rtt);
+    expect(blast.fired).toBe(true);
+    expect(blast.serverClamped).toBe(false);
+    expect(blast.falloff).toBeCloseTo(Math.max(0, 1 - blast.missYd / GROUND_BLAST_RADIUS), 9);
+    expect(blast.hit).toBe(true);
+    expect(blast.missYd).toBeLessThan(GROUND_BLAST_RADIUS);
+    expect(Math.abs(blast.missAlongYd)).toBeLessThanOrEqual(SELF_FRAME_BLAST_ALONG_CEIL[rtt]);
+  });
+});
+
+describe('rival frames across RTTs, driver prediction on', () => {
+  it('each screen follows its own link in an asymmetric pair', () => {
+    const run = predictedResult('sideBySide', 60, 200);
+    expectSelfFrameCeilings(run.a, 60);
+    expectSelfFrameCeilings(run.b, 200);
+  });
+
+  it('keeps the rival in the self frame past the arrival-age cap (300 ms)', () => {
+    // The self leads the rival's snapshot by about 290 ms here, over the
+    // 250 ms arrival budget: a fixed cap left the rival 140 ms behind the self
+    // (measured), the scaled one keeps the two frames together.
+    const run = predictedResult('tailgate', 300);
+    for (const screen of [run.a, run.b]) {
+      expect(screen.frames).toBeGreaterThan(20);
+      expect(Math.abs(screen.frameGapMs)).toBeLessThanOrEqual(SELF_FRAME_GAP_CEIL_MS);
+      expect(screen.selfOffsetMs).toBeGreaterThan(0);
+      expect(screen.selfOffsetMs).toBeLessThanOrEqual(300 / 2 + TICK_MS);
+      expect(screen.rivalInSelfFrameP95Yd).toBeLessThanOrEqual(SELF_FRAME_RIVAL_P95_CEIL_300);
+    }
+  });
+});
+
+// The block above ("baseline R1 is expected to flip"), flipped by drawing each
+// rival in the local kart's frame: the same questions, asked with driver
+// prediction on.
+describe('R1 flipped: rivals drawn in the local kart frame', () => {
+  it.each(RTTS)('the drawn frames at %i ms: self ahead, rival in its frame', (rtt) => {
+    for (const s of SCENARIOS) {
+      expectSelfFrames(predictedResult(s, rtt).a);
+      expectSelfFrames(predictedResult(s, rtt).b);
+    }
+  });
+
+  it('the asymmetric pair: each screen in its own self frame', () => {
+    const run = predictedResult('sideBySide', 60, 200);
+    expectSelfFrames(run.a);
+    expectSelfFrames(run.b);
+    // Each lead follows its own link.
+    expect(run.b.selfOffsetMs).toBeGreaterThan(run.a.selfOffsetMs + 40);
+  });
+
+  it('the rival no longer falls behind its server pose, at any RTT', () => {
+    for (const rtt of RTTS) {
+      const shown = predictedResult('tailgate', rtt).a;
+      expect(shown.rivalAlongMeanYd).toBeGreaterThan(0);
+      // The gap the follower sees is nearer the server's than stood down.
+      expect(shown.separationErr.p95).toBeLessThan(result('tailgate', rtt).a.separationErr.p95);
+    }
+  });
+
+  it.each(RTTS)('contacts at %i ms: the screens reach the bump by the time it lands', (rtt) => {
+    for (const s of ['rearRam', 'sideSwipe'] as const) {
+      const before = contactOf(s, rtt);
+      const after = predictedContactOf(s, rtt);
+      // Stood down, a screen got there late or never; now at or before.
+      for (const side of ['a', 'b'] as const) {
+        expect(after[side].drawnAtBumpGapVsServerMs as number).toBeLessThanOrEqual(TICK_MS);
+      }
+      // The rammer's and the swiper's screen draw the bump closer to the
+      // server's separation than they did stood down.
+      expect(Math.abs(after.a.drawnGapAtServerBumpYd - after.serverGapAtBumpYd)).toBeLessThan(
+        Math.abs(before.a.drawnGapAtServerBumpYd - before.serverGapAtBumpYd),
+      );
+    }
+    // The rammer no longer sees the gap wider than the one it bumps across.
+    const ram = predictedContactOf('rearRam', rtt);
+    expect(ram.a.drawnGapAtServerBumpYd).toBeLessThanOrEqual(ram.serverGapAtBumpYd + 0.5);
+  });
+
+  it('Ground Blast: the visual lead hits at every RTT, 200 ms included', () => {
+    for (const rtt of RTTS) {
+      const after = predictedBlastOf(rtt);
+      expect(after.hit).toBe(true);
+      // The along miss, what latency cost the lead, shrank at every RTT.
+      expect(Math.abs(after.missAlongYd)).toBeLessThan(Math.abs(blastOf(rtt).missAlongYd));
+    }
+    expect(blastOf(200).hit).toBe(false);
+  });
+});
+
+// The server's forward contact window (REALM_RACERS_CONTACT_EARLY_TICKS) is to
+// be retuned or removed once rivals share the local kart's frame. This holds
+// what it does then: at 60 ms the rear ram fires over the reach while both
+// screens still draw a gap, the "bounce off air" the display no longer hides.
+describe('lot 7 is expected to flip: the forward contact window', () => {
+  it('rear ram at 60 ms: the server bumps while both screens draw a gap', () => {
+    const ram = predictedContactOf('rearRam', 60);
+    expect(ram.serverGapAtBumpYd).toBeGreaterThan(CONTACT_REACH_YD);
+    expect(ram.a.minDrawnGapYd).toBeGreaterThan(CONTACT_REACH_YD);
+    expect(ram.b.minDrawnGapYd).toBeGreaterThan(CONTACT_REACH_YD);
   });
 });

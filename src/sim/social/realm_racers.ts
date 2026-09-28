@@ -43,6 +43,7 @@ import type { RallyDriverTier } from '../realm_racers_driver';
 import {
   GROUND_BLAST_CONTROL_SECONDS,
   GROUND_BLAST_CONTROL_SPEED_MULT,
+  GROUND_BLAST_MUZZLE_NOSE_YD,
   GROUND_BLAST_SHOCK_GRIP,
   GROUND_BLAST_SHOCK_TICKS,
   groundBlastFalloff,
@@ -1575,8 +1576,8 @@ export function realmRacersFireGroundBlast(ctx: SimContext, caster: Entity): voi
   ctx.emit({
     type: 'realmRacersGroundBlastFired',
     sourceId: caster.id,
-    x: caster.pos.x + Math.sin(caster.facing) * 2,
-    z: caster.pos.z + Math.cos(caster.facing) * 2,
+    x: caster.pos.x + Math.sin(caster.facing) * GROUND_BLAST_MUZZLE_NOSE_YD,
+    z: caster.pos.z + Math.cos(caster.facing) * GROUND_BLAST_MUZZLE_NOSE_YD,
     targetX: aim.x,
     targetZ: aim.z,
     flightSeconds: aim.flightTicks / TICK_RATE,

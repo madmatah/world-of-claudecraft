@@ -753,6 +753,8 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       // (stepRemoteRacerView) with the same entity, display frame, clock and
       // frame dt. A rival gone from the mirror has no view to project.
       const e = client.entities.get(rivalPid);
+      // renderer.sync hands the step the local player's newest arrival too.
+      const selfArrivedAt = client.entities.get(client.playerId)?.netUpdatedAt;
       let projected = false;
       if (e)
         projected = stepRemoteRacerView(
@@ -761,11 +763,12 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
           frame.selfMotion,
           frame.nowMs,
           frame.frameDtSec,
+          selfArrivedAt,
         );
       else if (rivalDisplay.active) resetRemoteVehicleDisplay(rivalDisplay);
       const ageMs =
         projected && e?.netUpdatedAt !== undefined
-          ? remoteRacerProjectionAgeMs(frame.nowMs, e.netUpdatedAt, frame.selfMotion)
+          ? remoteRacerProjectionAgeMs(frame.nowMs, e.netUpdatedAt, frame.selfMotion, selfArrivedAt)
           : null;
       if (recording) {
         recording.screens[self.pid]?.push({

@@ -173,6 +173,7 @@ export class MovementPredictionPipeline {
     residual: null,
     deck: null,
     tickOffset: null,
+    tickAlpha: null,
     drive: null,
   };
   private readonly driveOutput: ReconciledDrive = {
@@ -294,6 +295,7 @@ export class MovementPredictionPipeline {
       this.predicted.drive && wire.reconAckClientTick >= 0
         ? this.lastPredictedClientTick - wire.reconAckClientTick
         : null;
+    output.tickAlpha = output.tickOffset === null ? null : alpha;
     this.pendingResidual = null;
     return output;
   }

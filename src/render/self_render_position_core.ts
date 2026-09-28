@@ -24,7 +24,7 @@ import {
 
 // Decay rate of the one-time offset captured when the self-motion predictor
 // takes over from the lead-smoothing path (gone in ~0.3 s, no camera step).
-const SELF_MOTION_HANDOFF_RATE = 15;
+export const SELF_MOTION_HANDOFF_RATE = 15;
 export const MAX_SELF_REWIND_YD_PER_SEC = 12;
 
 const SELF_OFFSET_FLUSH_YD = 1e-3;
@@ -142,9 +142,13 @@ export interface ReconciledSelfPrediction {
    *  height stays world yards, the hull never heaves), and
    *  render/deck_frame.ts places them on the drawn deck. */
   deck?: number | null;
-  /** While driving: the displayed client tick minus the acknowledged one, the
-   *  depth a rival drawn in the self frame is projected by. Null otherwise. */
+  /** While driving: the predicted head's client tick minus the acknowledged
+   *  one. With `tickAlpha` it is the depth a rival drawn in the self frame is
+   *  projected by (remote_vehicle_display_core.ts). Null otherwise. */
   tickOffset?: number | null;
+  /** The interpolation alpha `position` was drawn at between the head's
+   *  previous tick and the head, set with `tickOffset`. */
+  tickAlpha?: number | null;
 }
 
 export type SelfRenderPrediction = SelfMotionFrame | ReconciledSelfPrediction;

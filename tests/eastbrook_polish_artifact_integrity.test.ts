@@ -1403,7 +1403,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
   // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
-  '180ff2c6a4701c012c953d93bed68ed21005694b37418c36de153fd9e92b59ae';
+  // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
+  'f9b5e1674d7b09d9645c8fcec52ee6ba2fa5293ecd638d97a3cc2aa7bce1766d';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1435,7 +1436,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
   // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
-  '31b8232595c17168a5698c35713d01f85db6538d3e6877658d44e6a31d3a4f4a';
+  // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
+  '5076bcf99fd904f8b2d31b930fbaddb0d42a4eb3976cbbc650b0a40de221285f';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2826,7 +2828,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers arrival compile lift for band landings.
       // Re-minted for the Realm Racers self drive view on both wires.
       // Re-minted for the Realm Racers drive view heading handoff and kart effects.
-    ).toBe('94c313031130d182fd9c8efa2177ffab6f31d2aa44c664ae0f264cb92a31c0fe');
+      // Re-minted for the Realm Racers rivals drawn in the local kart frame.
+    ).toBe('2acae4e22e522a1dd37608911c1bc0fa0b96b1eea9e7103487c20b6339a6c672');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

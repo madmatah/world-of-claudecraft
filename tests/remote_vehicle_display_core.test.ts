@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
   createRemoteVehicleDisplay,
+  REMOTE_RACER_MUZZLE_LIFT_YD,
   REMOTE_VEHICLE_AGE_CAP_MS,
+  REMOTE_VEHICLE_LEAD_CAP_MS,
+  type RemoteRacerHorizon,
+  type RemoteVehicleDisplayState,
+  rallyLaneResolve,
+  remoteRacerDrawnY,
+  remoteRacerHorizon,
+  remoteRacerMuzzle,
   remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
+  selfFrameLeadMs,
   stepRemoteRacerView,
   stepRemoteVehicleDisplay,
 } from '../src/render/remote_vehicle_display_core';
 import type { SelfMotionFrame } from '../src/render/self_motion';
 import type { ReconciledSelfPrediction } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
+import { REALM_RACERS_ORIGIN, realmRacersLaneAt } from '../src/sim/realm_racers_layout';
 import { DT, type VehicleDrive } from '../src/sim/types';
 import {
   advanceVehicleDrive,
@@ -325,5 +336,306 @@ describe('the remote racer view step renderer.sync runs', () => {
       false,
     );
     expect(s.active).toBe(false);
+  });
+});
+
+describe('the self-frame horizon: rivals drawn where the local kart is', () => {
+  const TICK_MS = DT * 1000;
+  const v1Frame = { echoMs: 120 } as unknown as SelfMotionFrame;
+  /** A driving v2 frame: the head `tickOffset` ticks over the ack, drawn at `alpha`. */
+  const driving = (tickOffset: number, tickAlpha: number): ReconciledSelfPrediction => ({
+    kind: 'reconciled',
+    position: { x: 0, y: 0, z: 0 },
+    residual: null,
+    tickOffset,
+    tickAlpha,
+  });
+  const horizon = (): RemoteRacerHorizon => ({ ageMs: 0, capMs: 0 });
+  const straight = (speed: number): VehicleDrive => {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = speed;
+    return drive;
+  };
+
+  it('reads the lead off the predictor: (tickOffset - 1 + alpha) ticks', () => {
+    expect(selfFrameLeadMs(driving(3, 0.4))).toBeCloseTo((3 - 1 + 0.4) * TICK_MS, 9);
+    expect(selfFrameLeadMs(driving(1, 0))).toBe(0);
+    expect(selfFrameLeadMs(driving(6, 1))).toBeCloseTo(6 * TICK_MS, 9);
+    // Not predicted: no lead, whatever else the frame carries.
+    expect(selfFrameLeadMs(null)).toBeNull();
+    expect(selfFrameLeadMs(v1Frame)).toBeNull();
+    expect(
+      selfFrameLeadMs({ kind: 'reconciled', position: { x: 0, y: 0, z: 0 }, residual: null }),
+    ).toBeNull();
+    expect(selfFrameLeadMs({ ...driving(3, 0.4), tickOffset: null })).toBeNull();
+    expect(selfFrameLeadMs({ ...driving(3, 0.4), tickAlpha: null })).toBeNull();
+  });
+
+  it('projects a rival from the self pose snapshot by exactly the self lead', () => {
+    // Rival and self arrived together (one snapshot): the arrival ages cancel.
+    const frame = driving(4, 0.25);
+    const lead = (4 - 1 + 0.25) * TICK_MS;
+    for (const now of [1000, 1017, 1049]) {
+      const out = remoteRacerHorizon(now, 980, frame, 980, horizon());
+      expect(out.ageMs).toBeCloseTo(lead, 9);
+      // The cap is the lead over the self's arrival plus the arrival budget.
+      expect(out.capMs).toBeCloseTo(lead - (now - 980) + REMOTE_VEHICLE_AGE_CAP_MS, 9);
+    }
+  });
+
+  it('carries a rival pose older than the self one over the difference', () => {
+    const frame = driving(4, 0.25);
+    const lead = (4 - 1 + 0.25) * TICK_MS;
+    const out = remoteRacerHorizon(1000, 930, frame, 980, horizon());
+    expect(out.ageMs).toBeCloseTo(lead + 50, 9);
+  });
+
+  it('keeps the arrival age and the fixed cap exactly when the kart is not predicted', () => {
+    for (const frame of [null, { ...driving(4, 0.25), tickOffset: null }] as const) {
+      const out = remoteRacerHorizon(1000, 940, frame, 990, horizon());
+      expect(out).toEqual({ ageMs: 60, capMs: REMOTE_VEHICLE_AGE_CAP_MS });
+      expect(remoteRacerProjectionAgeMs(1000, 940, frame, 990)).toBe(60);
+    }
+    // v1 keeps its echo half.
+    expect(remoteRacerHorizon(1000, 940, v1Frame, 990, horizon())).toEqual({
+      ageMs: 120,
+      capMs: REMOTE_VEHICLE_AGE_CAP_MS,
+    });
+  });
+
+  it('bounds the lead, and holds a stalled pose to the arrival budget', () => {
+    // A starved uplink: the ack stuck 40 ticks back while snapshots still land.
+    const stuck = remoteRacerHorizon(1000, 1000, driving(40, 0.5), 1000, horizon());
+    expect(stuck.ageMs).toBe(REMOTE_VEHICLE_LEAD_CAP_MS);
+    expect(stuck.capMs).toBe(REMOTE_VEHICLE_LEAD_CAP_MS + REMOTE_VEHICLE_AGE_CAP_MS);
+    // A whole-downlink stall: nothing arrives while the head runs on, so the
+    // lead over the self's arrival holds and only the pose's own age grows,
+    // past the budget, where the projection stops.
+    const lead = (4 - 1 + 0.5) * TICK_MS;
+    const fresh = remoteRacerHorizon(1000, 1000, driving(4, 0.5), 1000, horizon());
+    const stall = 400;
+    const late = remoteRacerHorizon(
+      1000 + stall,
+      1000,
+      driving(4 + stall / TICK_MS, 0.5),
+      1000,
+      horizon(),
+    );
+    expect(fresh.capMs).toBeCloseTo(lead + REMOTE_VEHICLE_AGE_CAP_MS, 9);
+    expect(late.capMs).toBeCloseTo(fresh.capMs, 9);
+    expect(late.ageMs).toBeGreaterThan(late.capMs);
+    // A self pose that arrived AFTER its lead ran out clamps at zero.
+    expect(remoteRacerHorizon(1000, 900, driving(1, 0), 900, horizon()).ageMs).toBe(100);
+  });
+
+  it('projects past the old fixed cap when the self frame leads by more', () => {
+    // A 200 ms round trip leads by about 300 ms: the arrival-age cap (250 ms)
+    // would freeze the rival 50 ms short of the self.
+    const frame = driving(7, 0);
+    const lead = 6 * TICK_MS;
+    expect(lead).toBeGreaterThan(REMOTE_VEHICLE_AGE_CAP_MS);
+    const drive = straight(40);
+    const mirror = { pos: { x: 0, z: 0 }, facing: 0, drive, netUpdatedAt: 1000 };
+    const s = createRemoteVehicleDisplay();
+    expect(stepRemoteRacerView(s, mirror, frame, 1000, 1 / 60, 1000)).toBe(true);
+    const direct = createRemoteVehicleDisplay();
+    stepRemoteVehicleDisplay(direct, 0, 0, 0, drive, lead, 1 / 60, lead + 250);
+    expect(s.z).toBeCloseTo(direct.z, 9);
+    const capped = createRemoteVehicleDisplay();
+    stepRemoteVehicleDisplay(capped, 0, 0, 0, drive, lead, 1 / 60);
+    expect(s.z).toBeGreaterThan(capped.z + 1);
+  });
+
+  it('never writes into the prediction frame or the mirror', () => {
+    const frame = Object.freeze(driving(5, 0.5));
+    const drive = Object.freeze(straight(30));
+    const mirror = Object.freeze({
+      pos: Object.freeze({ x: 1, z: 2 }),
+      facing: 0.2,
+      drive,
+      netUpdatedAt: 500,
+    });
+    const s = createRemoteVehicleDisplay();
+    for (let i = 0; i < 4; i++) stepRemoteRacerView(s, mirror, frame, 510 + i * 16, 1 / 60, 500);
+    expect(frame.tickOffset).toBe(5);
+    expect(mirror.pos.x).toBe(1);
+    expect(drive.speed).toBe(30);
+  });
+});
+
+describe('the drawn height and the muzzle of a projected rival', () => {
+  const ramp = (x: number, z: number): number => 0.25 * x + 0.1 * z;
+  const flat = (): number => 0;
+
+  it('keeps the wire height where the projection has not moved the hull', () => {
+    expect(remoteRacerDrawnY(10, 3, 10, 10, 10, ramp)).toBe(3);
+  });
+
+  it('follows the ground under the projected hull with no step, keeping any height above it', () => {
+    // Grounded: the wire y is the ground there, the drawn y the ground here.
+    const grounded = remoteRacerDrawnY(10, ramp(10, 10), 10, 22, 14, ramp);
+    expect(grounded).toBeCloseTo(ramp(22, 14), 12);
+    // Airborne 2 yd up (a blast pop): still 2 yd over the ground drawn under it.
+    const airborne = remoteRacerDrawnY(10, ramp(10, 10) + 2, 10, 22, 14, ramp);
+    expect(airborne).toBeCloseTo(ramp(22, 14) + 2, 12);
+    // Continuous in the displacement: a hair of projection moves y by a hair.
+    const tiny = remoteRacerDrawnY(10, ramp(10, 10), 10, 10.01, 10, ramp);
+    expect(Math.abs(tiny - ramp(10, 10))).toBeLessThan(0.01);
+    // A flat circuit band: nothing changes.
+    expect(remoteRacerDrawnY(10, 5, 10, 22, 14, () => -1)).toBe(5);
+  });
+
+  const shot = { sourceId: 7, x: 3, z: 4, targetX: 30, targetZ: 40, flightSeconds: 0.6 };
+  const drawnAt = (x: number, z: number, facing: number): RemoteVehicleDisplayState => {
+    const display = createRemoteVehicleDisplay();
+    display.active = true;
+    display.x = x;
+    display.z = z;
+    display.facing = facing;
+    return display;
+  };
+
+  it('leaves the barrel of the machine as drawn, at the server muzzle offset', () => {
+    const views = new Map([[7, { remoteVehicle: drawnAt(20, -5, 0.7) }]]);
+    const at = remoteRacerMuzzle(views, shot, 1, ramp);
+    expect(at.x).toBeCloseTo(20 + Math.sin(0.7) * GROUND_BLAST_MUZZLE_NOSE_YD, 12);
+    expect(at.z).toBeCloseTo(-5 + Math.cos(0.7) * GROUND_BLAST_MUZZLE_NOSE_YD, 12);
+    // The flash sits over the ground under the drawn barrel.
+    expect(at.y).toBeCloseTo(ramp(at.x, at.z) + REMOTE_RACER_MUZZLE_LIFT_YD, 12);
+    // The landing point is ground, and stays the server's.
+    expect([at.targetX, at.targetZ, at.flightSeconds, at.sourceId]).toEqual([30, 40, 0.6, 7]);
+    expect(shot.x).toBe(3);
+  });
+
+  it('keeps the event muzzle for the local pilot and for a shooter with no live projection', () => {
+    const lift = REMOTE_RACER_MUZZLE_LIFT_YD;
+    const self = new Map([[7, { remoteVehicle: drawnAt(20, -5, 0.7) }]]);
+    // The shooter IS the viewer: its own view is never a projection.
+    expect(remoteRacerMuzzle(self, shot, 7, flat)).toEqual({ ...shot, y: lift });
+    expect(remoteRacerMuzzle(new Map(), shot, 1, flat)).toEqual({ ...shot, y: lift });
+    const idle = new Map([[7, { remoteVehicle: createRemoteVehicleDisplay() }]]);
+    expect(remoteRacerMuzzle(idle, shot, 1, flat)).toEqual({ ...shot, y: lift });
+  });
+
+  it('stood down too: a rival stepped on its arrival age follows the ground and fires from its nose', () => {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = 30;
+    const mirror = { pos: { x: 10, z: 10 }, facing: 0, drive, netUpdatedAt: 1000 };
+    const view = createRemoteVehicleDisplay();
+    expect(stepRemoteRacerView(view, mirror, null, 1100, 1 / 60)).toBe(true);
+    // 100 ms of arrival age: 3 yd up the road from the wire pose.
+    expect(view.z).toBeGreaterThan(12.9);
+    expect(view.z).toBeLessThan(13.5);
+    const y = remoteRacerDrawnY(10, ramp(10, 10), 10, view.x, view.z, ramp);
+    expect(y).toBeCloseTo(ramp(view.x, view.z), 12);
+    expect(y).not.toBeCloseTo(ramp(10, 10), 3);
+    const at = remoteRacerMuzzle(new Map([[7, { remoteVehicle: view }]]), shot, 1, flat);
+    expect(at.z).toBeCloseTo(view.z + GROUND_BLAST_MUZZLE_NOSE_YD, 12);
+    expect(at.z).not.toBe(shot.z);
+  });
+});
+
+describe('a projected rival keeps to the circuit colliders', () => {
+  const lane = realmRacersLaneAt(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z);
+  if (!lane) throw new Error('lane 0 has no circuit');
+  const { halfX, halfThickness } = lane.circuit.perimeter;
+  const radius = vehicleProfile(PROFILE_KEY).bodyRadius;
+  /** The garden wall's inner face, circuit-local x. */
+  const innerFace = halfX - halfThickness;
+  const frame = (tickOffset: number, tickAlpha: number): ReconciledSelfPrediction => ({
+    kind: 'reconciled',
+    position: { x: 0, y: 0, z: 0 },
+    residual: null,
+    tickOffset,
+    tickAlpha,
+  });
+
+  it('a rival driving into the garden wall with a 250 ms lead stays inside', () => {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = 40;
+    // Six yards short of the wall, heading straight at it (+x).
+    const start = REALM_RACERS_ORIGIN.x + innerFace - radius - 6;
+    const mirror = {
+      pos: { x: start, z: REALM_RACERS_ORIGIN.z },
+      facing: Math.PI / 2,
+      drive,
+      netUpdatedAt: 1000,
+    };
+    const lead = frame(6, 0); // (6 - 1) ticks: 250 ms
+    const walled = createRemoteVehicleDisplay();
+    stepRemoteRacerView(walled, mirror, lead, 1000, 1 / 60, 1000);
+    expect(walled.x - REALM_RACERS_ORIGIN.x).toBeLessThanOrEqual(innerFace - radius + 1e-6);
+    expect(walled.x).toBeGreaterThan(start + 5);
+    // The same step with no collision runs the hull 4 yd through the wall.
+    const open = createRemoteVehicleDisplay();
+    stepRemoteRacerView(open, mirror, lead, 1000, 1 / 60, 1000, null);
+    expect(open.x - REALM_RACERS_ORIGIN.x).toBeGreaterThan(halfX + halfThickness);
+  });
+
+  it('passes a move outside every rally lane straight through', () => {
+    expect(rallyLaneResolve(0, 0, 3, 4, radius)).toEqual({ x: 3, z: 4 });
+  });
+});
+
+describe('a mid-race switch between the self frame and the arrival age glides', () => {
+  const SPEED = 40;
+  const FRAME = 1000 / 60;
+  const SNAP = 50;
+  /** Truth: straight up +z at racing speed; a snapshot every 50 ms carries the
+   *  pose 60 ms old, and the self frame leads it by 200 ms growing with the
+   *  tick alpha, the way the predictor's own counters do. */
+  function run(mode: (tMs: number) => 'predicted' | 'stood'): { t: number; z: number }[] {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = SPEED;
+    const view = createRemoteVehicleDisplay();
+    const out: { t: number; z: number }[] = [];
+    for (let t = 1000; t < 3000; t += FRAME) {
+      const arrival = Math.floor(t / SNAP) * SNAP;
+      const mirror = {
+        pos: { x: 0, z: (SPEED * (arrival - 60)) / 1000 },
+        facing: 0,
+        drive,
+        netUpdatedAt: arrival,
+      };
+      const selfMotion: ReconciledSelfPrediction | null =
+        mode(t) === 'predicted'
+          ? {
+              kind: 'reconciled',
+              position: { x: 0, y: 0, z: 0 },
+              residual: null,
+              tickOffset: 5,
+              tickAlpha: (t - arrival) / SNAP,
+            }
+          : null;
+      stepRemoteRacerView(view, mirror, selfMotion, t, FRAME / 1000, arrival, null);
+      out.push({ t, z: view.z });
+    }
+    return out;
+  }
+  const switched = (t: number) => (t >= 1800 && t < 2400 ? 'stood' : 'predicted');
+
+  it('never jumps the rival by the lead in one frame, either way', () => {
+    const drawn = run(switched);
+    let worst = 0;
+    for (let i = 1; i < drawn.length; i++)
+      worst = Math.max(worst, Math.abs(drawn[i].z - drawn[i - 1].z));
+    // The lead is 200 to 250 ms: 8 to 10 yd in one frame without the slew
+    // (a snap). Slewed, a frame moves it at most the slew rate times the lead
+    // times the speed, over one frame (15 x 0.25 s x 40 yd/s / 60, 2.5 yd).
+    expect(worst).toBeLessThan(3);
+    expect(worst).toBeGreaterThan((SPEED * FRAME) / 1000);
+  });
+
+  it('settles on each horizon within about 300 ms of the switch', () => {
+    const drawn = run(switched);
+    const stood = run(() => 'stood');
+    const predicted = run(() => 'predicted');
+    const at = (rows: { t: number; z: number }[], tMs: number) =>
+      rows.reduce((best, r) => (Math.abs(r.t - tMs) < Math.abs(best.t - tMs) ? r : best)).z;
+    // 300 ms after dropping to stood down, and after coming back.
+    expect(Math.abs(at(drawn, 2100) - at(stood, 2100))).toBeLessThan(0.3);
+    expect(Math.abs(at(drawn, 2700) - at(predicted, 2700))).toBeLessThan(0.3);
+    // Right at the switch it has not jumped: still near the old horizon.
+    expect(Math.abs(at(drawn, 1817) - at(predicted, 1817))).toBeLessThan(2.5);
   });
 });

@@ -563,6 +563,8 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(pipeline.display()?.tickOffset).toBe(3);
     drivePredictionFrame(pipeline, 6, THROTTLE);
     expect(pipeline.display()?.tickOffset).toBe(4);
+    // with the alpha the position was drawn at, for the rival horizon
+    expect(pipeline.display()?.tickAlpha).toBe(pipeline.interpolationAlpha);
 
     // back on foot the output carries no offset
     self.drive = null;
@@ -576,6 +578,7 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     const onFoot = pipeline.display();
     expect(onFoot).not.toBeNull();
     expect(onFoot?.tickOffset).toBeNull();
+    expect(onFoot?.tickAlpha).toBeNull();
 
     const runner = predictionFixture();
     drivePredictionFrame(runner.pipeline, 0);
