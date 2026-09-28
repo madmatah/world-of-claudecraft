@@ -2060,6 +2060,8 @@ export function onArenaMatchEndForDeeds(
 // A fixed lap-time threshold per circuit that carries a flying-lap deed, since
 // every circuit's lap is its own length. A circuit absent here (the garden
 // practice loop, or a competition circuit authored without one) never grants.
+// The Rampart Run's 25 is the Express Tour's 26 scaled by the two circuits'
+// best ace-bot flying laps (22.25 s against 23.05 s, measured 2026-09-28).
 const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: number }> = new Map([
   ['evergarden_express_tour', { deedId: 'pvp_rr_fast_lap', seconds: 26 }],
   ['drakelands_rampart_run', { deedId: 'pvp_rr_rampart_lap', seconds: 25 }],

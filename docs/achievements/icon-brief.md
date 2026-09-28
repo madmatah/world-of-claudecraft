@@ -11,7 +11,7 @@
 > `masterwrought-art-completion-2026-09-02/accepted-art.json`.
 > Updated 2026-09-05: the hidden Forgebreaker celebration adds one pending crest,
 > bringing the ledger to 11. Its commission brief is at the end of this file.
-> The seven Realm Racers `pvp_rr_*` crests ride on top of that ledger, commissioned in
+> The eight Realm Racers `pvp_rr_*` crests ride on top of that ledger, commissioned in
 > their own section below and not yet ingested.
 
 Ready to send. One line per new deed, same format as the v1 brief; icon files
@@ -142,6 +142,7 @@ PvP (deed crests, `npm run assets:deeds <source-dir>`):
 - [v1] `pvp_rr_fast_lap`, (fast lap): a single glowing lap line splitting a stopwatch face, violet on charcoal.
 - [v1] `pvp_rr_clean_race`, (clean race): an unscratched machine flank catching one clean highlight, cold steel on green.
 - [v1] `pvp_rr_comeback`, From the Back of the Pack: four staggered silhouettes with the rearmost breaking forward, ember trail behind it.
+- [v1] `pvp_rr_rampart_lap`, Scorching Lap: a lap line burning through a fortress rampart silhouette, molten orange on basalt black.
 
 Abilities (icon sheet):
 - [v1] `rally_nitro`: a pressurised canister venting a forward cone of flame, orange over gunmetal.
