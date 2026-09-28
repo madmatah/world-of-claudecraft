@@ -449,6 +449,29 @@ describe('the announced-impulse list', () => {
       GROUND_BLAST_POP_VELOCITY * 1.25,
     );
   });
+
+  it('pops a local SECOND victim off the per-racer list, and the named one once', () => {
+    const hit = (targetId: number | null, impact: number, hits?: number[]) =>
+      ({
+        type: 'realmRacersGroundBlastHit',
+        sourceId: 3,
+        targetId,
+        x: 0,
+        z: 0,
+        impact,
+        ...(hits ? { hits } : {}),
+      }) as const;
+    // Caught second: the event names the rival, the list names us.
+    const second = hit(THEM, 1, [THEM, 1, ME, 0.444]);
+    expect(authoritativeVerticalPop([second], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY * 0.444);
+    expect(hasAuthoritativeDriveImpulse([second], ME)).toBe(true);
+    // Named AND listed: one pop, off `impact`, never two.
+    const named = hit(ME, 0.8, [ME, 0.8, THEM, 0.2]);
+    expect(authoritativeVerticalPop([named], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY * 0.8);
+    // Not in the list at all: nothing.
+    expect(authoritativeVerticalPop([hit(THEM, 1, [THEM, 1])], ME)).toBe(0);
+    expect(hasAuthoritativeDriveImpulse([hit(THEM, 1, [THEM, 1])], ME)).toBe(false);
+  });
 });
 
 describe('SelfMotionPredictor', () => {

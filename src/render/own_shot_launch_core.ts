@@ -44,6 +44,9 @@ export function ownShotConfirmWindowS(leadMs: number): number {
   return (2 * leadMs) / 1000 + DT;
 }
 
+/** How long an unconfirmed own shell takes to shrink away, seconds. */
+export const OWN_SHOT_UNCONFIRMED_FADE_S = 0.25;
+
 export interface OwnShotLaunch {
   /** Muzzle, from the drawn kart. */
   x: number;
@@ -51,7 +54,10 @@ export interface OwnShotLaunch {
   /** The impact point, clamped exactly as the sim clamps it. */
   targetX: number;
   targetZ: number;
-  /** The sim's flight plus the confirmation delay: when the crater shows. */
+  /** The sim's flight plus the confirmation delay (when the crater shows),
+   *  and never shorter than the confirmation window plus the fade: a shell
+   *  that landed before its window closed would let a late Fired event draw a
+   *  second one. */
   flightSeconds: number;
   /** `ownShotConfirmWindowS` of this launch's lead. */
   confirmWithinS: number;
@@ -71,13 +77,17 @@ export function planOwnShotLaunch(
   if (leadMs === null || !Number.isFinite(leadMs) || leadMs < 0) return null;
   const aim = resolveGroundBlastAim(pose, requested);
   const muzzle = ownShotMuzzle(pose.x, pose.z, pose.facing);
+  const confirmWithinS = ownShotConfirmWindowS(leadMs);
   return {
     x: muzzle.x,
     z: muzzle.z,
     targetX: aim.x,
     targetZ: aim.z,
-    flightSeconds: aim.flightTicks / TICK_RATE + leadMs / 1000,
-    confirmWithinS: ownShotConfirmWindowS(leadMs),
+    flightSeconds: Math.max(
+      aim.flightTicks / TICK_RATE + leadMs / 1000,
+      confirmWithinS + OWN_SHOT_UNCONFIRMED_FADE_S,
+    ),
+    confirmWithinS,
   };
 }
 
@@ -100,8 +110,9 @@ export function createOwnShotLedger(): OwnShotLedger {
   return { pending: null };
 }
 
-/** A predicted shell just left the barrel. One in flight at a time, like the
- *  muzzle latch it rides behind: a newer launch replaces an older one. */
+/** A predicted shell just left the barrel. One in flight at a time: a newer
+ *  launch replaces an older one still pending, which is returned so the caller
+ *  fades it (it can no longer be adopted). */
 export function recordOwnShotLaunch(
   ledger: OwnShotLedger,
   ownerId: number,
@@ -109,8 +120,10 @@ export function recordOwnShotLaunch(
   serial: number,
   nowS: number,
   confirmWithinS: number,
-): void {
+): OwnShotPending | null {
+  const replaced = ledger.pending;
   ledger.pending = { ownerId, slot, serial, confirmBy: nowS + confirmWithinS };
+  return replaced;
 }
 
 /**

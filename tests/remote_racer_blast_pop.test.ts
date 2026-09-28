@@ -16,6 +16,7 @@ import {
   remoteRacerDisplayY,
   remoteRacerDrawnY,
   remoteRacerHopRise,
+  remoteRacerHopSeedS,
   startRemoteRacerHop,
   startRemoteRacerHops,
   stepRemoteVehicleDisplay,
@@ -199,6 +200,79 @@ describe('a rival popped by a Ground Blast, drawn from the Hit event', () => {
     expect(s.hop.phase).toBe('idle');
     expect(maxStep).toBeLessThan(0.25);
     expect(prev).toBeCloseTo(wireY, 3);
+  });
+
+  it('adds the pop to a rival already rising at the Hit, and never rises a second time', () => {
+    // The truth: a machine already airborne at 6 yd/s when the shell lands; the
+    // sim ADDS the 8 yd/s pop, so it flies on the sum. The wire shows the same
+    // track WIRE_DELAY_S late, so at the event it is still rising on the old arc.
+    const pre = 0.3;
+    const pop = 8;
+    const truth = (t: number): number => {
+      if (t < 0) return Math.max(0, remoteRacerHopRise(6, t + pre));
+      const vyAtHit = 6 - GRAVITY * pre;
+      return Math.max(0, remoteRacerHopRise(6, pre) + remoteRacerHopRise(vyAtHit + pop, t));
+    };
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    let drawn = 0;
+    for (let t = -1; t <= 0; t += FRAME_S) {
+      drawn = remoteRacerDisplayY(s, 0, truth(t - WIRE_DELAY_S), 0, 0, 0, flat, FRAME_S);
+    }
+    expect(s.hop.wireRate).toBeGreaterThan(0);
+    expect(startRemoteRacerHop(s, pop)).toBe(true);
+    // Seeded from the wire's own rate, not from rest.
+    expect(s.hop.vy0).toBeGreaterThan(pop);
+    const heights: number[] = [drawn];
+    for (let t = FRAME_S; t < 4; t += FRAME_S) {
+      heights.push(remoteRacerDisplayY(s, 0, truth(t - WIRE_DELAY_S), 0, 0, 0, flat, FRAME_S));
+    }
+    const landed = heights.findIndex((y, i) => i > 5 && y <= 1e-9);
+    expect(landed).toBeGreaterThan(0);
+    // Down once, down for good: the wire's late copy never lifts it again.
+    expect(Math.max(...heights.slice(landed))).toBeLessThanOrEqual(1e-9);
+    expect(s.hop.phase).toBe('idle');
+  });
+
+  it('never raises a landed rival into a wire still in the air at the hand-back', () => {
+    // The drawn arc lands and the settle window runs out while the wire is
+    // still airborne (rising, then falling): the kart stays down throughout.
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    startRemoteRacerHop(s, 3);
+    // Still RISING when the settle window runs out (the arc lands near 0.4 s,
+    // the window closes 0.6 s later), then falling.
+    const wire = (t: number): number => Math.max(0, remoteRacerHopRise(10, t - 0.8));
+    let drawnDown = -1;
+    const heights: number[] = [];
+    for (let t = FRAME_S; t < 3; t += FRAME_S) {
+      const y = remoteRacerDisplayY(s, 0, wire(t), 0, 0, 0, flat, FRAME_S);
+      heights.push(y);
+      if (drawnDown < 0 && heights.length > 3 && y <= 1e-9) drawnDown = heights.length - 1;
+    }
+    expect(drawnDown).toBeGreaterThan(0);
+    expect(Math.max(...heights.slice(drawnDown))).toBeLessThanOrEqual(1e-9);
+  });
+
+  it("starts the arc at the self frame's lead, so it shares the horizontal frame", () => {
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    s.lastSelfFrame = true;
+    s.lastLeadMs = 120;
+    s.leadCarryMs = 10;
+    expect(remoteRacerHopSeedS(s)).toBeCloseTo(0.13, 12);
+    startRemoteRacerHop(s, 12);
+    expect(s.hop.t).toBeCloseTo(0.13, 12);
+    const y = remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    expect(y).toBeCloseTo(remoteRacerHopRise(12, 0.13 + FRAME_S), 9);
+    // Drawn on its arrival age, the arc starts at the event.
+    const stood = activeDisplay();
+    remoteRacerDisplayY(stood, 0, 0, 0, 0, 0, flat, FRAME_S);
+    stood.lastSelfFrame = false;
+    stood.lastLeadMs = 120;
+    expect(remoteRacerHopSeedS(stood)).toBe(0);
   });
 
   it('stacks a second shell on the velocity the arc has left, as the sim adds to vy', () => {

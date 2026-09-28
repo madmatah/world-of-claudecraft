@@ -158,9 +158,11 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
 export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward';
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
+  // The ward first: it is the actionable read, and a class veil must never
+  // mask it on a racer.
+  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
   if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
   if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
-  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
   return 'none';
 }
 

@@ -268,7 +268,7 @@ export function hasAuthoritativeDriveImpulse(
   return events.some(
     (event) =>
       (event.type === 'realmRacersBump' && (event.aId === playerId || event.bId === playerId)) ||
-      (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId) ||
+      (event.type === 'realmRacersGroundBlastHit' && groundBlastFalloffFor(event, playerId) > 0) ||
       (event.type === 'realmRacersSlicked' && event.targetId === playerId),
   );
 }
@@ -298,20 +298,34 @@ export function hasAuthoritativeSelfPositionDiscontinuity(
 }
 
 /**
+ * The falloff a Ground Blast Hit event dealt `playerId`: `impact` when they are
+ * the named nearest racer, else their entry in the per-racer `hits` list (a
+ * second machine caught in the same shell), else 0. One source per racer, so
+ * nobody is counted twice.
+ */
+export function groundBlastFalloffFor(
+  event: { targetId: number | null; impact: number; hits?: readonly number[] },
+  playerId: number,
+): number {
+  if (event.targetId === playerId) return event.impact;
+  const hits = event.hits;
+  if (!hits) return 0;
+  for (let i = 0; i + 1 < hits.length; i += 2) if (hits[i] === playerId) return hits[i + 1];
+  return 0;
+}
+
+/**
  * The vertical launch the local machine took this frame, reconstructed from
  * the blast event: the pop is pure geometry (GROUND_BLAST_POP_VELOCITY times
- * the falloff the event already carries as `impact`), so the client rebuilds
- * the exact velocity the server added to vy, with no wire change.
- *
- * The event names only the racer NEAREST the crater, so a second machine
- * caught in the same shell misses its pop, the same limit the horizontal
- * resync already lives with (it keys off the same targetId).
+ * the falloff the event carries), so the client rebuilds the exact velocity
+ * the server added to vy, with no wire change. A second machine caught in the
+ * same shell reads its falloff off the event's per-racer list.
  */
 export function authoritativeVerticalPop(events: readonly SimEvent[], playerId: number): number {
   let pop = 0;
   for (const event of events) {
-    if (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId)
-      pop += GROUND_BLAST_POP_VELOCITY * event.impact;
+    if (event.type === 'realmRacersGroundBlastHit')
+      pop += GROUND_BLAST_POP_VELOCITY * groundBlastFalloffFor(event, playerId);
   }
   return pop;
 }

@@ -11,6 +11,7 @@ import {
   claimOwnShotLaunch,
   createOwnShotLedger,
   expireOwnShotLaunch,
+  OWN_SHOT_UNCONFIRMED_FADE_S,
   ownShotConfirmWindowS,
   ownShotMuzzle,
   planOwnShotLaunch,
@@ -216,6 +217,62 @@ describe('the own shell in the pooled Ground Blast visuals', () => {
       v.fire({ x: 0, z: 2, targetX: 0, targetZ: 30, flightSeconds: 0.5, sourceId: OWNER }, 0);
       expect(v.inFlight).toBe(1);
     }
+  });
+});
+
+describe('the own shell at a high lead, on a second press, and on uneven ground', () => {
+  it('outlives its confirm window on a minimum-range shot at a lead above 0.4 s', () => {
+    // A point-blank aim flies the minimum flight; at this lead the sim flight
+    // plus lead would land before the window closes, and a confirmation that
+    // arrived in that gap would draw a second shell.
+    const leadMs = 450;
+    const plan = planOwnShotLaunch({ x: 0, z: 0, facing: 0 }, { x: 0, z: 1 }, leadMs);
+    if (!plan) throw new Error('no plan');
+    const window = ownShotConfirmWindowS(leadMs);
+    expect(plan.flightSeconds).toBeGreaterThanOrEqual(window + OWN_SHOT_UNCONFIRMED_FADE_S);
+    const v = new RealmRacersGroundBlastVisuals();
+    v.prepare();
+    v.launchOwn(0, 0, 0, { x: 0, z: 1 }, leadMs, flat, OWNER);
+    let t = 0;
+    while (t < window - 2 * FRAME) {
+      v.update(FRAME);
+      t += FRAME;
+    }
+    expect(v.inFlight).toBe(1);
+    // Confirmed right at the end of its window: adopted, one shell.
+    v.fire({ x: 0, z: 2, targetX: 0, targetZ: 9, flightSeconds: 0.45, sourceId: OWNER }, 0);
+    expect(v.inFlight).toBe(1);
+  });
+
+  it('fades the first shell of two quick presses when the first was refused', () => {
+    const v = launched(200);
+    for (let i = 0; i < 6; i++) v.update(FRAME);
+    const first = named(v, 'groundBlast0');
+    // The second press replaces the pending first, which can no longer be
+    // adopted: it shrinks away while the second flies.
+    expect(v.launchOwn(0, 0, 0, { x: 5, z: 30 }, 200, flat, OWNER)).toBe(true);
+    expect(v.inFlight).toBe(2);
+    v.update(FRAME);
+    expect(first.scale.x).toBeLessThan(1);
+    // The server confirms only the second: adopted, no third shell.
+    v.fire({ x: 0, z: 2, targetX: 5, targetZ: 30, flightSeconds: 0.5, sourceId: OWNER }, 0);
+    expect(v.inFlight).toBe(2);
+    for (let i = 0; i < 20; i++) v.update(FRAME);
+    expect(first.visible).toBe(false);
+    expect(named(v, 'groundBlast1').visible).toBe(true);
+    expect(v.inFlight).toBe(1);
+  });
+
+  it('re-samples the ground under the adopted target, easing the marker onto it', () => {
+    const v = launched(200);
+    for (let i = 0; i < 6; i++) v.update(FRAME);
+    const marker = named(v, 'marker0');
+    const before = marker.position.y;
+    v.fire({ x: 0, z: 2, targetX: 0.5, targetZ: 30, flightSeconds: 0.5, sourceId: OWNER }, 3);
+    v.update(0.001);
+    expect(Math.abs(marker.position.y - before)).toBeLessThan(0.05);
+    for (let t = 0; t < 0.49; t += FRAME) v.update(FRAME);
+    expect(marker.position.y).toBeGreaterThan(2.9);
   });
 });
 

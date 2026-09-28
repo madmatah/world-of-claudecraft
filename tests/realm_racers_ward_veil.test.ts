@@ -91,6 +91,11 @@ describe('the ward veil decision', () => {
   it('reads the ward off the racer aura and wears the gold veil', () => {
     expect(characterVeilboundState(racer([ward]))).toBe('ward');
     expect(characterVeilboundState(racer([]))).toBe('none');
+    // The actionable read wins over any class veil a racer could carry.
+    const march = { ...ward, id: 'veilbound_march', kind: 'buff_speed' } as Aura;
+    const mark = { ...ward, id: 'veilbound_mark', kind: 'dot' } as Aura;
+    expect(characterVeilboundState(racer([march, ward]))).toBe('ward');
+    expect(characterVeilboundState(racer([mark, ward]))).toBe('ward');
     expect(characterVeilGhosted('ward')).toBe(true);
     expect(characterVeilGhosted('march')).toBe(true);
     expect(characterVeilGhosted('mark')).toBe(false);

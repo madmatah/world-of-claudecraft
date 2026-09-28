@@ -135,6 +135,11 @@ export interface RemoteRacerHop {
   carry: number;
   /** The height drawn last frame: where a new arc starts. */
   lastY: number;
+  /** The wire's lift over the ground last frame, and its vertical rate, yd
+   *  and yd/s: a machine already in the air when the shell lands keeps the
+   *  velocity it had, which the sim's pop is ADDED to. */
+  lastWireLift: number;
+  wireRate: number;
 }
 
 export interface RemoteVehicleDisplayState extends RemoteVehiclePose {
@@ -167,6 +172,8 @@ export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
       wireSeenAirborne: false,
       carry: 0,
       lastY: Number.NaN,
+      lastWireLift: Number.NaN,
+      wireRate: 0,
     },
     scratch: {
       profileKey: '',
@@ -206,6 +213,8 @@ function clearRemoteRacerHop(hop: RemoteRacerHop): void {
   hop.phase = 'idle';
   hop.carry = 0;
   hop.lastY = Number.NaN;
+  hop.lastWireLift = Number.NaN;
+  hop.wireRate = 0;
 }
 
 /** Where a projected hull may go: the swept move from one pose to the next,
@@ -551,22 +560,41 @@ export function remoteRacerHopRise(vy0: number, t: number): number {
 
 /**
  * Launch a drawn pop on a rival the server just threw, adding `pop` yd/s the
- * way the sim adds it to vy (a second shell mid-flight stacks on the velocity
- * the arc has left). False, and nothing drawn, for a rival with no live
- * projection: the wire (or the offline sim) already carries its height.
+ * way the sim adds it to vy: onto the velocity a drawn arc has left, or onto
+ * the wire's own vertical rate for a machine already in the air. False, and
+ * nothing drawn, for a rival with no live projection: the wire (or the
+ * offline sim) already carries its height.
+ *
+ * Drawn in the local kart's time frame, the rival's hull is already the
+ * frame's lead past the snapshot the event rode in, so the arc starts that far
+ * into its flight: the vertical and the horizontal share one time frame.
  */
 export function startRemoteRacerHop(s: RemoteVehicleDisplayState, pop: number): boolean {
   const hop = s.hop;
   if (!s.active || !(pop > 0) || Number.isNaN(hop.lastY)) return false;
-  const vyLeft = hop.phase === 'arc' ? hop.vy0 - GRAVITY * hop.t : 0;
+  const airborne = hop.lastWireLift > REMOTE_RACER_WIRE_AIR_YD;
+  const vyLeft =
+    hop.phase === 'arc'
+      ? hop.vy0 - GRAVITY * hop.t
+      : airborne && hop.phase === 'idle'
+        ? hop.wireRate
+        : 0;
   hop.phase = 'arc';
   hop.y0 = hop.lastY;
   hop.vy0 = vyLeft + pop;
-  hop.t = 0;
+  hop.t = remoteRacerHopSeedS(s);
   hop.settleT = 0;
   hop.wireSeenAirborne = false;
   hop.carry = 0;
   return true;
+}
+
+/** How far into its flight a pop starts: the self frame's current lead over
+ *  the snapshot (`lastLeadMs` plus any lead still being slewed in), or 0 when
+ *  the rival is drawn on its arrival age. */
+export function remoteRacerHopSeedS(s: RemoteVehicleDisplayState): number {
+  if (s.lastSelfFrame !== true) return 0;
+  return Math.max(0, s.lastLeadMs + s.leadCarryMs) / 1000;
 }
 
 /**
@@ -599,7 +627,9 @@ export function startRemoteRacerHops(
  * like the sim's, and lands where the ground under the drawn hull meets it;
  * the landed machine then stays down until the wire has shown and finished its
  * own copy of the hop, and hands back through a decaying offset, so the wire's
- * late hop never draws as a second one.
+ * late hop never draws as a second one. The hand-back never RAISES a landed
+ * machine into a wire that is still in the air: it waits while the wire rises,
+ * and holds the drawn height while the wire comes down.
  */
 export function remoteRacerDisplayY(
   s: RemoteVehicleDisplayState,
@@ -616,7 +646,12 @@ export function remoteRacerDisplayY(
   const wireLift = wireY - ground(wireX, wireZ);
   const wireDrawnY = wireLift + groundDrawn;
   const step = Math.max(0, dt);
-  if (hop.phase !== 'idle' && wireLift > REMOTE_RACER_WIRE_AIR_YD) hop.wireSeenAirborne = true;
+  const lastWireLift = hop.lastWireLift;
+  const wireDelta = Number.isNaN(lastWireLift) ? 0 : wireLift - lastWireLift;
+  hop.wireRate = step > 0 ? wireDelta / step : 0;
+  hop.lastWireLift = wireLift;
+  const wireAirborne = wireLift > REMOTE_RACER_WIRE_AIR_YD;
+  if (hop.phase !== 'idle' && wireAirborne) hop.wireSeenAirborne = true;
   let y = wireDrawnY;
   if (hop.phase === 'arc') {
     hop.t += step;
@@ -631,8 +666,9 @@ export function remoteRacerDisplayY(
     hop.settleT += step;
   }
   if (hop.phase === 'settle') {
-    const wireLanded = hop.wireSeenAirborne && wireLift <= REMOTE_RACER_WIRE_AIR_YD;
-    if (wireLanded || hop.settleT >= REMOTE_RACER_HOP_SETTLE_CAP_S) {
+    const wireLanded = hop.wireSeenAirborne && !wireAirborne;
+    const capped = hop.settleT >= REMOTE_RACER_HOP_SETTLE_CAP_S && wireDelta <= 0;
+    if (wireLanded || capped) {
       hop.phase = 'idle';
       hop.carry = groundDrawn - wireDrawnY;
     } else {
@@ -643,6 +679,8 @@ export function remoteRacerDisplayY(
     // Never eased under the ground: a hand-back caught a hair above it would
     // otherwise carry the landed machine into the road as the wire settles.
     y = Math.max(wireDrawnY + hop.carry, Math.min(wireDrawnY, groundDrawn));
+    // Nor lifted into a wire still coming down: that rise is the second hop.
+    if (hop.carry < 0 && wireDelta < 0 && !Number.isNaN(hop.lastY)) y = Math.min(y, hop.lastY);
     hop.carry *= Math.exp(-REMOTE_VEHICLE_SMOOTH_RATE * Math.min(step, 1 / 30));
     if (Math.abs(hop.carry) < 1e-3) hop.carry = 0;
   }

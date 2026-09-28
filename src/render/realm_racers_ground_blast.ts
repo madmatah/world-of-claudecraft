@@ -35,6 +35,7 @@ import {
   planOwnShotLaunch,
   recordOwnShotLaunch,
   shellProgress,
+  OWN_SHOT_UNCONFIRMED_FADE_S as UNCONFIRMED_FADE,
 } from './own_shot_launch_core';
 import { REALM_RACERS_COMPILE_OWNER } from './realm_racers_prepare_core';
 import { tagVfxSubtree } from './renderer_diagnostics';
@@ -66,8 +67,6 @@ const TRAIL_LIFE = 0.32;
 const FLASH_LIFE = 0.28;
 const SHOCKWAVE_LIFE = 0.45;
 const SHOCKWAVE_REACH = 2.4;
-/** How long an unconfirmed own shell takes to shrink away, seconds. */
-const UNCONFIRMED_FADE = 0.25;
 
 const COOL = new THREE.Color(0x6fd8ff);
 const HOT = new THREE.Color(0xffb04a);
@@ -95,9 +94,11 @@ interface GroundBlastSlot {
   /** Path progress the flight started from: 0, or where an adopted own shell
    *  already was when the server's flight took over. */
   progressFrom: number;
-  /** The adopted target's correction, decaying to zero over the flight. */
+  /** The adopted target's correction (ground height included), decaying to
+   *  zero over the flight. */
   shiftX: number;
   shiftZ: number;
+  shiftY: number;
   /** Bumped per launch, so a recycled slot is never mistaken for an old shot. */
   serial: number;
   /** Seconds of the unconfirmed shrink left, or -1 when not fading. */
@@ -315,6 +316,7 @@ export class RealmRacersGroundBlastVisuals {
       progressFrom: 0,
       shiftX: 0,
       shiftZ: 0,
+      shiftY: 0,
       serial: 0,
       fade: -1,
       live: false,
@@ -358,7 +360,7 @@ export class RealmRacersGroundBlastVisuals {
   fire(shot: GroundBlastShot, groundY: number): void {
     if (this.disposed) return;
     this.prepare();
-    if (shot.sourceId !== undefined && this.adoptOwnShot(shot)) return;
+    if (shot.sourceId !== undefined && this.adoptOwnShot(shot, groundY)) return;
     const { x: muzzleX, z: muzzleZ, targetX, targetZ, flightSeconds } = shot;
     const slot = this.slots[this.nextSlot % POOL_SIZE];
     this.nextSlot++;
@@ -366,6 +368,7 @@ export class RealmRacersGroundBlastVisuals {
     slot.progressFrom = 0;
     slot.shiftX = 0;
     slot.shiftZ = 0;
+    slot.shiftY = 0;
     slot.fade = -1;
     const span = Math.hypot(targetX - muzzleX, targetZ - muzzleZ);
     slot.fromX = muzzleX;
@@ -412,7 +415,7 @@ export class RealmRacersGroundBlastVisuals {
     const index = this.nextSlot % POOL_SIZE;
     this.fire(launch, ground(launch.targetX, launch.targetZ));
     const slot = this.slots[index];
-    recordOwnShotLaunch(
+    const replaced = recordOwnShotLaunch(
       this.ownShots,
       ownerId,
       index,
@@ -420,14 +423,24 @@ export class RealmRacersGroundBlastVisuals {
       this.clock,
       launch.confirmWithinS,
     );
+    // A second press before the first was confirmed: the first will never be
+    // adopted now, so it goes the way an unconfirmed shot goes.
+    if (replaced) this.fadeUnconfirmed(replaced);
     return true;
+  }
+
+  private fadeUnconfirmed(pending: { slot: number; serial: number }): void {
+    const slot = this.slots[pending.slot];
+    if (slot?.live && slot.serial === pending.serial && slot.fade < 0) {
+      slot.fade = UNCONFIRMED_FADE;
+    }
   }
 
   /** The server confirmed the pilot's predicted shell: re-time the ONE shell in
    *  the air onto the server's flight (from where it is drawn now, so nothing
    *  jumps) and glide it onto the server's target. False when there is nothing
    *  to adopt, and the event draws its own shell. */
-  private adoptOwnShot(shot: GroundBlastShot): boolean {
+  private adoptOwnShot(shot: GroundBlastShot, groundY: number): boolean {
     const claimed = claimOwnShotLaunch(this.ownShots, shot.sourceId ?? -1, this.clock);
     const slot = claimed ? this.slots[claimed.slot] : undefined;
     if (!claimed || !slot || !slot.live || slot.serial !== claimed.serial || slot.fade >= 0) {
@@ -443,6 +456,9 @@ export class RealmRacersGroundBlastVisuals {
     slot.toZ = shot.targetZ;
     slot.shiftX = drawnToX - shot.targetX;
     slot.shiftZ = drawnToZ - shot.targetZ;
+    // The ground under the server's target, eased in like the target itself.
+    slot.shiftY = slot.groundY + slot.shiftY * (1 - u) - groundY;
+    slot.groundY = groundY;
     return true;
   }
 
@@ -471,21 +487,23 @@ export class RealmRacersGroundBlastVisuals {
     const toZ = slot.toZ + slot.shiftZ * settle;
     const x = slot.fromX + (toX - slot.fromX) * t;
     const z = slot.fromZ + (toZ - slot.fromZ) * t;
-    if (slot.shiftX !== 0 || slot.shiftZ !== 0) {
-      slot.marker.position.set(toX, slot.marker.position.y, toZ);
-      slot.core.position.set(toX, slot.core.position.y, toZ);
-      slot.column.position.set(toX, slot.column.position.y, toZ);
+    const groundY = slot.groundY + slot.shiftY * settle;
+    if (slot.shiftX !== 0 || slot.shiftZ !== 0 || slot.shiftY !== 0) {
+      slot.marker.position.set(toX, groundY + MARKER_LIFT, toZ);
+      slot.core.position.set(toX, groundY + MARKER_LIFT * 0.5, toZ);
+      slot.column.position.set(toX, groundY + COLUMN_HEIGHT / 2, toZ);
     }
     // An unconfirmed own shell shrinks away: scale only, since the projectile's
     // material is shared and opaque (an opacity flip would be a new program).
     let shrink = 1;
-    if (slot.fade >= 0) {
+    const fading = slot.fade >= 0;
+    if (fading) {
       slot.fade -= dt;
       shrink = clamp01(slot.fade / UNCONFIRMED_FADE);
     }
     // A parabola through both ends: 4*t*(1-t) peaks at 1 halfway across, so the
     // shell leaves the barrel and meets the marker at ground level.
-    const y = slot.groundY + 1.1 * (1 - t) + slot.arc * 4 * t * (1 - t);
+    const y = groundY + 1.1 * (1 - t) + slot.arc * 4 * t * (1 - t);
     slot.projectile.position.set(x, y, z);
     slot.glow.position.set(x, y, z);
     slot.projectile.rotation.y += dt * 9;
@@ -496,9 +514,11 @@ export class RealmRacersGroundBlastVisuals {
 
     this.stepTrail(slot, dt, x, y, z, shrink);
 
-    // The countdown. The hazard disc never moves or resizes (it IS the blast,
-    // and a player acts on it): what closes is the fill inside it, and what
-    // sharpens is the colour. Reading the time left off those is the dodge.
+    // The countdown. The hazard disc never resizes (it IS the blast, and a
+    // player acts on it), and it only moves when the pilot's own predicted
+    // shell is adopted and glides onto the server's target: what closes is the
+    // fill inside it, and what sharpens is the colour. Reading the time left
+    // off those is the dodge.
     const heat = t * t;
     const closing = MARKER_CORE_FLOOR + (1 - MARKER_CORE_FLOOR) * (1 - t);
     slot.core.scale.setScalar(closing);
@@ -516,7 +536,7 @@ export class RealmRacersGroundBlastVisuals {
     columnMat.opacity = (0.1 + 0.22 * heat) * shrink;
     slot.column.scale.set(1, 1, 1);
 
-    if (t >= 1 || (slot.fade >= 0 && shrink <= 0)) this.retire(slot);
+    if (t >= 1 || (fading && shrink <= 0)) this.retire(slot);
   }
 
   /** Drop a mote behind the shell at a fixed cadence and age the rest. The motes
@@ -575,8 +595,7 @@ export class RealmRacersGroundBlastVisuals {
     if (this.disposed) return;
     this.clock += dt;
     const unconfirmed = expireOwnShotLaunch(this.ownShots, this.clock);
-    const stale = unconfirmed ? this.slots[unconfirmed.slot] : undefined;
-    if (stale?.live && stale.serial === unconfirmed?.serial) stale.fade = UNCONFIRMED_FADE;
+    if (unconfirmed) this.fadeUnconfirmed(unconfirmed);
     for (const slot of this.slots) {
       if (slot.live) this.step(slot, dt);
     }
