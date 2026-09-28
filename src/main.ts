@@ -198,10 +198,7 @@ import { runPetCommand } from './game/pet_commands';
 import { kickCharacterPreloadStream, runPostEntryWarmups } from './game/post_entry_warmups_core';
 import { newPresentationGateInput, presentationGate } from './game/presentation_gate';
 import { startRealmBuilderRollLoad } from './game/realm_builder_boot';
-import {
-  applyRealmRacersStartCameraFromWorld,
-  createRealmRacersStartCamera,
-} from './game/realm_racers_start_camera';
+import * as realmRacers from './game/realm_racers_client_wiring';
 import { adaptiveSelfAlphaLead } from './game/self_alpha_lead';
 import { SelfMotionFrameBuffer } from './game/self_motion_frame_buffer';
 import {
@@ -1747,17 +1744,8 @@ async function startGame(
       // that channel without the player retyping "/world" etc.
       const raw = chatInput.value;
       // dev-only chat interceptors (day/night scrub, the placer rig, circuit drafts)
-      if (
-        tryDevChatHooks(raw, {
-          hud,
-          renderer,
-          world,
-          realmRacersDraft: {
-            sim: online ? null : offlineSim,
-            draw: (circuit) => renderer.registerRealmRacersDraftCircuit(circuit),
-          },
-        })
-      ) {
+      const draft = realmRacers.draftChatHook(online ? null : offlineSim, () => renderer);
+      if (tryDevChatHooks(raw, { hud, renderer, world, realmRacersDraft: draft })) {
         chatInput.value = '';
         closeChat();
         return;
@@ -3858,7 +3846,6 @@ async function startGame(
     movementWireVersion: 1,
     frameDt: 0,
   };
-  const rallyStartCamera = createRealmRacersStartCamera();
   const selfMotionGateArgs: SelfMotionGateArgs = {
     disabled: SELF_MOTION_DISABLED,
     spectating: null,
@@ -4297,9 +4284,6 @@ async function startGame(
         intro !== null ||
         raceMovementLocked,
     );
-    // The touch jump button reads as the handbrake for as long as the player is
-    // driving; the binding and the hit area never move, only the label (the
-    // setter itself is edge-gated, so this costs nothing on an ordinary frame).
     mobileControls.setHandbrakeMode(world.player.drive != null);
     const playerDead = world.player.dead;
     if (shouldClearAutorunOnDeath(playerWasDead, playerDead)) {
@@ -4382,8 +4366,6 @@ async function startGame(
         // turnLeft/turnRight while stunned, but mouselook/controller facing is
         // applied out of band, here, before tick(), and must honor the same gate
         // or a stunned player can still turn to face away from a positional attack.
-        // A pilot's heading is STEERED: the movement kernel integrates it from
-        // the steering input, so the camera never claims it while driving.
         if (stepFacing !== null && !offlineSim.player.drive && !isStunned(offlineSim.player)) {
           offlineSim.player.facing = stepFacing;
         }
@@ -4528,41 +4510,25 @@ async function startGame(
       inputEcho.echoMs,
     );
     const pe = world.player;
-    // Behind the wheel the heading belongs to the vehicle kernel on BOTH sides:
-    // the server refuses a streamed facing from a driver (it would overwrite the
-    // steering it just integrated), so the client stops claiming the channel,
-    // keeps its turn keys on the wire as steering input, and lets the self
-    // extrapolator's predicted heading pose the model.
     const driving = pe.drive != null;
     const alpha = snapshotAlpha(performance.now(), net.lastSnapAt, net.snapInterval);
     // facing interp capped at 1 - extrapolating angles past the snapshot oscillates
     const interpServerFacing = interpolatedOnlineSelfFacing(net, pe, alpha);
     const foreignFacing = driving ? null : (movementFacing ?? resolved.facing);
     if (edgeReleaseFacing !== null) seedKeyboardTurnRelease(kbTurn, edgeReleaseFacing);
-    // Keyboard turns integrate the same TURN_SPEED locally and STREAM the
-    // resulting heading on the facing channel, exactly like mouselook: the
-    // server applies it outright instead of integrating the turn flags one
-    // echo late in 50ms quanta, so there is never a client/server heading
-    // disagreement to reconcile after a turn (the source of every release
-    // stutter this feature has chased). The turn flags are zeroed on the wire
-    // while the local heading owns the channel, or the server would integrate
-    // the turn a second time on top of the streamed facing. A pilot's turn keys
-    // are steering intent, so driving takes the raw lane: the flags ride the
-    // wire untouched and no local heading claims the channel.
-    kbTurnArgs.rawTurnIntent = glider.scriptedMovementActive(world) || driving;
+    kbTurnArgs.rawTurnIntent = glider.scriptedMovementActive(world);
     kbTurnArgs.turnLeft = resolved.mi.turnLeft;
     kbTurnArgs.turnRight = resolved.mi.turnRight;
-    kbTurnArgs.turnAllowed =
-      net.spectating === null && !movementFrozen() && !isStunned(pe) && !driving;
-    kbTurnArgs.sentFacing = driving
-      ? null
-      : ((!movementFrozen() ? (renderFacing ?? controllerFacing) : null) ?? resolved.facing);
+    kbTurnArgs.turnAllowed = net.spectating === null && !movementFrozen() && !isStunned(pe);
+    kbTurnArgs.sentFacing =
+      (!movementFrozen() ? (renderFacing ?? controllerFacing) : null) ?? resolved.facing;
     kbTurnArgs.serverFacing = interpServerFacing;
     kbTurnArgs.releaseCommitAcknowledged = net.inputFacingAcknowledged(kbTurn.pendingReleaseCommit);
     kbTurnArgs.echoMs = inputEcho.echoMs;
     kbTurnArgs.snapshotIntervalMs = net.snapInterval;
     kbTurnArgs.movementWireVersion = net.movementWireVersion;
     kbTurnArgs.frameDt = frameDt;
+    realmRacers.applyDriveFacingLane(kbTurnArgs, driving);
     const kbFacing = stepKeyboardTurnFacing(kbTurn, kbTurnArgs);
     const netFacing = foreignFacing ?? kbTurn.wireFacing;
     const localFacing = netFacing ?? kbFacing;
@@ -4667,8 +4633,6 @@ async function startGame(
     const netPipeline = net.netPipeline();
     netPipeline.onAnimationFrame(now);
     perf.setNetPipelineSource(netPipeline);
-    // Display-only self extrapolation (src/render/self_motion.ts). Which frames
-    // it may run on is the pure gate's call (src/game/self_motion_gate.ts).
     const selfMotion =
       net.movementWireVersion === 2
         ? movementPrediction.display()
@@ -4875,15 +4839,11 @@ async function startGame(
   const osReducedMotion =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const rallyCameraTick = (facing: number): void => {
-    applyRealmRacersStartCameraFromWorld(
-      rallyStartCamera,
-      input,
-      world,
-      facing,
-      settings.get('reduceMotion') || osReducedMotion,
-    );
-  };
+  const rallyCameraTick = realmRacers.createStartCameraTick(
+    input,
+    world,
+    () => settings.get('reduceMotion') || osReducedMotion,
+  );
   const introPolicy = decideSpawnCinematic({
     requested: playIntro,
     seen: introSeen,

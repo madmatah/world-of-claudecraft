@@ -1457,7 +1457,8 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 11140 -> 11033 when the wire v1 client stopped predicting karts:
     // the drive-impulse and blast-pop plumbing into the v1 extrapolator frame
     // left main.ts. wc -l on the tree. Exact count, zero slack.
-    ceiling: 11033,
+    // LOWERED 11033 -> 10993: Realm Racers wiring moved to src/game/realm_racers_client_wiring.ts.
+    ceiling: 10993,
     seam: 'a src/game/ or src/ui/ sibling module; main.ts is a firewall, not a home',
   },
   {

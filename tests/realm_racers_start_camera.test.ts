@@ -29,6 +29,7 @@ import { realmRacersPlacedProps } from '../src/sim/realm_racers_props_resolve';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { REALM_RACERS_COUNTDOWN_TICKS } from '../src/sim/social/realm_racers';
 import { TICK_RATE } from '../src/sim/types';
+import { stripComments } from './helpers/strip_comments';
 
 /** renderer.ts CAMERA_BASE_FOV, the vertical FOV in degrees; pinned below. */
 const CAMERA_BASE_FOV = 60;
@@ -535,11 +536,14 @@ describe('Realm Racers start camera', () => {
   });
 
   it('wires the start override into both hosts and selects the driving feel profiles', () => {
-    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const main = stripComments(readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'));
+    const wiring = stripComments(
+      readFileSync(new URL('../src/game/realm_racers_client_wiring.ts', import.meta.url), 'utf8'),
+    );
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    expect(main.match(/rallyCameraTick\(/g)).toHaveLength(2); // offline + online
-    expect(main).toContain('const rallyCameraTick =');
-    expect(main).toContain('applyRealmRacersStartCameraFromWorld(');
+    expect(main.match(/rallyCameraTick\(/g)).toHaveLength(2);
+    expect(main).toContain('const rallyCameraTick = realmRacers.createStartCameraTick(');
+    expect(wiring).toContain('applyRealmRacersStartCameraFromWorld(');
     expect(main).toContain('renderer.selfMotionFacing');
     expect(main).toMatch(
       /inputEcho\.jitterMs,\s+alpha,\s+frameDt,\s+Math\.max\(0, cameraLastSnapAge\)/,
