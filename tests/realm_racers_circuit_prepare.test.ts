@@ -866,7 +866,7 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
   });
 
   it.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
-    'prepares the shipped Lagoon Run exactly on its public lane on %s, the strand and the sea included',
+    'builds the shipped Lagoon Run in its lobby, then prepares it exactly on its public lane on %s, the strand and the sea included',
     async (tier) => {
       loaderControl.deferred = true;
       vi.resetModules();
@@ -886,26 +886,27 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       const circuit = records.realmRacersCircuitById('palmreach_lagoon_run');
       if (!circuit) throw new Error('the Lagoon Run ships');
       const theme = CIRCUIT_THEMES.palmreach;
-      const view = fresh.buildRealmRacersTrack(circuit);
+      // The pool's own lazy view, built by its client in the lobby (a piece at
+      // a time: the lobby's cover is up), then prepared.
+      const tracks = fresh.buildRealmRacersTracks();
+      const view = tracks.circuits.find((candidate) => candidate.circuitId === circuit.id);
+      if (!view) throw new Error('the Lagoon Run has a view');
+      expect(view.skyBiome).toBe(theme.sky.biome);
+      expect(view.group.children).toEqual([]);
       const fills = freshFills(view.group);
-      expect(fills.total).toBeGreaterThan(1);
       const sky = fakeSky();
-      const client = new FreshClient(
-        {
-          circuitId: circuit.id,
-          group: view.group,
-          skyBiome: theme.sky.biome,
-          drawnOnce: view.drawnOnce,
-          onViewerLane: view.onViewerLane,
-        },
-        sky.sky,
-      );
+      const client = new FreshClient(view, sky.sky, undefined, () => false);
       expect(client.prepareId).toBe(realmRacersCircuitPrepareId('palmreach_lagoon_run'));
       const { gate, calls } = fakeGate();
       let verdict: boolean | null = null;
       void client.run(gate, NEVER).then((ok) => {
         verdict = ok;
       });
+      expect(view.built).toBe(false);
+      for (let round = 0; round < 200 && !view.built; round++) await flush(1);
+      expect(view.built).toBe(true);
+      expect(gate).not.toHaveBeenCalled();
+      expect(fills.total).toBeGreaterThan(1);
       for (let round = 0; round < 8 && loaderControl.pending.length > 0; round++) {
         const ready = loaderControl.pending;
         loaderControl.pending = [];
@@ -939,7 +940,7 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       const origin = layout.realmRacersLaneOrigin(layout.realmRacersPublicLane(circuit));
       const drawn = new Set<string>();
       const drawOn = (time: number, match: RealmRacersLaneView) => {
-        view.update(origin.x, origin.z, time, match);
+        tracks.update(origin.x, origin.z, time, match);
         for (const { object, material } of drawsUnder(view.group)) {
           if (!object.visible) continue;
           for (const key of keysOf(object, material)) drawn.add(key);
@@ -949,7 +950,12 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       calls[0].resolve();
       sky.finish(true);
       await flush();
+      // The upload frame: the first frame on the lane since the gate, drawn
+      // unculled, then the verdict.
       drawOn(1, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.1 }));
+      await flush();
+      expect(verdict).toBeNull();
+      drawOn(2, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.2 }));
       await flush();
       expect(verdict).toBe(true);
       expect(sky.asked).toEqual(['jungle']);
