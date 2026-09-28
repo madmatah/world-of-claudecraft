@@ -17,6 +17,7 @@
 
 import type { DesktopBridge, DesktopDiscordActivity } from '../runtime';
 import { DUNGEON_X_THRESHOLD, zoneAt } from '../sim/data';
+import { realmRacersZoneAt } from '../sim/realm_racers_zone';
 import { zoneDisplayName } from '../ui/entity_i18n';
 import { Settings } from './settings';
 
@@ -192,6 +193,19 @@ export function initDiscordPresence(bridge: DesktopBridge): void {
 }
 
 /**
+ * The zone the presence names at a point, or null to HOLD the last one.
+ * Dungeons have no zone row (the instance strip sits past the threshold), so
+ * inside one the presence holds the region the player entered from: phase 10
+ * is zone-only, and naming the instance is a separate design call. A Realm
+ * Racers circuit is the instance that still names a zone: the one it belongs to.
+ */
+function presenceZoneIdAt(x: number, z: number): string | null {
+  const circuit = realmRacersZoneAt(x, z);
+  if (circuit) return circuit.id;
+  return x <= DUNGEON_X_THRESHOLD ? zoneAt(x, z).id : null;
+}
+
+/**
  * Feed one frame's world state to the presence coalescer. Called from the frame
  * path in both modes; self-throttled to one poll per second, so the per-frame
  * cost on an armed desktop shell is a Date.now() and a comparison, and on every
@@ -217,12 +231,9 @@ export function desktopPresenceOnFrame(world: DiscordPresenceWorld): void {
     // Forget the held zone so re-entry resolves it fresh.
     zoneId = null;
     zoneName = null;
-  } else if (p.pos.x <= DUNGEON_X_THRESHOLD) {
-    // Dungeons have no zone row (the instance strip sits past this x), so the
-    // presence HOLDS the region the player entered from: phase 10 is
-    // zone-only, and naming the instance is a separate design call.
-    const id = zoneAt(p.pos.x, p.pos.z).id;
-    if (id !== zoneId) {
+  } else {
+    const id = presenceZoneIdAt(p.pos.x, p.pos.z);
+    if (id !== null && id !== zoneId) {
       zoneId = id;
       // Resolved on change only: the core dedupes by zone id, so re-resolving
       // every poll could not publish a language switch any sooner anyway. The

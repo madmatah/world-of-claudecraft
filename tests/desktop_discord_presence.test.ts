@@ -19,6 +19,7 @@ import {
 import { Settings } from '../src/game/settings';
 import type { DesktopBridge, DesktopDiscordActivity } from '../src/runtime';
 import { DUNGEON_X_THRESHOLD, zoneAt } from '../src/sim/data';
+import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 import { zoneDisplayName } from '../src/ui/entity_i18n';
 
 const SESSION_START_SEC = 1_700_000_000;
@@ -569,6 +570,31 @@ describe('initDiscordPresence + desktopPresenceOnFrame', () => {
     expect((setDiscordActivity.mock.calls[2][0] as DesktopDiscordActivity).details).toBe(
       zoneDisplayName(ZONE_B.id),
     );
+  });
+
+  it('names the circuit zone on a Realm Racers lane, then holds it past the threshold', () => {
+    const { bridge, setDiscordActivity } = makeBridge();
+    initDiscordPresence(bridge);
+    desktopPresenceOnFrame(world(0, 0));
+    expect(setDiscordActivity).toHaveBeenCalledTimes(2);
+
+    // The band is on the instance plane too, but a circuit belongs to a zone:
+    // the Lagoon Run publishes The Palmreach rather than holding the zone the
+    // pilot queued from (or the band's own clamp, The Drakelands).
+    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    if (!lane) throw new Error('expected the Lagoon Run lane');
+    const origin = realmRacersLaneOrigin(lane.index);
+    clock += 30_000;
+    desktopPresenceOnFrame(world(origin.x, origin.z));
+    expect(setDiscordActivity).toHaveBeenCalledTimes(3);
+    expect((setDiscordActivity.mock.calls[2][0] as DesktopDiscordActivity).details).toBe(
+      zoneDisplayName('palmreach'),
+    );
+
+    // Any other instance x still holds whatever was last named.
+    clock += 30_000;
+    desktopPresenceOnFrame(world(DUNGEON_X_THRESHOLD + 100, 300));
+    expect(setDiscordActivity).toHaveBeenCalledTimes(3);
   });
 
   it('re-arms from scratch on a second init (no state carried across sessions)', () => {
