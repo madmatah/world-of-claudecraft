@@ -6583,6 +6583,17 @@ function realmRacersRace(): Scenario {
       rec.tick(40); // two seconds of the vehicle kernel on the circuit
       const liveMatch = sim.realmRacers.match;
       if (!liveMatch) throw new Error('realm racers grid did not seat');
+      // Placed on the circuit FLOOR: the shared `teleport` helper snaps y to the
+      // overworld terrainHeight, which stands a machine tens of yards over the
+      // band's flat floor, and the fall kills it before the beat it was placed
+      // for (the Nightbloom golden's parked rival died that way before the cap).
+      const floorTeleport = (e: AnyEntity, x: number, z: number) => {
+        teleport(sim, e, x, z);
+        e.pos.y = groundHeight(x, z, sim.cfg.seed);
+        e.prevPos = { ...e.pos };
+        e.fallStartY = e.pos.y;
+        sim.rebucket(e);
+      };
       // The circuit the grid was SEATED on, not the pool's first entry: the
       // draw above picks one of several competition circuits, and a box
       // resolved off another circuit's road would stand the leader in the
@@ -6605,7 +6616,7 @@ function realmRacersRace(): Scenario {
       const onLap = lap.project(at.x, at.z, rammedProgress.trackIndex);
       const sample = lap.samples[onLap.index];
       const side = realmRacersToWorld(liveMatch, at.x - sample.tz * 3.0, at.z + sample.tx * 3.0);
-      teleport(sim, rammer, side.x, side.z);
+      floorTeleport(rammer, side.x, side.z);
       rammer.facing = rammed.facing;
       rammer.drive.speed = rammed.drive.speed;
       rammer.drive.slip = -8;
@@ -6631,7 +6642,13 @@ function realmRacersRace(): Scenario {
       parker.drive.slip = 0;
       parker.drive.yawRate = 0;
       sim.realmRacersResetPosition(pids[1]);
-      teleport(sim, parker, recovered.pos.x + 1, recovered.pos.z);
+      // A yard up the road from the recovered hull, whichever way the road runs
+      // where the draw seated the grid.
+      floorTeleport(
+        parker,
+        recovered.pos.x + Math.sin(recovered.facing),
+        recovered.pos.z + Math.cos(recovered.facing),
+      );
       parker.facing = recovered.facing;
       const parkedAt = realmRacersToCanonical(liveMatch, parker.pos.x, parker.pos.z);
       const parkedOnLap = lap.project(parkedAt.x, parkedAt.z, rammerProgress.trackIndex);
@@ -6640,7 +6657,12 @@ function realmRacersRace(): Scenario {
       rec.tick(REALM_RACERS_RESET_LOCK_TICKS + 4); // past the lock, still overlapped
       rec.notes.ghostHeldPastLock = realmRacersGhosted(recovered);
       rec.snapshot('ghost-held');
-      rec.tick(recoveredProgress.ghostCapTick - sim.tickCount); // to the cap
+      rec.tick(recoveredProgress.ghostCapTick - sim.tickCount - 1);
+      // Rolling back into the recovered hull on the cap tick, so the parting the
+      // contact pass resolves there is an announced impact rather than a rub
+      // between two parked machines.
+      parker.drive.speed = -6;
+      rec.tick(1); // the cap
       rec.notes.ghostGoneAtCap = !realmRacersGhosted(recovered);
       rec.snapshot('ghost-cap');
       for (const pid of [pids[1], pids[3]]) {
@@ -6653,7 +6675,7 @@ function realmRacersRace(): Scenario {
       const box = realmRacersPickupBoxes(circuit)[0];
       const world = realmRacersToWorld(liveMatch, box.x, box.z);
       const racer = sim.entities.get(pids[0]) as AnyEntity;
-      teleport(sim, racer, world.x, world.z);
+      floorTeleport(racer, world.x, world.z);
       const progress = liveMatch.progress.get(pids[0]);
       if (!progress) throw new Error('missing racer progress');
       const projection = lap.project(box.x, box.z, progress.trackIndex);
@@ -6683,7 +6705,7 @@ function realmRacersRace(): Scenario {
         coreAt.x - coreSample.tx * 4,
         coreAt.z - coreSample.tz * 4,
       );
-      teleport(sim, bandVictim, behind.x, behind.z);
+      floorTeleport(bandVictim, behind.x, behind.z);
       bandVictim.facing = coreVictim.facing;
       const bandOnLap = lap.project(
         coreAt.x - coreSample.tx * 4,
@@ -6712,6 +6734,17 @@ function realmRacersRace(): Scenario {
         z: crater.z,
         impactTick: sim.tickCount + 1,
       });
+      // The fourth pilot, still beside the core victim since the ghost beat, is
+      // sent well up the road so the shell catches exactly the two it is for.
+      const clearOfBlast = lap.pointAt(coreOnLap.s + 40);
+      const clearWorld = realmRacersToWorld(liveMatch, clearOfBlast.x, clearOfBlast.z);
+      floorTeleport(parker, clearWorld.x, clearWorld.z);
+      const parkerProgress = liveMatch.progress.get(pids[3]);
+      if (parkerProgress) {
+        const clearOnLap = lap.project(clearOfBlast.x, clearOfBlast.z, coreOnLap.index);
+        parkerProgress.lastS = clearOnLap.s;
+        parkerProgress.trackIndex = clearOnLap.index;
+      }
       rec.notes.blastCoreVictim = pids[1];
       rec.notes.blastBandVictim = pids[2];
       rec.tick(2); // the landing: both machines popped, shoved and spun
