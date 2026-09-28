@@ -746,6 +746,10 @@ describe('the ward', () => {
     expect(absorbed.filter((event) => event.type === 'realmRacersGroundBlastHit')).toMatchObject([
       { targetId: null },
     ]);
+    // Nor is it in the per-racer list a client pops drawn rivals from.
+    expect(absorbed.find((event) => event.type === 'realmRacersGroundBlastHit')).not.toHaveProperty(
+      'hits',
+    );
 
     // And the ward is spent: the next shell lands in full.
     shellNear(sim, a, shooter, GROUND_BLAST_RADIUS - 0.01);

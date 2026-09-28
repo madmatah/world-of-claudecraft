@@ -237,6 +237,12 @@ export function groundBlastFalloff(bx: number, bz: number, x: number, z: number)
   return 1 - (dist - GROUND_BLAST_CORE_RADIUS) / (GROUND_BLAST_RADIUS - GROUND_BLAST_CORE_RADIUS);
 }
 
+/** A falloff as the Hit event's per-racer list carries it: thousandths, which
+ *  keeps the event small and moves a drawn pop by under a hundredth of a yard. */
+export function groundBlastHitFalloffWire(falloff: number): number {
+  return Math.round(falloff * 1000) / 1000;
+}
+
 export interface GroundBlastResult {
   /** 1 across the core, falling to 0 at the rim. Zero means untouched. */
   falloff: number;

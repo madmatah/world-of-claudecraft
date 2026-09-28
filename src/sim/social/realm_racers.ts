@@ -47,6 +47,7 @@ import {
   GROUND_BLAST_SHOCK_GRIP,
   GROUND_BLAST_SHOCK_TICKS,
   groundBlastFalloff,
+  groundBlastHitFalloffWire,
   resolveGroundBlastAim,
   resolveGroundBlastImpact,
 } from '../realm_racers_ground_blast';
@@ -1589,6 +1590,7 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
     match.groundBlasts.splice(i, 1);
     let nearestPid: number | null = null;
     let nearestImpact = 0;
+    let hits: number[] | undefined;
     for (const pid of match.pids) {
       if (pid === shot.ownerPid) continue;
       // A pilot whose race is over is not a target: they are parked, waiting to
@@ -1639,6 +1641,8 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
         nearestImpact = blast.falloff;
         nearestPid = pid;
       }
+      hits ??= [];
+      hits.push(pid, groundBlastHitFalloffWire(blast.falloff));
     }
     // Announced whether or not it caught anyone: a shot that lands on empty
     // track still craters, and that crater is most of the feedback the first
@@ -1650,6 +1654,7 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
       x: shot.x,
       z: shot.z,
       impact: nearestImpact,
+      ...(hits ? { hits } : {}),
     });
   }
 }

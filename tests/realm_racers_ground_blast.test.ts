@@ -9,6 +9,7 @@
 // checked here in plain numbers rather than by eye through a reticle.
 
 import { describe, expect, it } from 'vitest';
+import { serializeEventFragments } from '../server/event_frame';
 import {
   REALM_RACERS_ABILITY_ID,
   REALM_RACERS_WEAPON_CHARGES,
@@ -33,6 +34,7 @@ import {
   GROUND_BLAST_SPEED,
   GROUND_BLAST_YAW_KICK,
   groundBlastFalloff,
+  groundBlastHitFalloffWire,
   resolveGroundBlastAim,
   resolveGroundBlastImpact,
 } from '../src/sim/realm_racers_ground_blast';
@@ -45,7 +47,7 @@ import {
   realmRacersStartMatch,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
-import { type Entity, TICK_RATE, type VehicleDrive } from '../src/sim/types';
+import { type Entity, type SimEvent, TICK_RATE, type VehicleDrive } from '../src/sim/types';
 import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
 
@@ -483,7 +485,7 @@ describe('Ground Blast: landing it in a live race', () => {
   /** Park both machines nose to tail, aim the circle at the rival's feet the way
    *  a player would, and fire. */
   function stagedShot(gap: number) {
-    const { sim, a, b } = racing();
+    const { sim, a, b, pids } = racing();
     const live = match(sim);
     const caster = entity(sim, a);
     const rival = entity(sim, b);
@@ -493,7 +495,7 @@ describe('Ground Blast: landing it in a live race', () => {
     teleport(sim, b, caster.pos.x, caster.pos.z + gap);
     caster.castAim = { x: rival.pos.x, y: rival.pos.y, z: rival.pos.z };
     realmRacersFireGroundBlast(sim.ctx, caster);
-    return { sim, a, b, live, caster, rival, shell: live.groundBlasts[0] };
+    return { sim, a, b, pids, live, caster, rival, shell: live.groundBlasts[0] };
   }
 
   it('holds the shell until its impact tick, then lands it exactly once', () => {
@@ -572,10 +574,41 @@ describe('Ground Blast: landing it in a live race', () => {
         if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
       }
     }
-    // The crater still happens, with nobody in it.
+    // The crater still happens, with nobody in it, and no per-racer list: a
+    // miss costs the wire exactly what it did before the list existed.
     expect(hit).toMatchObject({ targetId: null, impact: 0 });
+    expect(hit).not.toHaveProperty('hits');
     expect(rival.onGround).toBe(true);
     expect(live.progress.get(b)?.groundBlastShockUntilTick).toBe(0);
+  });
+
+  it('names every racer the shell threw, with the falloff the sim applied', () => {
+    const { sim, a, b, live, rival, shell, pids } = stagedShot(14);
+    const c = pids[2];
+    // A second machine four yards off the same crater, outside the core, so
+    // the list carries two different falloffs and two different racers.
+    teleport(sim, c, rival.pos.x + 4, rival.pos.z);
+    const flightTicks = shell.impactTick - sim.tickCount;
+    let hit: (SimEvent & { type: 'realmRacersGroundBlastHit' }) | null = null;
+    for (let tick = 0; tick <= flightTicks; tick++) {
+      for (const ev of sim.tick()) {
+        if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
+      }
+    }
+    const landed = required(hit, 'hit');
+    expect(landed).toMatchObject({ sourceId: a, targetId: b, impact: 1 });
+    // Grid order, flat pairs, thousandths: 4 yd out is 4/9 of the blast.
+    expect(landed.hits).toEqual([b, 1, c, 0.444]);
+    expect(groundBlastHitFalloffWire(groundBlastFalloff(4, 0, 0, 0))).toBe(0.444);
+    // And each listed racer really took that pop (the display replays it).
+    expect(entity(sim, c).vy).toBeGreaterThan(0);
+    expect(live.progress.get(c)?.hitByShell).toBe(true);
+    // The bytes the list adds to the event, pinned: two short numbers per
+    // racer caught, nothing else.
+    const bytes = serializeEventFragments([landed])[0];
+    const without = serializeEventFragments([{ ...landed, hits: undefined }])[0];
+    expect(bytes.slice(without.length - 1)).toBe(`,"hits":[${b},1,${c},0.444]}`);
+    expect(bytes.length - without.length).toBe(`,"hits":[${b},1,${c},0.444]`.length);
   });
 
   it('never catches the caster in its own blast', () => {

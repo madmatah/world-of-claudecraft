@@ -1406,7 +1406,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
   // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
-  '200ff5688857f38593ec55dd9b0f52c8104b01222b763cd95c2ec5ed620b17a1';
+  // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
+  '72a80a83f8609f0d2f543665f9bfc1f12cbd5cc5b20a8e12ba3fa4bfb515e1a3';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1441,7 +1442,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
   // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
-  '6814185cb14ebb1f50ea3402c87a132d21b55b9fb1db74a2ed76cd95d13f9ee3';
+  // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
+  '205e7df396bbdd6c8bf0f275487f1a432cd7e7f709ba3368e2315a7c11239ed2';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2834,7 +2836,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers drive view heading handoff and kart effects.
       // Re-minted for the Realm Racers rivals drawn in the local kart frame.
       // Re-minted for the Realm Racers aim pose and prediction lead through the core.
-    ).toBe('47a6a2f2fee4831b598fb3e6e4420ad004c6cd63e66dbfc2d4d1aa4f8c82e4ce');
+      // Re-minted for the Realm Racers rival blast pop drawn from the Hit event.
+    ).toBe('587e5d7cc7f2f6bac9c736b86c61c9ca623e3c20a918fcb0c2e0d3cb5affcaab');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

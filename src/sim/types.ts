@@ -7520,6 +7520,11 @@ export type SimEvent = { pid?: number } & (
       x: number;
       z: number;
       impact: number;
+      /** EVERY racer the shell threw, flat pairs `[pid, falloff, ...]` in grid
+       *  order, the falloff rounded to thousandths; absent when it caught
+       *  nobody. It lets a client pop each drawn rival on the event frame
+       *  instead of waiting a round trip for the snapshot height. */
+      hits?: number[];
     }
   // Two racers made contact. World-visible and text-free like the shell pair
   // above, and throttled at the emit site: a sustained side-by-side lean is one

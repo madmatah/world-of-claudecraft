@@ -684,9 +684,10 @@ import {
 import {
   createRemoteVehicleDisplay,
   type RemoteVehicleDisplayState,
-  remoteRacerDrawnY,
+  remoteRacerDisplayY,
   remoteRacerMuzzle,
   resetRemoteVehicleDisplay,
+  startRemoteRacerHops,
   stepRemoteRacerView,
 } from './remote_vehicle_display_core';
 import {
@@ -7920,6 +7921,7 @@ export class Renderer {
         // happening. Flash and shockwave are the shell module's own pooled
         // meshes; the ring and the dust are the shared pools.
         this.realmRacersGroundBlasts.impact(ev.x, ev.z, this.groundSample(ev.x, ev.z));
+        startRemoteRacerHops(this.views, ev, this.sim.playerId);
         this.spawnAoeRing(ev.x, ev.z, GROUND_BLAST_RADIUS, 'physical');
         this.vfx.burst(
           new THREE.Vector3(ev.x, 1.1, ev.z),
@@ -10432,15 +10434,13 @@ export class Renderer {
       let facing = rp.facing;
       if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt, p.netUpdatedAt)) {
         // A remote racing machine is projected off its newest wire pose with
-        // the real vehicle kernel instead of interpolated, into the frame the
-        // local kart is drawn in while that kart is predicted (so contacts,
-        // leads and box races read true at any ping), else by its arrival age
-        // (remote_vehicle_display_core.ts). Display-only: server decisions
-        // keep using authoritative positions. The wire's vertical follows the
-        // ground under the projected hull (no vy rides for a rival).
+        // the real vehicle kernel, into the local kart's frame while that kart
+        // is predicted, else by its arrival age; its height is the wire's over
+        // the ground under the drawn hull, or a blast pop drawn from the Hit
+        // event (remote_vehicle_display_core.ts). Display-only.
         x = v.remoteVehicle.x;
         z = v.remoteVehicle.z;
-        y = remoteRacerDrawnY(rp.x, rp.y, rp.z, x, z, this.groundSample);
+        y = remoteRacerDisplayY(v.remoteVehicle, rp.x, rp.y, rp.z, x, z, this.groundSample, dt);
         facing = v.remoteVehicle.facing;
         // The local bump bang: the DISPLAYED hulls are accurate now, so when
         // they touch with a real closing speed the player sees a collision a

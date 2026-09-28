@@ -1,0 +1,246 @@
+// A rival thrown by a Ground Blast pops on the frame its Hit event arrives,
+// drawn on the sim's own arc, instead of a round trip later when the
+// interpolated snapshot height finally shows it
+// (remote_vehicle_display_core.ts, startRemoteRacerHops / remoteRacerDisplayY).
+//
+// The ground truth is the REAL sim: a staged shell lands on a seated rival and
+// its per-tick height is recorded. The wire is that same track delayed by the
+// interpolation plus the self frame's lead, which is exactly what a rival's
+// mirrored height shows.
+
+import { describe, expect, it } from 'vitest';
+import {
+  createRemoteVehicleDisplay,
+  REMOTE_RACER_HOP_SETTLE_CAP_S,
+  type RemoteVehicleDisplayState,
+  remoteRacerDisplayY,
+  remoteRacerDrawnY,
+  remoteRacerHopRise,
+  startRemoteRacerHop,
+  startRemoteRacerHops,
+  stepRemoteVehicleDisplay,
+} from '../src/render/remote_vehicle_display_core';
+import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
+import { GRAVITY } from '../src/sim/player_motion';
+import { GROUND_BLAST_POP_VELOCITY } from '../src/sim/realm_racers_ground_blast';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import {
+  realmRacersFireGroundBlast,
+  realmRacersStartMatch,
+  updateRealmRacers,
+} from '../src/sim/social/realm_racers';
+import { DT, type SimEvent, TICK_RATE } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
+
+type HitEvent = SimEvent & { type: 'realmRacersGroundBlastHit' };
+
+const FRAME_S = 1 / 60;
+/** How far the mirrored height trails the drawn frame: a 100 ms snapshot
+ *  interpolation plus a 120 ms self-frame lead. */
+const WIRE_DELAY_S = 0.22;
+
+function required<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) throw new Error(`Missing ${label}`);
+  return value;
+}
+
+/** The real sim: a shell `offset` yards beside a seated rival, and the rival's
+ *  height lift over its pre-hit height every tick from the Hit on. */
+function simArc(offset: number): { hit: HitEvent; lift: number[]; rivalId: number } {
+  const sim = makeWorld();
+  const circuit = realmRacersCompetitionCircuits()[0];
+  const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40 - i),
+  );
+  realmRacersStartMatch(sim.ctx, pids, undefined, circuit.id);
+  sim.tick();
+  const live = required(sim.realmRacers.match, 'match');
+  const track = realmRacersTrack(circuit);
+  pids.slice(2).forEach((pid, i) => {
+    const away = track.pointAt(track.length * (0.4 + i * 0.2));
+    teleport(sim, pid, away.x, away.z);
+  });
+  live.phase = 'racing';
+  updateRealmRacers(sim.ctx);
+  const [a, b] = pids;
+  const caster = required(sim.entities.get(a), 'caster');
+  const rival = required(sim.entities.get(b), 'rival');
+  caster.facing = 0;
+  rival.facing = 0;
+  teleport(sim, b, caster.pos.x, caster.pos.z + 14);
+  caster.castAim = { x: rival.pos.x + offset, y: rival.pos.y, z: rival.pos.z };
+  realmRacersFireGroundBlast(sim.ctx, caster);
+  const baseY = rival.pos.y;
+  let hit: HitEvent | null = null;
+  for (let tick = 0; tick < 40 && !hit; tick++) {
+    for (const ev of sim.tick()) if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
+  }
+  const lift = [rival.pos.y - baseY];
+  for (let tick = 0; tick < 80; tick++) {
+    sim.tick();
+    lift.push(rival.pos.y - baseY);
+  }
+  return { hit: required(hit, 'hit'), lift, rivalId: b };
+}
+
+/** The sim track sampled at `t` seconds after the Hit tick, linearly between
+ *  ticks (what an interpolated snapshot height shows). */
+function liftAt(lift: readonly number[], t: number): number {
+  if (t <= 0) return lift[0];
+  const f = t * TICK_RATE;
+  const i = Math.floor(f);
+  if (i + 1 >= lift.length) return lift[lift.length - 1];
+  return lift[i] + (lift[i + 1] - lift[i]) * (f - i);
+}
+
+function activeDisplay(): RemoteVehicleDisplayState {
+  const s = createRemoteVehicleDisplay();
+  s.active = true;
+  return s;
+}
+
+interface Frame {
+  t: number;
+  drawn: number;
+  wire: number;
+}
+
+/** Play the rival at 60 fps: a few frames of wire height, then the Hit event
+ *  on frame 0, then the drawn height against the delayed wire. */
+function replay(lift: readonly number[], pop: number, groundY: number, frames = 150): Frame[] {
+  const s = activeDisplay();
+  const flat = (): number => groundY;
+  for (let i = 0; i < 3; i++) remoteRacerDisplayY(s, 0, groundY, 0, 0, 0, flat, FRAME_S);
+  expect(startRemoteRacerHop(s, pop)).toBe(true);
+  const out: Frame[] = [];
+  for (let i = 0; i < frames; i++) {
+    const t = (i + 1) * FRAME_S;
+    const wire = groundY + liftAt(lift, t - WIRE_DELAY_S);
+    out.push({ t, drawn: remoteRacerDisplayY(s, 0, wire, 0, 0, 0, flat, FRAME_S), wire });
+  }
+  return out;
+}
+
+describe('a rival popped by a Ground Blast, drawn from the Hit event', () => {
+  it('replays the per-racer falloff the event carries as the pop the sim applied', () => {
+    const { hit, lift, rivalId } = simArc(3);
+    const hits = required(hit.hits, 'hits');
+    expect(hits[0]).toBe(rivalId);
+    expect(hits[1]).toBeCloseTo(2 / 3, 3);
+    // The sim's first tick in the air is exactly the drawn arc's first tick.
+    expect(lift[1]).toBeCloseTo(remoteRacerHopRise(GROUND_BLAST_POP_VELOCITY * hits[1], DT), 3);
+  });
+
+  it('starts the hop on the event frame, peaks with the sim, lands on time, and never hops twice', () => {
+    const { hit, lift } = simArc(0);
+    const pop = GROUND_BLAST_POP_VELOCITY * required(hit.hits, 'hits')[1];
+    const groundY = 12;
+    const frames = replay(lift, pop, groundY);
+
+    // Event frame: the drawn machine is already leaving the ground while the
+    // wire still shows it sitting there.
+    expect(frames[0].drawn).toBeGreaterThan(groundY + 0.1);
+    expect(frames[0].wire).toBeCloseTo(groundY, 9);
+
+    // Peak: the sim's own apex, within a hundredth of a yard.
+    const simPeak = Math.max(...lift);
+    const drawnPeak = Math.max(...frames.map((f) => f.drawn)) - groundY;
+    expect(simPeak).toBeGreaterThan(3);
+    expect(Math.abs(drawnPeak - simPeak)).toBeLessThan(0.01);
+
+    // Landing: when the SIM lands (in the drawn frame), not when the wire does.
+    const simLandT = lift.findIndex((y, i) => i > 0 && y <= 1e-9) / TICK_RATE;
+    const drawnLand = frames.findIndex((f) => f.drawn <= groundY + 1e-9);
+    expect(Math.abs(frames[drawnLand].t - simLandT)).toBeLessThanOrEqual(DT + FRAME_S);
+    const wireUp = frames.findIndex((f) => f.wire > groundY + 0.1);
+    const wireLand = frames.findIndex((f, i) => i > wireUp && f.wire <= groundY + 1e-9);
+    expect(wireUp).toBeGreaterThan(0);
+    expect(frames[wireLand].t - frames[drawnLand].t).toBeGreaterThan(WIRE_DELAY_S - 0.05);
+
+    // No double hop: once down, it stays down while the wire's late copy of
+    // the same hop plays out, though the wire is still in the air there.
+    const lateWire = frames.slice(drawnLand, wireLand);
+    expect(lateWire.some((f) => f.wire > groundY + 0.5)).toBe(true);
+    for (const f of frames.slice(drawnLand)) expect(f.drawn).toBeCloseTo(groundY, 9);
+  });
+
+  it('hands back to the wire exactly once it has shown and finished the hop', () => {
+    const { hit, lift } = simArc(0);
+    const pop = GROUND_BLAST_POP_VELOCITY * required(hit.hits, 'hits')[1];
+    const frames = replay(lift, pop, 5, 150);
+    const last = frames[frames.length - 1];
+    expect(last.drawn).toBe(last.wire);
+    // With no hop in play the height is exactly the wire's drawn height.
+    const idle = activeDisplay();
+    const ramp = (x: number, z: number): number => 0.25 * x + 0.1 * z;
+    expect(remoteRacerDisplayY(idle, 10, 7, 10, 22, 14, ramp, FRAME_S)).toBe(
+      remoteRacerDrawnY(10, 7, 10, 22, 14, ramp),
+    );
+  });
+
+  it('eases back to a wire that never replays the hop, without a step', () => {
+    // A wire that stays on the ground (the server saw a different landing):
+    // the settle cap hands it back through a decaying offset.
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    const wireY = 0.8;
+    remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    startRemoteRacerHop(s, 4);
+    let prev = 0;
+    let maxStep = 0;
+    let t = 0;
+    for (; t < 1.5 + REMOTE_RACER_HOP_SETTLE_CAP_S + 1; t += FRAME_S) {
+      const y = remoteRacerDisplayY(s, 0, wireY, 0, 0, 0, flat, FRAME_S);
+      if (s.hop.phase === 'idle') maxStep = Math.max(maxStep, Math.abs(y - prev));
+      prev = y;
+    }
+    expect(s.hop.phase).toBe('idle');
+    expect(maxStep).toBeLessThan(0.25);
+    expect(prev).toBeCloseTo(wireY, 3);
+  });
+
+  it('stacks a second shell on the velocity the arc has left, as the sim adds to vy', () => {
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    startRemoteRacerHop(s, 8);
+    let y = 0;
+    for (let i = 0; i < 12; i++) y = remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    const vyLeft = 8 - GRAVITY * s.hop.t;
+    startRemoteRacerHop(s, 6);
+    expect(s.hop.vy0).toBeCloseTo(vyLeft + 6, 9);
+    expect(s.hop.y0).toBe(y);
+  });
+
+  it('pops only the drawn rivals the event names, never the local pilot or an idle view', () => {
+    const flat = (): number => 0;
+    const views = new Map<number, { remoteVehicle: RemoteVehicleDisplayState }>();
+    for (const id of [2, 3, 4, 9]) {
+      const s = activeDisplay();
+      remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+      views.set(id, { remoteVehicle: s });
+    }
+    views.set(5, { remoteVehicle: createRemoteVehicleDisplay() });
+    const event = { hits: [2, 1, 9, 0.444, 5, 0.5, 3, 0] };
+    // 9 is the viewer (its pop rides the prediction), 5 has no live
+    // projection, 3 took nothing, 4 is not named.
+    expect(startRemoteRacerHops(views, event, 9)).toBe(1);
+    expect(views.get(2)?.remoteVehicle.hop).toMatchObject({ phase: 'arc', vy0: 12 });
+    for (const id of [3, 4, 5, 9]) expect(views.get(id)?.remoteVehicle.hop.phase).toBe('idle');
+    expect(startRemoteRacerHops(views, {}, 9)).toBe(0);
+  });
+
+  it('drops the hop on a teleport or a track reset', () => {
+    const s = activeDisplay();
+    const flat = (): number => 0;
+    const drive = createVehicleDrive('tank');
+    stepRemoteVehicleDisplay(s, 0, 0, 0, drive, 0, FRAME_S);
+    remoteRacerDisplayY(s, 0, 0, 0, 0, 0, flat, FRAME_S);
+    startRemoteRacerHop(s, 10);
+    stepRemoteVehicleDisplay(s, 40, 40, 0, drive, 0, FRAME_S);
+    expect(s.hop.phase).toBe('idle');
+    expect(remoteRacerDisplayY(s, 40, 0, 40, 40, 40, flat, FRAME_S)).toBe(0);
+  });
+});

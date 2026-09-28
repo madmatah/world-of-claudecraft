@@ -47,7 +47,11 @@
 
 import { resolveMovement } from '../sim/colliders';
 import { vehicleProfile } from '../sim/content/vehicles';
-import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../sim/realm_racers_ground_blast';
+import { GRAVITY } from '../sim/player_motion';
+import {
+  GROUND_BLAST_MUZZLE_NOSE_YD,
+  GROUND_BLAST_POP_VELOCITY,
+} from '../sim/realm_racers_ground_blast';
 import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { DT, type VehicleDrive } from '../sim/types';
 import {
@@ -110,8 +114,32 @@ export const REMOTE_VEHICLE_SNAP_DIST = 6;
 /** Facing gap that snaps rather than glides (a reset re-orients the machine). */
 export const REMOTE_VEHICLE_SNAP_FACING_RAD = Math.PI / 2;
 
+/**
+ * A Ground Blast pop drawn on a rival from the Hit event, ahead of the wire.
+ *
+ * `arc` draws the sim's own ballistic arc from the event frame; `settle` holds
+ * the landed machine on the ground while the wire's late copy of the same hop
+ * plays out (drawing it would hop the machine twice); `idle` draws the wire,
+ * with `carry` (drawn minus wire height at the hand-back) decaying to zero.
+ */
+export interface RemoteRacerHop {
+  phase: 'idle' | 'arc' | 'settle';
+  /** Drawn height the arc starts from, and its launch velocity, yd and yd/s. */
+  y0: number;
+  vy0: number;
+  /** Seconds since the arc started, and since it landed. */
+  t: number;
+  settleT: number;
+  /** The wire has shown the hop's own lift since the arc started. */
+  wireSeenAirborne: boolean;
+  carry: number;
+  /** The height drawn last frame: where a new arc starts. */
+  lastY: number;
+}
+
 export interface RemoteVehicleDisplayState extends RemoteVehiclePose {
   active: boolean;
+  hop: RemoteRacerHop;
   /** Reused kernel scratch: the wire drive is copied in every step, so the
    *  projection never allocates and never writes into the mirrored object. */
   scratch: VehicleDrive;
@@ -130,6 +158,16 @@ export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
     x: 0,
     z: 0,
     facing: 0,
+    hop: {
+      phase: 'idle',
+      y0: 0,
+      vy0: 0,
+      t: 0,
+      settleT: 0,
+      wireSeenAirborne: false,
+      carry: 0,
+      lastY: Number.NaN,
+    },
     scratch: {
       profileKey: '',
       speed: 0,
@@ -161,6 +199,13 @@ export function resetRemoteVehicleDisplay(s: RemoteVehicleDisplayState): void {
   s.active = false;
   s.leadCarryMs = 0;
   s.lastSelfFrame = null;
+  clearRemoteRacerHop(s.hop);
+}
+
+function clearRemoteRacerHop(hop: RemoteRacerHop): void {
+  hop.phase = 'idle';
+  hop.carry = 0;
+  hop.lastY = Number.NaN;
 }
 
 /** Where a projected hull may go: the swept move from one pose to the next,
@@ -299,6 +344,8 @@ export function stepRemoteVehicleDisplay(
     s.x = tx;
     s.z = tz;
     s.facing = tf;
+    // A teleport or a track reset puts the machine back on the ground.
+    clearRemoteRacerHop(s.hop);
     return s;
   }
   const decay = Math.exp(-REMOTE_VEHICLE_SMOOTH_RATE * step);
@@ -438,11 +485,11 @@ export function stepRemoteRacerView<E extends RemoteRacerMirror>(
 }
 
 /**
- * The drawn height of a projected machine. The wire's vertical stays on the
- * interpolated segment (no vy rides for a rival), so the ground change between
- * that pose and the drawn one is added to it, every frame, on both horizons: a
- * grounded machine follows the surface under where it is drawn, and an airborne
- * one keeps its height above it.
+ * The drawn height of a projected machine off the wire alone. The wire's
+ * vertical stays on the interpolated segment (no vy rides for a rival), so the
+ * ground change between that pose and the drawn one is added to it, every
+ * frame, on both horizons: a grounded machine follows the surface under where
+ * it is drawn, and an airborne one keeps its height above it.
  */
 export function remoteRacerDrawnY(
   wireX: number,
@@ -481,4 +528,124 @@ export function remoteRacerMuzzle<S extends { x: number; z: number; sourceId: nu
     ? display.z + Math.cos(display.facing) * GROUND_BLAST_MUZZLE_NOSE_YD
     : shot.z;
   return { ...shot, x, z, y: ground(x, z) + REMOTE_RACER_MUZZLE_LIFT_YD };
+}
+
+/** Wire lift over the ground under it past which the wire is showing a hop, yd. */
+export const REMOTE_RACER_WIRE_AIR_YD = 0.05;
+/**
+ * Longest a landed arc waits for the wire's late copy of the hop to land, s:
+ * the wire trails the drawn frame by at most the projection budgets, so past
+ * this the wire is not replaying the hop and is handed back at once.
+ */
+export const REMOTE_RACER_HOP_SETTLE_CAP_S =
+  (REMOTE_VEHICLE_LEAD_CAP_MS + REMOTE_VEHICLE_AGE_CAP_MS) / 1000;
+
+/**
+ * Height gained `t` seconds into a pop launched at `vy0`, on the sim's own air
+ * pass (`vy -= GRAVITY * DT; y += vy * DT` per tick): exact at every tick
+ * boundary, and the smooth curve through them in between.
+ */
+export function remoteRacerHopRise(vy0: number, t: number): number {
+  return vy0 * t - (GRAVITY * t * (t + DT)) / 2;
+}
+
+/**
+ * Launch a drawn pop on a rival the server just threw, adding `pop` yd/s the
+ * way the sim adds it to vy (a second shell mid-flight stacks on the velocity
+ * the arc has left). False, and nothing drawn, for a rival with no live
+ * projection: the wire (or the offline sim) already carries its height.
+ */
+export function startRemoteRacerHop(s: RemoteVehicleDisplayState, pop: number): boolean {
+  const hop = s.hop;
+  if (!s.active || !(pop > 0) || Number.isNaN(hop.lastY)) return false;
+  const vyLeft = hop.phase === 'arc' ? hop.vy0 - GRAVITY * hop.t : 0;
+  hop.phase = 'arc';
+  hop.y0 = hop.lastY;
+  hop.vy0 = vyLeft + pop;
+  hop.t = 0;
+  hop.settleT = 0;
+  hop.wireSeenAirborne = false;
+  hop.carry = 0;
+  return true;
+}
+
+/**
+ * Start a drawn pop on every rival a Ground Blast Hit event names (its
+ * per-racer `hits`), at the velocity the sim applied to each. The local
+ * pilot's own machine is skipped: its pop rides the prediction. Returns how
+ * many drawn rivals took one.
+ */
+export function startRemoteRacerHops(
+  views: ReadonlyMap<number, { remoteVehicle: RemoteVehicleDisplayState }>,
+  event: { hits?: readonly number[] },
+  selfId: number,
+): number {
+  const hits = event.hits;
+  if (!hits) return 0;
+  let started = 0;
+  for (let i = 0; i + 1 < hits.length; i += 2) {
+    if (hits[i] === selfId) continue;
+    const display = views.get(hits[i])?.remoteVehicle;
+    if (display && startRemoteRacerHop(display, GROUND_BLAST_POP_VELOCITY * hits[i + 1])) {
+      started++;
+    }
+  }
+  return started;
+}
+
+/**
+ * The drawn height of a projected machine: the wire's (`remoteRacerDrawnY`)
+ * unless a Ground Blast pop is being drawn ahead of it. The arc is absolute,
+ * like the sim's, and lands where the ground under the drawn hull meets it;
+ * the landed machine then stays down until the wire has shown and finished its
+ * own copy of the hop, and hands back through a decaying offset, so the wire's
+ * late hop never draws as a second one.
+ */
+export function remoteRacerDisplayY(
+  s: RemoteVehicleDisplayState,
+  wireX: number,
+  wireY: number,
+  wireZ: number,
+  drawnX: number,
+  drawnZ: number,
+  ground: (x: number, z: number) => number,
+  dt: number,
+): number {
+  const hop = s.hop;
+  const groundDrawn = ground(drawnX, drawnZ);
+  const wireLift = wireY - ground(wireX, wireZ);
+  const wireDrawnY = wireLift + groundDrawn;
+  const step = Math.max(0, dt);
+  if (hop.phase !== 'idle' && wireLift > REMOTE_RACER_WIRE_AIR_YD) hop.wireSeenAirborne = true;
+  let y = wireDrawnY;
+  if (hop.phase === 'arc') {
+    hop.t += step;
+    const arcY = hop.y0 + remoteRacerHopRise(hop.vy0, hop.t);
+    if (arcY > groundDrawn) {
+      y = arcY;
+    } else {
+      hop.phase = 'settle';
+      hop.settleT = 0;
+    }
+  } else if (hop.phase === 'settle') {
+    hop.settleT += step;
+  }
+  if (hop.phase === 'settle') {
+    const wireLanded = hop.wireSeenAirborne && wireLift <= REMOTE_RACER_WIRE_AIR_YD;
+    if (wireLanded || hop.settleT >= REMOTE_RACER_HOP_SETTLE_CAP_S) {
+      hop.phase = 'idle';
+      hop.carry = groundDrawn - wireDrawnY;
+    } else {
+      y = groundDrawn;
+    }
+  }
+  if (hop.phase === 'idle' && hop.carry !== 0) {
+    // Never eased under the ground: a hand-back caught a hair above it would
+    // otherwise carry the landed machine into the road as the wire settles.
+    y = Math.max(wireDrawnY + hop.carry, Math.min(wireDrawnY, groundDrawn));
+    hop.carry *= Math.exp(-REMOTE_VEHICLE_SMOOTH_RATE * Math.min(step, 1 / 30));
+    if (Math.abs(hop.carry) < 1e-3) hop.carry = 0;
+  }
+  hop.lastY = y;
+  return y;
 }
