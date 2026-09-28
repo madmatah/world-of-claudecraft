@@ -24,9 +24,13 @@ import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_GROUND_BLAST_AURA,
   REALM_RACERS_RESET_LOCK_TICKS,
+  REALM_RACERS_RETURN_TICKS,
   REALM_RACERS_STUCK_TICKS,
   REALM_RACERS_VEHICLE_KEY,
   type RealmRacersMatch,
+  realmRacersCircuitOf,
+  realmRacersFreePracticeSlot,
+  realmRacersMatchOf,
   realmRacersStartMatch,
   realmRacersToCanonical,
   realmRacersToWorld,
@@ -472,4 +476,68 @@ describe('the ghost aura lifecycle', () => {
     expect(progress.returned).toBe(true);
     expect(realmRacersGhosted(racer)).toBe(false);
   });
+});
+
+describe('a ghost belongs to the race that made it', () => {
+  /**
+   * Pilot `a` quits one race and waits out its tableau while that race runs on,
+   * then is seated in another and recovered there. The public race ticks before
+   * every practice, so both orders are staged: the race `a` left ticking before
+   * the one it now drives, and after it.
+   */
+  function reseated(left: 'public' | 'practice') {
+    const sim = makeWorld();
+    const add = (i: number) => addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40);
+    const a = add(0);
+    const publicField = [1, 2, 3].map(add);
+    const practiceField = [4, 5, 6].map(add);
+    const seat = (kind: 'public' | 'practice'): RealmRacersMatch => {
+      const seated =
+        kind === 'public'
+          ? realmRacersStartMatch(sim.ctx, [a, ...publicField], undefined, RACE_CIRCUIT.id)
+          : realmRacersStartMatch(sim.ctx, [a, ...practiceField], {
+              ownerPid: a,
+              slot: realmRacersFreePracticeSlot(sim.ctx),
+            });
+      expect(seated).toBe(true);
+      const match = required(realmRacersMatchOf(sim.ctx, a), `${kind} race`);
+      sim.tick();
+      match.phase = 'racing';
+      sim.tick();
+      return match;
+    };
+    const leftRace = seat(left);
+    const leftProgress = required(leftRace.progress.get(a), 'left progress');
+    sim.realmRacersForfeit(a);
+    for (let i = 0; i <= REALM_RACERS_RETURN_TICKS && !leftProgress.returned; i++) sim.tick();
+    expect(leftProgress.returned).toBe(true);
+    expect(leftRace.phase).toBe('racing');
+    const race = seat(left === 'public' ? 'practice' : 'public');
+    const progress = required(race.progress.get(a), 'progress');
+    // Recovered mid-lap, a long way from the rest of its new grid.
+    progress.resetS = realmRacersTrack(realmRacersCircuitOf(race)).length * 0.4;
+    return { sim, a, leftRace, race, progress, racer: required(sim.entities.get(a), 'racer') };
+  }
+
+  for (const left of ['public', 'practice'] as const) {
+    it(`keeps a ghost made in a new race while the ${left} race it quit still runs`, () => {
+      const { sim, a, leftRace, race, progress, racer } = reseated(left);
+      const resetTick = sim.tickCount;
+      sim.realmRacersResetPosition(a);
+      expect(realmRacersGhosted(racer)).toBe(true);
+      const earliestClearTick = resetTick + REALM_RACERS_RESET_LOCK_TICKS + 1;
+      expect(progress.ghostClearTick).toBe(earliestClearTick);
+      expect(progress.ghostCapTick).toBe(earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS);
+      // Nobody near it in either race: a ghost for its whole window, whatever
+      // the race it left makes of the pilot it no longer holds.
+      while (sim.tickCount < earliestClearTick - 1) {
+        sim.tick();
+        expect(realmRacersGhosted(racer)).toBe(true);
+      }
+      expect(leftRace.phase).toBe('racing');
+      expect(race.phase).toBe('racing');
+      sim.tick();
+      expect(realmRacersGhosted(racer)).toBe(false);
+    });
+  }
 });

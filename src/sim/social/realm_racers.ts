@@ -1794,10 +1794,13 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
     const racer = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
-    if (!racer || !progress || !realmRacersGhosted(racer)) continue;
+    // A returned pilot is no longer this race's: a ghost they carry now was
+    // made by the race seating them since, and only its progress can time it.
+    if (!racer || !progress || progress.returned || !realmRacersGhosted(racer)) continue;
     let overlapping = false;
     if (racer.drive) {
       const hull = contactBodyFor(racer, racer.drive);
+      // Returned pilots stay in this set: the contact pass still pairs them.
       for (const otherPid of match.pids) {
         if (otherPid === pid) continue;
         const other = ctx.entities.get(otherPid);
