@@ -148,18 +148,22 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
 
 /**
  * The veil family: the paladin's Veilbound March and Mark, and the Realm
- * Racers ward, which wears the March's translucent veil recoloured gold.
+ * Racers ward and recovery ghost, which wear the March's translucent veil
+ * recoloured (gold for the ward, pale for the ghost).
  *
- * The ward is ACTIONABLE (a shell fired at a warded rival is wasted), so it is
- * read off the entity aura every client mirrors and drawn on every graphics
- * tier; nothing here takes a tier. It is matched by its own aura kind, which
- * nothing else in the game carries.
+ * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
+ * ghosted one will not block you), so they are read off the entity aura every
+ * client mirrors and drawn on every graphics tier; nothing here takes a tier.
+ * Each is matched by its own aura kind, which nothing else in the game carries.
  */
-export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward';
+export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ghost';
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
-  // The ward first: it is the actionable read, and a class veil must never
-  // mask it on a racer.
+  // The racer reads first: a class veil must never mask one. The ghost wins
+  // over the ward because it is the short one (it ends the moment the machine
+  // is clear) and the one a rival arriving at speed acts on; the gold is back
+  // the tick it ends, and the ward stays in the aura row meanwhile.
+  if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
   if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
   if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
   if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
@@ -168,14 +172,15 @@ export function characterVeilboundState(e: Entity): CharacterVeilboundState {
 
 /** Whether the veil turns the rig translucent (the Mark only tints it). */
 export function characterVeilGhosted(state: CharacterVeilboundState): boolean {
-  return state === 'march' || state === 'ward';
+  return state === 'march' || state === 'ward' || state === 'ghost';
 }
 
 /**
  * Which fade a translucent rig wears. Duskveil/Smokefade (`stealthFade`) wear
  * the denser stealth fade; every spirit read (`spirit`: the ghost run, ghost
  * wolf, visions, the graveyard angel) keeps the thin ethereal one, and a dead
- * stealther is a spirit first; a racer's ward alone wears the gold veil.
+ * stealther is a spirit first; a racer's ward wears the gold veil and a
+ * recovery ghost the pale one.
  */
 export function characterGhostStyle(
   stealthFade: boolean,
@@ -183,7 +188,8 @@ export function characterGhostStyle(
   veil: CharacterVeilboundState,
 ): GhostStyle {
   if (stealthFade) return 'stealth';
-  return !spirit && veil === 'ward' ? 'ward' : 'spirit';
+  if (spirit) return 'spirit';
+  return veil === 'ward' || veil === 'ghost' ? veil : 'spirit';
 }
 
 /** The whole-body tint color for an active Thornhollow Fields rune buff (null = none). */

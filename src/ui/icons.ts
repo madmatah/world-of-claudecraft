@@ -3714,6 +3714,8 @@ const AURA_RECIPES: Record<string, IconRecipe> = {
   // ability record behind it; the pickup splash asks for the same id so the two
   // surfaces can never draw different wards.
   aura_rally_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
+  // The recovery ghost: a pale machine rivals pass through until it is clear.
+  aura_rally_ghost: r('arcane', 'silverWhite', ['boot', { p: 'eye', ...TR }], ['motion']),
   aura_dot: r('shadow', 'shadowPurple', ['skull'], ['drips']),
   aura_hot: r('nature', 'leafGreen', ['heart'], ['sparkle']),
   aura_slow: r('frost', 'ice', ['boot', { p: 'snowflake', ...TR }]),

@@ -11,6 +11,9 @@
 // Pure and clock-agnostic like own_shot_feedback_core: the caller passes its
 // wall clock in.
 
+import { realmRacersGhosted } from '../sim/realm_racers_ghost';
+import type { Entity } from '../sim/types';
+
 /**
  * Displayed closing speed under which no local bang plays, yd/s. Mirrors
  * REALM_RACERS_BUMP_EVENT_MIN_IMPACT (src/sim/social/realm_racers.ts), which
@@ -44,6 +47,35 @@ export function bumpClosingSpeed(dx: number, dz: number, relVx: number, relVz: n
   const dist = Math.hypot(dx, dz);
   if (dist <= 0) return 0;
   return Math.max(0, (relVx * dx + relVz * dz) / dist);
+}
+
+/** The slice of the local race readout the bang gate reads. */
+export interface LocalBumpRace {
+  phase: string;
+  participantIds: readonly number[];
+}
+
+/**
+ * Is a local bang armed between the self machine and this rival at all?
+ * Only for a PREDICTED self drive, a rival of the local race in its racing
+ * phase (the sim only resolves contacts over the match's own grid, so a paddock
+ * or post-tableau touch must never bang), and never when either machine is a
+ * recovery ghost: the server skips every contact with a ghost, so a bang there
+ * would be a collision that never happens.
+ */
+export function localBumpArmed(
+  selfSource: string,
+  race: LocalBumpRace | null | undefined,
+  rival: Entity,
+  self: Entity,
+): boolean {
+  return (
+    selfSource === 'predicted' &&
+    race?.phase === 'racing' &&
+    race.participantIds.includes(rival.id) &&
+    !realmRacersGhosted(rival) &&
+    !realmRacersGhosted(self)
+  );
 }
 
 /** May a bang play against this rival now? The caller marks after playing. */

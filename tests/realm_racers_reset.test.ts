@@ -6,6 +6,7 @@ import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_
  *  competition circuit instead of silently measuring the practice one. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
+import { realmRacersGhosted } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
@@ -502,6 +503,8 @@ describe('Realm Racers track limits in a live race', () => {
     // ...and the pilot is told why, in one line, for a few seconds.
     expect(sim.realmRacersInfoFor(a).match?.cutReturned).toBe(true);
     expect(resets()).toEqual([a]);
+    // Put back on the line like every recovery: a ghost to rival machines.
+    expect(realmRacersGhosted(racer)).toBe(true);
   });
 
   it('leaves a machine that ran wide and rejoined ahead completely alone', () => {
@@ -554,5 +557,6 @@ describe('Realm Racers track limits in a live race', () => {
     expect(racer.pos.z).toBeCloseTo(road.z, 5);
     expect(sim.realmRacersInfoFor(a).match?.offTrackIn).toBe(0);
     expect(resets()).toEqual([a]);
+    expect(realmRacersGhosted(racer)).toBe(true);
   });
 });

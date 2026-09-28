@@ -162,12 +162,15 @@ export const TOGGLE_AURA_KINDS: ReadonlySet<AuraKind> = new Set<AuraKind>([
 // mode and not timed, it lasts until something SPENDS it (or the race ends), and
 // the sim backs that with the long finite duration the aura system uses for
 // permanent effects. A countdown ticking down from three hours would be telling
-// a pilot about a clock that decides nothing.
+// a pilot about a clock that decides nothing. The recovery ghost hides it for the
+// same reason: it ends when the machine is unlocked and clear of every rival, not
+// when a clock runs out.
 export const TOGGLE_AURA_IDS: ReadonlySet<string> = new Set([
   'ghost_wolf',
   'beacon_of_light',
   'bg_carried_flag',
   'rally_ward',
+  'rally_ghost',
 ]);
 
 // The inverse override: an aura that rides a TOGGLE kind but is a genuine timed buff

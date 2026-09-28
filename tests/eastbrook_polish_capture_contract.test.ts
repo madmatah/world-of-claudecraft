@@ -715,7 +715,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
-  '67dda57c5bb4a8d772a9fbfda5c4190abebe1e38fce7757ea7c5a54d638255e0';
+  // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+  '5e9a60204de11c2d0e2f5a7e336adbf4702f6c225cfb3d85610bdd473c3967d9';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

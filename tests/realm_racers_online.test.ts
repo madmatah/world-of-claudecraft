@@ -45,6 +45,7 @@ import {
   REALM_RACERS_SLICK_ABILITY_ID,
 } from '../src/sim/content/realm_racers';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
+import { REALM_RACERS_GHOST_AURA, realmRacersGhosted } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
@@ -715,5 +716,54 @@ describe('Realm Racers server wire siblings', () => {
       ['rrkit', { active: true, w: 'rally_ground_blast', c: 3 }],
       ['rrkit', null],
     ]);
+  });
+});
+
+describe('the recovery ghost online', () => {
+  it('rides the entity aura wire to a rival and onto the pilot own mirror', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    advance(server);
+    const racer = server.sim.entities.get(session.pid);
+    if (!racer) throw new Error('missing racer');
+    expect(realmRacersGhosted(racer)).toBe(false);
+
+    // The ordinary manual recovery command, through the server's own dispatch.
+    command(server, session, 'realm_racers_reset');
+    expect(realmRacersGhosted(racer)).toBe(true);
+
+    const rivalClient = fakeClient();
+    const rivalSession = join(server, rivalClient, 2, 'Briar');
+    const rivalEntity = server.sim.entities.get(rivalSession.pid);
+    if (!rivalEntity) throw new Error('missing rival');
+    rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
+    rivalEntity.prevPos = { ...rivalEntity.pos };
+    advance(server);
+    expect(realmRacersGhosted(racer)).toBe(true);
+
+    // A rival reads it off the ordinary entity rows...
+    const seen = rivalClient.sent
+      .filter((frame) => frame.t === 'snap')
+      .flatMap((frame) => (frame.ents as { id: number; auras?: { id: string }[] }[]) ?? [])
+      .filter((row) => row.id === session.pid)
+      .flatMap((row) => row.auras ?? []);
+    expect(seen.map((aura) => aura.id)).toContain(REALM_RACERS_GHOST_AURA);
+    // ...and the mirror hands presentation a ghosted entity, which is what the
+    // veil and the local bump gate read.
+    const rivalWorld = bareClient(rivalSession.pid);
+    const rivalSnap = rivalClient.sent.filter((frame) => frame.t === 'snap').at(-1);
+    (rivalWorld as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(rivalSnap);
+    expect(realmRacersGhosted(rivalWorld.entities.get(session.pid))).toBe(true);
+    // The pilot's own mirror carries it too, so the local kart draws the veil.
+    const ownWorld = bareClient(session.pid);
+    const ownSnap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
+    (ownWorld as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(ownSnap);
+    expect(realmRacersGhosted(ownWorld.entities.get(session.pid))).toBe(true);
   });
 });

@@ -435,6 +435,11 @@ export type AuraKind =
   // would be eaten by the first point of damage, a `buff_dr` would change how
   // much a hit hurts), and because the buff bar keys an aura's icon off its kind.
   | 'rally_ward'
+  // The Realm Racers recovery ghost (realm_racers_ghost.ts): a pure marker put on
+  // a machine the race has just put back on the racing line. While it rides,
+  // rival machines pass through it rather than hitting it where it stands locked.
+  // Its own kind for the ward's reasons: nothing else may inherit its meaning.
+  | 'rally_ghost'
   // Cauterize lockout (fire mage, combat/fire_mage.ts): a pure debuff marking that
   // the lethal save already fired. While worn, Cauterize cannot save again. It
   // SURVIVES death (resurrection.ts aurasSurvivingDeath) and pauses while dead, so

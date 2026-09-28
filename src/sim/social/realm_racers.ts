@@ -41,6 +41,14 @@ import * as deedsMod from '../deeds';
 import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
 import type { RallyDriverTier } from '../realm_racers_driver';
 import {
+  REALM_RACERS_GHOST_AURA,
+  REALM_RACERS_GHOST_AURA_NAME,
+  REALM_RACERS_GHOST_MARGIN_TICKS,
+  rallyGhostMayClear,
+  rallyHullsOverlap,
+  realmRacersGhosted,
+} from '../realm_racers_ghost';
+import {
   GROUND_BLAST_CONTROL_SECONDS,
   GROUND_BLAST_CONTROL_SPEED_MULT,
   GROUND_BLAST_MUZZLE_NOSE_YD,
@@ -167,6 +175,15 @@ export const REALM_RACERS_CHASE_TICKS = 30 * TICK_RATE;
 export const REALM_RACERS_RETURN_TICKS = 6 * TICK_RATE;
 export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
 /**
+ * The hard cap on a recovery ghost, ticks from the recovery: the manual lock
+ * plus a second of driving (realm_racers_ghost.ts). A ghost normally ends the
+ * first tick its machine is unlocked and clear of every rival; this only bounds
+ * one a rival keeps parked on, so no pilot can stay intangible to pass through
+ * the field.
+ */
+export const REALM_RACERS_GHOST_CAP_TICKS =
+  REALM_RACERS_RESET_LOCK_TICKS + REALM_RACERS_GHOST_MARGIN_TICKS;
+/**
  * The lock an AUTOMATIC recovery carries (the wedged-machine arm and the
  * referee's loiter verdict), ticks.
  *
@@ -275,6 +292,50 @@ function consumeRealmRacersWard(ctx: SimContext, racer: Entity): boolean {
   // other removed aura emits it.
   ctx.emit({ type: 'aura', targetId: racer.id, name, gained: false });
   return true;
+}
+
+/**
+ * Make a just-recovered machine a GHOST (realm_racers_ghost.ts): rival machines
+ * pass through it until it is unlocked and clear, or the cap runs out. A second
+ * recovery inside the window only restarts the cap.
+ *
+ * Contacts are the ONLY thing it changes. A Ground Blast and a patch of oil keep
+ * their own rules (oil already refuses a locked machine, a blast never did), so
+ * the pilot who drives again after the lock is as exposed as any other: the
+ * ghost is a way out of a parked collision, never a way out of the fight.
+ *
+ * SILENT both ways, like the recovery itself (`realmRacersReset` is a dedicated
+ * silent event): the aura rides the entity aura list every client mirrors, so
+ * the buff row and the veil read it with no gain or fade event, and a recovery
+ * adds no event frame to anyone's downlink. The aura carries no stat effect and
+ * no crowd-control kind, so nothing the aura pipeline guards applies to it.
+ */
+function applyRealmRacersGhost(
+  ctx: SimContext,
+  racer: Entity,
+  progress: RealmRacersProgress,
+): void {
+  progress.ghostCapTick = ctx.tickCount + REALM_RACERS_GHOST_CAP_TICKS + 1;
+  if (realmRacersGhosted(racer)) return;
+  racer.auras.push({
+    id: REALM_RACERS_GHOST_AURA,
+    name: REALM_RACERS_GHOST_AURA_NAME,
+    kind: 'rally_ghost',
+    // Removed by the race, never by the clock (see the ward's duration): the
+    // cap above is what bounds it.
+    remaining: REALM_RACERS_WARD_AURA_SECONDS,
+    duration: REALM_RACERS_WARD_AURA_SECONDS,
+    value: 0,
+    sourceId: racer.id,
+    school: 'physical',
+  });
+}
+
+/** End a ghost, if there is one, as silently as it began. */
+function clearRealmRacersGhost(racer: Entity, progress: RealmRacersProgress | undefined): void {
+  if (progress) progress.ghostCapTick = 0;
+  if (!realmRacersGhosted(racer)) return;
+  racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_GHOST_AURA);
 }
 
 /**
@@ -429,6 +490,10 @@ export interface RealmRacersProgress {
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
+  /** Exclusive tick the recovery ghost ends on at the latest; 0 while this
+   *  machine is not a ghost. The ghost AURA is the source of truth for whether
+   *  it is one; this is only its cap. */
+  ghostCapTick: number;
   /** Tick the current lap began (reset to GO, and to every later lap wrap).
    *  Feeds the fast-lap deed; nothing else reads it. */
   lapStartTick: number;
@@ -1083,6 +1148,7 @@ function startMatch(
           slickGripUntilTick: 0,
           devHeldCharges: null,
           groundBlastShockUntilTick: 0,
+          ghostCapTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
           hadRivalContact: false,
@@ -1225,6 +1291,9 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     // through a tableau where nothing can hit anyone is chrome.
     const racer = ctx.entities.get(pid);
     if (racer) consumeRealmRacersWard(ctx, racer);
+    // And the ghost: nothing collides in a tableau, so it would only be a veil
+    // telling every rival something that no longer matters.
+    if (racer) clearRealmRacersGhost(racer, progress);
     // The kit goes with it too: an effect held at the flag is spent on nothing,
     // and a button that stays on the bar through the tableau is a button that lies.
     // The dev stack goes with the race that granted it, so a second race never
@@ -1371,6 +1440,7 @@ function retireRacer(
   // through their tableau is chrome, and every rival would see it as a live
   // gold veil on a machine nothing can hit.
   if (racer) consumeRealmRacersWard(ctx, racer);
+  if (racer) clearRealmRacersGhost(racer, progress);
   const drive = racer?.drive;
   if (drive) {
     resetVehicleDrive(drive);
@@ -1500,6 +1570,8 @@ function resetRacerTo(
   // passes.
   progress.resetLockedUntilTick = target.lockTicks > 0 ? ctx.tickCount + target.lockTicks + 1 : 0;
   racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_OFF_TRACK_AURA);
+  // Put back where a rival may be arriving at full speed: a ghost until clear.
+  applyRealmRacersGhost(ctx, racer, progress);
   ctx.rebucket(racer);
   // Recovery is a position discontinuity for the online predictor, but it is
   // not a resurrection: a dedicated silent event avoids the generic respawn
@@ -1708,6 +1780,45 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
 }
 
 /**
+ * End every recovery ghost whose machine is unlocked and clear of every other
+ * machine on the grid, or whose cap has run out. Runs right before the contact
+ * pass, so a ghost that ends here is solid for that same pass, and one that
+ * stays is skipped by it. Clear means clear of the SAME set the contact pass
+ * resolves (any seated, living machine), over the same hull circles. Draws no
+ * rng.
+ */
+function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
+  for (const pid of match.pids) {
+    const racer = ctx.entities.get(pid);
+    const progress = match.progress.get(pid);
+    if (!racer || !progress || !realmRacersGhosted(racer)) continue;
+    let overlapping = false;
+    if (racer.drive) {
+      const hull = contactBodyFor(racer, racer.drive);
+      for (const otherPid of match.pids) {
+        if (otherPid === pid) continue;
+        const other = ctx.entities.get(otherPid);
+        if (!other?.drive || other.dead) continue;
+        if (rallyHullsOverlap(hull, contactBodyFor(other, other.drive))) {
+          overlapping = true;
+          break;
+        }
+      }
+    }
+    if (
+      rallyGhostMayClear({
+        tick: ctx.tickCount,
+        lockedUntilTick: progress.resetLockedUntilTick,
+        capTick: progress.ghostCapTick,
+        overlapping,
+      })
+    ) {
+      clearRealmRacersGhost(racer, progress);
+    }
+  }
+}
+
+/**
  * Wheel-to-wheel contact between racers. Written as a loop over every unordered
  * PAIR rather than as "A versus B", so a four-pilot grid is a longer `pids`
  * array and nothing else.
@@ -1735,6 +1846,8 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       const a = ctx.entities.get(match.pids[i]);
       const b = ctx.entities.get(match.pids[j]);
       if (!a?.drive || !b?.drive || a.dead || b.dead) continue;
+      // A recovery ghost touches nobody, on either side of the pair.
+      if (realmRacersGhosted(a) || realmRacersGhosted(b)) continue;
       const bodyA = contactBodyFor(a, a.drive);
       const bodyB = contactBodyFor(b, b.drive);
       // No forward window: both screens draw their rivals in their own
@@ -2674,6 +2787,8 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // rather than an unrecorded correction applied after the line was judged.
   // (Only the racing phase reaches here: the countdown and finished arms return
   // above, which is also what keeps a nudge on the grid from doing anything.)
+  // The recovery ghosts settle first, so the pass reads who is solid NOW.
+  tickGhosts(ctx, match);
   tickContacts(ctx, match);
   // Track limits BEFORE progress, which is what makes the referee's guarantee
   // structural rather than nearly true. A cut is a position the racer must not

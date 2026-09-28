@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   bumpClosingSpeed,
@@ -5,9 +6,20 @@ import {
   createOwnBumpFeedback,
   LOCAL_BUMP_SUPPRESS_MS,
   LOCAL_BUMP_THROTTLE_MS,
+  localBumpArmed,
   markLocalBump,
   shouldPlayLocalBump,
 } from '../src/render/own_bump_feedback_core';
+import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
+import type { Aura, Entity } from '../src/sim/types';
+
+const ghostAura = {
+  id: REALM_RACERS_GHOST_AURA,
+  name: 'Ghosted',
+  kind: 'rally_ghost',
+} as Aura;
+const machine = (id: number, ghost = false): Entity =>
+  ({ id, auras: ghost ? [ghostAura] : [] }) as unknown as Entity;
 
 describe('own bump feedback', () => {
   it('measures closing speed along the separation, approach only', () => {
@@ -49,5 +61,27 @@ describe('own bump feedback', () => {
     expect(consumeLocalBumpSuppression(s, 7, 2000 + LOCAL_BUMP_SUPPRESS_MS + 1)).toBe(false);
     // Consuming re-arms the local side: a fresh bang may play at once.
     expect(shouldPlayLocalBump(s, 7, 2000 + LOCAL_BUMP_SUPPRESS_MS + 2)).toBe(true);
+  });
+
+  it('arms a local bang only for a predicted drive against a racing rival, never a ghost', () => {
+    const race = { phase: 'racing', participantIds: [1, 2] };
+    expect(localBumpArmed('predicted', race, machine(2), machine(1))).toBe(true);
+    // The server skips every contact with a recovery ghost, on either side.
+    expect(localBumpArmed('predicted', race, machine(2, true), machine(1))).toBe(false);
+    expect(localBumpArmed('predicted', race, machine(2), machine(1, true))).toBe(false);
+    // The gates it already had.
+    expect(localBumpArmed('none', race, machine(2), machine(1))).toBe(false);
+    expect(
+      localBumpArmed('predicted', { ...race, phase: 'finished' }, machine(2), machine(1)),
+    ).toBe(false);
+    expect(localBumpArmed('predicted', race, machine(3), machine(1))).toBe(false);
+    expect(localBumpArmed('predicted', null, machine(2), machine(1))).toBe(false);
+  });
+
+  it('is the gate the renderer bangs through, with the rival first and the self second', () => {
+    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    expect(renderer).toContain(
+      'if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {',
+    );
   });
 });

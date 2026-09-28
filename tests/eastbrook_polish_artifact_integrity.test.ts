@@ -1409,7 +1409,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
-  'bd9a94ee6f0c270641768021953e34c7313ca4de5427e73528b225b84c04f377';
+  // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+  'a028cf279d483a9b757d8ae651ea1819a21e71455ccae241f83109a6eb2da64d';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1447,7 +1448,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
-  '67dda57c5bb4a8d772a9fbfda5c4190abebe1e38fce7757ea7c5a54d638255e0';
+  // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+  '5e9a60204de11c2d0e2f5a7e336adbf4702f6c225cfb3d85610bdd473c3967d9';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2843,7 +2845,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers rival blast pop drawn from the Hit event.
       // Re-minted for the Realm Racers golden ward veil.
       // Re-minted for the Realm Racers own shell launched on the input frame.
-    ).toBe('7c55e901d2402ceb8fe6cecaad24fb595e6d4d521e58e4fbfd1c7caa2aaf6f2e');
+      // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+    ).toBe('69ee58450891d5a87c18ee2c13826f9b318d4235a20a649529a50f9421ff79b5');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

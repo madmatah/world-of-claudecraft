@@ -50,6 +50,17 @@ describe('naming a drawn pickup effect', () => {
     }
   });
 
+  it('names the recovery GHOST aura through the same sim-text path, mapped not echoed', () => {
+    expect(auraDisplayNameFromSource('Ghosted')).toBe('Ghosted');
+    expect(localizeSimAuraName('Ghosted')).toBe('Ghosted');
+    setLanguage('ru_RU');
+    try {
+      expect(localizeSimAuraName('Ghosted')).toBe('Призрак');
+    } finally {
+      setLanguage('en');
+    }
+  });
+
   it('shares its keys with the splash, so the two can never disagree', () => {
     // The big splash and the quiet floating note are the same moment on two
     // surfaces; they resolve through the same four keys on purpose.

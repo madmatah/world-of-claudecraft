@@ -3610,7 +3610,8 @@ export class CharacterVisual {
     const cached = this.ghostMaterials.get(material);
     if (cached) {
       // one cache serves every flavor; repaint it on style flips (stealth ->
-      // die -> ghost run, or a racer's gold ward veil, reuses the same clones)
+      // die -> ghost run, or a racer's gold ward or pale recovery-ghost veil,
+      // reuses the same clones)
       paintGhostEffectMaterial(cached, material, this.ghostStyle);
       return cached;
     }

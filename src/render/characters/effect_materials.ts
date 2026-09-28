@@ -29,8 +29,9 @@ import { cloneMaterialWithHooks } from '../material_clone_hooks';
 /** Translucent-rig flavor: 'spirit' is the thin ghost run (released spirits,
  *  ghost wolf, the graveyard angel, the Veilbound March); 'stealth' is the
  *  denser Duskveil fade; 'ward' is the March's veil recoloured gold, worn by a
- *  racer carrying the Realm Racers ward. */
-export type GhostStyle = 'spirit' | 'stealth' | 'ward';
+ *  racer carrying the Realm Racers ward; 'ghost' is the same veil washed pale,
+ *  worn by a racer the recovery made intangible to rival machines. */
+export type GhostStyle = 'spirit' | 'stealth' | 'ward' | 'ghost';
 
 /** Every overlay that flips `transparent` on a rig material. */
 type CharacterEffectStyle = GhostStyle | 'shadowform' | 'moonkin';
@@ -46,6 +47,11 @@ const WARD_TINT = new THREE.Color(0xffd35a);
 const WARD_TINT_STRENGTH = 0.6;
 const WARD_EMISSIVE_HEX = 0xb8860b;
 const WARD_EMISSIVE_INTENSITY = 0.6;
+// The recovery ghost: pale and see-through, so a rival reads "this will not
+// block me" at racing distance, and never mistakes it for the gold ward.
+const RALLY_GHOST_OPACITY = 0.4;
+const RALLY_GHOST_TINT = new THREE.Color(0xe4ecf4);
+const RALLY_GHOST_TINT_STRENGTH = 0.7;
 const SHADOWFORM_OPACITY = 0.9;
 const SHADOWFORM_TINT = new THREE.Color(0x5a2a8f);
 const SHADOWFORM_EMISSIVE_HEX = 0x2a0a4a;
@@ -99,7 +105,9 @@ export function createGhostEffectMaterial(
 
 /** The opacity a ghost clone wears for `style`. */
 export function ghostEffectOpacity(style: GhostStyle): number {
-  return style === 'stealth' ? STEALTH_OPACITY : style === 'ward' ? WARD_OPACITY : GHOST_OPACITY;
+  if (style === 'stealth') return STEALTH_OPACITY;
+  if (style === 'ward') return WARD_OPACITY;
+  return style === 'ghost' ? RALLY_GHOST_OPACITY : GHOST_OPACITY;
 }
 
 /**
@@ -119,6 +127,7 @@ export function paintGhostEffectMaterial(
   if (target.color && from.color) {
     target.color.copy(from.color);
     if (style === 'ward') target.color.lerp(WARD_TINT, WARD_TINT_STRENGTH);
+    if (style === 'ghost') target.color.lerp(RALLY_GHOST_TINT, RALLY_GHOST_TINT_STRENGTH);
   }
   if (target.emissive && from.emissive) {
     if (style === 'ward') {

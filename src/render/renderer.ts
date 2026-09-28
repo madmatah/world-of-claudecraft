@@ -535,6 +535,7 @@ import {
   consumeLocalBumpSuppression,
   createOwnBumpFeedback,
   LOCAL_BUMP_MIN_CLOSING,
+  localBumpArmed,
   markLocalBump,
   type OwnBumpFeedbackState,
   shouldPlayLocalBump,
@@ -10449,19 +10450,18 @@ export class Renderer {
         // beat before the server's event can say so. Play the bang at the
         // seen touch (throttled per rival) and let the event's duplicate be
         // suppressed in handleEvent; the physics still arrives with the
-        // snapshots, untouched. Gated on the rival being a participant of the
-        // LOCAL race in its racing phase: the sim only resolves contacts over
-        // the match's own grid, so a paddock or post-tableau touch must never
-        // bang. The overlap test is the plain instantaneous circle, not the
-        // sim's swept same-tick test, on purpose: a fast crossing the
-        // circle misses simply plays through the unsuppressed server event.
+        // snapshots, untouched. Gated by localBumpArmed: a predicted self
+        // drive, a rival of the LOCAL race in its racing phase (the sim only
+        // resolves contacts over the match's own grid, so a paddock or
+        // post-tableau touch must never bang), and neither machine a recovery
+        // ghost, which the server never collides. The overlap test is the
+        // plain instantaneous circle, not the sim's swept same-tick test, on
+        // purpose: a fast crossing the circle misses simply plays through
+        // the unsuppressed server event. The ghost read is the entity aura
+        // both worlds carry (realm_racers_ghost.ts), so a machine a rival
+        // passes through never bangs on either side of the wire.
         const race = this.sim.realmRacersInfo.match;
-        if (
-          this.selfRender.drive.source === 'predicted' &&
-          p.drive &&
-          race?.phase === 'racing' &&
-          race.participantIds.includes(id)
-        ) {
+        if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {
           const reach =
             vehicleProfile(e.drive.profileKey).bodyRadius +
             vehicleProfile(p.drive.profileKey).bodyRadius;
