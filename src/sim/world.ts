@@ -946,8 +946,8 @@ export interface ReachPalm {
 // per-variant height normalizes all three to PALM_TARGET_H before the
 // per-spot size jitter, so the strand reads as one canopy height like the
 // neighbouring pines rather than three different species sizes.
-const PALM_NATIVE_H = [2.685, 2.689, 3.587];
-const PALM_TRUNK_R = 0.17; // native trunk radius (all three ~equal)
+export const PALM_NATIVE_H: readonly number[] = [2.685, 2.689, 3.587];
+export const PALM_TRUNK_R = 0.17; // native trunk radius (all three ~equal)
 const PALM_TARGET_H = 9; // rendered trunk height at size factor 1.0
 
 let reachPalmCache: { seed: number; spots: ReachPalm[] } | null = null;

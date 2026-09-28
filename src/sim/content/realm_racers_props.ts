@@ -439,9 +439,11 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
   // --- the Palmreach strand, out of the jungle zone's own set
   // (`jungle_prop_urls.ts`). A palm stands on its trunk at the origin with its
   // crown leaning off it, so the footprint is the trunk the world collides
-  // (`PALM_TRUNK_R`, world.ts) and the height is the model's box; the world
-  // seats them at scale three to four and a half. The coconuts are clutter the
-  // world gives no collider ---
+  // (`PALM_TRUNK_R`, world.ts) and the height is the model's box
+  // (`PALM_NATIVE_H`); the world seats them at scale three to four and a half.
+  // Literals rather than imports, since this leaf stays off world.ts's graph;
+  // `tests/realm_racers_props.test.ts` pins them to those constants. The
+  // coconuts are clutter the world gives no collider ---
   beachPalm1: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 2.69 },
   beachPalm2: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 2.69 },
   beachPalm3: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 3.59 },

@@ -76,6 +76,7 @@ import {
   STREETLAMP_FIXTURE_HEIGHT,
   STREETLAMP_STYLE_BY_ZONE,
 } from '../src/sim/streetlamp_style';
+import { PALM_NATIVE_H, PALM_TRUNK_R } from '../src/sim/world';
 import { glbBounds } from './helpers/glb_bounds';
 
 const SEED = 42;
@@ -220,6 +221,20 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     // preload, so a circuit placing one adds no fetch to anybody's session.
     const lampUrls = new Set(Object.values(STREETLAMP_ASSET_DEFS).map((def) => def.url));
     expect(REALM_RACERS_PROP_URLS.filter((url) => lampUrls.has(url))).toEqual([]);
+  });
+
+  it('sizes every palm off the constants the world collides its own palms with', () => {
+    // The strand's palms are the world's beach palms (one per GLB variant, in
+    // the world's variant order), so a palm a pilot hits is a palm the world
+    // would stop them at. The catalog keeps them as literals, being a leaf
+    // kept off world.ts's graph, which is why this equality is the pin.
+    const palms = ['beachPalm1', 'beachPalm2', 'beachPalm3'];
+    expect(palms).toHaveLength(PALM_NATIVE_H.length);
+    palms.forEach((key, variant) => {
+      const def = REALM_RACERS_PROPS[key];
+      expect(def?.footprint, key).toEqual({ kind: 'circle', r: PALM_TRUNK_R });
+      expect(def?.height, key).toBe(Math.round(PALM_NATIVE_H[variant] * 100) / 100);
+    });
   });
 
   it('draws every KIT piece out of the world env-prop templates, one the world instances', () => {
