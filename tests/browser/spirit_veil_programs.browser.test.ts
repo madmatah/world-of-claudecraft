@@ -22,6 +22,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { assetsReady } from '../../src/render/assets/preload';
+import { syncCharacterVeils } from '../../src/render/character_effects';
 import type { AnimState } from '../../src/render/characters/anim_state';
 import { attachArmorDye } from '../../src/render/characters/armor_dye';
 import { preloadMountAssets } from '../../src/render/characters/assets';
@@ -1221,56 +1222,99 @@ describe('the racer kart veil on a real CharacterVisual', () => {
     await preloadMountAssets(kartKey);
   }, 60_000);
 
+  const racer = (kind: string | null) =>
+    ({
+      id: 2,
+      kind: 'player',
+      ghost: false,
+      templateId: 'player',
+      auras: kind ? [{ id: kind, kind }] : [],
+    }) as never;
+
   for (const standardMaterials of [false, true]) {
     for (const offscreen of [false, true]) {
       const tier = standardMaterials ? 'standard (above Low)' : 'Lambert (Low)';
       const arm = offscreen ? 'render-target (composer tiers)' : 'canvas (direct tiers)';
-      it(`links nothing for the ward or the ghost on the whole kart once the family ran, ${tier}, ${arm}`, async () => {
+      it(`links nothing for a warded or ghosted kart and pilot in one unit, far pilot included, ${tier}, ${arm}`, async () => {
         const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials });
         try {
           expect(kartKey).toBe('mount_terrorspark_groundshaker');
           const w = world(offscreen);
-          w.camera.position.set(0, 2, 6);
-          w.camera.lookAt(0, 0.8, 0);
+          w.camera.position.set(0, 2, 7);
+          w.camera.lookAt(0, 1, 0);
+          const pilot = new CharacterVisual('player_druid_modular', 0xffffff, 0, null, null, null, {
+            app: normalizeAppearance({ ...DEFAULT_APPEARANCE, gender: 'male' }),
+            worn: fullSet('druid'),
+          });
+          disposers.push(() => pilot.dispose());
+          pilot.update(1 / 60, IDLE, true);
+          pilot.root.position.set(0, 1, 0);
+          w.scene.add(pilot.root);
           const kart = createMountVisual(kartKey);
           disposers.push(() => kart.dispose());
           kart.update(1 / 60, IDLE, true);
-          kart.setShadow(true);
+          // Built for a racer already warded: hidden behind its creation gate.
+          kart.root.visible = false;
           w.scene.add(kart.root);
           const empty = w.programs();
           w.draw();
           w.draw();
-          // the harness really draws the kart: its living set links here
+          // the pilot's living set really links here
           expect(w.programs()).toBeGreaterThan(empty);
           await linkFamily(w);
           w.draw();
+
+          // The build frame: the pilot takes the ward, the pending kart stays
+          // bare, so the creation gate links the kart's OWN programs.
+          const pending = { mountVisual: kart, mountCompilePending: true };
+          syncCharacterVeils(1, racer('rally_ward'), false, 'ward', pilot, pending);
+          await linkColorPrograms(w.arms, kart.root, false);
+          w.draw();
           const before = w.programs();
-          const worn = (): Set<string | null> => {
+
+          const worn = (visual: CharacterVisual): Set<string | null> => {
             const out = new Set<string | null>();
-            kart.root.traverse((object) => {
+            visual.root.traverse((object) => {
               const mesh = object as THREE.Mesh;
-              if (
-                mesh.isMesh &&
-                mesh.visible &&
-                spiritVeilPassOf([mesh.material].flat()[0]) !== 'depth'
-              )
-                for (const m of [mesh.material].flat()) out.add(spiritVeilPaletteOf(m));
+              if (!mesh.isMesh || !mesh.visible || mesh.name === 'spirit_veil_depth') return;
+              if (mesh === pilot.clickProxy || mesh === kart.clickProxy) return;
+              for (const m of [mesh.material].flat()) out.add(spiritVeilPaletteOf(m));
             });
             return out;
           };
+          const presented = { mountVisual: kart, mountCompilePending: false };
+          kart.root.visible = true;
           for (const state of ['ward', 'ghost'] as const) {
             const palette = rallyVeilLook(state);
             if (!palette) throw new Error(`the ${state} wears no veil`);
-            kart.setGhost(true, palette);
+            syncCharacterVeils(1, racer(`rally_${state}`), false, state, pilot, presented);
             w.draw();
             w.draw();
-            // every drawn part wears it, and nothing linked
-            expect(worn(), state).toEqual(new Set([palette]));
+            expect(worn(kart), state).toEqual(new Set([palette]));
+            expect(worn(pilot), state).toContain(palette);
             expect(w.programs(), state).toBe(before);
-            kart.setGhost(false);
+            // The pilot at distance: its composed far bake mints veiled.
+            for (let i = 0; i < 20 && !pilot.displayedFarBody; i++) {
+              pilot.setFar(true);
+              pilot.update(1 / 60, IDLE, true);
+            }
+            const far = pilot.displayedFarBody as THREE.Mesh | null;
+            expect(far, state).not.toBeNull();
+            for (const m of [(far as THREE.Mesh).material].flat()) {
+              expect(spiritVeilPaletteOf(m), state).toBe(palette);
+            }
             w.draw();
-            expect(w.programs(), `${state} off`).toBe(before);
+            w.draw();
+            expect(w.programs(), `${state} far`).toBe(before);
+            pilot.setFar(false);
+            pilot.update(1 / 60, IDLE, true);
           }
+          // The state ends: the kart draws its own set, which the gate linked.
+          syncCharacterVeils(1, racer(null), false, 'none', pilot, presented);
+          w.draw();
+          w.draw();
+          expect(worn(kart)).toEqual(new Set([null]));
+          expect(w.programs(), 'after the state').toBe(before);
         } finally {
           restoreGfx();
         }
