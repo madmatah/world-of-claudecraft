@@ -25,6 +25,11 @@ import {
   mountEngineLoopActive,
 } from './mount_engine_state';
 import {
+  REALM_RACERS_EVENT_SFX,
+  REALM_RACERS_VEHICLE_SFX,
+  type RealmRacersSfxEvent,
+} from './realm_racers_sfx';
+import {
   SFX_CATALOG_HASH,
   SFX_CLIPS,
   SFX_RUNTIME_PACK_URL,
@@ -1335,14 +1340,14 @@ class Sfx {
     const speed = Math.min(1, Math.max(0, speedFraction));
     const load = Math.min(1, Math.max(0, effort));
     const slide = Math.min(1, Math.max(0, (Math.abs(slip) - 2) / 10));
-    const rollKey = offRoad ? 'foot_dirt' : 'foot_stone';
+    const rollKey = offRoad ? REALM_RACERS_VEHICLE_SFX.rollDirt : REALM_RACERS_VEHICLE_SFX.rollRoad;
     const engineTarget =
       REALM_RACERS_ENGINE_GAIN *
       (VEHICLE_ENGINE_IDLE + speed * VEHICLE_ENGINE_SPEED + load * VEHICLE_ENGINE_LOAD);
     const skidTarget = slide * VEHICLE_SKID_GAIN;
     const rollTarget = speed * (offRoad ? VEHICLE_ROLL_DIRT : VEHICLE_ROLL_ROAD);
     const mixedContactTarget =
-      skidTarget * (this.entry('mount_run_stalkglider_snail')?.gain ?? 1) +
+      skidTarget * (this.entry(REALM_RACERS_VEHICLE_SFX.skid)?.gain ?? 1) +
       rollTarget * (this.entry(rollKey)?.gain ?? 1);
     const contactScale =
       mixedContactTarget > 0
@@ -1362,7 +1367,7 @@ class Sfx {
     const vehicleOutput = this.vehicleLimiter ?? this.master ?? undefined;
     this.loop(
       ids.engine,
-      'move_groundshaker_engine',
+      REALM_RACERS_VEHICLE_SFX.engine,
       engineTarget,
       engineX,
       engineY,
@@ -1379,7 +1384,7 @@ class Sfx {
     if (slide > 0)
       this.loop(
         ids.skid,
-        'mount_run_stalkglider_snail',
+        REALM_RACERS_VEHICLE_SFX.skid,
         skidTarget * contactScale,
         x,
         y,
@@ -1413,21 +1418,10 @@ class Sfx {
     this.vehicleLoopIds.delete(entityId);
   }
 
-  realmRacersEvent(
-    kind: 'groundBlastFire' | 'groundBlastImpact' | 'bump' | 'scrape',
-    x: number,
-    y: number,
-    z: number,
-    impact = 1,
-  ): void {
+  realmRacersEvent(kind: RealmRacersSfxEvent, x: number, y: number, z: number, impact = 1): void {
     const strength = Math.min(1, Math.max(0.2, impact));
     const contactGain = (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25;
-    const key =
-      kind === 'groundBlastFire'
-        ? 'proj_groundshaker'
-        : kind === 'groundBlastImpact'
-          ? 'impact_groundshaker'
-          : 'impact_arcane';
+    const key = REALM_RACERS_EVENT_SFX[kind];
     const [audioX, audioY, audioZ] =
       kind === 'groundBlastImpact' ? this.realmRacersPlayerAnchoredPosition(x, y, z) : [x, y, z];
     this.playAt(key, audioX, audioY, audioZ, {
