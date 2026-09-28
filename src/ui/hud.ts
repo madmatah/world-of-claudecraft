@@ -1398,13 +1398,13 @@ export class Hud {
       if (barSlot !== null) this.flashActionSlot(barSlot);
       // Online, every audible and visible cue of a rally shot used to wait for
       // the server's Fired event, a full round trip after the press: the weapon
-      // read as firing late. Play the muzzle report NOW when the cast is legal
-      // by every mirror the client can see (the gate mirrors the client-visible
-      // half of realmRacersFireGroundBlast's refusals); the renderer suppresses
-      // the duplicate when the real event lands. The shot itself, the arc and
-      // the dodge marker stay server-authoritative.
+      // read as firing late. Launch the muzzle report and the shell NOW, toward
+      // the point just sent, when the cast is legal by every mirror the client
+      // can see (the gate mirrors the client-visible half of
+      // realmRacersFireGroundBlast's refusals); the Fired event adopts the
+      // shell, and the crater stays server-authoritative.
       if (this.localRallyFeedbackAllowed(id, REALM_RACERS_ABILITY_ID)) {
-        this.renderer.predictOwnGroundBlastFire();
+        this.renderer.predictOwnGroundBlastFire(point);
       }
     },
     clearReticle: () => this.renderer.setGroundAimReticle(null),

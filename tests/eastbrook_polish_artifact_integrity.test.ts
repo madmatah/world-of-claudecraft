@@ -1408,7 +1408,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
-  '93090d92bd3a58852abeced86331149b8c767a3e258e6b1dab52ce51a29c0228';
+  // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
+  'bd9a94ee6f0c270641768021953e34c7313ca4de5427e73528b225b84c04f377';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1445,7 +1446,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
   // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
-  '4072c2627b01164e2766d50f707a1f872e842815e036fa0b6c87ef05aa1466e4';
+  // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
+  '67dda57c5bb4a8d772a9fbfda5c4190abebe1e38fce7757ea7c5a54d638255e0';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2840,7 +2842,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers aim pose and prediction lead through the core.
       // Re-minted for the Realm Racers rival blast pop drawn from the Hit event.
       // Re-minted for the Realm Racers golden ward veil.
-    ).toBe('536f89f1c8a09058958b20b8724581e3d645149efdce5c2f144158e0391e75f3');
+      // Re-minted for the Realm Racers own shell launched on the input frame.
+    ).toBe('7c55e901d2402ceb8fe6cecaad24fb595e6d4d521e58e4fbfd1c7caa2aaf6f2e');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

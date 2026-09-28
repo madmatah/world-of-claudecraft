@@ -546,6 +546,7 @@ import {
   markOwnShotFeedback,
   type OwnShotFeedbackState,
 } from './own_shot_feedback_core';
+import { ownShotMuzzle } from './own_shot_launch_core';
 import {
   PALADIN_AEGIS_DOME_RADIUS,
   type PaladinAegisVisual,
@@ -7208,13 +7209,13 @@ export class Renderer {
   }
 
   /**
-   * Instant local feedback for the pilot's OWN rally shot: the muzzle flash
-   * and fire report, played at the press instead of one round trip later.
-   * Display and audio only, from the displayed pose; the shot itself, its
-   * arc, the dodge marker and the crater stay server-authoritative (the Fired
-   * event still drives them, minus the duplicate muzzle, see handleEvent).
+   * Instant local feedback for the pilot's OWN rally shot: the muzzle flash,
+   * the fire report and (while the kart is predicted) the shell itself leave
+   * at the press, from the displayed pose toward the point the client sent.
+   * Display and audio only: the Fired event adopts the shell (or it fades
+   * unconfirmed), and the crater stays the server's Hit event.
    */
-  predictOwnGroundBlastFire(): void {
+  predictOwnGroundBlastFire(point: { x: number; z: number } | null = null): void {
     // One report in flight at a time: a re-commit inside the round trip beats
     // the not-yet-mirrored cooldown, and its shell will never exist.
     if (!canMarkOwnShotFeedback(this.ownShotFeedback, performance.now())) return;
@@ -7223,10 +7224,9 @@ export class Renderer {
     const px = pose ? pose.pos.x : p.pos.x;
     const pz = pose ? pose.pos.z : p.pos.z;
     const facing = pose ? pose.facing : p.facing;
-    // The server spawns its muzzle two yards up the nose (social/realm_racers
-    // emit site); match it so the suppressed event leaves no visible gap.
-    const x = px + Math.sin(facing) * 2;
-    const z = pz + Math.cos(facing) * 2;
+    const { x, z } = ownShotMuzzle(px, pz, facing); // the server's muzzle, so no gap
+    const lead = this.selfRender.reconciledLeadMs;
+    this.realmRacersGroundBlasts.launchOwn(px, pz, facing, point, lead, this.groundSample, p.id);
     this.vfx.burst(new THREE.Vector3(x, 1.1, z), 'arcane', 14, 0.65);
     playRealmRacersEventAudio(this.audioSink, this.groundSample, {
       type: 'realmRacersGroundBlastFired',

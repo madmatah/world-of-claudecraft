@@ -18,11 +18,24 @@
 // The whole pool is built by `prepare()`, which the race preparation seam
 // (realm_racers_prepare.ts) calls when the viewer commits to racing and then
 // links and uploads off the live frame; a shot never builds or waits.
+//
+// The local pilot's own shell can leave on the input frame (`launchOwn`): it is
+// one of the same pooled slots, its Fired event ADOPTS it instead of drawing a
+// second one, and an unconfirmed one shrinks away mid-air with no crater. The
+// decisions are own_shot_launch_core.ts; this module only moves the meshes.
 
 import * as THREE from 'three';
 import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { floorVfxRenderOrder } from './floor_vfx_layer';
+import {
+  claimOwnShotLaunch,
+  createOwnShotLedger,
+  expireOwnShotLaunch,
+  planOwnShotLaunch,
+  recordOwnShotLaunch,
+  shellProgress,
+} from './own_shot_launch_core';
 import { REALM_RACERS_COMPILE_OWNER } from './realm_racers_prepare_core';
 import { tagVfxSubtree } from './renderer_diagnostics';
 import { rallyGroundBlastMarkerTexture } from './textures';
@@ -53,6 +66,8 @@ const TRAIL_LIFE = 0.32;
 const FLASH_LIFE = 0.28;
 const SHOCKWAVE_LIFE = 0.45;
 const SHOCKWAVE_REACH = 2.4;
+/** How long an unconfirmed own shell takes to shrink away, seconds. */
+const UNCONFIRMED_FADE = 0.25;
 
 const COOL = new THREE.Color(0x6fd8ff);
 const HOT = new THREE.Color(0xffb04a);
@@ -77,6 +92,16 @@ interface GroundBlastSlot {
   arc: number;
   flight: number;
   elapsed: number;
+  /** Path progress the flight started from: 0, or where an adopted own shell
+   *  already was when the server's flight took over. */
+  progressFrom: number;
+  /** The adopted target's correction, decaying to zero over the flight. */
+  shiftX: number;
+  shiftZ: number;
+  /** Bumped per launch, so a recycled slot is never mistaken for an old shot. */
+  serial: number;
+  /** Seconds of the unconfirmed shrink left, or -1 when not fading. */
+  fade: number;
   live: boolean;
 }
 
@@ -87,6 +112,8 @@ export interface GroundBlastShot {
   targetX: number;
   targetZ: number;
   flightSeconds: number;
+  /** The shooter, when known: the pilot's own event adopts a predicted shell. */
+  sourceId?: number;
 }
 
 interface BurstSlot {
@@ -114,6 +141,10 @@ export class RealmRacersGroundBlastVisuals {
   private prepared = false;
   private disposed = false;
   private scratch = new THREE.Object3D();
+  /** Frame clock, seconds (the sum of `update` steps): the only time the own
+   *  shot's confirmation window is measured on. */
+  private clock = 0;
+  private readonly ownShots = createOwnShotLedger();
 
   private projectileGeometry = new THREE.IcosahedronGeometry(0.3, 1);
   private glowGeometry = new THREE.IcosahedronGeometry(0.72, 1);
@@ -281,6 +312,11 @@ export class RealmRacersGroundBlastVisuals {
       arc: 0,
       flight: 1,
       elapsed: 0,
+      progressFrom: 0,
+      shiftX: 0,
+      shiftZ: 0,
+      serial: 0,
+      fade: -1,
       live: false,
     };
     this.retire(slot);
@@ -303,6 +339,9 @@ export class RealmRacersGroundBlastVisuals {
 
   private retire(slot: GroundBlastSlot): void {
     slot.live = false;
+    slot.fade = -1;
+    slot.projectile.scale.setScalar(1);
+    slot.glow.scale.setScalar(1);
     slot.projectile.visible = false;
     slot.glow.visible = false;
     slot.trail.visible = false;
@@ -319,9 +358,15 @@ export class RealmRacersGroundBlastVisuals {
   fire(shot: GroundBlastShot, groundY: number): void {
     if (this.disposed) return;
     this.prepare();
+    if (shot.sourceId !== undefined && this.adoptOwnShot(shot)) return;
     const { x: muzzleX, z: muzzleZ, targetX, targetZ, flightSeconds } = shot;
     const slot = this.slots[this.nextSlot % POOL_SIZE];
     this.nextSlot++;
+    slot.serial++;
+    slot.progressFrom = 0;
+    slot.shiftX = 0;
+    slot.shiftZ = 0;
+    slot.fade = -1;
     const span = Math.hypot(targetX - muzzleX, targetZ - muzzleZ);
     slot.fromX = muzzleX;
     slot.fromZ = muzzleZ;
@@ -347,6 +392,60 @@ export class RealmRacersGroundBlastVisuals {
     this.step(slot, 0);
   }
 
+  /**
+   * The local pilot fired: launch their shell NOW from the drawn pose, toward
+   * the point the client sent, clamped and timed as the sim does it
+   * (own_shot_launch_core.ts). No-op, false, without a lead to time it by.
+   */
+  launchOwn(
+    x: number,
+    z: number,
+    facing: number,
+    requested: { x: number; z: number } | null,
+    leadMs: number | null,
+    ground: (x: number, z: number) => number,
+    ownerId: number,
+  ): boolean {
+    if (this.disposed) return false;
+    const launch = planOwnShotLaunch({ x, z, facing }, requested, leadMs);
+    if (!launch) return false;
+    const index = this.nextSlot % POOL_SIZE;
+    this.fire(launch, ground(launch.targetX, launch.targetZ));
+    const slot = this.slots[index];
+    recordOwnShotLaunch(
+      this.ownShots,
+      ownerId,
+      index,
+      slot.serial,
+      this.clock,
+      launch.confirmWithinS,
+    );
+    return true;
+  }
+
+  /** The server confirmed the pilot's predicted shell: re-time the ONE shell in
+   *  the air onto the server's flight (from where it is drawn now, so nothing
+   *  jumps) and glide it onto the server's target. False when there is nothing
+   *  to adopt, and the event draws its own shell. */
+  private adoptOwnShot(shot: GroundBlastShot): boolean {
+    const claimed = claimOwnShotLaunch(this.ownShots, shot.sourceId ?? -1, this.clock);
+    const slot = claimed ? this.slots[claimed.slot] : undefined;
+    if (!claimed || !slot || !slot.live || slot.serial !== claimed.serial || slot.fade >= 0) {
+      return false;
+    }
+    const u = clamp01(slot.elapsed / slot.flight);
+    const drawnToX = slot.toX + slot.shiftX * (1 - u);
+    const drawnToZ = slot.toZ + slot.shiftZ * (1 - u);
+    slot.progressFrom = shellProgress(slot.progressFrom, slot.elapsed, slot.flight);
+    slot.elapsed = 0;
+    slot.flight = Math.max(1e-3, shot.flightSeconds);
+    slot.toX = shot.targetX;
+    slot.toZ = shot.targetZ;
+    slot.shiftX = drawnToX - shot.targetX;
+    slot.shiftZ = drawnToZ - shot.targetZ;
+    return true;
+  }
+
   /** The shell landed: a flash and a shockwave off the ground. Driven by the
    *  impact EVENT rather than by the flight clock, so a shell that caught
    *  nothing still craters at the exact point the sim resolved. */
@@ -366,9 +465,24 @@ export class RealmRacersGroundBlastVisuals {
 
   private step(slot: GroundBlastSlot, dt: number): void {
     slot.elapsed += dt;
-    const t = Math.min(1, slot.elapsed / slot.flight);
-    const x = slot.fromX + (slot.toX - slot.fromX) * t;
-    const z = slot.fromZ + (slot.toZ - slot.fromZ) * t;
+    const t = shellProgress(slot.progressFrom, slot.elapsed, slot.flight);
+    const settle = 1 - clamp01(slot.elapsed / slot.flight);
+    const toX = slot.toX + slot.shiftX * settle;
+    const toZ = slot.toZ + slot.shiftZ * settle;
+    const x = slot.fromX + (toX - slot.fromX) * t;
+    const z = slot.fromZ + (toZ - slot.fromZ) * t;
+    if (slot.shiftX !== 0 || slot.shiftZ !== 0) {
+      slot.marker.position.set(toX, slot.marker.position.y, toZ);
+      slot.core.position.set(toX, slot.core.position.y, toZ);
+      slot.column.position.set(toX, slot.column.position.y, toZ);
+    }
+    // An unconfirmed own shell shrinks away: scale only, since the projectile's
+    // material is shared and opaque (an opacity flip would be a new program).
+    let shrink = 1;
+    if (slot.fade >= 0) {
+      slot.fade -= dt;
+      shrink = clamp01(slot.fade / UNCONFIRMED_FADE);
+    }
     // A parabola through both ends: 4*t*(1-t) peaks at 1 halfway across, so the
     // shell leaves the barrel and meets the marker at ground level.
     const y = slot.groundY + 1.1 * (1 - t) + slot.arc * 4 * t * (1 - t);
@@ -377,9 +491,10 @@ export class RealmRacersGroundBlastVisuals {
     slot.projectile.rotation.y += dt * 9;
     slot.projectile.rotation.x += dt * 6;
     const pulse = 1 + Math.sin(slot.elapsed * 30) * 0.12;
-    slot.glow.scale.setScalar(pulse);
+    slot.glow.scale.setScalar(pulse * shrink);
+    slot.projectile.scale.setScalar(shrink);
 
-    this.stepTrail(slot, dt, x, y, z);
+    this.stepTrail(slot, dt, x, y, z, shrink);
 
     // The countdown. The hazard disc never moves or resizes (it IS the blast,
     // and a player acts on it): what closes is the fill inside it, and what
@@ -396,18 +511,25 @@ export class RealmRacersGroundBlastVisuals {
     coreMat.color.copy(COOL).lerp(HOT, heat);
     columnMat.color.copy(COOL).lerp(HOT, heat);
     // A steady pulse that quickens as the shell falls, on OPACITY only.
-    markerMat.opacity = 0.72 + 0.28 * Math.abs(Math.sin(slot.elapsed * (6 + 14 * t)));
-    coreMat.opacity = 0.2 + 0.35 * heat;
-    columnMat.opacity = 0.1 + 0.22 * heat;
+    markerMat.opacity = (0.72 + 0.28 * Math.abs(Math.sin(slot.elapsed * (6 + 14 * t)))) * shrink;
+    coreMat.opacity = (0.2 + 0.35 * heat) * shrink;
+    columnMat.opacity = (0.1 + 0.22 * heat) * shrink;
     slot.column.scale.set(1, 1, 1);
 
-    if (t >= 1) this.retire(slot);
+    if (t >= 1 || (slot.fade >= 0 && shrink <= 0)) this.retire(slot);
   }
 
   /** Drop a mote behind the shell at a fixed cadence and age the rest. The motes
    *  are one InstancedMesh per slot, so a trail costs one draw call and no
    *  per-frame allocation. */
-  private stepTrail(slot: GroundBlastSlot, dt: number, x: number, y: number, z: number): void {
+  private stepTrail(
+    slot: GroundBlastSlot,
+    dt: number,
+    x: number,
+    y: number,
+    z: number,
+    shrink: number,
+  ): void {
     slot.trailSince += dt;
     const interval = TRAIL_LIFE / TRAIL_MOTES;
     if (slot.trailSince >= interval || dt === 0) {
@@ -424,7 +546,7 @@ export class RealmRacersGroundBlastVisuals {
       const life = clamp01(1 - slot.trailAge[i] / TRAIL_LIFE);
       const at = i * 3;
       this.scratch.position.set(slot.trailPos[at], slot.trailPos[at + 1], slot.trailPos[at + 2]);
-      this.scratch.scale.setScalar(life * life);
+      this.scratch.scale.setScalar(life * life * shrink);
       this.scratch.updateMatrix();
       slot.trail.setMatrixAt(i, this.scratch.matrix);
     }
@@ -451,6 +573,10 @@ export class RealmRacersGroundBlastVisuals {
 
   update(dt: number): void {
     if (this.disposed) return;
+    this.clock += dt;
+    const unconfirmed = expireOwnShotLaunch(this.ownShots, this.clock);
+    const stale = unconfirmed ? this.slots[unconfirmed.slot] : undefined;
+    if (stale?.live && stale.serial === unconfirmed?.serial) stale.fade = UNCONFIRMED_FADE;
     for (const slot of this.slots) {
       if (slot.live) this.step(slot, dt);
     }

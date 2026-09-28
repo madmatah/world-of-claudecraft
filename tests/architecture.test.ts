@@ -1037,6 +1037,7 @@ const RENDER_PURE_CORES = [
   'src/render/opaque_draw_order_core.ts',
   'src/render/own_bump_feedback_core.ts',
   'src/render/own_shot_feedback_core.ts',
+  'src/render/own_shot_launch_core.ts',
   'src/render/perceptual_lod_core.ts',
   'src/render/prop_cell_core.ts',
   'src/render/prop_cull_core.ts',
