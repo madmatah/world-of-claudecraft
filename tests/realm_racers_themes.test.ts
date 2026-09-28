@@ -55,6 +55,7 @@ import {
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
+import { realmRacersThemeZone } from '../src/sim/realm_racers_zone';
 import { STREETLAMP_STYLE_BY_ZONE } from '../src/sim/streetlamp_style';
 
 // The builder mints procedural canvas textures, so the build cases below need
@@ -119,12 +120,6 @@ function themeUrls(themeId: string): string[] {
   ];
 }
 
-/** The world-map zone a theme is the record of: the zone id with its article
- *  dropped, the naming rule the ids are authored under. */
-function zoneOfTheme(themeId: string) {
-  return ZONES.find((zone) => zone.id.replace(/_(vale|marsh|heights|isle)$/, '') === themeId);
-}
-
 describe('Realm Racers circuit themes', () => {
   it('resolves every id both ways, so neither list can grow alone', () => {
     // The sim-side list is what the editor's picker offers and what the metrics
@@ -173,12 +168,11 @@ describe('Realm Racers circuit themes', () => {
     // than a taste: the realm's own lakes are ones the world's water flora
     // leaves bare. The lakes check keeps it from passing on a realm that has
     // no water to be bare.
-    const zone = zoneOfTheme(themeId);
-    expect(zone, themeId).toBeDefined();
-    expect(WATER_FLORA_SKIP_BIOMES.has(zone?.biome ?? ''), `${themeId} lakes are planted`).toBe(
-      true,
-    );
-    expect(zone?.lakes?.length ?? 0, `${themeId} has lakes`).toBeGreaterThan(0);
+    // The world-map zone the theme is the record of (the one naming rule,
+    // src/sim/realm_racers_zone.ts).
+    const zone = realmRacersThemeZone(themeId);
+    expect(WATER_FLORA_SKIP_BIOMES.has(zone.biome), `${themeId} lakes are planted`).toBe(true);
+    expect(zone.lakes?.length ?? 0, `${themeId} has lakes`).toBeGreaterThan(0);
   });
 
   it('every shipped circuit names a theme the game authors', () => {
@@ -386,10 +380,11 @@ describe('Realm Racers circuit themes', () => {
     // to be in, so a fifteenth realm cannot ship without a record and a record
     // cannot name a realm the world does not have.
     //
-    // Matched on the zone id with its article dropped, which is the naming
-    // rule the ids are authored under (`thornpeak` for `thornpeak_heights`).
-    const themeIdForZone = (zoneId: string): string =>
-      zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
+    // Matched through the one resolver that holds the naming rule the ids are
+    // authored under (`thornpeak` for `thornpeak_heights`), read backwards: a
+    // zone no theme resolves to reads undefined and fails the list below.
+    const themeIdForZone = (zoneId: string): string | undefined =>
+      REALM_RACERS_THEME_IDS.find((themeId) => realmRacersThemeZone(themeId).id === zoneId);
     // ONE named exemption, and it is a fact about the place rather than a
     // shortcut: the Proving Shore is the level 1 to 2 tutorial island a
     // character learns on and sails away from (its ferry bell only ever brings
@@ -411,7 +406,7 @@ describe('Realm Racers circuit themes', () => {
     // `beach` paint rather than the `vale` its ZoneDef sits in, which is also
     // what leaves the vale free for Eastbrook under the unique-ground rule.
     for (const zone of RACEABLE_ZONES) {
-      const theme = CIRCUIT_THEMES[themeIdForZone(zone.id)];
+      const theme = CIRCUIT_THEMES[themeIdForZone(zone.id) ?? ''];
       const expected = zone.id === 'farshore_isle' ? 'beach' : zone.biome;
       expect(theme.ground, zone.id).toBe(expected);
       // The SKY is the second dimension, and it is worth the extra line: an id

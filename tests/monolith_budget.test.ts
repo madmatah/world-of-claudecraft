@@ -540,7 +540,9 @@ const MONOLITHS: MonolithRow[] = [
     // moved to src/ui/realm_racers_result_notice_view.ts.
     // LOWERED 18295 -> 18130: the Realm Racers event router, cast affordances and part
     // construction moved to src/ui/hud/realm_racers/.
-    ceiling: 18130,
+    // LOWERED 18130 -> 18127: the map zone focus lookup bag moved to
+    // src/ui/hud/map/map_zone_focus_lookup.ts.
+    ceiling: 18127,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
   },
   {

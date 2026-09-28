@@ -6,13 +6,15 @@
 // DUNGEON_X_THRESHOLD, so `lastZoneId` carries it); outdoors, the committed
 // zone, so border-straddling cannot thrash the cached terrain regen. A dev or
 // atlas override wins over all of them.
-import { realmRacersZoneAt } from '../../../sim/realm_racers_zone';
+// Every world read arrives in the lookup bag (the live binding is
+// map_zone_focus_lookup.ts), and every zone it returns is one of `zones`.
 import type { ZoneDef } from '../../../sim/types';
 
 export interface MapZoneFocusLookup {
   zones: readonly ZoneDef[];
   zoneAt(x: number, z: number): ZoneDef;
   dungeonAt(x: number): { doorPos: { x: number; z: number } } | null | undefined;
+  realmRacersZoneAt(x: number, z: number): { id: string } | null;
 }
 
 /**
@@ -31,7 +33,7 @@ export function resolveMapZone(
   if (mapZoneOverride !== null) return byId(mapZoneOverride) ?? lookup.zoneAt(pos.x, pos.z);
   const dungeon = lookup.dungeonAt(pos.x);
   if (dungeon) return lookup.zoneAt(dungeon.doorPos.x, dungeon.doorPos.z);
-  const circuit = realmRacersZoneAt(pos.x, pos.z);
+  const circuit = byId(lookup.realmRacersZoneAt(pos.x, pos.z)?.id ?? null);
   if (circuit) return circuit;
   return byId(lastZoneId) ?? lookup.zoneAt(pos.x, pos.z);
 }

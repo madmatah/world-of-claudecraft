@@ -474,6 +474,7 @@ import {
 } from './hud/map';
 import { MapSidebarCollapse } from './hud/map/map_sidebar_collapse';
 import { resolveMapZone } from './hud/map/map_zone_focus_core';
+import { MAP_ZONE_LOOKUP } from './hud/map/map_zone_focus_lookup';
 import { refreshSideButtonLabels } from './hud/menu/side_buttons';
 import { livingSecondaryPet } from './hud/pet_bar_core';
 import { CARD_POSES } from './hud/player_card/player_card';
@@ -10737,12 +10738,8 @@ export class Hud {
     }
     this.continentRegions = [];
 
-    // map_zone_focus_core.ts: dungeon door, frozen last zone, committed zone, override first.
-    const zone = resolveMapZone(this.mapZoneOverride, this.lastZoneId, p.pos, {
-      zones: ZONES,
-      zoneAt,
-      dungeonAt,
-    });
+    // map_zone_focus_core.ts: override, dungeon door, circuit, frozen last zone, committed zone.
+    const zone = resolveMapZone(this.mapZoneOverride, this.lastZoneId, p.pos, MAP_ZONE_LOOKUP);
     this.mapSidebar.update(this.sim, zone);
     // Crossing a zone while the map is open starts that zone at its full frame;
     // a pan target from the previous zone must never leak into the new one.

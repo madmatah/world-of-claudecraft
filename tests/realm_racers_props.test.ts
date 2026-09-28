@@ -39,6 +39,7 @@ import { resolvePosition } from '../src/sim/colliders';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
   REALM_RACERS_CIRCUIT_LIST,
+  REALM_RACERS_THEME_IDS,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import {
@@ -71,6 +72,7 @@ import {
   SCATTER_SURFACE_CLEARANCE,
 } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { realmRacersThemeZone } from '../src/sim/realm_racers_zone';
 import {
   STREETLAMP_COLLIDER_RADIUS,
   STREETLAMP_FIXTURE_HEIGHT,
@@ -353,13 +355,13 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     // Fourteen near-identical lamp tiles in one palette is a hunt; a theme
     // naming the one that belongs in its realm is what makes them authorable.
     //
-    // Matched through the ZONE, the way the theme ids themselves are (the zone
-    // id with its article dropped, pinned in `realm_racers_themes.test.ts`),
-    // never through the biome: the Farshore flies a place-keyed sky over the
-    // vale, and a biome lookup would light its isle with Eastbrook's civic
-    // posts instead of its own coral.
+    // Matched through the ZONE, the way the theme ids themselves are (the one
+    // naming rule, `realmRacersThemeZone`, read backwards), never through the
+    // biome: the Farshore flies a place-keyed sky over the vale, and a biome
+    // lookup would light its isle with Eastbrook's civic posts instead of its
+    // own coral.
     const themeIdForZone = (zoneId: string): string =>
-      zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
+      REALM_RACERS_THEME_IDS.find((themeId) => realmRacersThemeZone(themeId).id === zoneId) ?? '';
     const lampOf = (theme: (typeof CIRCUIT_THEMES)[string]): string | undefined =>
       theme.props.find((key) => key in REALM_RACERS_LAMP_STYLES);
     for (const [themeId, theme] of Object.entries(CIRCUIT_THEMES)) {
