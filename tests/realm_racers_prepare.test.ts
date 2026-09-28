@@ -452,10 +452,15 @@ describe('race preparation seam (renderer wiring)', () => {
     expect(tracksAt).toBeGreaterThan(frameAt);
     expect(occurrences('this.realmRacersTrack.update(')).toBe(1);
     // It names the drawn circuit, so a circuit client not asked yet still counts.
-    const hud = stripComments(readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8'));
+    const hud = stripComments(
+      readFileSync(
+        new URL('../src/ui/hud/realm_racers/realm_racers_hud_parts.ts', import.meta.url),
+        'utf8',
+      ),
+    );
     expect(
       hud.split(
-        'prepareProgress: (out, circuitId) => this.renderer.realmRacersPrepare.progress(out, circuitId),',
+        'prepareProgress: (out, circuitId) => h.renderer.realmRacersPrepare.progress(out, circuitId),',
       ).length - 1,
     ).toBe(1);
   });

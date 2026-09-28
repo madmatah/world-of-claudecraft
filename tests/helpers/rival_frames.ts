@@ -439,7 +439,7 @@ export function fireAtDrawnRival(
         vz: vehicleVelocityZ(mirror.drive, f.rivalFacing),
       },
     );
-    // The HUD's aimCaster(): the displayed pose first, the mirror as fallback.
+    // The HUD's rallyAimCaster(): the displayed pose first, the mirror as fallback.
     const caster = frame.aimPose ?? shooter.client.player;
     const clamp = clampAimToRange(caster, lead, 0, REALM_RACERS_ABILITY_ID);
     out.sent = clamp.point;

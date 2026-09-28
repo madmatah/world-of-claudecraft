@@ -538,7 +538,9 @@ const MONOLITHS: MonolithRow[] = [
     // wc -l on the merged tree (release 18081). Exact count, zero slack.
     // LOWERED 18310 -> 18295: the Realm Racers result banner and log choice
     // moved to src/ui/realm_racers_result_notice_view.ts.
-    ceiling: 18295,
+    // LOWERED 18295 -> 18130: the Realm Racers event router, cast affordances and part
+    // construction moved to src/ui/hud/realm_racers/.
+    ceiling: 18130,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
   },
   {

@@ -10,7 +10,6 @@ import { bindActionLabel, type Keybinds, keyCapLabel } from '../game/keybinds';
 import { trackMetaPixel } from '../game/meta_pixel';
 import { syncMinigameMusic } from '../game/minigame_music_sync';
 import { music } from '../game/music';
-import { playRealmRacersResultAudio } from '../game/realm_racers_audio_routing';
 import {
   type BoolSettingKey,
   type GameSettings,
@@ -47,7 +46,6 @@ import {
 } from '../render/characters/portrait';
 import { isFriendlyPet, mobTooltipConColor } from '../render/reaction';
 import type { Renderer } from '../render/renderer';
-import { isAbilityBudgetSpent, isAbilityLockedByActivity } from '../sim/ability_budget';
 import {
   type ChatSenderFlair,
   normalizeStreamerLink,
@@ -60,10 +58,6 @@ import { HEROIC_MARK_ITEM_ID } from '../sim/content/dungeon_difficulty';
 import { HEROIC_VENDOR_STOCK } from '../sim/content/heroic_vendor';
 import { CRUCIBLE_VENDOR_STOCK } from '../sim/content/ignivar_loot';
 import { isOnMountRaceStartPlatform, MOUNTS } from '../sim/content/mounts';
-import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_SLICK_ABILITY_ID,
-} from '../sim/content/realm_racers';
 import { recipeById } from '../sim/content/recipes';
 import { RELIQUARY_PAGES, RELIQUARY_PAGES_BY_ID } from '../sim/content/reliquary';
 import { FIRST_TALENT_LEVEL, type TalentAllocation, talentsFor } from '../sim/content/talents';
@@ -382,7 +376,6 @@ import {
 import { bindEmpoweredActionHold } from './hud/action_bar/empowered_hold';
 import {
   type AimPoint,
-  localRallyCastFeedbackAllowed,
   quickGroundTarget,
   selectedGroundAimPoint,
   shouldUseGroundAim,
@@ -585,6 +578,15 @@ import { parseChatSegments } from './hud/quest/quest_link';
 import { QuestProgressBanner } from './hud/quest/quest_progress_banner';
 import { QuestTrackerController } from './hud/quest/quest_tracker_controller';
 import { QuestLogWindow } from './hud/quest/questlog_window';
+import {
+  applyRealmRacersEventPresentation,
+  predictRallyGroundBlastFire,
+  predictRallySlickDrop,
+  rallyAimCaster,
+  realmRacersSplashDeps,
+  realmRacersUiDeps,
+  refuseLockedAbility,
+} from './hud/realm_racers';
 import { paintFactionTierCelebrations } from './hud/reputation/faction_tier_celebration_painter';
 import { advanceFactionTierObservation } from './hud/reputation/faction_tier_celebration_view';
 import { RiftMapPainter } from './hud/rift';
@@ -812,10 +814,7 @@ import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view'
 import { RAID_MARKER_LABEL_KEYS, raidMarkerDisplayName } from './raid_marker_labels_view';
 import { presentRealmBuilder, RealmBuilderPopup } from './realm_builder_popup';
 import { RealmRacersUi } from './realm_racers';
-import { realmRacersPickupEffectText } from './realm_racers_pickup_i18n';
 import { RealmRacersPickupSplash } from './realm_racers_pickup_splash_controller';
-import { realmRacersResultNotice } from './realm_racers_result_notice_view';
-import { rallyControlKeys } from './realm_racers_view';
 import { RecipePinStore } from './recipe_pins_store';
 import { RecipeTrackerPainter } from './recipe_tracker_painter';
 import {
@@ -1381,7 +1380,7 @@ export class Hud {
     return this.sim.vehicleSession ? this.vehicleControls.aim : this.playerGroundAim;
   }
   private readonly playerGroundAim = new GroundAimController({
-    player: () => this.aimCaster(),
+    player: () => rallyAimCaster(this),
     resolveAbility: (id) => this.sim.known.find((k) => k.def.id === id) ?? null,
     seedTargetPoint: () =>
       selectedGroundAimPoint(
@@ -1396,16 +1395,7 @@ export class Hud {
       // mouse click, mobile tap), so the button flash lives here, once, instead
       // of only on the keyboard path.
       if (barSlot !== null) this.flashActionSlot(barSlot);
-      // Online, every audible and visible cue of a rally shot used to wait for
-      // the server's Fired event, a full round trip after the press: the weapon
-      // read as firing late. Launch the muzzle report and the shell NOW, toward
-      // the point just sent, when the cast is legal by every mirror the client
-      // can see (the gate mirrors the client-visible half of
-      // realmRacersFireGroundBlast's refusals); the Fired event adopts the
-      // shell, and the crater stays server-authoritative.
-      if (this.localRallyFeedbackAllowed(id, REALM_RACERS_ABILITY_ID)) {
-        this.renderer.predictOwnGroundBlastFire(point);
-      }
+      predictRallyGroundBlastFire(this, id, point);
     },
     clearReticle: () => this.renderer.setGroundAimReticle(null),
     projectPlacement: (id, point) => this.sim.groundAimPlacementPreview(id, point),
@@ -5603,38 +5593,8 @@ export class Hud {
     root: () => $('#bg-proposal-popup'),
     world: () => this.sim,
   });
-  /**
-   * The pickup splash: the big kart-racer flash of what a box just gave. Event
-   * driven (see the module header), so it costs the frame loop nothing; the FCT
-   * note beside it stays as the quiet line and the held-ability slot stays as
-   * the state.
-   */
-  private readonly realmRacersSplash = new RealmRacersPickupSplash({
-    layer: () => document.getElementById('ui'),
-    writers: this.writerFacet,
-    iconUrl: (icon) => iconDataUrl(icon.kind, icon.id, 128),
-    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
-    cancel: (handle) => window.clearTimeout(handle),
-  });
-  private readonly realmRacersUi = new RealmRacersUi({
-    root: () => $('#realm-racers-window'),
-    layer: () => document.getElementById('ui'),
-    world: () => this.sim,
-    closeOthers: () => this.closeOtherWindows('#realm-racers-window'),
-    // The rally's practice tutorial teaches the keys the player ACTUALLY has,
-    // so the binding lookup is resolved here (the rally module never reaches
-    // into the game layer's keybind profile) and the touch HUD is told to drop
-    // the key column entirely.
-    controlKeys: (action) => rallyControlKeys(action, (bind) => this.keybinds.primaryLabel(bind)),
-    isTouchHud: () => document.body.classList.contains('mobile-touch'),
-    countdownTick: () => audio.realmRacersCountdownTick(),
-    showBanner: (text) => this.showBanner(text),
-    // The race UI owns the match-end edge; the splash it clears is this class's.
-    clearPickupSplash: () => this.realmRacersSplash.clear(),
-    writers: this.writerFacet,
-    prepareProgress: (out, circuitId) => this.renderer.realmRacersPrepare.progress(out, circuitId),
-    ...this.windowFocus('#realm-racers-window'),
-  });
+  private readonly realmRacersSplash = new RealmRacersPickupSplash(realmRacersSplashDeps(this));
+  private readonly realmRacersUi = new RealmRacersUi(realmRacersUiDeps(this));
   readonly lobbyHold = this.realmRacersUi.lobbyHold;
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
@@ -7381,30 +7341,6 @@ export class Hud {
     return this.groundAim.abilityRange();
   }
 
-  /** The pose the aim clamp measures from: the DISPLAYED self when the online
-   *  predictor drives it (the mirror pose is an echo old, which at racing
-   *  speed clamps the reticle yards behind the machine the player sees), else
-   *  the world's own player pose (offline it is exact). */
-  private aimCaster(): Pick<Entity, 'pos' | 'facing'> {
-    return this.renderer.selfAimPose ?? this.sim.player;
-  }
-
-  /** Every mirror the client can see says the sim will accept this rally
-   *  cast, so its instant local cue (the shell's muzzle report, the oil
-   *  drop's patch) may play now (localRallyCastFeedbackAllowed). */
-  private localRallyFeedbackAllowed(abilityId: string, expectedAbilityId: string): boolean {
-    const race = this.sim.realmRacersInfo.match;
-    return localRallyCastFeedbackAllowed(
-      abilityId,
-      expectedAbilityId,
-      this.sim.player.dead,
-      isAbilityLockedByActivity(this.sim.player, abilityId),
-      this.sim.player.cooldowns.get(abilityId) ?? 0,
-      race?.phase === 'racing',
-      race !== null && !race.me.finished && !race.me.retired,
-    );
-  }
-
   updateGroundAimPoint(rawPoint: AimPoint | null): void {
     this.groundAim.updatePoint(rawPoint);
   }
@@ -7423,24 +7359,6 @@ export class Hud {
 
   commitGroundAim(): boolean {
     return this.groundAim.commitAt();
-  }
-
-  /**
-   * An activity that lent this kit is refusing the ability: never open an aiming
-   * mode the cast would then reject. Returns true when the press is spent here.
-   *
-   * The two reasons come from the SAME predicate the sim refuses on, so the
-   * affordance and the authority cannot disagree. Running out of ammunition
-   * borrows the sim's own words, because "nothing happened" is indistinguishable
-   * from a broken key; being held on the grid stays silent, since a racer
-   * waiting for the flag can see perfectly well why they cannot shoot.
-   */
-  private refuseLockedAbility(abilityId: string, barSlot: number): boolean {
-    const player = this.sim.player;
-    if (!isAbilityLockedByActivity(player, abilityId)) return false;
-    this.flashActionSlot(barSlot);
-    if (isAbilityBudgetSpent(player, abilityId)) this.showError(t('hud.errors.outOfCharges'));
-    return true;
   }
 
   private activateFixedAttackSlot(): void {
@@ -7537,7 +7455,7 @@ export class Hud {
   ): void {
     // An activity kit's own refusal comes first: a spent race weapon must say so
     // rather than opening an aiming mode the cast will refuse.
-    if (this.refuseLockedAbility(abilityId, slotForAim)) return;
+    if (refuseLockedAbility(this, abilityId, slotForAim)) return;
     this.playerGroundAim.pressPosition(
       abilityId,
       slotForAim,
@@ -7594,18 +7512,7 @@ export class Hud {
             this.sim.castAbilityOn(action.id, mouseoverPid);
           } else {
             this.sim.castAbility(action.id);
-            // The oil drop's instant patch, the slick twin of the shell's
-            // muzzle report: painted under the displayed machine the frame
-            // the cast commits, swapped for the readout's real patch when it
-            // lands (or expired if the sim refused). Reading the gate AFTER
-            // the cast is deliberate: offline the cast applies synchronously
-            // (the cooldown is already running, the gate refuses, and the
-            // REAL patch is on the road this same tick, so the cue would be
-            // redundant); online the mirror only moves when the server
-            // echoes, so the gate still sees the pre-cast state.
-            if (this.localRallyFeedbackAllowed(action.id, REALM_RACERS_SLICK_ABILITY_ID)) {
-              this.renderer.predictOwnSlickDrop();
-            }
+            predictRallySlickDrop(this, action.id);
           }
           // Optional QoL: also engage auto-attack when the ability is an offensive
           // attack, so white swings start without a separate Attack press. Gated on
@@ -11267,6 +11174,7 @@ export class Hud {
       this.meters.onEvent(ev);
       if (this.isNythraxisEvent(ev)) this.lastNythraxisCombatEventAt = performance.now();
       if (applyQuestEventPresentation(this, ev)) continue;
+      if (applyRealmRacersEventPresentation(this, ev)) continue;
       if (ev.type === 'worldQuestInvestigationDialogue') this.questDialog.open(ev.targetId);
       if (ev.type === 'worldQuestWeeklyOpen') this.weeklyQuestsWindow.open();
       switch (ev.type) {
@@ -13108,79 +13016,6 @@ export class Hud {
         // save/golden/end) are pid-LESS with a world anchor so walk-up
         // bystanders at the Sowfield see the same banners; every string here
         // reads correctly for a spectator (nations + score ride the event).
-        case 'realmRacersQueued':
-          if (ev.pid === sim.playerId) {
-            this.log(
-              t('hudChrome.rally.logQueued', {
-                position: formatNumber(ev.position, { maximumFractionDigits: 0 }),
-              }),
-              HUD_LOG.RACE_NOTICE,
-            );
-          }
-          break;
-        case 'realmRacersUnqueued':
-          if (ev.pid === sim.playerId)
-            this.log(t('hudChrome.rally.logUnqueued'), HUD_LOG.RACE_NOTICE);
-          break;
-        case 'realmRacersFound':
-          // The CUE only: the circuit banner is driven from STATE by
-          // `RealmRacersUi`, since this event reaches the client one frame
-          // before the snapshot that carries the circuit.
-          if (ev.pid === sim.playerId) audio.realmRacersFound();
-          break;
-        case 'realmRacersGo':
-          if (ev.pid === sim.playerId) {
-            this.showBanner(t('hudChrome.rally.bannerGo'));
-            audio.realmRacersGo();
-          }
-          break;
-        case 'realmRacersReset':
-          // A silent recovery marker for the online position predictor.
-          break;
-        case 'realmRacersLap':
-          if (ev.pid === sim.playerId) {
-            this.showBanner(
-              t('hudChrome.rally.bannerLap', {
-                lap: formatNumber(ev.lap, { maximumFractionDigits: 0 }),
-                total: formatNumber(ev.totalLaps, { maximumFractionDigits: 0 }),
-              }),
-            );
-            audio.realmRacersLap();
-          }
-          break;
-        // A box just gave this pilot something. It floats over their own machine
-        // rather than taking the banner: a take happens every few seconds, the
-        // pilot is steering while it lands, and the banner belongs to the three
-        // moments that stop a race (the flag, a lap, the result). The event
-        // carries the EFFECT and the words are resolved here.
-        case 'realmRacersPickup':
-          if (ev.pid === sim.playerId) {
-            this.showSelfNote(realmRacersPickupEffectText(ev.effect));
-            this.realmRacersSplash.show(ev.effect);
-          }
-          break;
-        // And the ward paying for itself, on the same surface: a shell that
-        // lands on a warded machine and does nothing has to say why.
-        case 'realmRacersWardBroken':
-          if (ev.pid === sim.playerId) this.showSelfNote(t('hudChrome.rally.wardBroken'));
-          break;
-        case 'realmRacersGroundBlastFired':
-        case 'realmRacersGroundBlastHit':
-          break;
-        // Contact and oil are rendered in the world (sparks, puff, ring, shake),
-        // never in the HUD: a banner on every nudge would bury the lap and
-        // result lines.
-        case 'realmRacersBump':
-        case 'realmRacersSlicked':
-          break;
-        case 'realmRacersResult': {
-          if (ev.pid !== sim.playerId) break;
-          const notice = realmRacersResultNotice(ev);
-          this.showBanner(notice.banner);
-          this.combatLog(notice.log, notice.logColor);
-          playRealmRacersResultAudio(ev, sim.playerId, audio);
-          break;
-        }
         case 'cardDuelMatchStart':
           audio.cardShuffle();
           break;

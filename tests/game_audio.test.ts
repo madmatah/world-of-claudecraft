@@ -116,7 +116,10 @@ describe('sampled GameAudio facade', () => {
   });
 
   it('routes live race results by outcome and keeps draws and recovery gates silent', () => {
-    const hud = readFileSync(join(ROOT, 'src/ui/hud.ts'), 'utf8');
+    const hud = readFileSync(
+      join(ROOT, 'src/ui/hud/realm_racers/realm_racers_event_router.ts'),
+      'utf8',
+    );
     const rallyUi = readFileSync(join(ROOT, 'src/ui/realm_racers.ts'), 'utf8');
     expect(rallyUi).toContain('this.deps.countdownTick()');
     expect(hud).toContain('audio.realmRacersGo()');

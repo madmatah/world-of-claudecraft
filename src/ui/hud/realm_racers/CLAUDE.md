@@ -1,5 +1,13 @@
 # HUD domain: Realm Racers loading lobby
 
+Also here, extracted from `hud.ts` and taking the Hud untyped (the
+`hud/quest/quest_event_router.ts` precedent, welded to hud.ts in
+`tests/realm_racers_ui.test.ts`): `realm_racers_event_router.ts` (the rally
+sim events' log lines, banners, pickup note and cues), `realm_racers_cast_feedback.ts`
+(the aim caster pose, the instant local cues of a shot or oil drop, the refusal of a
+held kit ability) and `realm_racers_hud_parts.ts` (the deps Hud builds the pickup splash
+and `RealmRacersUi` from).
+
 The curtain a race opens under while every pilot's machine prepares the circuit
 (the sim's `loading` phase, `src/sim/social/realm_racers_loading.ts`, read through
 `IWorld.realmRacersInfo`), behind the `index.ts` barrel. `src/ui/realm_racers.ts`

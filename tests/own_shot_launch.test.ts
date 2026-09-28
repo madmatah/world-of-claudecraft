@@ -278,9 +278,20 @@ describe('the own shell at a high lead, on a second press, and on uneven ground'
 
 describe('the own-shot launch is wired behind the local gate', () => {
   it('sends the HUD aim point through the gated press, after the one-in-flight latch', () => {
-    const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
-    const gate = hud.indexOf('if (this.localRallyFeedbackAllowed(id, REALM_RACERS_ABILITY_ID)) {');
-    const call = hud.indexOf('this.renderer.predictOwnGroundBlastFire(point);');
+    const hudTs = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
+    const castAt = hudTs.indexOf('castAt: (id, point, barSlot) => {');
+    const cast = hudTs.indexOf('this.sim.castAbilityAt(id, point);', castAt);
+    const predict = hudTs.indexOf('predictRallyGroundBlastFire(this, id, point);', castAt);
+    expect(castAt).toBeGreaterThan(0);
+    expect(cast).toBeGreaterThan(castAt);
+    expect(predict).toBeGreaterThan(cast);
+    expect(hudTs.slice(castAt, predict)).not.toContain('},');
+    const hud = readFileSync(
+      new URL('../src/ui/hud/realm_racers/realm_racers_cast_feedback.ts', import.meta.url),
+      'utf8',
+    );
+    const gate = hud.indexOf('if (rallyCastFeedbackAllowed(hud, id, REALM_RACERS_ABILITY_ID)) {');
+    const call = hud.indexOf('(hud as RallyCastHost).renderer.predictOwnGroundBlastFire(point);');
     expect(gate).toBeGreaterThan(0);
     expect(call).toBeGreaterThan(gate);
     expect(hud.slice(gate, call)).not.toContain('}');

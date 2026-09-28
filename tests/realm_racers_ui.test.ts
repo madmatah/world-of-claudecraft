@@ -19,6 +19,7 @@ vi.mock('../src/ui/icons', async (importOriginal) => ({
 }));
 
 import * as THREE from 'three';
+import { audio } from '../src/game/audio';
 import {
   arrivalCoverActive,
   arrivalCoverDepthForTest,
@@ -29,9 +30,16 @@ import {
   type RealmRacersPrepareClient,
 } from '../src/render/realm_racers_prepare';
 import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../src/sim/content/realm_racers_circuits';
+import type { SimEvent } from '../src/sim/types';
 import { dispatchCollectionAction } from '../src/ui/collection_actions_core';
 import { durationText } from '../src/ui/duration_text';
-import { REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS } from '../src/ui/hud/realm_racers';
+import {
+  applyRealmRacersEventPresentation,
+  predictRallySlickDrop,
+  REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS,
+  rallyAimCaster,
+  refuseLockedAbility,
+} from '../src/ui/hud/realm_racers';
 import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
 import {
   dispatchInterfaceVisibilityAction,
@@ -1560,6 +1568,44 @@ describe('Realm Racers lobby hold wiring', () => {
   });
 });
 
+describe('the Realm Racers HUD host seams', () => {
+  it('stay welded to the Hud members the untyped rally helpers read', () => {
+    const hud = stripComments(readFileSync('src/ui/hud.ts', 'utf8'));
+    for (const anchor of [
+      'private sim: IWorld,',
+      'private renderer: Renderer,',
+      'private keybinds: Keybinds,',
+      'private readonly writerFacet = makeWriterFacet(',
+      'private windowFocus(rootSel: string): {',
+      'private closeOtherWindows(_keep?: string | string[]): void {',
+      'private flashActionSlot(barSlot: number): void {',
+      'private combatLog(text: string, color: string = HUD_LOG.PLAIN): void {',
+      'showSelfNote(text: string): void {',
+      'showError(text: string, logChannel = ERROR_LOG_CHAN, announceWhenFiltered = false): void {',
+      'private readonly realmRacersSplash = new RealmRacersPickupSplash(realmRacersSplashDeps(this));',
+      'private readonly realmRacersUi = new RealmRacersUi(realmRacersUiDeps(this));',
+      'player: () => rallyAimCaster(this),',
+      'predictRallyGroundBlastFire(this, id, point);',
+      'predictRallySlickDrop(this, action.id);',
+      'if (refuseLockedAbility(this, abilityId, slotForAim)) return;',
+      'if (applyRealmRacersEventPresentation(this, ev)) continue;',
+    ]) {
+      expect(hud, anchor).toContain(anchor);
+    }
+    expect(hud).toMatch(/\n {2}log\(\n/);
+    expect(hud).toMatch(/\n {2}showBanner\(\n/);
+    expect(hud.indexOf('private readonly writerFacet = makeWriterFacet(')).toBeLessThan(
+      hud.indexOf('private readonly realmRacersSplash = new RealmRacersPickupSplash('),
+    );
+    expect(hud).not.toContain("case 'realmRacersResult':");
+    // The oil cue reads its gate AFTER the cast commits (see the helper's comment).
+    const slick = hud.indexOf('predictRallySlickDrop(this, action.id);');
+    const cast = hud.lastIndexOf('this.sim.castAbility(action.id);', slick);
+    expect(cast).toBeGreaterThan(0);
+    expect(hud.slice(cast, slick)).not.toContain('}');
+  });
+});
+
 describe('Realm Racers circuit announcement', () => {
   /** The pill at the head of the race strip: the minigame's name outside a
    *  race, the drawn circuit's name during one. */
@@ -1959,5 +2005,70 @@ describe('Realm Racers lobby ready waits for the drawn circuit', () => {
     await flush();
     h.frame();
     expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the Realm Racers HUD event router and cast affordances', () => {
+  const host = () => ({
+    sim: { playerId: 7 },
+    log: vi.fn(),
+    showBanner: vi.fn(),
+    showSelfNote: vi.fn(),
+    combatLog: vi.fn(),
+    realmRacersSplash: { show: vi.fn() },
+  });
+
+  it('claims every rally event and routes the viewer-owned ones', () => {
+    const h = host();
+    const go = vi.spyOn(audio, 'realmRacersGo').mockImplementation(() => {});
+    expect(
+      applyRealmRacersEventPresentation(h, { type: 'realmRacersGo', pid: 7 } as SimEvent),
+    ).toBe(true);
+    expect(h.showBanner).toHaveBeenCalledWith(t('hudChrome.rally.bannerGo'));
+    expect(go).toHaveBeenCalledOnce();
+    expect(
+      applyRealmRacersEventPresentation(h, { type: 'realmRacersUnqueued', pid: 8 } as SimEvent),
+    ).toBe(true);
+    expect(h.log).not.toHaveBeenCalled();
+    expect(
+      applyRealmRacersEventPresentation(h, {
+        type: 'realmRacersPickup',
+        pid: 7,
+        effect: 'slick',
+      } as SimEvent),
+    ).toBe(true);
+    expect(h.showSelfNote).toHaveBeenCalledOnce();
+    expect(h.realmRacersSplash.show).toHaveBeenCalledWith('slick');
+    for (const type of ['realmRacersReset', 'realmRacersBump', 'realmRacersGroundBlastHit']) {
+      expect(applyRealmRacersEventPresentation(h, { type } as SimEvent)).toBe(true);
+    }
+    expect(applyRealmRacersEventPresentation(h, { type: 'cardDuelMatchStart' } as SimEvent)).toBe(
+      false,
+    );
+    go.mockRestore();
+  });
+
+  it('refuses a held kit ability out loud only when its budget is spent', () => {
+    const player = {
+      dead: false,
+      cooldowns: new Map<string, number>(),
+      drive: null,
+      abilityCharges: undefined,
+    };
+    const h = {
+      sim: { player, realmRacersInfo: { match: null } },
+      renderer: {
+        selfAimPose: null,
+        predictOwnGroundBlastFire: vi.fn(),
+        predictOwnSlickDrop: vi.fn(),
+      },
+      flashActionSlot: vi.fn(),
+      showError: vi.fn(),
+    };
+    expect(refuseLockedAbility(h, 'fireball', 2)).toBe(false);
+    expect(h.flashActionSlot).not.toHaveBeenCalled();
+    expect(rallyAimCaster(h)).toBe(player);
+    predictRallySlickDrop(h, 'rally_oil_slick');
+    expect(h.renderer.predictOwnSlickDrop).not.toHaveBeenCalled();
   });
 });
