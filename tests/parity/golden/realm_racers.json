@@ -34,7 +34,7 @@
       "tick": 1,
       "time": 0.05,
       "nextId": 1014,
-      "state": "3a05fe94",
+      "state": "fb18579e",
       "events": "0071f3bf",
       "rng": {
         "draws": 1,
@@ -374,7 +374,7 @@
             "slipCap": 1,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fallStartY": -2,
           "fiveSecondRule": 99.05,
           "healPower": 5,
@@ -392,8 +392,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113583.216314,
-            "z": 3887.357422
+            "x": 113633,
+            "z": 4394.5
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -441,7 +441,7 @@
             "slipCap": 1,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fallStartY": -2,
           "fiveSecondRule": 99.05,
           "healPower": 13,
@@ -458,8 +458,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113583.073327,
-            "z": 3892.355377
+            "x": 113633,
+            "z": 4399.5
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -509,7 +509,7 @@
             "speedCap": 1
           },
           "dualWielding": true,
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fallStartY": -2,
           "fiveSecondRule": 99.05,
           "healPower": 6,
@@ -533,8 +533,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113582.930341,
-            "z": 3897.353332
+            "x": 113633,
+            "z": 4404.5
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -584,7 +584,7 @@
             "slipCap": 1,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fallStartY": -2,
           "fiveSecondRule": 99.05,
           "healPower": 12,
@@ -601,8 +601,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113582.787354,
-            "z": 3902.351287
+            "x": 113633,
+            "z": 4409.5
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -634,7 +634,7 @@
       "tick": 20,
       "time": 1,
       "nextId": 1014,
-      "state": "53dd3445",
+      "state": "36b05c35",
       "events": "dd533975",
       "rng": {
         "draws": 1,
@@ -645,7 +645,7 @@
       "tick": 40,
       "time": 2,
       "nextId": 1014,
-      "state": "16c67920",
+      "state": "449f6c2a",
       "events": "741638a5",
       "rng": {
         "draws": 1,
@@ -656,7 +656,7 @@
       "tick": 60,
       "time": 3,
       "nextId": 1014,
-      "state": "cd978f13",
+      "state": "4fb7a1bd",
       "events": "741638a5",
       "rng": {
         "draws": 127,
@@ -667,7 +667,7 @@
       "tick": 80,
       "time": 4,
       "nextId": 1014,
-      "state": "86f1052a",
+      "state": "8853e21c",
       "events": "741638a5",
       "rng": {
         "draws": 302,
@@ -678,7 +678,7 @@
       "tick": 100,
       "time": 5,
       "nextId": 1014,
-      "state": "f95a7b7d",
+      "state": "8b5640cf",
       "events": "741638a5",
       "rng": {
         "draws": 485,
@@ -689,7 +689,7 @@
       "tick": 120,
       "time": 6,
       "nextId": 1014,
-      "state": "973c1614",
+      "state": "82f2e7b6",
       "events": "741638a5",
       "rng": {
         "draws": 700,
@@ -700,7 +700,7 @@
       "tick": 140,
       "time": 7,
       "nextId": 1014,
-      "state": "e064d6af",
+      "state": "77414581",
       "events": "741638a5",
       "rng": {
         "draws": 916,
@@ -711,7 +711,7 @@
       "tick": 160,
       "time": 8,
       "nextId": 1014,
-      "state": "818aec7e",
+      "state": "82f7c198",
       "events": "741638a5",
       "rng": {
         "draws": 1121,
@@ -722,7 +722,7 @@
       "tick": 180,
       "time": 9,
       "nextId": 1014,
-      "state": "81dcdf49",
+      "state": "32a13873",
       "events": "741638a5",
       "rng": {
         "draws": 1388,
@@ -733,7 +733,7 @@
       "tick": 200,
       "time": 10,
       "nextId": 1014,
-      "state": "14b64378",
+      "state": "26993688",
       "events": "f0ccd455",
       "rng": {
         "draws": 1660,
@@ -744,7 +744,7 @@
       "tick": 220,
       "time": 11,
       "nextId": 1014,
-      "state": "c411bd2d",
+      "state": "54569916",
       "events": "741638a5",
       "rng": {
         "draws": 1829,
@@ -755,8 +755,8 @@
       "tick": 224,
       "time": 11.2,
       "nextId": 1014,
-      "state": "ef8b9643",
-      "events": "6352bf44",
+      "state": "db426166",
+      "events": "8a124061",
       "rng": {
         "draws": 1851,
         "digest": "debc92bf"
@@ -1106,7 +1106,7 @@
             "speed": 36.822786,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 110.2,
           "healPower": 5,
           "hp": 100,
@@ -1123,8 +1123,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113623.89215,
-            "z": 3888.521117
+            "x": 113673.692479,
+            "z": 4394.5
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -1172,7 +1172,7 @@
             "speed": 36.822786,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 110.2,
           "healPower": 13,
           "hp": 54,
@@ -1188,8 +1188,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113623.749164,
-            "z": 3893.519072
+            "x": 113673.692479,
+            "z": 4399.5
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -1234,14 +1234,13 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -5.151384,
+            "slip": -5.239877,
             "slipCap": 1,
-            "speed": 35.101444,
-            "speedCap": 1,
-            "spin": 0.047274
+            "speed": 35.253418,
+            "speedCap": 1
           },
           "dualWielding": true,
-          "facing": 1.544807,
+          "facing": 1.570796,
           "fiveSecondRule": 110.2,
           "healPower": 6,
           "hp": 62,
@@ -1264,8 +1263,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113623.525469,
-            "z": 3897.87162
+            "x": 113673.61401,
+            "z": 4403.857039
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -1311,13 +1310,12 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -1.320021,
+            "slip": -1.309969,
             "slipCap": 1,
-            "speed": 35.439673,
-            "speedCap": 1,
-            "spin": -0.002546
+            "speed": 35.253418,
+            "speedCap": 1
           },
-          "facing": 1.542054,
+          "facing": 1.570796,
           "fiveSecondRule": 110.2,
           "healPower": 12,
           "hp": 51,
@@ -1333,8 +1331,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113623.550784,
-            "z": 3901.468418
+            "x": 113673.61401,
+            "z": 4407.453534
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -1366,7 +1364,7 @@
       "tick": 240,
       "time": 12,
       "nextId": 1014,
-      "state": "2c18bf0c",
+      "state": "bd861fb2",
       "events": "988fa03f",
       "rng": {
         "draws": 1991,
@@ -1377,7 +1375,7 @@
       "tick": 260,
       "time": 13,
       "nextId": 1014,
-      "state": "72c3d845",
+      "state": "a2ecbc68",
       "events": "741638a5",
       "rng": {
         "draws": 2140,
@@ -1388,8 +1386,8 @@
       "tick": 268,
       "time": 13.4,
       "nextId": 1014,
-      "state": "84dc5497",
-      "events": "741638a5",
+      "state": "9997f918",
+      "events": "f51e13fa",
       "rng": {
         "draws": 2199,
         "digest": "cdbb4e15"
@@ -1722,6 +1720,16 @@
               "remaining": 3586.65,
               "school": "physical",
               "sourceId": 1010
+            },
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1010,
+              "value": 0.75
             }
           ],
           "blockChance": 0.05,
@@ -1732,14 +1740,14 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 3,
+            "gripMult": 0.7,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 55.481466,
+            "speed": 50.444526,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 112.4,
           "healPower": 5,
           "hp": 100,
@@ -1756,8 +1764,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113731.064564,
-            "z": 3891.587213
+            "x": 113780.656896,
+            "z": 4394.5
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -1815,7 +1823,7 @@
             "slipCap": 1,
             "speedCap": 1
           },
-          "facing": 1.568816,
+          "facing": 1.570796,
           "fiveSecondRule": 112.4,
           "healPower": 13,
           "hp": 54,
@@ -1831,8 +1839,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113590,
-            "z": 3895
+            "x": 113640,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -1877,14 +1885,13 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -0.00222,
+            "slip": -0.064332,
             "slipCap": 1,
-            "speed": 55.155312,
-            "speedCap": 1,
-            "spin": 0.00058
+            "speed": 55.172675,
+            "speedCap": 1
           },
           "dualWielding": true,
-          "facing": 1.569341,
+          "facing": 1.570796,
           "fiveSecondRule": 112.4,
           "healPower": 6,
           "hp": 62,
@@ -1907,8 +1914,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113728.695306,
-            "z": 3896.516767
+            "x": 113778.879743,
+            "z": 4401.396499
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -1955,10 +1962,9 @@
             "gripMult": 1,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speedCap": 1,
-            "spin": -0.000031
+            "speedCap": 1
           },
-          "facing": 1.567495,
+          "facing": 1.570796,
           "fiveSecondRule": 112.4,
           "healPower": 12,
           "hp": 51,
@@ -1974,8 +1980,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113590.999998,
-            "z": 3895.00198
+            "x": 113641,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -2007,8 +2013,8 @@
       "tick": 280,
       "time": 14,
       "nextId": 1014,
-      "state": "63cd8436",
-      "events": "741638a5",
+      "state": "05f64aab",
+      "events": "a914796a",
       "rng": {
         "draws": 2316,
         "digest": "d77d87a0"
@@ -2018,8 +2024,8 @@
       "tick": 285,
       "time": 14.25,
       "nextId": 1014,
-      "state": "ecda3403",
-      "events": "0585ddd4",
+      "state": "20f16a16",
+      "events": "d592b511",
       "rng": {
         "draws": 2359,
         "digest": "fee7c13d"
@@ -2352,6 +2358,16 @@
               "remaining": 3585.8,
               "school": "physical",
               "sourceId": 1010
+            },
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Garden Lawn",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1010,
+              "value": 0.6
             }
           ],
           "blockChance": 0.05,
@@ -2362,14 +2378,14 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 6,
+            "gripMult": 0.5,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 57.029217,
+            "speed": 31.238439,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 113.25,
           "healPower": 5,
           "hp": 100,
@@ -2386,8 +2402,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113779.006138,
-            "z": 3892.958774
+            "x": 113810.964499,
+            "z": 4394.5
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -2431,13 +2447,11 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": 0.002656,
             "slipCap": 1,
-            "speed": -3.888775,
-            "speedCap": 1,
-            "spin": 0.002573
+            "speed": -3.888783,
+            "speedCap": 1
           },
-          "facing": 1.568816,
+          "facing": 1.570796,
           "fiveSecondRule": 113.25,
           "healPower": 13,
           "hp": 54,
@@ -2453,8 +2467,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113588.652027,
-            "z": 3894.998086
+            "x": 113638.652025,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -2490,23 +2504,34 @@
           },
           "aiState": "idle",
           "attackPower": 42,
+          "auras": [
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Garden Lawn",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            }
+          ],
           "combatTimer": 113.2,
           "comboUntil": -1,
           "critChance": 0.0625,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0625,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 6,
+            "gripMult": 0.5,
             "profileKey": "rally_loaner",
-            "slip": 0.004661,
+            "slip": 5.621028,
             "slipCap": 1,
-            "speed": 56.906373,
-            "speedCap": 1,
-            "spin": 0.000106
+            "speed": 2.807538,
+            "speedCap": 1
           },
           "dualWielding": true,
-          "facing": 1.56959,
+          "facing": 1.570796,
           "fiveSecondRule": 113.25,
           "healPower": 6,
           "hp": 62,
@@ -2529,8 +2554,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113776.48321,
-            "z": 3896.581737
+            "x": 113810.091204,
+            "z": 4402.104297
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -2576,12 +2601,10 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -0.008973,
             "slipCap": 1,
-            "speedCap": 1,
-            "spin": -0.000223
+            "speedCap": 1
           },
-          "facing": 1.567481,
+          "facing": 1.570796,
           "fiveSecondRule": 113.25,
           "healPower": 12,
           "hp": 51,
@@ -2597,8 +2620,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113592.052023,
-            "z": 3895.002913
+            "x": 113642.052025,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -2630,8 +2653,8 @@
       "tick": 287,
       "time": 14.35,
       "nextId": 1014,
-      "state": "d9f618e3",
-      "events": "eb115870",
+      "state": "55e43a39",
+      "events": "696c26ae",
       "rng": {
         "draws": 2374,
         "digest": "aba5e48b"
@@ -2964,6 +2987,16 @@
               "remaining": 3585.7,
               "school": "physical",
               "sourceId": 1010
+            },
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1010,
+              "value": 0.75
             }
           ],
           "blockChance": 0.05,
@@ -2974,14 +3007,14 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 3,
+            "gripMult": 0.7,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 57.129429,
+            "speed": 31.852948,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 113.35,
           "healPower": 5,
           "hp": 100,
@@ -2998,8 +3031,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113825.972556,
-            "z": 4045.1651
+            "x": 113811.210724,
+            "z": 4454.553517
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -3043,13 +3076,11 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": 0.001696,
             "slipCap": 1,
-            "speed": -1.734076,
-            "speedCap": 1,
-            "spin": 0.002107
+            "speed": -1.734083,
+            "speedCap": 1
           },
-          "facing": 1.569061,
+          "facing": 1.570796,
           "fiveSecondRule": 113.35,
           "healPower": 13,
           "hp": 54,
@@ -3065,8 +3096,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113588.424778,
-            "z": 3894.997864
+            "x": 113638.424776,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -3102,23 +3133,34 @@
           },
           "aiState": "idle",
           "attackPower": 42,
+          "auras": [
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Garden Lawn",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            }
+          ],
           "combatTimer": 113.3,
           "comboUntil": -1,
           "critChance": 0.0625,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0625,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 6,
+            "gripMult": 0.5,
             "profileKey": "rally_loaner",
-            "slip": 0.004311,
+            "slip": 5.086117,
             "slipCap": 1,
-            "speed": 57.020442,
-            "speedCap": 1,
-            "spin": 0.000087
+            "speed": 3.858575,
+            "speedCap": 1
           },
           "dualWielding": true,
-          "facing": 1.5696,
+          "facing": 1.570796,
           "fiveSecondRule": 113.35,
           "healPower": 6,
           "hp": 62,
@@ -3141,8 +3183,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113782.182483,
-            "z": 3896.589006
+            "x": 113810.450866,
+            "z": 4402.625948
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -3188,13 +3230,11 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -0.007372,
             "slipCap": 1,
             "speed": 1.847076,
-            "speedCap": 1,
-            "spin": -0.000183
+            "speedCap": 1
           },
-          "facing": 1.56746,
+          "facing": 1.570796,
           "fiveSecondRule": 113.35,
           "healPower": 12,
           "hp": 51,
@@ -3210,8 +3250,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113592.190579,
-            "z": 3895.0026
+            "x": 113642.190579,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -3243,8 +3283,8 @@
       "tick": 289,
       "time": 14.45,
       "nextId": 1014,
-      "state": "3f92be1a",
-      "events": "a5bef865",
+      "state": "4c16e127",
+      "events": "93b1fcc0",
       "rng": {
         "draws": 2400,
         "digest": "462ba823"
@@ -3577,6 +3617,16 @@
               "remaining": 3585.6,
               "school": "physical",
               "sourceId": 1010
+            },
+            {
+              "duration": 0.2,
+              "id": "realm_racers_soft_verge",
+              "kind": "slow",
+              "name": "Garden Lawn",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1010,
+              "value": 0.6
             }
           ],
           "blockChance": 0.05,
@@ -3587,14 +3637,14 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "drive": {
-            "dragMult": 1,
-            "gripMult": 1,
+            "dragMult": 6,
+            "gripMult": 0.5,
             "profileKey": "rally_loaner",
             "slipCap": 1,
-            "speed": 57.218275,
+            "speed": 32.690306,
             "speedCap": 1
           },
-          "facing": 1.542195,
+          "facing": 1.570796,
           "fiveSecondRule": 113.45,
           "healPower": 5,
           "hp": 100,
@@ -3611,8 +3661,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113831.68989,
-            "z": 4045.328667
+            "x": 113814.459194,
+            "z": 4454.553517
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -3668,13 +3718,13 @@
             "dragMult": 1,
             "gripMult": 0.25,
             "profileKey": "rally_loaner",
-            "slip": -21.380166,
+            "slip": -21.44547,
             "slipCap": 1,
-            "speed": 5.18541,
+            "speed": 4.90834,
             "speedCap": 1,
-            "spin": 4.071427
+            "spin": 4.071768
           },
-          "facing": 1.794042,
+          "facing": 1.795796,
           "fallStartY": 0.56,
           "fiveSecondRule": 113.45,
           "healPower": 13,
@@ -3690,9 +3740,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113588.440941,
+            "x": 113638.424776,
             "y": 0.56,
-            "z": 3893.897983
+            "z": 4400.9
           },
           "potionCooldownUntil": -1,
           "resource": 195,
@@ -3749,14 +3799,14 @@
             "dragMult": 1,
             "gripMult": 0.25,
             "profileKey": "rally_loaner",
-            "slip": -2.552353,
+            "slip": -2.42751,
             "slipCap": 1,
-            "speed": -8.813805,
+            "speed": -8.849003,
             "speedCap": 1,
-            "spin": 0.433209
+            "spin": 0.411894
           },
           "dualWielding": true,
-          "facing": 1.593,
+          "facing": 1.593557,
           "fallStartY": 0.210253,
           "fiveSecondRule": 113.45,
           "healPower": 6,
@@ -3779,9 +3829,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113583.981795,
+            "x": 113633.979678,
             "y": 0.210253,
-            "z": 3894.82129
+            "z": 4401.888726
           },
           "potionCooldownUntil": -1,
           "resource": 100,
@@ -3827,13 +3877,11 @@
             "dragMult": 1,
             "gripMult": 1,
             "profileKey": "rally_loaner",
-            "slip": -0.006084,
             "slipCap": 1,
             "speed": 3.690454,
-            "speedCap": 1,
-            "spin": -0.00015
+            "speedCap": 1
           },
-          "facing": 1.567443,
+          "facing": 1.570796,
           "fiveSecondRule": 113.45,
           "healPower": 12,
           "hp": 51,
@@ -3849,8 +3897,8 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113628.747807,
-            "z": 3895.000443
+            "x": 113678.74776,
+            "z": 4402
           },
           "potionCooldownUntil": -1,
           "resource": 175,
@@ -3882,8 +3930,8 @@
       "tick": 300,
       "time": 15,
       "nextId": 1014,
-      "state": "b348e01e",
-      "events": "44721fd3",
+      "state": "7f63510b",
+      "events": "30d2edc1",
       "rng": {
         "draws": 2485,
         "digest": "62e5d087"
@@ -3893,7 +3941,7 @@
       "tick": 320,
       "time": 16,
       "nextId": 1014,
-      "state": "7ef6dc17",
+      "state": "19d59610",
       "events": "9e15a1da",
       "rng": {
         "draws": 2689,
@@ -3904,7 +3952,7 @@
       "tick": 340,
       "time": 17,
       "nextId": 1014,
-      "state": "2c1f8ab4",
+      "state": "27e31725",
       "events": "741638a5",
       "rng": {
         "draws": 2883,
@@ -3915,7 +3963,7 @@
       "tick": 360,
       "time": 18,
       "nextId": 1014,
-      "state": "56e38ea1",
+      "state": "59573d12",
       "events": "741638a5",
       "rng": {
         "draws": 3070,
@@ -3926,7 +3974,7 @@
       "tick": 380,
       "time": 19,
       "nextId": 1014,
-      "state": "89dbb37e",
+      "state": "cd9bc157",
       "events": "741638a5",
       "rng": {
         "draws": 3249,
@@ -3937,7 +3985,7 @@
       "tick": 400,
       "time": 20,
       "nextId": 1014,
-      "state": "f0eb5dfb",
+      "state": "d81c320c",
       "events": "741638a5",
       "rng": {
         "draws": 3414,
