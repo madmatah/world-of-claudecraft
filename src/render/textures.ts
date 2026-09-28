@@ -279,7 +279,10 @@ function paintFlowerTuft(kinds: FlowerKind[], balanced: boolean): THREE.Texture 
   const c = document.createElement('canvas');
   c.width = S;
   c.height = S;
-  const ctx = c.getContext('2d')!;
+  // Read back once for the mip bleed: a GPU-backed canvas makes that read wait
+  // on every command the GPU has queued, which in a race lobby (links and
+  // uploads in flight) measured over 100 ms for one 128 px card.
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.clearRect(0, 0, S, S);
 
   // balanced mode cycles the kinds list so every colour is guaranteed a
