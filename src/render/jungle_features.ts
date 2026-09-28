@@ -21,6 +21,7 @@ import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { buildDeckWood } from './deck_render';
 import { GFX } from './gfx';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS, type JunglePropKey } from './jungle_prop_urls';
 import { applySurfaceDetail, GREAT_TREE_BARK_DETAIL, isBarkMaterialName } from './worn_stone';
 
 export interface JungleFeaturesView {
@@ -30,13 +31,8 @@ export interface JungleFeaturesView {
 
 // The three beach-palm models, instanced per variant so the whole strand is a
 // handful of draws. Preloaded at import; buildJungleFeatures reads the cache.
-const PALM_URLS = [
-  '/models/biome/beach_palm_1.glb',
-  '/models/biome/beach_palm_2.glb',
-  '/models/biome/beach_palm_3.glb',
-];
 const palmScenes: (THREE.Group | null)[] = [null, null, null];
-PALM_URLS.forEach((url, i) => {
+JUNGLE_PALM_URLS.forEach((url, i) => {
   registerDeferredPreload(() =>
     loadGltf(url).then((gltf) => {
       palmScenes[i] = gltf.scene;
@@ -95,19 +91,10 @@ registerDeferredPreload(() =>
   }),
 );
 
-// The ground props: the maintainer's generated fallen-coconut clusters
-// (built by build_palmreach_props.mjs), plus the Willowfen's lily rafts and
-// river reeds reused on the Palmreach's still water.
-const REACH_PROP_URLS = {
-  coconuts: '/models/props/fallen_coconuts.glb',
-  lilies: '/models/props/fen_lilies.glb',
-  reeds: '/models/props/fen_reeds.glb',
-} as const;
-type ReachPropKey = keyof typeof REACH_PROP_URLS;
-const propScenes: Partial<Record<ReachPropKey, THREE.Group>> = {};
-for (const key of Object.keys(REACH_PROP_URLS) as ReachPropKey[]) {
+const propScenes: Partial<Record<JunglePropKey, THREE.Group>> = {};
+for (const key of Object.keys(JUNGLE_PROP_URLS) as JunglePropKey[]) {
   registerDeferredPreload(() =>
-    loadGltf(REACH_PROP_URLS[key]).then((gltf) => {
+    loadGltf(JUNGLE_PROP_URLS[key]).then((gltf) => {
       propScenes[key] = gltf.scene;
     }),
   );
@@ -232,7 +219,7 @@ export function buildJungleFeatures(seed: number): JungleFeaturesView {
     mesh.computeBoundingSphere();
     group.add(mesh);
   };
-  const instanceProp = (key: ReachPropKey, spots: Placement[]): void => {
+  const instanceProp = (key: JunglePropKey, spots: Placement[]): void => {
     const scene = propScenes[key];
     if (!scene || spots.length === 0) return;
     for (const part of extractParts(scene)) {

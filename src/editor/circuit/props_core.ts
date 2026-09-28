@@ -926,6 +926,9 @@ export const PALETTE_GROUPS: readonly { group: string; assets: readonly string[]
     group: 'planting',
     assets: [
       'oak',
+      'beachPalm1',
+      'beachPalm2',
+      'beachPalm3',
       'shrub',
       'bedRound',
       'bedSquareA',
@@ -936,6 +939,7 @@ export const PALETTE_GROUPS: readonly { group: string; assets: readonly string[]
       'mushroomRed',
       'mushroomTan',
       'emberLily',
+      'fallenCoconuts',
     ],
   },
   { group: 'waterside', assets: ['reeds', 'lilyRaft'] },

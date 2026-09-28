@@ -26,7 +26,9 @@
 // fetches this at world entry" true by construction rather than by review.
 // The Drakelands entries take the same guarantee from their own world tables,
 // through `ember()` and `worldKit()`: the ember zone's set and the env-prop
-// templates, both loaded in the deferred lane at world entry.
+// templates, both loaded in the deferred lane at world entry. The Palmreach's
+// palms and coconuts take it through `jungle()` from the jungle zone's table,
+// loaded in that same lane.
 //
 // A model is seated at its own authored origin, not re-based to its lowest
 // vertex the way `propAsset` re-bases the world's placed props, so a piece whose
@@ -47,6 +49,7 @@ import { EMBER_PROP_URLS, type EmberPropKey } from './ember_prop_urls';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
 import type { IgnivarEnvPropKey } from './ignivar_dressing_plan_core';
 import { IGNIVAR_ENV_PROP_URLS } from './ignivar_env_props';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from './jungle_prop_urls';
 import { PROP_ASSET_DEFS } from './props';
 import { STREETLAMP_ASSET_DEFS } from './streetlamp_assets';
 
@@ -87,6 +90,11 @@ const gltf = (key: keyof typeof PROP_ASSET_DEFS): RallyPropVisual => ({
 
 /** The ember zone's own models, drawn with the parse the world keeps. */
 const ember = (key: EmberPropKey): RallyPropVisual => ({ kind: 'gltf', url: EMBER_PROP_URLS[key] });
+
+/** The Palmreach's own models, drawn with the parse the jungle zone keeps. */
+const jungle = (
+  url: (typeof JUNGLE_PALM_URLS)[number] | typeof JUNGLE_PROP_URLS.coconuts,
+): RallyPropVisual => ({ kind: 'gltf', url });
 
 const worldKit = (key: Exclude<IgnivarEnvPropKey, 'street_lamp'>): RallyPropVisual => ({
   kind: 'worldKit',
@@ -346,6 +354,12 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
   dragonHoard: ember('hoard'),
   dragonEggs: ember('eggs'),
   emberLily: ember('lily'),
+
+  // the Palmreach: the strand's three beach palms and its fallen coconuts
+  beachPalm1: jungle(JUNGLE_PALM_URLS[0]),
+  beachPalm2: jungle(JUNGLE_PALM_URLS[1]),
+  beachPalm3: jungle(JUNGLE_PALM_URLS[2]),
+  fallenCoconuts: jungle(JUNGLE_PROP_URLS.coconuts),
 };
 
 /**

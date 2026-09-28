@@ -28,10 +28,11 @@
 // game client ALREADY fetches at world entry for every player. `props.ts`
 // registers EVERY `PROP_ASSET_DEFS` entry in the deferred preload lane that
 // `startGame` opens, so a catalog key pointing at one of those files adds no
-// download to world entry. Two other world lanes keep the same promise and are
-// the only others admitted: the env-prop templates (`ignivar_env_props.ts`) and
-// the ember zone's own set (`ember_prop_urls.ts`), both registered in that same
-// deferred lane when the renderer's modules load. A model that arrives on zone
+// download to world entry. Three other world lanes keep the same promise and
+// are the only others admitted: the env-prop templates (`ignivar_env_props.ts`),
+// the ember zone's own set (`ember_prop_urls.ts`) and the jungle zone's
+// (`jungle_prop_urls.ts`), all registered in that same deferred lane when the
+// renderer's modules load. A model that arrives on zone
 // proximity or on instance entry is a different promise, and
 // `tests/realm_racers_props.test.ts` fails on one. The RESIDENT half of that
 // promise is the rally track builder's business rather than this file's: it
@@ -434,6 +435,17 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
   dragonHoard: { footprint: { kind: 'circle', r: 0.46 }, solid: true, height: 0.34 },
   dragonEggs: { footprint: { kind: 'circle', r: 0.39 }, solid: true, height: 0.49 },
   emberLily: { footprint: { kind: 'circle', r: 0.19 }, solid: true, height: 0.58 },
+
+  // --- the Palmreach strand, out of the jungle zone's own set
+  // (`jungle_prop_urls.ts`). A palm stands on its trunk at the origin with its
+  // crown leaning off it, so the footprint is the trunk the world collides
+  // (`PALM_TRUNK_R`, world.ts) and the height is the model's box; the world
+  // seats them at scale three to four and a half. The coconuts are clutter the
+  // world gives no collider ---
+  beachPalm1: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 2.69 },
+  beachPalm2: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 2.69 },
+  beachPalm3: { footprint: { kind: 'circle', r: 0.17 }, solid: true, height: 3.59 },
+  fallenCoconuts: { footprint: { kind: 'obb', hw: 0.44, hd: 0.36 }, solid: false, height: 0.32 },
 
   // --- the fourteen streetlamp fixtures, so a circuit can be LIT after dark
   // rather than only darkened (see REALM_RACERS_LAMP_STYLES above) ---

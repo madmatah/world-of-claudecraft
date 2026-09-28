@@ -20,9 +20,10 @@
 //    them (`realmRacersWorldKitPart`). The street lamp is the one entry left out,
 //    because the world lights its instances through streetlamps.ts.
 //  - `worldRaw`: the world draws the model with its raw glTF material too (the
-//    garden maze's hedge pieces, garden_features.ts, and the ember zone's lava,
-//    hoard, clutch and lily, ember_features.ts), so the circuit does the same
-//    and shares those programs.
+//    garden maze's hedge pieces, garden_features.ts, the ember zone's lava,
+//    hoard, clutch and lily, ember_features.ts, and the Palmreach's beach palms
+//    and fallen coconuts, jungle_features.ts), so the circuit does the same and
+//    shares those programs.
 //  - `raceOnly`: nothing in the world draws the model as a circuit can, either
 //    because no world module draws it or because the world splits its parts per
 //    UV family (`worldPropSplitsBySurface`). It keeps its raw material, under a
@@ -40,6 +41,7 @@ import {
   ignivarEnvPropKeyOfUrl,
   ignivarEnvPropTemplate,
 } from './ignivar_env_props';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from './jungle_prop_urls';
 import { cloneMaterialWithHooks } from './material_clone_hooks';
 import {
   applyUvCellFix,
@@ -56,6 +58,8 @@ const WORLD_RAW_URLS: ReadonlySet<string> = new Set([
   GARDEN_MAZE_WALL_URL,
   GARDEN_MAZE_ARCH_URL,
   ...Object.values(EMBER_PROP_URLS),
+  ...JUNGLE_PALM_URLS,
+  JUNGLE_PROP_URLS.coconuts,
 ]);
 
 function worldKitKey(url: string) {

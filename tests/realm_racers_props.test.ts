@@ -24,6 +24,7 @@ import {
 } from '../src/render/camera_boom_core';
 import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
 import { ignivarEnvPropKeyOfUrl } from '../src/render/ignivar_env_props';
+import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from '../src/render/jungle_prop_urls';
 import { PROP_ASSET_DEFS, propPreloadInternalsForTest } from '../src/render/props';
 import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
 import {
@@ -80,9 +81,12 @@ import { glbBounds } from './helpers/glb_bounds';
 const SEED = 42;
 const publicDir = path.join(process.cwd(), 'public');
 
-/** The ember zone's own models: the one table besides `PROP_ASSET_DEFS` a
- *  `gltf` entry may name (ember_prop_urls.ts). */
+/** The ember zone's own models: one of the two tables besides `PROP_ASSET_DEFS`
+ *  a `gltf` entry may name (ember_prop_urls.ts). */
 const EMBER_URLS: ReadonlySet<string> = new Set(Object.values(EMBER_PROP_URLS));
+
+/** The jungle zone's palms and coconuts: the other one (jungle_prop_urls.ts). */
+const JUNGLE_URLS: ReadonlySet<string> = new Set([...JUNGLE_PALM_URLS, JUNGLE_PROP_URLS.coconuts]);
 
 /**
  * The rally catalog's models as they stood before the breadth pass promoted the
@@ -172,10 +176,11 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       // Through the world's OWN registry, never a second one: that is what
       // keeps the manifest and preload guards covering it and what makes an
       // Evergarden circuit wear the Evergarden's vocabulary. The ember zone's
-      // set is the one other world table allowed, for the same reason: it is
-      // the Drakelands' own, loaded for every player (the lane case below).
+      // set and the jungle zone's palms and coconuts are the two other world
+      // tables allowed, for the same reason: each is its zone's own, loaded for
+      // every player (the lane cases below).
       expect(
-        known.has(url) || EMBER_URLS.has(url),
+        known.has(url) || EMBER_URLS.has(url) || JUNGLE_URLS.has(url),
         `${url} should be registered in PROP_ASSET_DEFS`,
       ).toBe(true);
       const rel = url.replace(/^\//, '');
@@ -292,6 +297,43 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     }
   });
 
+  it('draws the Palmreach strand out of the lane the jungle build opens at entry for every player', async () => {
+    // The same promise for the palms and the coconuts: the jungle zone's
+    // module registers them in the deferred lane when it loads, and the
+    // renderer loads it. Proved by running the registrations.
+    vi.resetModules();
+    const asked: string[] = [];
+    vi.doMock('../src/render/assets/preload', () => ({
+      registerPreload: vi.fn(),
+      registerDeferredPreload: (start: () => Promise<unknown>) => {
+        void start().catch(() => undefined);
+      },
+    }));
+    vi.doMock('../src/render/assets/loader', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../src/render/assets/loader')>()),
+      loadGltf: vi.fn((url: string) => {
+        asked.push(url);
+        return new Promise(() => undefined);
+      }),
+      releaseGltf: vi.fn(),
+    }));
+    vi.stubGlobal('window', {});
+    try {
+      await import('../src/render/jungle_features');
+      expect(JUNGLE_URLS.size).toBe(4);
+      for (const url of JUNGLE_URLS) expect(asked, url).toContain(url);
+      const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+      expect(renderer).toMatch(
+        /import \{[^}]*\bbuildJungleFeatures\b[^}]*\} from '\.\/jungle_features'/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.doUnmock('../src/render/assets/preload');
+      vi.doUnmock('../src/render/assets/loader');
+      vi.resetModules();
+    }
+  });
+
   it('offers every theme its own zone lamp, leading its vocabulary', () => {
     // Fourteen near-identical lamp tiles in one palette is a hunt; a theme
     // naming the one that belongs in its realm is what makes them authorable.
@@ -384,7 +426,10 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       ),
     );
     const alreadyLoaded = (url: string): boolean =>
-      RALLY_URLS_BEFORE_THE_PROMOTION.has(url) || worldEntryUrls.has(url) || EMBER_URLS.has(url);
+      RALLY_URLS_BEFORE_THE_PROMOTION.has(url) ||
+      worldEntryUrls.has(url) ||
+      EMBER_URLS.has(url) ||
+      JUNGLE_URLS.has(url);
 
     expect(REALM_RACERS_PROP_URLS.length).toBeGreaterThan(150);
     for (const url of REALM_RACERS_PROP_URLS) expect(alreadyLoaded(url), url).toBe(true);
