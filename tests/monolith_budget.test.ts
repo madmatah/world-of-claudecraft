@@ -1017,7 +1017,11 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13218 -> 13203: the oil-slick throw presentation moved to
     // realm_racers_field_cues.ts with the rival oil spray and the missed-box
     // cue, which the renderer reaches through one event arm. Exact count.
-    ceiling: 13203,
+    // LOWERED 13203 -> 13133 by the carry of PR 4229 (the shared spirit
+    // veil): every translucent look moved onto the veil, deleting the lit
+    // twin group's slot, the local self warm and the Soul Rend live arm, wc
+    // -l on the carried tree. Exact count.
+    ceiling: 13133,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

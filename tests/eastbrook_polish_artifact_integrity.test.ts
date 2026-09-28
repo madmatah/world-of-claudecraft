@@ -1410,7 +1410,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
-  'a028cf279d483a9b757d8ae651ea1819a21e71455ccae241f83109a6eb2da64d';
+  // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
+  '73785621d67f4250ae7080933302b527753d5ca4b09ed03c628012ef05a7a77c';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1449,7 +1450,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers golden ward veil (renderer leaf).
   // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
-  '5e9a60204de11c2d0e2f5a7e336adbf4702f6c225cfb3d85610bdd473c3967d9';
+  // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
+  '5784958561582f48223cb5f3fc6473fb8ad6f042f6df423647fa9185f1ccaf2d';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2846,7 +2848,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers golden ward veil.
       // Re-minted for the Realm Racers own shell launched on the input frame.
       // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
-    ).toBe('69ee58450891d5a87c18ee2c13826f9b318d4235a20a649529a50f9421ff79b5');
+      // Re-minted for the carry of PR 4229, the shared spirit veil.
+    ).toBe('79a8a8f041faf06b06d6dcd088aa33a4d218a04ba0f96018c11fe356103436a1');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

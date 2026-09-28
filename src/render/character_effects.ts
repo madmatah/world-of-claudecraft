@@ -16,7 +16,7 @@ import {
   characterEffectFlags,
   hasCharacterEffect,
 } from './character_effects_core';
-import type { GhostStyle } from './characters/effect_materials';
+import type { SpiritVeilPalette } from './characters/spirit_veil_palette_core';
 
 export function isAvengingWrathAura(aura: Pick<Aura, 'id' | 'kind'>): boolean {
   return aura.id === 'avenging_wrath' && aura.kind === 'buff_dmg_done';
@@ -148,8 +148,8 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
 
 /**
  * The veil family: the paladin's Veilbound March and Mark, and the Realm
- * Racers ward and recovery ghost, which wear the March's translucent veil
- * recoloured (gold for the ward, pale for the ghost).
+ * Racers ward and recovery ghost, which wear the spirit veil (the ward the
+ * March's gold palette, the ghost the released spirit's).
  *
  * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
  * ghosted one will not block you), so they are read off the entity aura every
@@ -170,26 +170,18 @@ export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   return 'none';
 }
 
-/** Whether the veil turns the rig translucent (the Mark only tints it). */
-export function characterVeilGhosted(state: CharacterVeilboundState): boolean {
-  return state === 'march' || state === 'ward' || state === 'ghost';
+/** The class veil a state carries into characterGhostLook: a racer's is none. */
+export function classVeilboundState(state: CharacterVeilboundState): 'march' | 'mark' | 'none' {
+  return state === 'ward' || state === 'ghost' ? 'none' : state;
 }
 
 /**
- * Which fade a translucent rig wears. Duskveil/Smokefade (`stealthFade`) wear
- * the denser stealth fade; every spirit read (`spirit`: the ghost run, ghost
- * wolf, visions, the graveyard angel) keeps the thin ethereal one, and a dead
- * stealther is a spirit first; a racer's ward wears the gold veil and a
- * recovery ghost the pale one.
+ * The spirit veil palette a racer's ward or recovery ghost wears, when no
+ * spirit, stealth, wolf or class veil read claims the rig first.
  */
-export function characterGhostStyle(
-  stealthFade: boolean,
-  spirit: boolean,
-  veil: CharacterVeilboundState,
-): GhostStyle {
-  if (stealthFade) return 'stealth';
-  if (spirit) return 'spirit';
-  return veil === 'ward' || veil === 'ghost' ? veil : 'spirit';
+export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
+  if (state === 'ward') return 'march';
+  return state === 'ghost' ? 'spirit' : null;
 }
 
 /** The whole-body tint color for an active Thornhollow Fields rune buff (null = none). */
