@@ -168,7 +168,7 @@ describe('renderer self-kart reads go through the drive view', () => {
       'const vx = this.selfRender.drive.velocityX;',
       'const vz = this.selfRender.drive.velocityZ;',
       // the local bump bang (and so its duplicate suppression)
-      "if ( this.selfRender.drive.source === 'predicted' && p.drive &&",
+      'if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {',
       'this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),',
       'this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),',
       // the model yaw
