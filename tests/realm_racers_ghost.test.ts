@@ -1,6 +1,6 @@
 // The recovery GHOST: a machine the race has just put back on the racing line is
-// intangible to rival machines until it is unlocked and clear, or a hard cap
-// runs out. The playtest case it exists for: at 200 ms a pilot shot a rival off
+// intangible to rival machines until it is unlocked, old enough for a follower
+// to have passed, and clear; or until a hard cap runs out. The playtest case it exists for: at 200 ms a pilot shot a rival off
 // the road, the rival was recovered onto the line locked still for two seconds,
 // and the shooter, following at full speed, hit a parked solid machine.
 
@@ -10,7 +10,10 @@ import { vehicleProfile } from '../src/sim/content/vehicles';
 import {
   REALM_RACERS_GHOST_AURA,
   REALM_RACERS_GHOST_MARGIN_TICKS,
+  REALM_RACERS_GHOST_MIN_TICKS,
   rallyGhostMayClear,
+  rallyGhostWindow,
+  rallyHullsMeetInTick,
   rallyHullsOverlap,
   realmRacersGhosted,
 } from '../src/sim/realm_racers_ghost';
@@ -19,7 +22,6 @@ import { REALM_RACERS_SLICK_LIFETIME_TICKS } from '../src/sim/realm_racers_slick
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
-  REALM_RACERS_GHOST_CAP_TICKS,
   REALM_RACERS_GROUND_BLAST_AURA,
   REALM_RACERS_RESET_LOCK_TICKS,
   REALM_RACERS_STUCK_TICKS,
@@ -28,8 +30,10 @@ import {
   realmRacersStartMatch,
   realmRacersToCanonical,
   realmRacersToWorld,
+  updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
+import { expectGhostWindow } from './helpers/realm_racers_ghost_window';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
@@ -109,24 +113,46 @@ function parkOn(sim: Sim, match: RealmRacersMatch, pid: number, on: Entity, offs
 }
 
 describe('the ghost rule, on its own', () => {
-  it('pins the cap to the manual lock plus one second of driving', () => {
+  it('pins a 1.5 s minimum from the recovery and a one-second margin to the cap', () => {
+    expect(REALM_RACERS_GHOST_MIN_TICKS).toBe(30);
     expect(REALM_RACERS_GHOST_MARGIN_TICKS).toBe(20);
-    expect(REALM_RACERS_GHOST_CAP_TICKS).toBe(REALM_RACERS_RESET_LOCK_TICKS + 20);
-    expect(REALM_RACERS_GHOST_CAP_TICKS).toBe(60);
   });
 
-  it('ends only once unlocked and clear, or at the cap whatever the overlap', () => {
+  it('opens its window off the recovery, never off the manual lock alone', () => {
+    // A manual reset at 100: its 40-tick lock (ends 141) outlasts the minimum.
+    expect(rallyGhostWindow(100, 141)).toEqual({ earliestClearTick: 141, capTick: 161 });
+    // The one-tick automatic lock (ends 102) and the one-second cut lock (ends
+    // 121): the minimum from the recovery holds them both to 131.
+    expect(rallyGhostWindow(100, 102)).toEqual({ earliestClearTick: 131, capTick: 151 });
+    expect(rallyGhostWindow(100, 121)).toEqual({ earliestClearTick: 131, capTick: 151 });
+    expect(rallyGhostWindow(100, 0)).toEqual({ earliestClearTick: 131, capTick: 151 });
+  });
+
+  it('ends only once the window allows it and the hull is clear, or at the cap', () => {
     const at = (tick: number, overlapping: boolean) =>
-      rallyGhostMayClear({ tick, lockedUntilTick: 10, capTick: 30, overlapping });
+      rallyGhostMayClear({ tick, earliestClearTick: 10, capTick: 30, overlapping });
     expect(at(9, false)).toBe(false);
     expect(at(10, false)).toBe(true);
     expect(at(10, true)).toBe(false);
     expect(at(29, true)).toBe(false);
     expect(at(30, true)).toBe(true);
-    // The cap wins even over a lock that somehow outlived it.
     expect(
-      rallyGhostMayClear({ tick: 30, lockedUntilTick: 99, capTick: 30, overlapping: true }),
+      rallyGhostMayClear({ tick: 30, earliestClearTick: 99, capTick: 30, overlapping: true }),
     ).toBe(true);
+  });
+
+  it('counts a hull crossing the ghost inside the tick as overlapping, not just the endpoint', () => {
+    const r = PROFILE.bodyRadius;
+    const ghost = { x: 0, z: 0, prevX: 0, prevZ: 0, radius: r };
+    // Ten yards before to ten yards past, straight through: both ends clear.
+    const tunnel = { x: 10, z: 0, prevX: -10, prevZ: 0, radius: r };
+    expect(rallyHullsOverlap(ghost, tunnel)).toBe(false);
+    expect(rallyHullsMeetInTick(ghost, tunnel)).toBe(true);
+    // The same run a lane over, beyond the reach: clear the whole tick.
+    const beside = { x: 10, z: REACH + 0.5, prevX: -10, prevZ: REACH + 0.5, radius: r };
+    expect(rallyHullsMeetInTick(ghost, beside)).toBe(false);
+    // Parked on it: the endpoint answer, unchanged.
+    expect(rallyHullsMeetInTick(ghost, { ...ghost, x: 1, prevX: 1 })).toBe(true);
   });
 
   it('reads overlap on the contact reach, touching exactly at the reach being clear', () => {
@@ -150,26 +176,60 @@ describe('the ghost starts on every recovery', () => {
       'ghost aura',
     );
     expect(aura).toMatchObject({ kind: 'rally_ghost', name: 'Ghosted', value: 0 });
-    expect(progress.ghostCapTick).toBe(sim.tickCount + REALM_RACERS_GHOST_CAP_TICKS + 1);
+    expect(progress.ghostClearTick).toBe(progress.resetLockedUntilTick);
+    expect(progress.ghostCapTick).toBe(
+      progress.resetLockedUntilTick + REALM_RACERS_GHOST_MARGIN_TICKS,
+    );
     // Silent, like the recovery itself: the entity aura list is the whole wire,
     // and no gain line lands in anybody's event frame.
     expect(auras().filter((event) => event.name === 'Ghosted')).toEqual([]);
   });
 
-  it('starts on the automatic stuck recovery, and ends with its one-tick lock', () => {
-    const { sim, match, a, racer, road, progress } = racing();
+  it('holds a manual recovery for its minimum, then to the cap with a rival on it', () => {
+    const { sim, match, a, b, racer, progress } = racing();
+    sim.realmRacersResetPosition(a);
+    expectGhostWindow({
+      sim,
+      racer,
+      progress,
+      resetTick: sim.tickCount,
+      holdRivalOn: () => parkOn(sim, match, b, racer),
+    });
+  });
+
+  it('holds a stuck recovery for its minimum, well past its one-tick lock, then to the cap', () => {
+    const { sim, match, a, b, racer, road, progress } = racing();
     const lateral = road.halfWidth + 8;
     park(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS; i++) sim.tick();
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
-    expect(realmRacersGhosted(racer)).toBe(true);
-    // Nobody near it: the ghost goes the tick the lock does.
-    while (sim.tickCount < progress.resetLockedUntilTick) {
-      expect(realmRacersGhosted(racer)).toBe(true);
+    expect(progress.resetLockedUntilTick).toBe(sim.tickCount + 2);
+    expectGhostWindow({
+      sim,
+      racer,
+      progress,
+      resetTick: sim.tickCount,
+      holdRivalOn: () => parkOn(sim, match, b, racer),
+    });
+    expect(progress.ghostCapTick).toBe(0);
+  });
+
+  it('replaces the window on a second recovery rather than stacking a longer one', () => {
+    const { sim, match, a, b, racer, progress } = racing();
+    sim.realmRacersResetPosition(a);
+    // Held a ghost past the lock by a rival parked on it, then reset again.
+    while (sim.tickCount < progress.resetLockedUntilTick + 4) {
+      parkOn(sim, match, b, racer);
       sim.tick();
     }
-    expect(realmRacersGhosted(racer)).toBe(false);
-    expect(progress.ghostCapTick).toBe(0);
+    expect(realmRacersGhosted(racer)).toBe(true);
+    const second = sim.tickCount;
+    sim.realmRacersResetPosition(a);
+    // Exactly what one fresh recovery at this tick opens.
+    expect({ earliestClearTick: progress.ghostClearTick, capTick: progress.ghostCapTick }).toEqual(
+      rallyGhostWindow(second, progress.resetLockedUntilTick),
+    );
+    expect(racer.auras.filter((aura) => aura.id === REALM_RACERS_GHOST_AURA)).toHaveLength(1);
   });
 });
 
@@ -202,16 +262,16 @@ describe('a ghost touches nobody', () => {
     expect(Math.hypot(rival.pos.x - rivalAt.x, rival.pos.z - rivalAt.z)).toBeGreaterThan(0.01);
   });
 
-  it('stays a ghost past the lock while overlapped, and ends the first tick it is clear', () => {
+  it('stays a ghost past its window while overlapped, and ends the first tick it is clear', () => {
     const { sim, match, a, b, racer, rival, progress } = racing();
     sim.realmRacersResetPosition(a);
     parkOn(sim, match, b, racer);
-    while (sim.tickCount < progress.resetLockedUntilTick) sim.tick();
+    while (sim.tickCount < progress.ghostClearTick) sim.tick();
     sim.tick();
     sim.tick();
     // Unlocked, still inside the rival: a ghost, or two machines spawn in each
     // other.
-    expect(sim.tickCount).toBeGreaterThan(progress.resetLockedUntilTick);
+    expect(sim.tickCount).toBeGreaterThan(progress.ghostClearTick);
     expect(realmRacersGhosted(racer)).toBe(true);
     // Clear of it by more than the reach: solid on the next tick.
     park(sim, match, b, racer.pos.x + REACH + 1, racer.pos.z);
@@ -225,7 +285,7 @@ describe('a ghost touches nobody', () => {
     const { sim, match, a, b, racer, rival, progress } = racing();
     sim.realmRacersResetPosition(a);
     const cap = progress.ghostCapTick;
-    expect(cap).toBeGreaterThan(progress.resetLockedUntilTick);
+    expect(cap).toBe(progress.ghostClearTick + REALM_RACERS_GHOST_MARGIN_TICKS);
     while (sim.tickCount < cap - 1) {
       // Held on top of it every tick, the way a rival parked on it would sit.
       parkOn(sim, match, b, racer, 0.5);
@@ -282,13 +342,70 @@ describe('a ghost touches nobody', () => {
   });
 });
 
+describe('the ghost ends only when it really is clear', () => {
+  it('holds through a rival tunnelling through it on the clearing tick, with no bump', () => {
+    const { sim, match, a, b, racer, rival, progress } = racing();
+    const bumps = watch(sim, 'realmRacersBump');
+    sim.realmRacersResetPosition(a);
+    // Held on it past the earliest clear, so the next evaluation may clear.
+    while (sim.tickCount < progress.ghostClearTick + 1) {
+      parkOn(sim, match, b, racer);
+      sim.tick();
+    }
+    expect(realmRacersGhosted(racer)).toBe(true);
+    // One pass of the race: the rival crossed the whole ghost inside the tick,
+    // clear of it at both ends (a shell throw, or a head-on meeting).
+    const dirX = Math.sin(racer.facing);
+    const dirZ = Math.cos(racer.facing);
+    rival.prevPos = { ...rival.pos, x: racer.pos.x - dirX * 4, z: racer.pos.z - dirZ * 4 };
+    rival.pos = { ...rival.pos, x: racer.pos.x + dirX * 4, z: racer.pos.z + dirZ * 4 };
+    sim.ctx.rebucket(rival);
+    const rivalAt = { ...rival.pos };
+    updateRealmRacers(sim.ctx);
+    expect(sim.tickCount).toBeLessThan(progress.ghostCapTick);
+    expect(realmRacersGhosted(racer)).toBe(true);
+    expect(bumps()).toEqual([]);
+    expect(rival.pos.x).toBeCloseTo(rivalAt.x, 9);
+    expect(rival.pos.z).toBeCloseTo(rivalAt.z, 9);
+  });
+
+  it('holds two karts recovered onto the same anchor, and parts them boundedly at the cap', () => {
+    const { sim, match, a, b, racer, rival, progress, road } = racing();
+    const rivalProgress = required(match.progress.get(b), 'rival progress');
+    rivalProgress.resetS = road.s;
+    sim.realmRacersResetPosition(a);
+    sim.realmRacersResetPosition(b);
+    expect(realmRacersGhosted(racer)).toBe(true);
+    expect(realmRacersGhosted(rival)).toBe(true);
+    expect(Math.hypot(racer.pos.x - rival.pos.x, racer.pos.z - rival.pos.z)).toBeLessThan(REACH);
+    const cap = progress.ghostCapTick;
+    expect(rivalProgress.ghostCapTick).toBe(cap);
+    while (sim.tickCount < cap - 1) {
+      sim.tick();
+      expect(realmRacersGhosted(racer)).toBe(true);
+      expect(realmRacersGhosted(rival)).toBe(true);
+    }
+    sim.tick();
+    expect(realmRacersGhosted(racer)).toBe(false);
+    expect(realmRacersGhosted(rival)).toBe(false);
+    for (let i = 0; i < 10; i++) sim.tick();
+    const apart = Math.hypot(racer.pos.x - rival.pos.x, racer.pos.z - rival.pos.z);
+    for (const p of [racer.pos, rival.pos]) {
+      expect(Number.isFinite(p.x) && Number.isFinite(p.z)).toBe(true);
+    }
+    // Parted to about the reach, never flung across the circuit.
+    expect(apart).toBeGreaterThan(REACH * 0.9);
+    expect(apart).toBeLessThan(REACH * 3);
+  });
+});
+
 describe('hazards ignore the ghost', () => {
   /** A ghost past its lock, held a ghost by a rival parked on it. */
   function unlockedGhost() {
     const staged = racing();
     const { sim, match, a, b, racer, progress } = staged;
     sim.realmRacersResetPosition(a);
-    while (sim.tickCount < progress.resetLockedUntilTick + 1) {
+    while (sim.tickCount < progress.ghostClearTick + 1) {
       parkOn(sim, match, b, racer);
       sim.tick();
     }

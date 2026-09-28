@@ -43,9 +43,9 @@ import type { RallyDriverTier } from '../realm_racers_driver';
 import {
   REALM_RACERS_GHOST_AURA,
   REALM_RACERS_GHOST_AURA_NAME,
-  REALM_RACERS_GHOST_MARGIN_TICKS,
   rallyGhostMayClear,
-  rallyHullsOverlap,
+  rallyGhostWindow,
+  rallyHullsMeetInTick,
   realmRacersGhosted,
 } from '../realm_racers_ghost';
 import {
@@ -174,15 +174,6 @@ export const REALM_RACERS_COUNTDOWN_TICKS = 9 * TICK_RATE;
 export const REALM_RACERS_CHASE_TICKS = 30 * TICK_RATE;
 export const REALM_RACERS_RETURN_TICKS = 6 * TICK_RATE;
 export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
-/**
- * The hard cap on a recovery ghost, ticks from the recovery: the manual lock
- * plus a second of driving (realm_racers_ghost.ts). A ghost normally ends the
- * first tick its machine is unlocked and clear of every rival; this only bounds
- * one a rival keeps parked on, so no pilot can stay intangible to pass through
- * the field.
- */
-export const REALM_RACERS_GHOST_CAP_TICKS =
-  REALM_RACERS_RESET_LOCK_TICKS + REALM_RACERS_GHOST_MARGIN_TICKS;
 /**
  * The lock an AUTOMATIC recovery carries (the wedged-machine arm and the
  * referee's loiter verdict), ticks.
@@ -315,7 +306,11 @@ function applyRealmRacersGhost(
   racer: Entity,
   progress: RealmRacersProgress,
 ): void {
-  progress.ghostCapTick = ctx.tickCount + REALM_RACERS_GHOST_CAP_TICKS + 1;
+  // Written AFTER the lock (the caller's order): the window is a function of
+  // this recovery alone, so a second one replaces it rather than stacking.
+  const ghostWindow = rallyGhostWindow(ctx.tickCount, progress.resetLockedUntilTick);
+  progress.ghostClearTick = ghostWindow.earliestClearTick;
+  progress.ghostCapTick = ghostWindow.capTick;
   if (realmRacersGhosted(racer)) return;
   racer.auras.push({
     id: REALM_RACERS_GHOST_AURA,
@@ -331,11 +326,15 @@ function applyRealmRacersGhost(
   });
 }
 
-/** End a ghost, if there is one, as silently as it began. */
+/** End a ghost, if there is one, as silently as it began (in place, the way
+ *  the ward is spent). */
 function clearRealmRacersGhost(racer: Entity, progress: RealmRacersProgress | undefined): void {
-  if (progress) progress.ghostCapTick = 0;
-  if (!realmRacersGhosted(racer)) return;
-  racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_GHOST_AURA);
+  if (progress) {
+    progress.ghostClearTick = 0;
+    progress.ghostCapTick = 0;
+  }
+  const index = racer.auras.findIndex((aura) => aura.id === REALM_RACERS_GHOST_AURA);
+  if (index >= 0) racer.auras.splice(index, 1);
 }
 
 /**
@@ -490,9 +489,11 @@ export interface RealmRacersProgress {
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
-  /** Exclusive tick the recovery ghost ends on at the latest; 0 while this
+  /** The recovery ghost's window (realm_racers_ghost.ts): the first tick it may
+   *  end on if clear, and the tick it ends on regardless. Both 0 while this
    *  machine is not a ghost. The ghost AURA is the source of truth for whether
-   *  it is one; this is only its cap. */
+   *  it is one; these only time it. */
+  ghostClearTick: number;
   ghostCapTick: number;
   /** Tick the current lap began (reset to GO, and to every later lap wrap).
    *  Feeds the fast-lap deed; nothing else reads it. */
@@ -1148,6 +1149,7 @@ function startMatch(
           slickGripUntilTick: 0,
           devHeldCharges: null,
           groundBlastShockUntilTick: 0,
+          ghostClearTick: 0,
           ghostCapTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
@@ -1780,8 +1782,9 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
 }
 
 /**
- * End every recovery ghost whose machine is unlocked and clear of every other
- * machine on the grid, or whose cap has run out. Runs right before the contact
+ * End every recovery ghost whose window allows it (unlocked, and old enough for
+ * a follower to have passed) and whose machine is clear of every other machine
+ * on the grid, over the tick's whole motion; or whose cap has run out. Runs right before the contact
  * pass, so a ghost that ends here is solid for that same pass, and one that
  * stays is skipped by it. Clear means clear of the SAME set the contact pass
  * resolves (any seated, living machine), over the same hull circles. Draws no
@@ -1799,7 +1802,7 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
         if (otherPid === pid) continue;
         const other = ctx.entities.get(otherPid);
         if (!other?.drive || other.dead) continue;
-        if (rallyHullsOverlap(hull, contactBodyFor(other, other.drive))) {
+        if (rallyHullsMeetInTick(hull, contactBodyFor(other, other.drive))) {
           overlapping = true;
           break;
         }
@@ -1808,7 +1811,7 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
     if (
       rallyGhostMayClear({
         tick: ctx.tickCount,
-        lockedUntilTick: progress.resetLockedUntilTick,
+        earliestClearTick: progress.ghostClearTick,
         capTick: progress.ghostCapTick,
         overlapping,
       })

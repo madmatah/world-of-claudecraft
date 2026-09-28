@@ -6,7 +6,7 @@ import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_
  *  competition circuit instead of silently measuring the practice one. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
-import { realmRacersGhosted } from '../src/sim/realm_racers_ghost';
+import { REALM_RACERS_GHOST_AURA, realmRacersGhosted } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
@@ -28,6 +28,7 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
+import { expectGhostWindow, followThrough } from './helpers/realm_racers_ghost_window';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 /** The racers the sim has marked with the silent relocation event (the
@@ -559,4 +560,99 @@ describe('Realm Racers track limits in a live race', () => {
     expect(resets()).toEqual([a]);
     expect(realmRacersGhosted(racer)).toBe(true);
   });
+
+  /** Every racer but `keep` parked on the lane well away from `s`. */
+  function clearTheField(
+    sim: Sim,
+    match: RealmRacersMatch,
+    pids: number[],
+    keep: number,
+    s: number,
+  ) {
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    pids
+      .filter((pid) => pid !== keep)
+      .forEach((pid, i) => {
+        const away = onLane(match, (s + track.length * (0.3 + i * 0.15)) % track.length);
+        parkOffRoad(sim, match, pid, away.x, away.z);
+      });
+  }
+
+  /** A real cut return: the chord driven until the referee steps in. */
+  function cutReturn() {
+    const staged = racing();
+    const { sim, a, match } = staged;
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const cut = findCut(40);
+    const exit = startFrom(sim, match, a, track.samples[Math.max(cut.from, 3)].s);
+    const target = onLane(match, track.samples[cut.to].s);
+    const steps = Math.ceil(Math.hypot(target.x - exit.x, target.z - exit.z) / 3);
+    for (let i = 1; i <= steps && progress.cutReturnUntilTick === 0; i++) {
+      const t = i / steps;
+      glide(sim, a, exit.x + (target.x - exit.x) * t, exit.z + (target.z - exit.z) * t);
+    }
+    expect(progress.cutReturnUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    return { ...staged, progress, resetTick: sim.tickCount };
+  }
+
+  /** A real loiter return: parked off the road, circling, until the clock runs out. */
+  function loiterReturn() {
+    const staged = racing();
+    const { sim, a, match, racer } = staged;
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, track.length * 0.4);
+    progress.resetS = road.s;
+    const lateral = road.halfWidth + 10;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    for (let i = 0; i < REALM_RACERS_LOITER_TICKS; i++) {
+      required(racer.drive, 'drive').speed = 4;
+      const wobble = i % 2 === 0 ? 1 : -1;
+      glide(sim, a, racer.pos.x + road.tz * wobble, racer.pos.z - road.tx * wobble);
+    }
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    return { ...staged, progress, resetTick: sim.tickCount };
+  }
+
+  for (const [kind, stage] of [
+    ['cut return', cutReturn],
+    ['loiter return', loiterReturn],
+  ] as const) {
+    it(`holds a ${kind} ghost for its minimum past the lock, then to the cap`, () => {
+      const { sim, a, b, pids, match, racer, progress, resetTick } = stage();
+      clearTheField(sim, match, pids, a, progress.lastS);
+      expectGhostWindow({
+        sim,
+        racer,
+        progress,
+        resetTick,
+        holdRivalOn: () => parkOffRoad(sim, match, b, racer.pos.x + 1, racer.pos.z),
+      });
+    });
+
+    it(`replays the playtest on a ${kind}: a follower at speed passes it clean`, () => {
+      const run = (ghost: boolean) => {
+        const { sim, a, b, pids, match, racer, progress } = stage();
+        clearTheField(sim, match, pids, a, progress.lastS);
+        // The follower arrives once the short lock is over, which is exactly
+        // when a ghost tied to the lock alone would already have gone.
+        while (sim.tickCount < progress.resetLockedUntilTick) sim.tick();
+        expect(realmRacersGhosted(racer)).toBe(true);
+        if (!ghost) racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_GHOST_AURA);
+        return followThrough({
+          sim,
+          recovered: racer,
+          follower: required(sim.entities.get(b), 'follower'),
+          place: (pid, x, z) => parkOffRoad(sim, match, pid, x, z),
+          pids,
+        });
+      };
+      const clean = run(true);
+      expect(clean.bumps).toBe(0);
+      expect(clean.ahead).toBeGreaterThan(3.4);
+      // The same approach into a SOLID machine is the reported collision.
+      expect(run(false).bumps).toBeGreaterThan(0);
+    });
+  }
 });

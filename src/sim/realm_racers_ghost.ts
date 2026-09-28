@@ -20,15 +20,47 @@ export const REALM_RACERS_GHOST_AURA = 'rally_ghost';
 /** Player-visible aura name, localized at the client boundary (sim_i18n.ts). */
 export const REALM_RACERS_GHOST_AURA_NAME = 'Ghosted';
 /**
- * How long past the MANUAL recovery lock the ghost may last at most, ticks.
+ * The shortest a ghost lasts, ticks from the recovery, whatever lock the
+ * recovery carried.
  *
- * The ghost normally ends the first tick the machine is unlocked and clear of
- * every rival. The margin only bounds the case where a rival parks on top of it:
- * one second of driving is enough to separate two machines that want to be
+ * It is keyed to the RECOVERY, not to the lock, because the pilot it protects
+ * is the follower: the automatic recoveries hand control back after one tick
+ * and the cut return after one second, and the follower is still arriving. The
+ * farthest a shooter stands behind a machine it knocks off the road is the
+ * Ground Blast's maximum range (70 yd, `GROUND_BLAST_MAX_RANGE`); at a racing
+ * pace of about 47 yd/s (just under four fifths of the 60 yd/s top speed)
+ * that is 1.5 s, which is this.
+ */
+export const REALM_RACERS_GHOST_MIN_TICKS = (3 * TICK_RATE) / 2;
+/**
+ * How long past its earliest clear tick a ghost may last at most, ticks.
+ *
+ * The ghost normally ends the first tick it may clear and is clear of every
+ * rival. The margin only bounds the case where a rival parks on top of it: one
+ * second of driving is enough to separate two machines that want to be
  * separated, and short enough that nobody can use the window to pass through a
  * rival they would otherwise have to go around.
  */
 export const REALM_RACERS_GHOST_MARGIN_TICKS = TICK_RATE;
+
+/** The window one recovery opens: exclusive ticks, the lock's convention. */
+export interface RallyGhostWindow {
+  /** The first tick the ghost may end on, if the machine is clear. */
+  earliestClearTick: number;
+  /** The tick it ends on whatever the overlap. */
+  capTick: number;
+}
+
+/**
+ * The ghost window a recovery at `resetTick` opens, given the lock it wrote
+ * (`resetLockedUntilTick`, 0 for none). A function of this one recovery only:
+ * a second recovery inside a live window REPLACES it, so repeated resets can
+ * never stack a longer ghost than one fresh reset gives.
+ */
+export function rallyGhostWindow(resetTick: number, lockedUntilTick: number): RallyGhostWindow {
+  const earliestClearTick = Math.max(lockedUntilTick, resetTick + REALM_RACERS_GHOST_MIN_TICKS + 1);
+  return { earliestClearTick, capTick: earliestClearTick + REALM_RACERS_GHOST_MARGIN_TICKS };
+}
 
 /** Is this machine a ghost right now? The one question every ghost site asks. */
 export function realmRacersGhosted(racer: Entity | undefined | null): boolean {
@@ -51,22 +83,48 @@ export function rallyHullsOverlap(a: RallyGhostHull, b: RallyGhostHull): boolean
   return dx * dx + dz * dz < reach * reach;
 }
 
-export interface RallyGhostClearInput {
+/** A hull plus where it STARTED the tick (Entity.prevPos). */
+export interface RallyGhostSweptHull extends RallyGhostHull {
+  prevX: number;
+  prevZ: number;
+}
+
+/**
+ * Did two hulls come within reach at any point of this tick's motion (linear
+ * within the tick, the contact pass's own assumption)? The end-of-tick overlap
+ * alone misses a rival that tunnels clean through the ghost on the tick it
+ * would clear, and the swept contact pass would then resolve that crossing as a
+ * hit. The closest approach over the tick is a superset of every crossing the
+ * swept pass can resolve, so clearing never lands inside one.
+ */
+export function rallyHullsMeetInTick(a: RallyGhostSweptHull, b: RallyGhostSweptHull): boolean {
+  if (rallyHullsOverlap(a, b)) return true;
+  const reach = a.radius + b.radius;
+  const px = b.prevX - a.prevX;
+  const pz = b.prevZ - a.prevZ;
+  const vx = b.x - b.prevX - (a.x - a.prevX);
+  const vz = b.z - b.prevZ - (a.z - a.prevZ);
+  const vv = vx * vx + vz * vz;
+  const t = vv > 0 ? Math.min(1, Math.max(0, -(px * vx + pz * vz) / vv)) : 0;
+  const cx = px + vx * t;
+  const cz = pz + vz * t;
+  return cx * cx + cz * cz < reach * reach;
+}
+
+export interface RallyGhostClearInput extends RallyGhostWindow {
   tick: number;
-  /** The recovery lock's exclusive end tick (`resetLockedUntilTick`). */
-  lockedUntilTick: number;
-  /** The hard cap's exclusive end tick. */
-  capTick: number;
-  /** Does the ghost's hull overlap any other machine on the grid right now? */
+  /** Does the ghost's hull overlap any other machine on the grid, at the end
+   *  of this tick or anywhere along the tick's motion? */
   overlapping: boolean;
 }
 
 /**
- * May the ghost end on this tick? Only once the machine is unlocked AND clear
- * of every rival, since ending it inside another hull would spawn two machines
- * in each other; or at the cap, whatever the overlap.
+ * May the ghost end on this tick? Only once the window allows it (the lock is
+ * over AND the recovery is old enough) and the machine is clear of every rival,
+ * since ending it inside another hull would spawn two machines in each other;
+ * or at the cap, whatever the overlap.
  */
 export function rallyGhostMayClear(input: RallyGhostClearInput): boolean {
   if (input.tick >= input.capTick) return true;
-  return input.tick >= input.lockedUntilTick && !input.overlapping;
+  return input.tick >= input.earliestClearTick && !input.overlapping;
 }

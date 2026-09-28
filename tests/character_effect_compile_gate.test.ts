@@ -397,4 +397,26 @@ describe('a transparent character effect swaps in only once its programs are lin
     expect(spirit.emissive.getHex()).not.toBe(0xb8860b);
     visual.dispose();
   });
+
+  it('wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads', async () => {
+    const { ghostEffectOpacity } = await import('../src/render/characters/effect_materials');
+    for (const style of ['ghost', 'ward'] as const) {
+      const visual = await makeVisual();
+      const gateCalls: GateCall[] = [];
+      visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
+      const farMesh = (visual as unknown as { farMesh: THREE.Mesh | null }).farMesh;
+      if (!farMesh) throw new Error('the harness rig bakes no far mesh');
+      visual.setGhost(true, style);
+      for (const call of gateCalls) call.settle();
+      visual.update(FRAME, anim(), true);
+      const far = farMesh.material;
+      const mats = Array.isArray(far) ? far : [far];
+      expect(mats.length, style).toBeGreaterThan(0);
+      for (const material of mats) {
+        expect(material.transparent, style).toBe(true);
+        expect(material.opacity, style).toBe(ghostEffectOpacity(style));
+      }
+      visual.dispose();
+    }
+  });
 });
