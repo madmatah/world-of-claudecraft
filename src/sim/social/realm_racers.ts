@@ -48,6 +48,7 @@ import {
   rallyGhostWindow,
   rallyHullsMeetInTick,
   rallyKeepParting,
+  rallyPartingEndTick,
   realmRacersGhosted,
 } from '../realm_racers_ghost';
 import {
@@ -314,6 +315,7 @@ function applyRealmRacersGhost(
   progress.ghostClearTick = ghostWindow.earliestClearTick;
   progress.ghostCapTick = ghostWindow.capTick;
   progress.ghostPartingPids.length = 0;
+  progress.ghostPartingEndTick = 0;
   if (realmRacersGhosted(racer)) return;
   racer.auras.push({
     id: REALM_RACERS_GHOST_AURA,
@@ -330,13 +332,19 @@ function applyRealmRacersGhost(
 }
 
 /** End a ghost, if there is one, as silently as it began (in place, the way
- *  the ward is spent), and any parting a previous one left. */
-function clearRealmRacersGhost(racer: Entity, progress: RealmRacersProgress | undefined): void {
+ *  the ward is spent), and any parting a previous one left. The window and the
+ *  parting are the race's books and go even when the body is already gone. */
+function clearRealmRacersGhost(
+  racer: Entity | undefined,
+  progress: RealmRacersProgress | undefined,
+): void {
   if (progress) {
     progress.ghostClearTick = 0;
     progress.ghostCapTick = 0;
     progress.ghostPartingPids.length = 0;
+    progress.ghostPartingEndTick = 0;
   }
+  if (!racer) return;
   const index = racer.auras.findIndex((aura) => aura.id === REALM_RACERS_GHOST_AURA);
   if (index >= 0) racer.auras.splice(index, 1);
 }
@@ -504,6 +512,9 @@ export interface RealmRacersProgress {
    *  with this machine until then never count as rival contact
    *  (`rallyContactCounts`). Empty otherwise. */
   ghostPartingPids: number[];
+  /** The tick those partings end on whatever the overlap
+   *  (`rallyPartingEndTick`); 0 while there are none. */
+  ghostPartingEndTick: number;
   /** Tick the current lap began (reset to GO, and to every later lap wrap).
    *  Feeds the fast-lap deed; nothing else reads it. */
   lapStartTick: number;
@@ -1161,6 +1172,7 @@ function startMatch(
           ghostClearTick: 0,
           ghostCapTick: 0,
           ghostPartingPids: [],
+          ghostPartingEndTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
           hadRivalContact: false,
@@ -1305,7 +1317,7 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     if (racer) consumeRealmRacersWard(ctx, racer);
     // And the ghost: nothing collides in a tableau, so it would only be a veil
     // telling every rival something that no longer matters.
-    if (racer) clearRealmRacersGhost(racer, progress);
+    clearRealmRacersGhost(racer, progress);
     // The kit goes with it too: an effect held at the flag is spent on nothing,
     // and a button that stays on the bar through the tableau is a button that lies.
     // The dev stack goes with the race that granted it, so a second race never
@@ -1405,7 +1417,7 @@ function returnRacer(ctx: SimContext, match: RealmRacersMatch, pid: number): voi
   const e = ctx.entities.get(pid);
   // The ghost and its partings are this race's to time, and the race no longer
   // holds this pilot: none of it may follow them into the next one.
-  if (e) clearRealmRacersGhost(e, progress);
+  clearRealmRacersGhost(e, progress);
   if (meta && e) restoreRacer(ctx, match, meta, e);
 }
 
@@ -1455,7 +1467,7 @@ function retireRacer(
   // through their tableau is chrome, and every rival would see it as a live
   // gold veil on a machine nothing can hit.
   if (racer) consumeRealmRacersWard(ctx, racer);
-  if (racer) clearRealmRacersGhost(racer, progress);
+  clearRealmRacersGhost(racer, progress);
   const drive = racer?.drive;
   if (drive) {
     resetVehicleDrive(drive);
@@ -1816,8 +1828,11 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
     if (progress.ghostPartingPids.length > 0) {
       if (drive) {
         const hull = contactBodyFor(racer, drive);
-        rallyKeepParting(progress.ghostPartingPids, (otherPid) =>
-          hullMeetsMachine(ctx, hull, otherPid),
+        rallyKeepParting(
+          progress.ghostPartingPids,
+          ctx.tickCount,
+          progress.ghostPartingEndTick,
+          (otherPid) => hullMeetsMachine(ctx, hull, otherPid),
         );
       } else {
         progress.ghostPartingPids.length = 0;
@@ -1844,7 +1859,10 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
       })
     ) {
       clearRealmRacersGhost(racer, progress);
-      if (inside) progress.ghostPartingPids.push(...inside);
+      if (inside) {
+        progress.ghostPartingPids.push(...inside);
+        progress.ghostPartingEndTick = rallyPartingEndTick(ctx.tickCount);
+      }
     }
   }
 }

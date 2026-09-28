@@ -147,11 +147,31 @@ export function rallyContactCounts(
 }
 
 /**
- * Keep only the partners a machine still meets this tick (`stillMeeting`, the
- * ghost's own swept hull test). One tick apart ends a parting for good, so the
- * next contact between that pair counts like any other. In place.
+ * The tick a parting opened at `capTick` ends on whatever the overlap: the same
+ * one-second margin a ghost gets to shake off an overlap. Without it a pair held
+ * together (pinned on a wall, or a blast throwing one back into the other)
+ * would stay exempt for as long as they touched.
  */
-export function rallyKeepParting(partners: number[], stillMeeting: (pid: number) => boolean): void {
+export function rallyPartingEndTick(capTick: number): number {
+  return capTick + REALM_RACERS_GHOST_MARGIN_TICKS;
+}
+
+/**
+ * Keep only the partners a machine still meets this tick (`stillMeeting`, the
+ * ghost's own swept hull test), and none from `endTick` on (exclusive, the
+ * lock's convention). One tick apart ends a parting for good, so the next
+ * contact between that pair counts like any other. In place.
+ */
+export function rallyKeepParting(
+  partners: number[],
+  tick: number,
+  endTick: number,
+  stillMeeting: (pid: number) => boolean,
+): void {
+  if (tick >= endTick) {
+    partners.length = 0;
+    return;
+  }
   let kept = 0;
   for (let i = 0; i < partners.length; i++) {
     if (stillMeeting(partners[i])) partners[kept++] = partners[i];

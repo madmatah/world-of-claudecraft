@@ -17,6 +17,7 @@ import {
   rallyHullsMeetInTick,
   rallyHullsOverlap,
   rallyKeepParting,
+  rallyPartingEndTick,
   realmRacersGhosted,
 } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
@@ -215,11 +216,20 @@ describe('the ghost rule, on its own', () => {
 
   it('ends a parting the first tick the pair is apart, for that pair alone and for good', () => {
     const partners = [2, 3, 4];
-    rallyKeepParting(partners, (pid) => pid !== 3);
+    rallyKeepParting(partners, 10, 30, (pid) => pid !== 3);
     expect(partners).toEqual([2, 4]);
-    rallyKeepParting(partners, () => true);
+    rallyKeepParting(partners, 11, 30, () => true);
     expect(partners).toEqual([2, 4]);
-    rallyKeepParting(partners, () => false);
+    rallyKeepParting(partners, 12, 30, () => false);
+    expect(partners).toEqual([]);
+  });
+
+  it('ends every parting one margin past the cap that opened it, whatever the overlap', () => {
+    expect(rallyPartingEndTick(100)).toBe(100 + REALM_RACERS_GHOST_MARGIN_TICKS);
+    const partners = [2, 3];
+    rallyKeepParting(partners, 119, 120, () => true);
+    expect(partners).toEqual([2, 3]);
+    rallyKeepParting(partners, 120, 120, () => true);
     expect(partners).toEqual([]);
   });
 
@@ -685,6 +695,29 @@ describe('the separation at the cap is no rival contact', () => {
     expect(rivalProgress.hadRivalContact).toBe(true);
   });
 
+  it('ends a parting one margin past the cap even with the pair still inside each other', () => {
+    // Pinned together (a wall behind one of them, or a blast throwing one back
+    // into the other): the exemption still runs out.
+    const { sim, match, b, racer, spot, progress, rivalProgress } = partedAtCap();
+    const capTick = sim.tickCount;
+    const partingEndTick = capTick + REALM_RACERS_GHOST_MARGIN_TICKS;
+    while (sim.tickCount < partingEndTick - 1) {
+      holdStill(sim, match, racer, spot);
+      ramInto(sim, match, b, racer, 1.5);
+      sim.tick();
+    }
+    expect(progress.ghostPartingPids).toEqual([b]);
+    expect(progress.hadRivalContact).toBe(false);
+    expect(rivalProgress.hadRivalContact).toBe(false);
+    holdStill(sim, match, racer, spot);
+    ramInto(sim, match, b, racer, 1.5);
+    sim.tick();
+    expect(sim.tickCount).toBe(partingEndTick);
+    expect(progress.ghostPartingPids).toEqual([]);
+    expect(progress.hadRivalContact).toBe(true);
+    expect(rivalProgress.hadRivalContact).toBe(true);
+  });
+
   it('counts a third machine that hits one of a parting pair, for those two alone', () => {
     const { sim, match, pids, b, racer, spot, progress, rivalProgress } = partedAtCap();
     const c = pids[2];
@@ -716,6 +749,26 @@ describe('the separation at the cap is no rival contact', () => {
     flagged.sim.tick();
     expect(flagged.match.phase).toBe('finished');
     expect(flagged.progress.ghostPartingPids).toEqual([]);
+  });
+
+  it('forgets the window and the parting of a pilot whose body is already gone', () => {
+    // A ghost still running, and a parting still live: both are the race's
+    // books, not the body's, so a pilot retired with no entity left to strip
+    // still leaves them clean.
+    const ghosted = racing();
+    ghosted.sim.realmRacersResetPosition(ghosted.a);
+    expect(ghosted.progress.ghostCapTick).not.toBe(0);
+    ghosted.sim.entities.delete(ghosted.a);
+    ghosted.sim.tick();
+    expect(ghosted.progress.returned).toBe(true);
+    expect(ghosted.progress.ghostClearTick).toBe(0);
+    expect(ghosted.progress.ghostCapTick).toBe(0);
+
+    const parted = partedAtCap();
+    parted.sim.entities.delete(parted.a);
+    parted.sim.tick();
+    expect(parted.progress.returned).toBe(true);
+    expect(parted.progress.ghostPartingPids).toEqual([]);
   });
 });
 
