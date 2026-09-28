@@ -1897,7 +1897,9 @@ const MONOLITHS: MonolithRow[] = [
     // wc -l on the merged tree (release 5354). Exact count, zero slack.
     // LOWERED 5491 -> 5487: the Realm Racers mirror's idle initializer reuses
     // idleRealmRacersInfo() from src/net/realm_racers_self_wire.ts.
-    ceiling: 5487,
+    // LOWERED 5487 -> 5405: the drive decode, the Rally kit mirror and the
+    // recovery-snap latch moved to src/net sibling modules.
+    ceiling: 5405,
     seam: 'a src/net sibling module (the refactor/net-online split is the template)',
   },
   {

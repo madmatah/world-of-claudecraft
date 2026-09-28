@@ -225,9 +225,6 @@ export function bareClient(pid: number, overrides: BareClientOverrides = {}): Cl
   c.pendingFacingDelta = 0;
   c.connected = true;
   c.eventQueue = [];
-  // The two-frame position-recovery latch: nothing pending, nothing ready.
-  c.selfPositionDiscontinuityPending = false;
-  c.selfPositionDiscontinuityReady = false;
   c.activeFrostRings = [];
   c.activeIgnivarMeteors = [];
   c.activeNythraxisGraveEruptions = [];

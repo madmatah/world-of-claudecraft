@@ -12,6 +12,8 @@
 // ordered frames and a render frame can fall between them.
 import { describe, expect, it } from 'vitest';
 import { ClientWorld } from '../src/net/online';
+import { SelfPositionDiscontinuityLatch } from '../src/net/self_position_discontinuity';
+import type { SimEvent } from '../src/sim/types';
 
 class StubWebSocket {
   static readonly OPEN = 1;
@@ -121,5 +123,25 @@ describe('ClientWorld authoritative position-discontinuity latch', () => {
     wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(4, 0) }));
     expect(world.consumeSelfPositionDiscontinuity()).toBe(true);
     expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+  });
+});
+
+describe('SelfPositionDiscontinuityLatch', () => {
+  it('arms on the viewer or a pid-less event, fires once after the snapshot', () => {
+    const latch = new SelfPositionDiscontinuityLatch();
+    latch.noteEvent({ type: 'realmRacersReset', pid: 2 } as unknown as SimEvent, 1);
+    latch.snapshotApplied();
+    expect(latch.consume()).toBe(false);
+    latch.noteEvent({ type: 'unstuck', phase: 'started' } as unknown as SimEvent, 1);
+    latch.snapshotApplied();
+    expect(latch.consume()).toBe(false);
+    latch.noteEvent({ type: 'unstuck', phase: 'completed' } as unknown as SimEvent, 1);
+    expect(latch.consume()).toBe(false);
+    latch.snapshotApplied();
+    expect(latch.consume()).toBe(true);
+    expect(latch.consume()).toBe(false);
+    latch.noteEvent({ type: 'realmRacersReset', pid: 1 } as unknown as SimEvent, 1);
+    latch.snapshotApplied();
+    expect(latch.consume()).toBe(true);
   });
 });

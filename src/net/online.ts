@@ -24,7 +24,6 @@ import { applyAbilityCostTail, resolveAbilityChain } from '../sim/combat/ability
 import { heroicLeapPlacementPreview } from '../sim/combat/heroic_leap';
 import { FARM_PATCHES } from '../sim/content/farm_patches';
 import { type MountKey, normalizeMountKey } from '../sim/content/mounts';
-import { REALM_RACERS_EFFECT_ABILITIES, resolveRealmRacersKit } from '../sim/content/realm_racers';
 import { mechChromaSkinIndex } from '../sim/content/skins';
 import {
   emptyAllocation,
@@ -63,7 +62,6 @@ import type { HarvestPreference } from '../sim/professions/harvest_preference';
 import type { PerfectingSwapRequest } from '../sim/professions/perfecting_swap';
 import type { TownFocusPendingView } from '../sim/professions/town_focus_pending';
 import { emptyCraftSkills } from '../sim/professions/wheel';
-import { type RallyHeldEffect, rallyHeldEffectFromWire } from '../sim/realm_racers_pickup_effects';
 import {
   accountReliquaryOwnershipOpts,
   catalogRankOwned,
@@ -254,8 +252,16 @@ import {
 import { decodePlayerIdentityWire } from './player_identity_wire';
 import { applyProfessionsSelfMirror } from './professions_self_mirror';
 import { optimisticQuestState } from './quest_state_optimistic';
-import { applyRealmRacersSelfWire, idleRealmRacersInfo } from './realm_racers_self_wire';
+import { decodeDriveWire } from './realm_racers_drive_wire';
+import {
+  applyRealmRacersSelfWire,
+  decodeRealmRacersKit,
+  idleRealmRacersInfo,
+  type RealmRacersKitMirror,
+  realmRacersKnownOr,
+} from './realm_racers_self_wire';
 import { isTransientReconnectRejection, isTransientTimeoutRejection } from './reconnect_policy';
+import { SelfPositionDiscontinuityLatch } from './self_position_discontinuity';
 import { isInputSendBackpressured } from './send_backpressure';
 import { snapshotAlpha } from './snapshot_alpha';
 import {
@@ -1272,14 +1278,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
   cardMinigameInfo: CardMinigameInfo = { queued: false, available: true, match: null };
   realmRacersInfo: RealmRacersInfo = idleRealmRacersInfo();
   realmRacersTrackside: import('../world_api/realm_racers').RealmRacersLaneView | null = null;
-  private realmRacersKit: {
-    abilityId: string;
-    charges: number | null;
-    /** Every pickup effect the racer is holding, not just the first: a racer can
-     *  carry more than one, and a mirror that kept one drops the other's button
-     *  off the bar entirely. */
-    held: readonly RallyHeldEffect[];
-  } | null = null;
+  private realmRacersKit: RealmRacersKitMirror | null = null;
   // --- IWorldSocialGraph: persistent friends/blocks/guild, set ONLY by the
   // `social`/`socialpos` frames (there is no `s.social` snapshot field). ---
   socialInfo: SocialInfo | null = null;
@@ -1676,12 +1675,12 @@ export class ClientWorld extends ReconWireState implements IWorld {
   private readonly base: string;
   private readonly clientSeed: string;
   private eventQueue: SimEvent[] = [];
-  // Position-recovery events and their authoritative self pose travel in two
-  // ordered WebSocket frames (events first, snapshot second). A render frame
-  // may land between them, so the renderer must not consume the discontinuity
-  // until the first subsequent snapshot has actually updated the mirror.
-  private selfPositionDiscontinuityPending = false;
-  private selfPositionDiscontinuityReady = false;
+  // Created on first use, so a prototype-built test instance latches too.
+  private selfDiscontinuityLatch?: SelfPositionDiscontinuityLatch;
+  private get selfDiscontinuity(): SelfPositionDiscontinuityLatch {
+    this.selfDiscontinuityLatch ??= new SelfPositionDiscontinuityLatch();
+    return this.selfDiscontinuityLatch;
+  }
   activeFrostRings: ActiveFrostRing[] = [];
   activeIgnivarMeteors: ActiveIgnivarMeteorWarning[] = [];
   activeNythraxisGraveEruptions: ActiveNythraxisGraveEruption[] = [];
@@ -2011,9 +2010,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
 
   /** Consume one recovery snap only after its following authoritative snapshot. */
   consumeSelfPositionDiscontinuity(): boolean {
-    const ready = this.selfPositionDiscontinuityReady;
-    this.selfPositionDiscontinuityReady = false;
-    return ready;
+    return this.selfDiscontinuity.consume();
   }
 
   setMoveInput(input: unknown, facing?: unknown): void {
@@ -2443,15 +2440,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
         this.applyUnstuckEvent(ev as SimEvent);
         this.applyPrestigeEvent(ev as SimEvent);
         this.applyGuildRenamedEvent(ev as SimEvent);
-        if (
-          (((ev as SimEvent).type === 'unstuck' &&
-            (ev as Extract<SimEvent, { type: 'unstuck' }>).phase === 'completed') ||
-            (ev as SimEvent).type === 'realmRacersReset') &&
-          ((ev as { pid?: number }).pid === undefined ||
-            (ev as { pid?: number }).pid === this.playerId)
-        ) {
-          this.selfPositionDiscontinuityPending = true;
-        }
+        this.selfDiscontinuity.noteEvent(ev as SimEvent, this.playerId);
         this.eventQueue.push(ev as SimEvent);
       }
       return;
@@ -2513,10 +2502,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
       const applyStart = performance.now();
       const rawGapMs = this.lastSnapAt > 0 ? applyStart - this.lastSnapAt : null;
       this.applySnapshot(msg);
-      if (this.selfPositionDiscontinuityPending) {
-        this.selfPositionDiscontinuityPending = false;
-        this.selfPositionDiscontinuityReady = true;
-      }
+      this.selfDiscontinuity.snapshotApplied();
       this.netPipeline().recordSnapshot({
         nowMs: applyStart,
         approxBytes: raw.length,
@@ -2921,29 +2907,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
       // movement root, which reads mountCastRemaining.
       e.mountCastRemaining = w.mcr ?? 0;
       e.mountCastKey = w.mck ?? '';
-      // Vehicle state (volatile): absent means on foot, which is what selects
-      // the character path in the shared movement kernel. Rebuilt into a fresh
-      // object rather than kept by reference, so the display-only self
-      // extrapolator can never write back into this mirror.
-      e.drive = w.drv
-        ? {
-            profileKey: w.drv.k ?? '',
-            speed: w.drv.sp ?? 0,
-            slip: w.drv.sl ?? 0,
-            // Absent means a centred wheel (see the server's sparse encoding).
-            steerAngle: w.drv.st ?? 0,
-            yawRate: w.drv.yr ?? 0,
-            spin: w.drv.sn ?? 0,
-            handbrake: w.drv.hb ?? 0,
-            gripMult: w.drv.g ?? 1,
-            dragMult: w.drv.dg ?? 1,
-            speedCap: w.drv.c ?? 1,
-            slipCap: w.drv.sc ?? 1,
-            collisionImpact: w.drv.ci ?? 0,
-            // Sent only while set, so absent means the pilot has the controls.
-            controlsLocked: !!w.drv.lk,
-          }
-        : null;
+      e.drive = decodeDriveWire(w.drv);
       e.sitting = !!w.sit;
       e.riftSliding = !!w.sld;
       e.climbing = !!w.cl;
@@ -3294,54 +3258,8 @@ export class ClientWorld extends ReconWireState implements IWorld {
       this.talentMods = presentation.mods;
       this.talentSpec = presentation.mods.spec;
       this.talentRole = presentation.mods.role;
-      // The Rally kit rides a wireRev-gated heavy self field because a
-      // server-side meta.known swap is invisible to this derived rebuild, and it
-      // carries WHICH weapon plus its per-race budget: the kit is resolved
-      // from the racer's slot server-side, so a mirror that re-derived a
-      // hardcoded ability would show the wrong slot the moment a machine or a
-      // pickup hands out a different one. The live count rides `achg` like every
-      // other charge-limited ability.
-      if (s.rrkit !== undefined) {
-        this.realmRacersKit =
-          s.rrkit && s.rrkit.active === true
-            ? {
-                abilityId: String(s.rrkit.w ?? ''),
-                charges: s.rrkit.c ?? null,
-                // The HELD pickup effects (22b), empty with an empty slot. The
-                // mirror rebuilds the whole kit below, so without these an online
-                // pilot would carry an effect with no button to spend it.
-                held: (Array.isArray(s.rrkit.h) ? s.rrkit.h : [])
-                  .map((effect: unknown) => rallyHeldEffectFromWire(String(effect ?? '')))
-                  .filter(
-                    (effect: RallyHeldEffect | null): effect is RallyHeldEffect => effect !== null,
-                  ),
-              }
-            : null;
-      }
-      const rallyKit = this.realmRacersKit;
-      // The weapon's charge pool is a FIXED race budget, not the refilling
-      // recharge model, and the wire carries counts only. It is stamped HERE
-      // rather than where `achg` decodes because that block runs ABOVE this one:
-      // reading the kit there would take it from the previous snapshot, so the
-      // first frame after a racer is seated would mirror their budget as an
-      // ordinary pool. The HUD greys a spent slot (and declines to open an
-      // aiming mode) off exactly this flag.
-      const budget = rallyKit ? e?.abilityCharges?.[rallyKit.abilityId] : undefined;
-      if (budget) budget.fixed = true;
-      // Each held effect's own pool is the same shape and needs the same stamp:
-      // a fixed count that never recharges, so the HUD greys the button the
-      // moment it is spent rather than showing a cooldown that will not come
-      // back. The COUNT is the authoritative one off `achg`, which is why the
-      // kit flag carries no number: one charge from a pickup, or a stack from a
-      // dev grant, and the badge reads whatever the server published.
-      const heldSlots = (rallyKit?.held ?? []).map((effect) => {
-        const pool = e?.abilityCharges?.[REALM_RACERS_EFFECT_ABILITIES[effect]];
-        if (pool) pool.fixed = true;
-        return { effect, charges: pool?.charges ?? 1 };
-      });
-      this.known = rallyKit
-        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges, heldSlots)
-        : presentation.known;
+      this.realmRacersKit = decodeRealmRacersKit(this.realmRacersKit, s.rrkit);
+      this.known = realmRacersKnownOr(this.realmRacersKit, e, presentation.known);
       if (this.spectateExitPending) {
         this.spectateExitPending = false;
         this.spectating = null; // own presentation rebuilt: the view is ours again

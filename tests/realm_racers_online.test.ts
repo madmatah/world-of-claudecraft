@@ -36,6 +36,8 @@ vi.mock('../server/db', () => ({
 
 import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
+import { decodeDriveWire } from '../src/net/realm_racers_drive_wire';
+import { decodeRealmRacersKit, realmRacersKnownOr } from '../src/net/realm_racers_self_wire';
 import {
   REALM_RACERS_NITRO_ABILITY_ID,
   REALM_RACERS_SLICK_ABILITY_ID,
@@ -599,5 +601,65 @@ describe('Realm Racers online parity', () => {
       x: Math.round(dropped.x * 100) / 100,
       z: Math.round(dropped.z * 100) / 100,
     });
+  });
+});
+
+describe('Realm Racers net decode siblings', () => {
+  it('decodes a drive record into a fresh object, with defaults for sparse keys', () => {
+    const drv = { k: 'rally_loaner', sp: 12, lk: 1 };
+    const drive = decodeDriveWire(drv);
+    expect(drive).toEqual({
+      profileKey: 'rally_loaner',
+      speed: 12,
+      slip: 0,
+      steerAngle: 0,
+      yawRate: 0,
+      spin: 0,
+      handbrake: 0,
+      gripMult: 1,
+      dragMult: 1,
+      speedCap: 1,
+      slipCap: 1,
+      collisionImpact: 0,
+      controlsLocked: true,
+    });
+    expect(drive).not.toBe(drv);
+    expect(decodeDriveWire(undefined)).toBeNull();
+  });
+
+  it('keeps the prior kit on an absent key and drops unknown held effects', () => {
+    const prior = { abilityId: 'x', charges: 1, held: [] };
+    expect(decodeRealmRacersKit(prior, undefined)).toBe(prior);
+    expect(decodeRealmRacersKit(prior, null)).toBeNull();
+    expect(decodeRealmRacersKit(prior, { active: false })).toBeNull();
+    expect(
+      decodeRealmRacersKit(null, {
+        active: true,
+        w: 'rally_ground_blast',
+        c: 3,
+        h: ['slick', 'bogus'],
+      }),
+    ).toEqual({ abilityId: 'rally_ground_blast', charges: 3, held: ['slick'] });
+  });
+
+  it('stamps the kit pools fixed and resolves the kit, or keeps the class list', () => {
+    const presentation = [{ id: 'class_ability' }] as unknown as Parameters<
+      typeof realmRacersKnownOr
+    >[2];
+    const e = {
+      abilityCharges: {
+        rally_ground_blast: { charges: 2, maxCharges: 3, recharge: 0, rechargeLength: 0 },
+        rally_oil_slick: { charges: 1, maxCharges: 1, recharge: 0, rechargeLength: 0 },
+      },
+    } as unknown as Parameters<typeof realmRacersKnownOr>[1];
+    expect(realmRacersKnownOr(null, e, presentation)).toBe(presentation);
+    const known = realmRacersKnownOr(
+      { abilityId: 'rally_ground_blast', charges: 3, held: ['slick'] },
+      e,
+      presentation,
+    );
+    expect(known.map((k) => k.def.id)).toEqual(['rally_ground_blast', 'rally_oil_slick']);
+    expect(e?.abilityCharges?.rally_ground_blast?.fixed).toBe(true);
+    expect(e?.abilityCharges?.rally_oil_slick?.fixed).toBe(true);
   });
 });
