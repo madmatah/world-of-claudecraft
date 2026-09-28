@@ -127,7 +127,7 @@ export function realmRacersStartLightSignal(
   };
 }
 
-interface RallyFlowerSpot {
+export interface RallyFlowerSpot {
   x: number;
   z: number;
   rot: number;
@@ -745,6 +745,35 @@ export function rallyShoreSpots(
  * ever thins the SAME patches rather than reshuffling them.
  */
 export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): RallyFlowerSpot[] {
+  const walk = rallyFlowerFieldWalk(circuit, density);
+  walk.walkRows(walk.rows);
+  return walk.spots;
+}
+
+/**
+ * Candidate points one piece of the lobby build walks through the flower field.
+ * Each candidate is a spline projection, which is what makes the field the
+ * largest term of a circuit build, so a piece is sized in candidates rather
+ * than in milliseconds.
+ */
+export const RALLY_FLOWER_CANDIDATES_PER_PIECE = 1600;
+
+/** `rallyFlowerSpots`, walked a band of rows at a time: the spots come out in
+ *  the same order off the same projection hints, so a walk finished in pieces
+ *  equals the one-shot answer. */
+export interface RallyFlowerFieldWalk {
+  readonly rows: number;
+  readonly rowsDone: number;
+  /** Rows one piece walks under `RALLY_FLOWER_CANDIDATES_PER_PIECE`. */
+  readonly rowsPerPiece: number;
+  readonly spots: RallyFlowerSpot[];
+  walkRows(count: number): void;
+}
+
+export function rallyFlowerFieldWalk(
+  circuit: RealmRacersCircuit,
+  density = 1,
+): RallyFlowerFieldWalk {
   const track = realmRacersTrack(circuit);
   const out: RallyFlowerSpot[] = [];
   const palette = realmRacersTheme(circuit).flowers.colours.length;
@@ -754,7 +783,8 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
   const rows = Math.floor((halfZ * 2) / PATCH_PITCH);
   const keep = Math.max(0, Math.min(1, density));
   let hint: number | undefined;
-  for (let row = 0; row < rows; row++) {
+  let nextRow = 0;
+  const walkRow = (row: number): void => {
     for (let col = 0; col < cols; col++) {
       const roll = hash2(col, row, 0x7a5f);
       if (roll > keep) continue;
@@ -809,8 +839,22 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
         });
       }
     }
-  }
-  return out;
+  };
+  return {
+    rows,
+    get rowsDone() {
+      return nextRow;
+    },
+    rowsPerPiece: Math.max(
+      1,
+      Math.floor(RALLY_FLOWER_CANDIDATES_PER_PIECE / Math.max(1, cols * PATCH_COUNT)),
+    ),
+    spots: out,
+    walkRows(count) {
+      const end = Math.min(rows, nextRow + Math.max(0, Math.floor(count)));
+      for (; nextRow < end; nextRow++) walkRow(nextRow);
+    },
+  };
 }
 
 /**

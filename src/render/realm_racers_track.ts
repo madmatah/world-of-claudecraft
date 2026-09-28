@@ -38,7 +38,7 @@ import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
-import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
+import { GFX, surfaceMat } from './gfx';
 import {
   ignivarEnvPropCastsShadow,
   ignivarEnvPropKeyOfUrl,
@@ -46,7 +46,6 @@ import {
 } from './ignivar_env_props';
 import {
   biomeGroundTint,
-  buildInstanceGroundMaterial,
   type GroundBlend,
   type GroundLayer,
   paintInstanceGround,
@@ -65,6 +64,7 @@ import { recordRealmRacersFill } from './realm_racers_fills';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
   REALM_RACERS_GRASS_Y,
+  type RealmRacersGrassTile,
   realmRacersGrassTiles,
   realmRacersGrassTint,
 } from './realm_racers_grass_core';
@@ -85,9 +85,10 @@ import {
 } from './realm_racers_themes';
 import {
   type RallyBasinMesh,
+  type RallyFlowerSpot,
   rallyBorderFlowerSpots,
   rallyFencePieces,
-  rallyFlowerSpots,
+  rallyFlowerFieldWalk,
   rallyKerbRuns,
   rallyLawnContour,
   rallyPondMeshes,
@@ -99,10 +100,15 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from './realm_racers_track_core';
+import {
+  createRealmRacersTrackPalette,
+  type RallyStartLightMaterials,
+  type RealmRacersTrackPalette,
+} from './realm_racers_track_palette';
 import { renderLayerDisabled } from './render_dev_flags';
-import { flowerTuftTexture, rallyKerbTexture, rallyStartGridTexture } from './textures';
-import { layLowTierWaterUv, lowTierWaterMaterial, usesShaderWater } from './water';
-import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_material';
+import { textureRandomStream, withTextureRandomStream } from './texture_random_stream';
+import { rallyKerbTexture } from './textures';
+import { layLowTierWaterUv, usesShaderWater } from './water';
 
 export interface RealmRacersTrackView {
   group: THREE.Group;
@@ -517,15 +523,18 @@ function buildStartArch(
   );
 }
 
-function buildStartLights(circuit: RealmRacersCircuit, group: THREE.Group): THREE.Mesh[] {
+function buildStartLights(
+  circuit: RealmRacersCircuit,
+  group: THREE.Group,
+  palette: RealmRacersTrackPalette,
+): THREE.Mesh[] {
   const fixture = new THREE.Group();
   fixture.name = 'realm-racers-start-lights';
   const housingGeo = new THREE.BoxGeometry(0.72, 0.68, 0.48);
   const lensGeo = new THREE.CircleGeometry(0.24, 16);
   const housingMat = surfaceMat({ color: 0x171816, roughness: 0.72 });
   housingMat.name = 'realmRacersTrack:startLightHousing';
-  const offMat = new THREE.MeshBasicMaterial({ color: 0x241c12 });
-  offMat.name = 'realmRacersTrack:startLightOff';
+  const offMat = palette.startLights().off;
   const lenses: THREE.Mesh[] = [];
   for (const [index, place] of rallyStartLightPlacements(circuit).entries()) {
     const housing = new THREE.Mesh(housingGeo, housingMat);
@@ -549,33 +558,27 @@ function buildStartLights(circuit: RealmRacersCircuit, group: THREE.Group): THRE
   return lenses;
 }
 
+/** The flower field's density on this tier: a cosmetic knob that only thins
+ *  the same patches (`rallyFlowerSpots`). */
+function rallyFlowerDensity(): number {
+  return GFX.leanFoliage ? 0.45 : 1;
+}
+
 /**
  * The garden's flowers: one near-white card, coloured PER INSTANCE from the
  * patch palette, which is how the Evergarden paints its beds (a coloured
- * texture would multiply against the tint and muddy every hue).
- *
- * MeshStandardMaterial where the tier has it, for the same reason the world's
- * own meadow uses it: a vertical card lit only by a zenith sun through Lambert
- * comes out nearly black, which is exactly how these first shipped.
+ * texture would multiply against the tint and muddy every hue). The card's
+ * material is the palette's (realm_racers_track_palette.ts).
  */
-function buildFlowers(
-  circuit: RealmRacersCircuit,
+function drawFlowers(
+  spots: readonly RallyFlowerSpot[],
   theme: RallyCircuitTheme,
   group: THREE.Group,
+  palette: RealmRacersTrackPalette,
 ): void {
-  const spots = [
-    ...rallyBorderFlowerSpots(circuit),
-    ...rallyFlowerSpots(circuit, GFX.leanFoliage ? 0.45 : 1),
-  ];
   if (spots.length === 0) return;
   const geo = rallyFlowerCardGeo();
-  const map = flowerTuftTexture(theme.flowers.card);
-  const mat = configureMaskedDoubleSidedVegetationMaterial(
-    GFX.standardMaterials
-      ? new THREE.MeshStandardMaterial({ map, alphaTest: 0.3, roughness: 0.85 })
-      : new THREE.MeshLambertMaterial({ map, alphaTest: 0.35 }),
-  );
-  mat.name = 'realmRacersTrack:flower';
+  const mat = palette.flower(theme.flowers.card);
   const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -729,37 +732,18 @@ function buildBasin(
   circuit: RealmRacersCircuit,
   theme: RallyCircuitTheme,
   group: THREE.Group,
+  palette: RealmRacersTrackPalette,
 ): void {
   const basin = circuit.basin;
   const meshes = basin ? rallyPondMeshes(circuit) : [];
   const sea = rallySeaMesh(circuit);
   if (meshes.length === 0 && !sea) return;
-  // ONE material for every pond of this build. It is a ShaderMaterial with its
-  // own uniform block and its own compiled program, and the two callers that
-  // rebuild a circuit over and over (the editor preview per edit, a dev draft
-  // per re-registration) are exactly the ones a per-pond material multiplies
-  // against. The ponds differ by geometry alone; nothing about the water's
-  // surface is per pond.
-  // The colour ramp is the theme's, and it is the ONLY thing about the water a
-  // theme moves: the ripples, the fresnel sky tint, the sun glints and the foam
-  // are the world's own water everywhere, deliberately.
-  // The tier gate is the world's own (`usesShaderWater`): where the world lays
-  // its Phong plane, the band wears that very material, theme ramp and all left
-  // behind, rather than linking a shader program only a racer would ever draw.
+  // ONE material for every pond and every circuit of this theme: it is a
+  // ShaderMaterial with its own uniform block, and the ponds differ by
+  // geometry alone; nothing about the water's surface is per pond. The palette
+  // decides the tier arm (realm_racers_track_palette.ts).
   const shader = usesShaderWater();
-  const material = shader
-    ? buildWaterSurfaceMaterial({
-        wave: zeroWaveUniforms(),
-        surfaceOrigin: REALM_RACERS_ORIGIN,
-        ...(theme.water
-          ? {
-              shallow: new THREE.Color(theme.water.shallow),
-              deep: new THREE.Color(theme.water.deep),
-            }
-          : {}),
-      })
-    : lowTierWaterMaterial();
-  if (shader) material.name = 'realmRacersTrack:water';
+  const material = palette.water(theme);
   const sheet = (mesh: RallyBasinMesh, waterY: number, bankSlope: number): THREE.Mesh => {
     const water = waterSheet(mesh, waterY, bankSlope, material);
     if (!shader) layLowTierWaterUv(water.geometry, REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z);
@@ -965,15 +949,46 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Dr
  * camera; the cluster geometry and its material are shared across every tile
  * and every build.
  */
-function buildGrass(circuit: RealmRacersCircuit, group: THREE.Group): void {
-  // The same gate the overworld carpet takes, and for the same reason: blades
-  // are a close-camera detail layer, they are the heaviest thing a circuit
-  // draws (a Nightbloom Express Tour is 75 000 clusters and about 1.9 M
-  // triangles resident), and tiers below high keep neither them nor the
-  // world's. `?bladegrass=off` is the dev perf-attribution switch.
-  if (GFX.bladeCarpetRadius <= 0 || renderLayerDisabled('bladegrass')) return;
-  const tiles = realmRacersGrassTiles(circuit);
-  if (tiles.length === 0) return;
+/**
+ * The tiles of the circuit's grass on this tier: none where the tier keeps no
+ * blades, which is the same gate the overworld carpet takes and for the same
+ * reason: blades are a close-camera detail layer, they are the heaviest thing a
+ * circuit draws (a Nightbloom Express Tour is 75 000 clusters and about 1.9 M
+ * triangles resident), and tiers below high keep neither them nor the world's.
+ * `?bladegrass=off` is the dev perf-attribution switch.
+ */
+function rallyGrassTilesOnTier(circuit: RealmRacersCircuit): readonly RealmRacersGrassTile[] {
+  if (GFX.bladeCarpetRadius <= 0 || renderLayerDisabled('bladegrass')) return [];
+  return realmRacersGrassTiles(circuit);
+}
+
+/** Blade clusters one piece of the lobby build instances. */
+const RALLY_GRASS_CLUSTERS_PER_PIECE = 20_000;
+
+/** The grass tiles cut into build pieces of about `RALLY_GRASS_CLUSTERS_PER_PIECE`
+ *  clusters each, a tile never split, in tile order. */
+function rallyGrassPieces(tiles: readonly RealmRacersGrassTile[]): RealmRacersGrassTile[][] {
+  const pieces: RealmRacersGrassTile[][] = [];
+  let piece: RealmRacersGrassTile[] = [];
+  let clusters = 0;
+  for (const tile of tiles) {
+    piece.push(tile);
+    clusters += tile.clusters.length;
+    if (clusters >= RALLY_GRASS_CLUSTERS_PER_PIECE) {
+      pieces.push(piece);
+      piece = [];
+      clusters = 0;
+    }
+  }
+  if (piece.length > 0) pieces.push(piece);
+  return pieces;
+}
+
+function drawGrassTiles(
+  circuit: RealmRacersCircuit,
+  tiles: readonly RealmRacersGrassTile[],
+  group: THREE.Group,
+): void {
   // One material per TINT, not one colour per instance. The colour is a
   // property of the circuit, so writing it into an `instanceColor` would carry
   // one repeated value in about 900 KB of per-instance buffer at the cluster
@@ -1044,172 +1059,322 @@ function rallyGrassCluster(tint: number): {
   return { geometry: grassGeometry, material: built.material };
 }
 
-export function buildRealmRacersTrack(
+/**
+ * One circuit's build, run a piece at a time (the race lobby, through the race
+ * preparation: realm_racers_circuit_prepare.ts) or all at once
+ * (`buildRealmRacersTrack`). The pieces add to `group` in the order a one-shot
+ * build always has, so the two come out identical; a piece that plans a loop
+ * (the flower field, the grass) adds its bands right after itself. Every piece
+ * paints from the circuit's own random stream (textures.ts), so when and in
+ * which order circuits are built never shifts a texture painted after them.
+ */
+/** What a build piece does, for its queue label and its build-ledger kind: the
+ *  budget prices a 67 ms memo and a 10 ms band apart. */
+export type RallyBuildPieceKind =
+  | 'spline'
+  | 'ground'
+  | 'placements'
+  | 'surfaces'
+  | 'basin'
+  | 'fixtures'
+  | 'flowers'
+  | 'grass'
+  | 'props'
+  | 'finish';
+
+interface RallyBuildPiece {
+  kind: RallyBuildPieceKind;
+  run: () => void;
+}
+
+export interface RealmRacersTrackBuild {
+  readonly group: THREE.Group;
+  /** The kind of the piece `step` runs next, null once finished. */
+  readonly nextKind: RallyBuildPieceKind | null;
+  /** Pieces run so far. */
+  readonly done: number;
+  /** Pieces known so far, run or planned. */
+  readonly total: number;
+  readonly finished: boolean;
+  /** Run the next piece; a no-op once finished. */
+  step(): void;
+  /** Run every piece left and return the view. */
+  finish(): AuthoredTrackView;
+}
+
+export function realmRacersTrackBuild(
   circuit: RealmRacersCircuit,
   reveal: RevealHold = NEVER_HELD,
-): AuthoredTrackView {
-  const group = new THREE.Group();
+  palette: RealmRacersTrackPalette = createRealmRacersTrackPalette(),
+  group: THREE.Group = new THREE.Group(),
+): RealmRacersTrackBuild {
   group.name = 'realm-racers-track';
-  const track = realmRacersTrack(circuit);
-  const samples = track.samples;
-  const count = samples.length;
-  // Everything below that is a colour, a model or a size comes from HERE. The
-  // geometry is the same on every circuit in every zone; the skin is not.
+  group.visible = false;
+  const stream = textureRandomStream(`realm-racers:circuit:${circuit.id}`);
+  // Everything below that is a colour, a model or a size comes from the THEME.
+  // The geometry is the same on every circuit in every zone; the skin is not.
   const theme = realmRacersTheme(circuit);
-
-  // --- the lawn the whole circuit sits on: the SHAPE of the land, off the one
-  // resolver. A circuit that authors no outline gets the rectangle it has always
-  // had, running well past the region so the horizon stays lawn instead of the
-  // empty instance band's void; one that authors an island gets its own edge,
-  // with the theme's water outside it.
-  // The world's OWN ground material, not a lookalike: six-layer PBR splat,
-  // detail normals, macro breakup, the lot. One material serves every ground
-  // surface here, because which layer a surface is made of is a per-vertex
-  // weight, not a material (see instance_surface.ts).
-  const ground = buildInstanceGroundMaterial(REALM_RACERS_ORIGIN);
-  ground.name = 'realmRacersTrack:ground';
   const tint = biomeGroundTint(theme.ground);
-  // The ponds are punched out of it as holes, so a pool sits in a hole in the
-  // ground instead of floating over it: an island is the same mechanism with a
-  // different outer path. Rotated and placed at BUILD time: the ground material
-  // reads object space as world space, so a surface rotated at draw time would
-  // hand it a sideways normal.
-  //
-  // The z is negated for the same reason the pond holes' is: a ShapeGeometry
-  // rotated -PI/2 about X maps the shape's y to world -z.
-  const lawnShape = new THREE.Shape(
-    rallyLawnContour(circuit).map((point) => new THREE.Vector2(point.x, point.y)),
-  );
-  for (const hole of basinShapes(circuit)) lawnShape.holes.push(hole);
-  const lawnGeo = new THREE.ShapeGeometry(lawnShape)
-    .rotateX(-Math.PI / 2)
-    .translate(REALM_RACERS_ORIGIN.x, GRASS_Y, REALM_RACERS_ORIGIN.z);
-  group.add(surface(paintGround(lawnGeo, 'grass', tint.grass), ground));
+  // What the pieces hand each other, each set by the piece that computes it.
+  let samples: readonly RallySample[] = [];
+  let count = 0;
+  let ground: THREE.Material | null = null;
+  let startLightLenses: THREE.Mesh[] = [];
+  let dressing: DressingProps = { breathing: [], lamps: null };
+  let view: AuthoredTrackView | null = null;
 
-  // --- runoff, road, kerbs: one continuous swept surface each, so corners have
-  // no seams and nothing crosses the racing line ---
-  for (const side of [1, -1]) {
-    group.add(
-      surface(
-        paintGround(
-          ribbon(
-            circuit,
-            samples,
-            0,
-            count,
-            (s) => side * s.halfWidth,
-            (s) => side * (s.halfWidth + REALM_RACERS_RUNOFF_WIDTH),
-            RUNOFF_Y,
+  const pieces: RallyBuildPiece[] = [];
+  let next = 0;
+  const piece = (kind: RallyBuildPieceKind, run: () => void): RallyBuildPiece => ({ kind, run });
+  /** Queue pieces to run right after the one running now. */
+  const plan = (more: RallyBuildPiece[]): void => {
+    pieces.splice(next, 0, ...more);
+  };
+
+  pieces.push(
+    piece('spline', () => {
+      samples = realmRacersTrack(circuit).samples;
+      count = samples.length;
+    }),
+    piece('ground', () => {
+      // The world's OWN ground material, not a lookalike: six-layer PBR splat,
+      // detail normals, macro breakup, the lot. One material serves every
+      // ground surface of every circuit, because which layer a surface is made
+      // of is a per-vertex weight, not a material (see instance_surface.ts).
+      ground = palette.ground();
+    }),
+    piece('placements', () => {
+      // The resolver's placements (the ponds, the props, the scatters) are a
+      // sim memo, first asked here. The one piece that cannot be cut.
+      realmRacersPlacedProps(circuit);
+    }),
+    piece('surfaces', () => {
+      // --- the lawn the whole circuit sits on: the SHAPE of the land, off the
+      // one resolver. A circuit that authors no outline gets the rectangle it
+      // has always had, running well past the region so the horizon stays lawn
+      // instead of the empty instance band's void; one that authors an island
+      // gets its own edge, with the theme's water outside it.
+      //
+      // The ponds are punched out of it as holes, so a pool sits in a hole in
+      // the ground instead of floating over it: an island is the same mechanism
+      // with a different outer path. Rotated and placed at BUILD time: the
+      // ground material reads object space as world space, so a surface rotated
+      // at draw time would hand it a sideways normal.
+      //
+      // The z is negated for the same reason the pond holes' is: a
+      // ShapeGeometry rotated -PI/2 about X maps the shape's y to world -z.
+      const lawnShape = new THREE.Shape(
+        rallyLawnContour(circuit).map((point) => new THREE.Vector2(point.x, point.y)),
+      );
+      for (const hole of basinShapes(circuit)) lawnShape.holes.push(hole);
+      const lawnGeo = new THREE.ShapeGeometry(lawnShape)
+        .rotateX(-Math.PI / 2)
+        .translate(REALM_RACERS_ORIGIN.x, GRASS_Y, REALM_RACERS_ORIGIN.z);
+      group.add(surface(paintGround(lawnGeo, 'grass', tint.grass), groundOf()));
+    }),
+    piece('surfaces', () => {
+      // --- runoff, road, kerbs: one continuous swept surface each, so corners
+      // have no seams and nothing crosses the racing line ---
+      for (const side of [1, -1]) {
+        group.add(
+          surface(
+            paintGround(
+              ribbon(
+                circuit,
+                samples,
+                0,
+                count,
+                (s) => side * s.halfWidth,
+                (s) => side * (s.halfWidth + REALM_RACERS_RUNOFF_WIDTH),
+                RUNOFF_Y,
+              ),
+              'dirt',
+              tint.dirt,
+              { layer: 'grass', tint: tint.grass, weightAt: runoffGrassWeight },
+            ),
+            groundOf(),
           ),
-          'dirt',
-          tint.dirt,
-          { layer: 'grass', tint: tint.grass, weightAt: runoffGrassWeight },
+        );
+      }
+      group.add(
+        surface(
+          paintGround(
+            ribbon(
+              circuit,
+              samples,
+              0,
+              count,
+              (s) => -s.halfWidth,
+              (s) => s.halfWidth,
+              ROAD_Y,
+            ),
+            'dirt',
+            tint.dirt,
+            { layer: 'grass', tint: tint.grass, weightAt: () => ROAD_GRASS_MIX },
+          ),
+          groundOf(),
         ),
-        ground,
-      ),
-    );
-  }
-  group.add(
-    surface(
-      paintGround(
-        ribbon(
-          circuit,
-          samples,
-          0,
-          count,
-          (s) => -s.halfWidth,
-          (s) => s.halfWidth,
-          ROAD_Y,
-        ),
-        'dirt',
-        tint.dirt,
-        { layer: 'grass', tint: tint.grass, weightAt: () => ROAD_GRASS_MIX },
-      ),
-      ground,
-    ),
-  );
+      );
 
-  const kerbMat = surfaceMat({ map: rallyKerbTexture(theme.kerb), roughness: 0.7 });
-  kerbMat.name = 'realmRacersTrack:kerb';
-  for (const run of rallyKerbRuns(circuit)) {
-    for (const side of [1, -1]) {
+      const kerbMat = surfaceMat({ map: rallyKerbTexture(theme.kerb), roughness: 0.7 });
+      kerbMat.name = 'realmRacersTrack:kerb';
+      for (const run of rallyKerbRuns(circuit)) {
+        for (const side of [1, -1]) {
+          group.add(
+            surface(
+              ribbon(
+                circuit,
+                samples,
+                run.from,
+                run.to - run.from,
+                (s) => side * s.halfWidth,
+                (s) => side * (s.halfWidth + KERB_WIDTH),
+                KERB_Y,
+                1 / 2,
+              ),
+              kerbMat,
+            ),
+          );
+        }
+      }
+
+      // --- the start/finish band, straddling s = 0 ---
       group.add(
         surface(
           ribbon(
             circuit,
             samples,
-            run.from,
-            run.to - run.from,
-            (s) => side * s.halfWidth,
-            (s) => side * (s.halfWidth + KERB_WIDTH),
-            KERB_Y,
-            1 / 2,
+            count - Math.round(START_LINE_LENGTH / 2),
+            START_LINE_LENGTH,
+            (s) => -s.halfWidth,
+            (s) => s.halfWidth,
+            START_LINE_Y,
+            1 / 6,
           ),
-          kerbMat,
+          palette.startGrid(theme.startGrid),
         ),
       );
-    }
-  }
+    }),
+    piece('basin', () => buildBasin(circuit, theme, group, palette)),
+    piece('fixtures', () => {
+      buildStartArch(circuit, theme, group);
+      startLightLenses = buildStartLights(circuit, group, palette);
+    }),
+    piece('flowers', () => {
+      // The border, then the field walked in bands of rows (the largest term
+      // of a build: a spline projection per candidate), then one draw.
+      const border = rallyBorderFlowerSpots(circuit);
+      const field = rallyFlowerFieldWalk(circuit, rallyFlowerDensity());
+      const bands: RallyBuildPiece[] = [];
+      for (let row = 0; row < field.rows; row += field.rowsPerPiece) {
+        bands.push(piece('flowers', () => field.walkRows(field.rowsPerPiece)));
+      }
+      bands.push(
+        piece('flowers', () => drawFlowers(border.concat(field.spots), theme, group, palette)),
+      );
+      plan(bands);
+    }),
+    piece('grass', () => {
+      const tiles = rallyGrassTilesOnTier(circuit);
+      plan(
+        rallyGrassPieces(tiles).map((band) =>
+          piece('grass', () => drawGrassTiles(circuit, band, group)),
+        ),
+      );
+    }),
+    piece('props', () => {
+      // --- the AUTHORED dressing: every piece a designer placed by hand, plus
+      // the seeded fills, from the one resolver the collision set reads too ---
+      dressing = buildDressingProps(circuit, group);
+    }),
+    piece('finish', () => {
+      // --- the pickup boxes, under THIS circuit's group so they inherit the
+      // lane transform and the "not my lane" hide the view already resolves ---
+      const pickups = buildRealmRacersPickups(circuit);
+      group.add(pickups.group);
 
-  // --- the start/finish band, straddling s = 0 ---
-  const gridTexture = rallyStartGridTexture(theme.startGrid);
-  const gridMat = new THREE.MeshBasicMaterial({ map: gridTexture });
-  gridMat.name = 'realmRacersTrack:startGrid';
-  group.add(
-    surface(
-      ribbon(
-        circuit,
-        samples,
-        count - Math.round(START_LINE_LENGTH / 2),
-        START_LINE_LENGTH,
-        (s) => -s.halfWidth,
-        (s) => s.halfWidth,
-        START_LINE_Y,
-        1 / 6,
-      ),
-      gridMat,
-    ),
+      // --- and the oil a drawn pickup leaves behind, on the same group for the
+      // same reasons. It takes no circuit: where the patches are is a live fact
+      // of the race, not of the geometry ---
+      const slicks = buildRealmRacersSlicks();
+      group.add(slicks.group);
+
+      // --- the AUTHORED barriers: what a circuit's visible edge is made of ---
+      //
+      // The perimeter box used to be drawn here, from four derived corners
+      // wearing one kit from the theme. It was the last derived thing standing
+      // on a circuit and it is why every one of them read as a rectangle; it
+      // survives as collision (`realm_racers_colliders.ts`) and draws nothing.
+      // What stands at a circuit's edge is placed by hand now, from the same
+      // resolver the collision set reads, so a hedge is where a machine hits one.
+      buildFences(circuit, group);
+
+      view = authoredTrackView(circuit, group, reveal, {
+        startLightLenses,
+        startLights: palette.startLights(),
+        breathingProps: dressing.breathing,
+        lamps: dressing.lamps,
+        pickups,
+        slicks,
+      });
+    }),
   );
 
-  buildBasin(circuit, theme, group);
-  buildStartArch(circuit, theme, group);
-  const startLightLenses = buildStartLights(circuit, group);
-  const startLightOff = startLightLenses[0]?.material as THREE.Material;
-  const startLightRed = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
-  startLightRed.name = 'realmRacersTrack:startLightRed';
-  const startLightGreen = new THREE.MeshBasicMaterial({ color: 0x45e06f });
-  startLightGreen.name = 'realmRacersTrack:startLightGreen';
+  const groundOf = (): THREE.Material => ground ?? palette.ground();
+
+  const job: RealmRacersTrackBuild = {
+    group,
+    get done() {
+      return next;
+    },
+    get total() {
+      return pieces.length;
+    },
+    get finished() {
+      return next >= pieces.length;
+    },
+    get nextKind() {
+      return pieces[next]?.kind ?? null;
+    },
+    step() {
+      if (next >= pieces.length) return;
+      withTextureRandomStream(stream, pieces[next++].run);
+    },
+    finish() {
+      while (next < pieces.length) job.step();
+      if (!view) throw new Error(`Realm Racers: circuit build ${circuit.id} ended without a view`);
+      return view;
+    },
+  };
+  return job;
+}
+
+export function buildRealmRacersTrack(
+  circuit: RealmRacersCircuit,
+  reveal: RevealHold = NEVER_HELD,
+  palette: RealmRacersTrackPalette = createRealmRacersTrackPalette(),
+): AuthoredTrackView {
+  return realmRacersTrackBuild(circuit, reveal, palette).finish();
+}
+
+/** What the live view of a built circuit drives each frame. */
+interface AuthoredTrackParts {
+  startLightLenses: THREE.Mesh[];
+  startLights: RallyStartLightMaterials;
+  breathingProps: BreathingProp[];
+  lamps: RallyLampsView | null;
+  pickups: ReturnType<typeof buildRealmRacersPickups>;
+  slicks: ReturnType<typeof buildRealmRacersSlicks>;
+}
+
+function authoredTrackView(
+  circuit: RealmRacersCircuit,
+  group: THREE.Group,
+  reveal: RevealHold,
+  parts: AuthoredTrackParts,
+): AuthoredTrackView {
+  const { startLightLenses, startLights, breathingProps, lamps, pickups, slicks } = parts;
   let lastStartLightSignal = '';
-  buildFlowers(circuit, theme, group);
-  buildGrass(circuit, group);
-
-  // --- the AUTHORED dressing: every piece a designer placed by hand, plus the
-  // seeded fills, from the one resolver the collision set reads too ---
-  const { breathing: breathingProps, lamps } = buildDressingProps(circuit, group);
-
-  // --- the pickup boxes, under THIS circuit's group so they inherit the lane
-  // transform and the "not my lane" hide the view already resolves ---
-  const pickups = buildRealmRacersPickups(circuit);
-  group.add(pickups.group);
-
-  // --- and the oil a drawn pickup leaves behind, on the same group for the
-  // same reasons. It takes no circuit: where the patches are is a live fact of
-  // the race, not of the geometry ---
-  const slicks = buildRealmRacersSlicks();
-  group.add(slicks.group);
-
-  // --- the AUTHORED barriers: what a circuit's visible edge is made of ---
-  //
-  // The perimeter box used to be drawn here, from four derived corners wearing
-  // one kit from the theme. It was the last derived thing standing on a circuit
-  // and it is why every one of them read as a rectangle; it survives as
-  // collision (`realm_racers_colliders.ts`) and draws nothing. What stands at a
-  // circuit's edge is placed by hand now, from the same resolver the collision
-  // set reads, so a hedge is where a machine hits one.
-  buildFences(circuit, group);
-
-  group.visible = false;
-
   const provisionalTmp = new THREE.Vector3();
   let onLane = false;
   let shownLastUpdate = false;
@@ -1277,9 +1442,9 @@ export function buildRealmRacersTrack(
       const signalKey = `${signal.colour}:${signal.litCount}`;
       if (signalKey !== lastStartLightSignal) {
         lastStartLightSignal = signalKey;
-        const on = signal.colour === 'green' ? startLightGreen : startLightRed;
+        const on = signal.colour === 'green' ? startLights.green : startLights.red;
         for (let i = 0; i < startLightLenses.length; i++)
-          startLightLenses[i].material = i < signal.litCount ? on : startLightOff;
+          startLightLenses[i].material = i < signal.litCount ? on : startLights.off;
       }
       // The fountain's tiny breath is cosmetic and frame-time based.
       const breath = Math.sin(time * 1.7) * 0.006;
@@ -1372,7 +1537,10 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   excludeFromParentCompile(group, REALM_RACERS_COMPILE_OWNER);
   const reveal: RevealHold = { held: NEVER_HELD.held };
   let fillGate: () => FillGate | undefined = () => undefined;
-  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit, reveal));
+  const palette = createRealmRacersTrackPalette();
+  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) =>
+    buildRealmRacersTrack(circuit, reveal, palette),
+  );
   const circuits = REALM_RACERS_CIRCUIT_LIST.map(
     (circuit, i): RealmRacersCircuitView => ({
       circuitId: circuit.id,
@@ -1387,7 +1555,9 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   // Dev drafts get their own lifecycle beside the authored ones (built on
   // registration, replaced on re-registration); the map stays empty in every
   // session where no dev command filled it.
-  const drafts = buildRealmRacersDraftTracks(group, buildRealmRacersTrack);
+  const drafts = buildRealmRacersDraftTracks(group, (circuit) =>
+    buildRealmRacersTrack(circuit, NEVER_HELD, palette),
+  );
   return {
     group,
     circuits,

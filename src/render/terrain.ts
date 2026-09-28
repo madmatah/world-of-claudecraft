@@ -837,11 +837,14 @@ export function buildSplatMaterial(
   normalTex: THREE.Texture,
   brush: BrushUniforms,
   surfaceOrigin: SurfaceOrigin = WORLD_SURFACE_ORIGIN,
+  legacySplatDraws = true,
 ): THREE.MeshStandardMaterial {
   // Legacy canvas splats are still generated (result unused): textures.ts
   // shares one LCG across all generators, so dropping this call would shift
-  // the look of every texture generated after it (foliage, props, ...).
-  groundSplatMaps();
+  // the look of every texture generated after it (foliage, props, ...). A
+  // caller painting from its own stream (textures.ts TextureRandomStream)
+  // shifts nothing by skipping it.
+  if (legacySplatDraws) groundSplatMaps();
   const macro = macroNoiseTexture();
   const t = TERRAIN_TEX;
   // The meadow-continuum ground paint: present whenever the renderer baked

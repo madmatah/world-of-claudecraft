@@ -49,10 +49,18 @@ const LAYER_INDEX: Record<GroundLayer, number> = { grass: 0, dirt: 1, rock: 2, s
  * detail normals, which are the half of the look that actually reads on a flat
  * surface.
  */
-export function buildInstanceGroundMaterial(origin: SurfaceOrigin): THREE.Material {
+export function buildInstanceGroundMaterial(
+  origin: SurfaceOrigin,
+  opts: { legacySplatDraws?: boolean } = {},
+): THREE.Material {
   const brush = makeBrushUniforms();
   return GFX.terrainSplat && hasGroundSplatAssets()
-    ? buildGroundSplatMaterial({ normalMap: flatNormalTexture(), brush, surfaceOrigin: origin })
+    ? buildGroundSplatMaterial({
+        normalMap: flatNormalTexture(),
+        brush,
+        surfaceOrigin: origin,
+        legacySplatDraws: opts.legacySplatDraws,
+      })
     : buildGroundLambertMaterial(brush);
 }
 

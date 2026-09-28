@@ -53,6 +53,10 @@ export interface GroundMaterialOptions {
   normalMap: THREE.Texture;
   brush: BrushUniforms;
   surfaceOrigin?: SurfaceOrigin;
+  /** False skips the unused legacy canvas splats `buildSplatMaterial` paints
+   *  only to keep the shared texture random sequence in place: for a caller
+   *  painting from its own stream. The material is the same either way. */
+  legacySplatDraws?: boolean;
 }
 
 /**
@@ -87,7 +91,12 @@ export function flatNormalTexture(): THREE.DataTexture {
 export function buildGroundSplatMaterial(
   options: GroundMaterialOptions,
 ): THREE.MeshStandardMaterial {
-  return buildSplatMaterial(options.normalMap, options.brush, options.surfaceOrigin);
+  return buildSplatMaterial(
+    options.normalMap,
+    options.brush,
+    options.surfaceOrigin,
+    options.legacySplatDraws ?? true,
+  );
 }
 
 /** The Lambert tier the same surface takes when the splat set is unavailable. */
