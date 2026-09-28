@@ -1686,6 +1686,24 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
   });
 
+  it('grants Tidal Lap, and no other flying lap, on the Lagoon Run through the per-tick call site', () => {
+    const { sim, a } = startMatch('palmreach_lagoon_run');
+    match(sim).phase = 'racing';
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    const meta = required(sim.players.get(a), 'player meta');
+    // Exactly the 24 s threshold: withheld, and neither the Express Tour's nor
+    // the Rampart Run's deed is credited by a lap that would clear theirs.
+    sim.tickCount = progress.lapStartTick + 24 * TICK_RATE;
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    const again = required(match(sim).progress.get(a), `progress ${a}`);
+    sim.tickCount = again.lapStartTick + Math.round(23.9 * TICK_RATE);
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(true);
+    expect(meta.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
   it('does not let the starting grid slot flag a pilot dead last before the field has spread out', () => {
     const { sim, pids } = startMatch();
     const [, , , d] = pids;

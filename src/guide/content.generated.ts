@@ -6054,6 +6054,13 @@ export const GUIDE_DEEDS: GuideDeed[] = [
     "category": "pvp",
     "renown": 0,
     "feat": false
+  },
+  {
+    "id": "pvp_rr_lagoon_lap",
+    "name": "Tidal Lap",
+    "category": "pvp",
+    "renown": 0,
+    "feat": false
   }
 ];
 

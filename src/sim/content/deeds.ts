@@ -3664,6 +3664,15 @@ export const DEEDS: Record<string, DeedDef> = {
     renown: 0,
     trigger: { kind: 'manual' },
   },
+  // The Palmreach Lagoon Run's flying lap, on the fourth competition circuit.
+  pvp_rr_lagoon_lap: {
+    id: 'pvp_rr_lagoon_lap',
+    name: 'Tidal Lap',
+    desc: 'Post a lap of the Palmreach Lagoon Run in under 24 seconds.',
+    category: 'pvp',
+    renown: 0,
+    trigger: { kind: 'manual' },
+  },
 };
 
 for (const def of Object.values(DEEDS)) {

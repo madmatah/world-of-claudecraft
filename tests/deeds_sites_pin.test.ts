@@ -849,6 +849,39 @@ describe('Realm Racers sites', () => {
     expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
   });
 
+  it('pvp_rr_lagoon_lap: only the Lagoon Run, only under its threshold, never practice or a bot', () => {
+    const sim = makeSim();
+    const racer = addMeta(sim, 'Tidewalker');
+    // Another circuit's fast lap never counts here, the other two flying-lap
+    // circuits' included (on a racer of their own, who earns only theirs).
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    onRallyLapForDeeds(sim.ctx, false, false, 'nightbloom_moonwell_run', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    const other = addMeta(sim, 'Rampartwalker');
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', other.entityId, 10);
+    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', other.entityId, 10);
+    expect(other.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    // Its own threshold, not the Rampart Run's: a 24.9 s lap clears that one
+    // and not this one.
+    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 24.9);
+    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    // Right circuit, exactly at the threshold: the guard is exclusive.
+    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 24);
+    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    // A practice lap and a bot's lap never count.
+    onRallyLapForDeeds(sim.ctx, true, false, 'palmreach_lagoon_run', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    const bot = addMeta(sim, 'BotTidewalker');
+    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
+    onRallyLapForDeeds(sim.ctx, false, true, 'palmreach_lagoon_run', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    // Right circuit, fast enough, a human: grants its own deed and no other.
+    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 23.9);
+    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
   it('pvp_rr_rampart_lap: only the Rampart Run, only under its threshold, never practice or a bot', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Scorcher');

@@ -5631,6 +5631,8 @@ export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
   'pvp_rr_comeback',
   // The Drakelands Rampart Run's flying lap: the same pvp crest until commissioned.
   'pvp_rr_rampart_lap',
+  // The Palmreach Lagoon Run's flying lap: the same pvp crest until commissioned.
+  'pvp_rr_lagoon_lap',
 ]);
 /** Static URL of a deed crest's painted art, or null when the crest id has no committed image. */
 export function deedImageUrl(crestId: string): string | null {

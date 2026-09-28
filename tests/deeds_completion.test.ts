@@ -166,6 +166,7 @@ describe('the real catalog', () => {
       'pvp_rr_fast_lap',
       'pvp_rr_first_race',
       'pvp_rr_first_win',
+      'pvp_rr_lagoon_lap',
       'pvp_rr_rampart_lap',
       'pvp_rr_wins_10',
       'pvp_rr_wins_25',

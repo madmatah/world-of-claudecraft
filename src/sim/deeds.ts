@@ -2061,10 +2061,12 @@ export function onArenaMatchEndForDeeds(
 // every circuit's lap is its own length. A circuit absent here (the garden
 // practice loop, or a competition circuit authored without one) never grants.
 // The Rampart Run's 25 is the Express Tour's 26 scaled by the two circuits'
-// best ace-bot flying laps (22.25 s against 23.05 s, measured 2026-09-28).
+// best ace-bot flying laps (22.25 s against 23.05 s, measured 2026-09-28), and
+// the Lagoon Run's 24 the same way (21.45 s against 23.05 s, 2026-09-29).
 const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: number }> = new Map([
   ['evergarden_express_tour', { deedId: 'pvp_rr_fast_lap', seconds: 26 }],
   ['drakelands_rampart_run', { deedId: 'pvp_rr_rampart_lap', seconds: 25 }],
+  ['palmreach_lagoon_run', { deedId: 'pvp_rr_lagoon_lap', seconds: 24 }],
 ]);
 
 /** One pilot's race-end tableau, already resolved by the rally module (which
