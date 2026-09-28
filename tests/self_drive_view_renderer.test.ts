@@ -48,10 +48,8 @@ const predictedKart: ReconciledDrive = {
   facing: 1.1,
   velocityX: 30,
   velocityZ: -12,
-  vy: 0,
   onGround: true,
-  handbrake: 0,
-  collisionImpact: 0,
+  state: createVehicleDrive('rally_loaner'),
 };
 
 function harness(): RendererHarness {
@@ -90,6 +88,20 @@ describe('renderer self-kart consumers on wire v2', () => {
     expect(renderer.selfAimPose).toBeNull();
   });
 
+  it('hands the chase camera the held heading across a suspend on the same seat', () => {
+    const renderer = harness();
+    const near = v2Kart();
+    near.position = { x: 3, y: 0, z: 4 };
+    frame(renderer, near);
+    expect(renderer.selfMotionFacing).toBe(1.1);
+    frame(renderer, null);
+    const held = renderer.selfMotionFacing as number;
+    expect(held).toBeGreaterThan(0.2);
+    expect(held).toBeLessThan(1.1);
+    for (let i = 0; i < 120; i++) frame(renderer, null);
+    expect(renderer.selfMotionFacing).toBeNull();
+  });
+
   it('lags the provisional oil drop by the predicted velocity, never the mirror', () => {
     const renderer = harness();
     frame(renderer, v2Kart());
@@ -115,46 +127,56 @@ describe('renderer self-kart reads go through the drive view', () => {
   const source = stripComments(
     readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
   );
-  const count = (needle: string): number => source.split(needle).length - 1;
+  const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** Occurrences of `needle`, any whitespace run in it matching any other. */
+  const count = (needle: string): number => {
+    const pattern = needle.trim().split(/\s+/).map(escapeRegex).join('\\s+');
+    return source.match(new RegExp(pattern, 'g'))?.length ?? 0;
+  };
 
   it('reads the v1 predictor object only for the latency telemetry', () => {
     expect(count('this.selfRender.predictor')).toBe(2);
-    expect(source).toContain(
-      'return this.selfRender.active && this.selfRender.predictor\n      ? this.selfRender.predictor.leadMs',
-    );
+    expect(
+      count(
+        'return this.selfRender.active && this.selfRender.predictor ? this.selfRender.predictor.leadMs',
+      ),
+    ).toBe(1);
+  });
+
+  it('never rebuilds the self kart velocity from the mirror', () => {
+    expect(count('vehicleVelocityX(p.drive')).toBe(0);
+    expect(count('vehicleVelocityZ(p.drive')).toBe(0);
   });
 
   it('pins every self-kart consumer on the drive view', () => {
-    const consumers: Array<[string, number]> = [
-      // selfMotionFacing: model aim pose, chase camera (camera_follow via main.ts)
-      [
-        "return this.selfRender.drive.source === 'predicted' ? this.selfRender.drive.facing : null;",
-        1,
-      ],
-      ['out.facing = this.selfMotionFacing ?? this.sim.player?.facing ?? 0;', 1],
+    const consumers: string[] = [
+      // selfMotionFacing: the aim pose and the chase camera (camera_follow via main.ts)
+      'return this.selfRender.drive.steersHeading ? this.selfRender.drive.facing : null;',
+      'out.facing = this.selfMotionFacing ?? this.sim.player?.facing ?? 0;',
       // the provisional oil drop's lag and velocity
-      [
-        "this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;",
-        1,
-      ],
-      ['const vx = this.selfRender.drive.velocityX;', 1],
-      ['const vz = this.selfRender.drive.velocityZ;', 1],
+      "const lag = this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;",
+      'const vx = this.selfRender.drive.velocityX;',
+      'const vz = this.selfRender.drive.velocityZ;',
       // the local bump bang (and so its duplicate suppression)
-      ["this.selfRender.drive.source === 'predicted' &&\n          p.drive &&", 1],
-      ['this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),', 1],
-      ['this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),', 1],
+      "if ( this.selfRender.drive.source === 'predicted' && p.drive &&",
+      'this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),',
+      'this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),',
       // the model yaw
-      ["if (id === p.id && this.selfRender.drive.source === 'predicted') {", 1],
-      ['facing = this.selfRender.drive.facing;', 1],
+      'if (id === p.id && this.selfRender.drive.steersHeading) {',
+      'facing = this.selfRender.drive.facing;',
       // the airborne pose
-      ['animFromDisplay && this.selfRender.drive.kernelOnGround !== null && !inRift', 1],
-      ['? !this.selfRender.drive.kernelOnGround', 1],
+      'animFromDisplay && this.selfRender.drive.kernelOnGround !== null && !inRift ? !this.selfRender.drive.kernelOnGround',
       // look-ahead and speed FOV
-      ['velX = this.selfRender.drive.velocityX;', 1],
-      ['velZ = this.selfRender.drive.velocityZ;', 1],
+      'let velX = p.drive ? this.selfRender.drive.velocityX : 0;',
+      'let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;',
+      // drift smoke, surface dust, scrape sparks
+      'const kart = (isSelf && this.selfRender.drive.state) || e.drive;',
+      'this.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);',
+      'this.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);',
+      'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {',
+      'const impact = Math.min(1, kart.collisionImpact / 24);',
     ];
-    for (const [needle, times] of consumers) expect(count(needle), needle).toBe(times);
-    expect(count('this.selfRender.drive.')).toBe(14);
-    expect(count('this.selfRender.drive')).toBe(14);
+    for (const needle of consumers) expect(count(needle), needle).toBe(1);
+    expect(count('this.selfRender.drive.')).toBe(15);
   });
 });

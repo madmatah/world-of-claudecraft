@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
 
 /** The circuit a QUEUED race runs on, which is what every case here seats.
@@ -28,6 +28,17 @@ import {
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld, teleport } from './realm_racers_util';
+
+/** The racers the sim has marked with the silent relocation event (the
+ *  self-position discontinuity the online client snaps on), in emit order. */
+function watchResets(sim: Sim): () => number[] {
+  const emit = vi.spyOn(sim, 'emit');
+  return () =>
+    emit.mock.calls
+      .map(([event]) => event as { type: string; pid?: number })
+      .filter((event) => event.type === 'realmRacersReset')
+      .map((event) => event.pid as number);
+}
 
 function required<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) throw new Error(`Missing ${label}`);
@@ -99,6 +110,17 @@ function racing() {
 }
 
 describe('Realm Racers recovery', () => {
+  it('marks every seated racer relocated onto the grid as a self-position discontinuity', () => {
+    const sim = makeWorld();
+    const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+      addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
+    );
+    const resets = watchResets(sim);
+    realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
+    expect(resets()).toEqual(pids);
+    for (const pid of pids) expect(required(sim.entities.get(pid), 'racer').drive).not.toBeNull();
+  });
+
   it('pins a two-second manual lock and three-second automatic recovery wait', () => {
     expect(REALM_RACERS_RESET_LOCK_TICKS).toBe(40);
     expect(REALM_RACERS_STUCK_TICKS).toBe(60);
@@ -126,6 +148,7 @@ describe('Realm Racers recovery', () => {
 
   it('resets to the recovery-anchor pose and restores its progress snapshot', () => {
     const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
     const progress = required(match.progress.get(a), 'progress');
     const track = realmRacersTrack(RACE_CIRCUIT);
     const anchor = onLane(match, track.length * 0.25);
@@ -153,6 +176,7 @@ describe('Realm Racers recovery', () => {
     });
     expect(realmRacersMovementLocked(sim.ctx, a)).toBe(true);
     expect(sim.drainEvents()).toContainEqual({ type: 'realmRacersReset', pid: a });
+    expect(resets()).toEqual([a]);
   });
 
   it('ignores reset requests outside a live racing phase', () => {
@@ -195,6 +219,7 @@ describe('Realm Racers recovery', () => {
 
   it('automatically recovers after three seconds stopped off track with only the one-tick lock', () => {
     const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
     const progress = required(match.progress.get(a), 'progress');
     const track = realmRacersTrack(RACE_CIRCUIT);
     const road = onLane(match, track.length * 0.4);
@@ -208,6 +233,7 @@ describe('Realm Racers recovery', () => {
 
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
     expect(racer.pos.z).toBeCloseTo(road.z, 5);
+    expect(resets()).toEqual([a]);
     // Since 22b the automatic recovery takes a ONE-TICK lock, just long enough
     // for the pickup and slick eligibility guard to refuse the landing tick,
     // nothing like the manual reset's full control lock. The pilot is free on
@@ -426,6 +452,7 @@ describe('Realm Racers track limits in a live race', () => {
 
   it('returns a machine that cuts a corner to the point it left the road', () => {
     const { sim, a, match } = racing();
+    const resets = watchResets(sim);
     const track = realmRacersTrack(RACE_CIRCUIT);
     const progress = required(match.progress.get(a), 'progress');
     const cut = findCut(40);
@@ -474,6 +501,7 @@ describe('Realm Racers track limits in a live race', () => {
     );
     // ...and the pilot is told why, in one line, for a few seconds.
     expect(sim.realmRacersInfoFor(a).match?.cutReturned).toBe(true);
+    expect(resets()).toEqual([a]);
   });
 
   it('leaves a machine that ran wide and rejoined ahead completely alone', () => {
@@ -498,6 +526,7 @@ describe('Realm Racers track limits in a live race', () => {
 
   it('counts a machine loitering off the road down, then returns it to the last anchor', () => {
     const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
     const track = realmRacersTrack(RACE_CIRCUIT);
     const progress = required(match.progress.get(a), 'progress');
     const road = onLane(match, track.length * 0.4);
@@ -524,5 +553,6 @@ describe('Realm Racers track limits in a live race', () => {
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
     expect(racer.pos.z).toBeCloseTo(road.z, 5);
     expect(sim.realmRacersInfoFor(a).match?.offTrackIn).toBe(0);
+    expect(resets()).toEqual([a]);
   });
 });

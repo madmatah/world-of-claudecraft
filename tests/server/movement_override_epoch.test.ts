@@ -456,6 +456,8 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     r.pids.slice(1).forEach((pid, i) => {
       r.place(pid, (clearFrom + TRACK.length * (0.35 + i * 0.15)) % TRACK.length);
     });
+    // the grid seat's own relocation markers are not an in-race recovery
+    r.events.length = 0;
     return r;
   }
 
@@ -470,6 +472,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     realmRacersStartMatch(r.sim.ctx, r.pids, undefined, CIRCUIT.id);
     const seat = r.run(1);
     expect(seat[0], 'the seat: drive, grid teleport and race lock in one bump').toHaveLength(1);
+    expect(r.resets(a), 'the grid teleport snaps the owning client').toBe(1);
     expect(session.movementOverrideSignature).toMatchObject({ driving: true, raceLocked: true });
     expect(session.movementOverrideActive).toBe(true);
 

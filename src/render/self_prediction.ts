@@ -179,10 +179,8 @@ export class MovementPredictionPipeline {
     facing: 0,
     velocityX: 0,
     velocityZ: 0,
-    vy: 0,
     onGround: true,
-    handbrake: 0,
-    collisionImpact: 0,
+    state: null,
   };
 
   constructor(seed: number, riftCollisionToken = 0) {

@@ -4,11 +4,12 @@ import {
   driveViewFromMirror,
   driveViewFromReconciled,
   fillReconciledDrive,
-  lerpFacing,
   type PredictedDriveHead,
   type ReconciledDrive,
+  SELF_YAW_SNAP_RAD,
 } from '../src/render/self_drive_view_core';
 import {
+  displaySpeedBudget,
   SELF_MOTION_SNAP_DIST_SQ,
   type SelfMotionFrame,
   SelfMotionPredictor,
@@ -25,8 +26,18 @@ import {
   updateSelfRenderPosition,
 } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
-import { type Entity, emptyMoveInput, RUN_SPEED, type VehicleDrive } from '../src/sim/types';
+import { Sim } from '../src/sim/sim';
+import {
+  DT,
+  type Entity,
+  emptyMoveInput,
+  type MoveInput,
+  RUN_SPEED,
+  type VehicleDrive,
+} from '../src/sim/types';
 import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
+import { terrainHeight } from '../src/sim/world';
+import { EMPTY_TEST_WORLD } from './sim_shared';
 
 const SEED = 42;
 const FRAME_DT = 1 / 60;
@@ -43,9 +54,11 @@ const kartDrive = (over: Partial<VehicleDrive> = {}): VehicleDrive => ({
   ...over,
 });
 
-const v1Frame = (): SelfMotionFrame => ({
+const v1Frame = (
+  moveInput: MoveInput = { ...emptyMoveInput(), forward: true },
+): SelfMotionFrame => ({
   enabled: true,
-  moveInput: { ...emptyMoveInput(), forward: true },
+  moveInput,
   displayFacing: 0,
   echoMs: 80,
   jitterMs: 10,
@@ -88,22 +101,24 @@ function headDrive(head: PredictedDriveHead, alpha: number): ReconciledDrive {
   return fillReconciledDrive(out, head, alpha) as ReconciledDrive;
 }
 
-/** A real v1 predictor whose scratch kart is `head`, drawn at `frac`. */
-function v1PredictorOver(
-  head: PredictedDriveHead,
-  frac: number,
-  at: Vec3Like,
-): SelfMotionPredictor {
-  const predictor = new SelfMotionPredictor(SEED);
-  const internals = predictor as unknown as {
-    actor: unknown;
-    renderFacing: number;
-    step: () => Vec3Like;
-  };
-  internals.actor = { ...head, pos: { ...at }, prevPos: { ...at } };
-  internals.renderFacing = lerpFacing(head.prevFacing ?? head.facing, head.facing, frac);
-  internals.step = () => ({ ...at });
-  return predictor;
+/** A seated pilot on open, collider-free ground, as a snapshot mirrors it. */
+function seatedMirror(): { sim: Sim; mirror: Entity } {
+  const sim = new Sim({
+    seed: SEED,
+    playerClass: 'warrior',
+    autoEquip: true,
+    world: EMPTY_TEST_WORLD,
+  });
+  const p = sim.player;
+  p.pos = { x: 0, y: terrainHeight(0, -1000, sim.cfg.seed), z: -1000 };
+  p.prevPos = { ...p.pos };
+  p.fallStartY = p.pos.y;
+  p.facing = 0.3;
+  p.prevFacing = 0.3;
+  p.mountKey = 'tank';
+  p.drive = { ...createVehicleDrive('tank'), speed: 14 };
+  const mirror = { ...p, pos: { ...p.pos }, prevPos: { ...p.prevPos }, drive: { ...p.drive } };
+  return { sim, mirror };
 }
 
 describe('the self drive view on both wires', () => {
@@ -112,33 +127,64 @@ describe('the self drive view on both wires', () => {
     drive: kartDrive(),
     prevFacing: 0.9,
     facing: 1.05,
-    vy: 2.25,
     onGround: false,
   };
 
-  it('fills the same view from the v1 predictor and the v2 output for one kart', () => {
-    const alpha = 0.4;
+  // The v1 predictor draws its heading at its OWN step fraction (its frame
+  // accumulator over DT), not at the frame alpha the v2 display lerps at: the
+  // two wires agree on the heading when both are read at the same alpha.
+  it('fills the same view from a real v1 predictor step and the v2 output for one kart', () => {
+    const { mirror } = seatedMirror();
     const v1 = createSelfRenderPositionState();
-    v1.predictor = v1PredictorOver(head, alpha, at);
-    updateSelfRenderPosition(v1, seated(at), SEED, alpha, FRAME_DT, 0.2, v1Frame(), false);
+    v1.predictor = new SelfMotionPredictor(SEED);
+    const steer: MoveInput = { ...emptyMoveInput(), forward: true, turnLeft: true };
+    for (let frame = 0; frame < 20; frame++) {
+      updateSelfRenderPosition(v1, mirror, SEED, 0.5, FRAME_DT, 0.2, v1Frame(steer), false);
+    }
+    const internals = v1.predictor as unknown as {
+      actor: PredictedDriveHead & { drive: VehicleDrive };
+      previousStepFacing: number;
+      acc: number;
+    };
+    const actor = internals.actor;
+    expect(v1.drive.source).toBe('predicted');
+    expect(actor.facing).not.toBe(internals.previousStepFacing);
+    const frac = internals.acc / DT;
+    expect(frac).toBeGreaterThan(0);
+    expect(frac).toBeLessThan(1);
 
     const v2 = createSelfRenderPositionState();
-    const output = reconciled(at, headDrive(head, alpha));
-    updateSelfRenderPosition(v2, seated(at), SEED, alpha, FRAME_DT, 0.2, output, false);
+    const kart: PredictedDriveHead = {
+      drive: actor.drive,
+      prevFacing: internals.previousStepFacing,
+      facing: actor.facing,
+      onGround: actor.onGround,
+    };
+    const output = reconciled(at, headDrive(kart, frac));
+    updateSelfRenderPosition(v2, mirror, SEED, frac, FRAME_DT, 0.2, output, false);
 
+    expect(v2.drive.facing).toBeCloseTo(v1.drive.facing, 12);
+    expect(v2.drive).toEqual({ ...v1.drive, facing: v2.drive.facing, reconciled: true });
+    expect(v1.drive.velocityX).toBe(vehicleVelocityX(actor.drive, actor.facing));
+    expect(v1.drive.velocityZ).toBe(vehicleVelocityZ(actor.drive, actor.facing));
+    expect(v1.drive.state).toBe(actor.drive);
+    expect(v2.drive.state).toBe(actor.drive);
+    expect(v1.drive.kernelOnGround).toBe(actor.onGround);
+  });
+
+  it('reads the v2 head at the interpolation alpha', () => {
+    const v2 = createSelfRenderPositionState();
+    const output = reconciled(at, headDrive(head, 0.4));
+    updateSelfRenderPosition(v2, seated(at), SEED, 0.4, FRAME_DT, 0.2, output, false);
     const drive = head.drive as VehicleDrive;
-    for (const view of [v1.drive, v2.drive]) {
-      expect(view.source).toBe('predicted');
-      expect(view.facing).toBeCloseTo(0.9 + 0.15 * alpha, 12);
-      expect(view.velocityX).toBe(vehicleVelocityX(drive, head.facing));
-      expect(view.velocityZ).toBe(vehicleVelocityZ(drive, head.facing));
-      expect(view.vy).toBe(2.25);
-      expect(view.kernelOnGround).toBe(false);
-      expect(view.handbrake).toBe(0.4);
-      expect(view.collisionImpact).toBe(7);
-      expect(view.yawOffset).toBe(0);
-    }
-    expect(v2.drive).toEqual({ ...v1.drive, facing: v2.drive.facing });
+    expect(v2.drive.source).toBe('predicted');
+    expect(v2.drive.steersHeading).toBe(true);
+    expect(v2.drive.facing).toBeCloseTo(0.9 + 0.15 * 0.4, 12);
+    expect(v2.drive.velocityX).toBe(vehicleVelocityX(drive, head.facing));
+    expect(v2.drive.velocityZ).toBe(vehicleVelocityZ(drive, head.facing));
+    expect(v2.drive.kernelOnGround).toBe(false);
+    expect(v2.drive.state).toBe(drive);
+    expect(v2.drive.yawOffset).toBe(0);
   });
 
   it('falls back to the interpolated mirror for a stood-down driver, and says so', () => {
@@ -148,6 +194,8 @@ describe('the self drive view on both wires', () => {
     updateSelfRenderPosition(state, p, SEED, 0.5, FRAME_DT, 0.2, null, false);
     const mirror = { ...state.drive };
     expect(mirror.source).toBe('mirror');
+    expect(mirror.steersHeading).toBe(false);
+    expect(mirror.state).toBe(p.drive);
     expect(mirror.facing).toBeCloseTo(0.35, 12);
     expect(mirror.velocityX).toBe(vehicleVelocityX(p.drive as VehicleDrive, p.facing));
     expect(mirror.velocityZ).toBe(vehicleVelocityZ(p.drive as VehicleDrive, p.facing));
@@ -173,7 +221,6 @@ describe('the self drive view on both wires', () => {
       drive: kartDrive(),
       prevFacing: Math.PI - 0.1,
       facing: -Math.PI + 0.1,
-      vy: 0,
       onGround: true,
     };
     expect(Math.abs(headDrive(across, 0.5).facing)).toBeCloseTo(Math.PI, 12);
@@ -216,13 +263,99 @@ describe('the self drive view on both wires', () => {
     run(reconciled(at, drive, { x: 0.2, y: 0, z: 0, yaw: 0.3 }));
     run(reconciled(at, drive), true);
     expect(state.drive.facing).toBe(0.4);
+  });
 
-    // and so does any frame the prediction does not own the kart
-    run(reconciled(at, drive, { x: 0.2, y: 0, z: 0, yaw: 0.3 }));
-    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+  it('snaps a re-facing past the named angle instead of gliding it', () => {
+    const drive = headDrive({ ...head, prevFacing: 0.4, facing: 0.4 }, 1);
+    const p = seated(at);
+    const state = createSelfRenderPositionState();
+    const run = (residual: ReconciledSelfPrediction['residual']) =>
+      updateSelfRenderPosition(
+        state,
+        p,
+        SEED,
+        1,
+        FRAME_DT,
+        0.2,
+        reconciled(at, drive, residual),
+        false,
+      );
+    run(null);
+    run({ x: 0.1, y: 0, z: 0, yaw: SELF_YAW_SNAP_RAD - 0.05 });
+    expect(state.drive.yawOffset).not.toBe(0);
+    run({ x: 0.1, y: 0, z: 0, yaw: 0.45 });
     expect(state.drive.yawOffset).toBe(0);
-    run(reconciled(at, drive));
     expect(state.drive.facing).toBe(0.4);
+    run({ x: 0.1, y: 0, z: 0, yaw: SELF_YAW_SNAP_RAD + 0.05 });
+    expect(state.drive.facing).toBe(0.4);
+  });
+
+  it('holds the predicted heading across a suspend and glides it onto the mirror', () => {
+    const decay = Math.exp(-HANDOFF_RATE * FRAME_DT);
+    const p = seated(at);
+    const mirrorFacing = 0.5;
+    p.prevFacing = mirrorFacing;
+    const state = createSelfRenderPositionState();
+    const predicted = headDrive({ ...head, prevFacing: 0.9, facing: 0.9 }, 1);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), false);
+    expect(state.drive.facing).toBe(0.9);
+
+    // the epoch suspends: no prediction this frame, same seat
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    expect(state.drive.source).toBe('mirror');
+    expect(state.drive.steersHeading).toBe(true);
+    expect(state.drive.facing).toBeCloseTo(mirrorFacing + 0.4 * decay, 12);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    expect(state.drive.facing).toBeCloseTo(mirrorFacing + 0.4 * decay * decay, 12);
+    // the camera follows the same held heading (selfMotionFacing stays set)
+    for (let i = 0; i < 120 && state.drive.steersHeading; i++) {
+      updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    }
+    expect(state.drive.steersHeading).toBe(false);
+    expect(state.drive.yawOffset).toBe(0);
+    expect(state.drive.facing).toBeCloseTo(mirrorFacing, 12);
+
+    // a suspend across a teleport drops the heading outright
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), false);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, true);
+    expect(state.drive.steersHeading).toBe(false);
+    expect(state.drive.facing).toBeCloseTo(mirrorFacing, 12);
+  });
+
+  it('glides the drawn mirror heading into a resumed prediction on the same seat', () => {
+    const decay = Math.exp(-HANDOFF_RATE * FRAME_DT);
+    const p = seated(at);
+    p.prevFacing = 0.5;
+    const state = createSelfRenderPositionState();
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    expect(state.drive.facing).toBe(0.5);
+    const predicted = headDrive({ ...head, prevFacing: 0.8, facing: 0.8 }, 1);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), false);
+    expect(state.drive.facing).toBeCloseTo(0.8 - 0.3 * decay, 12);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), false);
+    expect(state.drive.facing).toBeCloseTo(0.8 - 0.3 * decay * decay, 12);
+
+    // resuming across a teleport adopts the prediction outright
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    for (let i = 0; i < 120; i++)
+      updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), true);
+    expect(state.drive.facing).toBe(0.8);
+  });
+
+  it('never holds a v1 heading: the old wire hands straight to the mirror', () => {
+    const { mirror } = seatedMirror();
+    const state = createSelfRenderPositionState();
+    state.predictor = new SelfMotionPredictor(SEED);
+    const steer: MoveInput = { ...emptyMoveInput(), forward: true, turnLeft: true };
+    for (let frame = 0; frame < 20; frame++) {
+      updateSelfRenderPosition(state, mirror, SEED, 0.5, FRAME_DT, 0.2, v1Frame(steer), false);
+    }
+    expect(state.drive.source).toBe('predicted');
+    updateSelfRenderPosition(state, mirror, SEED, 0.5, FRAME_DT, 0.2, null, false);
+    expect(state.drive.source).toBe('mirror');
+    expect(state.drive.steersHeading).toBe(false);
+    expect(state.drive.facing).toBeCloseTo(0.3, 12);
   });
 
   it('keeps a first predicted frame free of a residual it has no drawn heading for', () => {
@@ -273,12 +406,17 @@ describe('the self fallback for a seated driver', () => {
     }
   });
 
-  it('scales the rewind cap by the profile top speed, runners unchanged', () => {
+  it('scales the rewind cap by the driver speed budget, boost included, runners unchanged', () => {
     const runner = seated({ x: 0, y: 0, z: 0 }, null);
     const driver = seated({ x: 0, y: 0, z: 0 });
     const profileCap = (MAX_SELF_REWIND_YD_PER_SEC * vehicleProfile(PROFILE).maxSpeed) / RUN_SPEED;
     expect(selfRewindCapYdPerSec(runner)).toBe(MAX_SELF_REWIND_YD_PER_SEC);
     expect(selfRewindCapYdPerSec(driver)).toBeCloseTo(profileCap, 12);
+    const boosted = seated({ x: 0, y: 0, z: 0 }, kartDrive({ speedCap: 1.3 }));
+    expect(displaySpeedBudget(boosted)).toBeCloseTo(vehicleProfile(PROFILE).maxSpeed * 1.3, 12);
+    expect(selfRewindCapYdPerSec(boosted)).toBeCloseTo(profileCap * 1.3, 12);
+    const slowed = seated({ x: 0, y: 0, z: 0 }, kartDrive({ speedCap: 0.5 }));
+    expect(selfRewindCapYdPerSec(slowed)).toBeCloseTo(profileCap, 12);
 
     // a machine thrown backward at 60 yd/s while the display still holds a
     // 4 yd lead: the gate closes and the drawn body rewinds onto the mirror
@@ -309,6 +447,41 @@ describe('the self fallback for a seated driver', () => {
       }
       expect(widest).toBeCloseTo(cap * FRAME_DT, 9);
     }
+  });
+
+  it('flushes a driver spent rewind offset so the plain fallback takes the pose back', () => {
+    const state = createSelfRenderPositionState();
+    const p = seated({ x: 0, y: 0, z: 0 });
+    updateSelfRenderPosition(
+      state,
+      p,
+      SEED,
+      1,
+      FRAME_DT,
+      0.2,
+      reconciled({ x: 1, y: 0, z: 0 }, null),
+      false,
+    );
+    updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+    expect(state.offset.x).toBeGreaterThan(0.5);
+    let frames = 0;
+    while (state.offset.x !== 0 && frames < 2000) {
+      updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
+      frames++;
+    }
+    expect(state.offset).toEqual({ x: 0, y: 0, z: 0 });
+    expect(frames).toBeLessThan(120);
+    expect(Math.abs(state.position.x)).toBeLessThan(1e-3);
+
+    // a runner keeps the old unflushed decay
+    const runner = createSelfRenderPositionState();
+    const walker = seated({ x: 0, y: 0, z: 0 }, null);
+    const lead = reconciled({ x: 1, y: 0, z: 0 }, null);
+    updateSelfRenderPosition(runner, walker, SEED, 1, FRAME_DT, 0.2, lead, false);
+    for (let i = 0; i < 120; i++) {
+      updateSelfRenderPosition(runner, walker, SEED, 1, FRAME_DT, 0.2, null, false);
+    }
+    expect(runner.offset.x).toBeGreaterThan(0);
   });
 
   it('keeps the runner snap at the fixed six yards', () => {

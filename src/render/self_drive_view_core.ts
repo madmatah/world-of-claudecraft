@@ -8,15 +8,18 @@ import type { Entity, VehicleDrive } from '../sim/types';
 import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
 import { wrapAngle } from './facing_smooth';
 
+/** A heading gap past this is a re-facing (a recovery, a server turn), never
+ *  a correction: it snaps instead of gliding. */
+export const SELF_YAW_SNAP_RAD = Math.PI / 2;
+const SELF_YAW_FLUSH_RAD = 1e-3;
+
 /** The v2 prediction's kart at the frame's interpolation alpha. */
 export interface ReconciledDrive {
   facing: number;
   velocityX: number;
   velocityZ: number;
-  vy: number;
   onGround: boolean;
-  handbrake: number;
-  collisionImpact: number;
+  state: VehicleDrive | null;
 }
 
 /** The predicted head the v2 display reads its kart from. */
@@ -24,7 +27,6 @@ export interface PredictedDriveHead {
   drive?: VehicleDrive | null;
   facing: number;
   prevFacing?: number;
-  vy: number;
   onGround: boolean;
 }
 
@@ -34,7 +36,6 @@ export interface DrivePredictorReadout {
   readonly facing: number;
   readonly velocityX: number;
   readonly velocityZ: number;
-  readonly vy: number;
   readonly onGround: boolean;
   readonly drive: VehicleDrive | null;
 }
@@ -48,30 +49,35 @@ export type SelfDriveSource = 'predicted' | 'mirror' | 'none';
 
 export interface SelfDriveView {
   source: SelfDriveSource;
+  /** The view owns the drawn heading: predicted, or a mirror still gliding
+   *  out of the last predicted one. */
+  steersHeading: boolean;
   facing: number;
   velocityX: number;
   velocityZ: number;
-  vy: number;
-  handbrake: number;
-  collisionImpact: number;
+  /** The kart's drive at the drawn instant, for its surface and contact
+   *  effects; null on foot. */
+  state: VehicleDrive | null;
   /** The kernel's ground state for the drawn body, or null when no kernel
    *  owns it and the renderer's foot-height heuristic decides. */
   kernelOnGround: boolean | null;
-  /** The reconcile yaw residual still gliding out of the drawn heading. */
+  /** The heading gap still gliding out of the drawn heading. */
   yawOffset: number;
+  /** The last predicted frame came from the v2 reconcile (v1 never glides). */
+  reconciled: boolean;
 }
 
 export function createSelfDriveView(): SelfDriveView {
   return {
     source: 'none',
+    steersHeading: false,
     facing: 0,
     velocityX: 0,
     velocityZ: 0,
-    vy: 0,
-    handbrake: 0,
-    collisionImpact: 0,
+    state: null,
     kernelOnGround: null,
     yawOffset: 0,
+    reconciled: false,
   };
 }
 
@@ -80,7 +86,7 @@ export function lerpFacing(from: number, to: number, alpha: number): number {
 }
 
 /** The v2 output's kart: heading lerped wrap-aware from the tick start at
- *  `alpha`, velocity and presentation from the head. Null on foot. */
+ *  `alpha`, velocity and drive from the head. Null on foot. */
 export function fillReconciledDrive(
   out: ReconciledDrive,
   head: PredictedDriveHead,
@@ -91,42 +97,54 @@ export function fillReconciledDrive(
   out.facing = lerpFacing(head.prevFacing ?? head.facing, head.facing, alpha);
   out.velocityX = vehicleVelocityX(drive, head.facing);
   out.velocityZ = vehicleVelocityZ(drive, head.facing);
-  out.vy = head.vy;
   out.onGround = head.onGround;
-  out.handbrake = drive.handbrake;
-  out.collisionImpact = drive.collisionImpact;
+  out.state = drive;
   return out;
 }
 
-function writeDrive(view: SelfDriveView, drive: VehicleDrive | null): void {
-  view.handbrake = drive?.handbrake ?? 0;
-  view.collisionImpact = drive?.collisionImpact ?? 0;
+function glide(offset: number, decayShare: number): number {
+  const wrapped = wrapAngle(offset);
+  if (Math.abs(wrapped) > SELF_YAW_SNAP_RAD) return 0;
+  const left = wrapped * (1 - decayShare);
+  return Math.abs(left) < SELF_YAW_FLUSH_RAD ? 0 : left;
 }
 
-/** The seat as the mirror shows it, or `none` on foot. */
+/**
+ * The seat as the mirror shows it, or `none` on foot. Leaving a v2
+ * prediction on the same seat (a suspend), the last predicted heading is held
+ * and glides onto the mirror at `decayShare` instead of popping; `snap` (a
+ * teleport-size gap) drops it.
+ */
 export function driveViewFromMirror(
   view: SelfDriveView,
   p: Entity,
   alpha: number,
   predictor: Pick<DrivePredictorReadout, 'onGround'> | null,
+  snap = false,
+  decayShare = 0,
 ): SelfDriveView {
-  view.yawOffset = 0;
   view.kernelOnGround = predictor ? predictor.onGround : null;
   const drive = p.drive ?? null;
-  writeDrive(view, drive);
+  view.state = drive;
   if (!drive) {
     view.source = 'none';
+    view.steersHeading = false;
     view.facing = 0;
     view.velocityX = 0;
     view.velocityZ = 0;
-    view.vy = 0;
+    view.yawOffset = 0;
     return view;
   }
+  const facing = lerpFacing(p.prevFacing, p.facing, Math.min(1, alpha));
+  let offset = 0;
+  if (!snap && view.source === 'predicted' && view.reconciled) offset = view.facing - facing;
+  else if (!snap && view.source === 'mirror') offset = view.yawOffset;
+  view.yawOffset = glide(offset, decayShare);
   view.source = 'mirror';
-  view.facing = lerpFacing(p.prevFacing, p.facing, Math.min(1, alpha));
+  view.steersHeading = view.yawOffset !== 0;
+  view.facing = wrapAngle(facing + view.yawOffset);
   view.velocityX = vehicleVelocityX(drive, p.facing);
   view.velocityZ = vehicleVelocityZ(drive, p.facing);
-  view.vy = p.vy;
   return view;
 }
 
@@ -140,21 +158,24 @@ export function driveViewFromPredictor(
 ): SelfDriveView {
   if (!predictor.driving) return driveViewFromMirror(view, p, alpha, predictor);
   view.source = 'predicted';
+  view.steersHeading = true;
+  view.reconciled = false;
   view.yawOffset = 0;
   view.kernelOnGround = predictor.onGround;
   view.facing = predictor.facing;
   view.velocityX = predictor.velocityX;
   view.velocityZ = predictor.velocityZ;
-  view.vy = predictor.vy;
-  writeDrive(view, predictor.drive);
+  view.state = predictor.drive;
   return view;
 }
 
 /**
- * Wire v2: the reconciled kart, its heading gliding a replay's yaw residual
- * out at `decayShare` this frame (the position offset's handoff rate), or
- * dropping it outright on a teleport-size gap. The mirror while the
- * prediction holds no kart (a driver stood down, a seat not yet adopted).
+ * Wire v2: the reconciled kart. Its heading glides at `decayShare` (the
+ * position offset's handoff rate) out of a replay's yaw residual, or out of
+ * the drawn mirror heading when the prediction resumes on the same seat; a
+ * teleport-size gap (`snap`) or a re-facing past SELF_YAW_SNAP_RAD drops it.
+ * The mirror while the prediction holds no kart (a driver stood down, a seat
+ * not yet adopted).
  */
 export function driveViewFromReconciled(
   view: SelfDriveView,
@@ -166,16 +187,18 @@ export function driveViewFromReconciled(
   snap: boolean,
   decayShare: number,
 ): SelfDriveView {
-  if (!drive) return driveViewFromMirror(view, p, alpha, predictor);
-  const offset = snap || view.source !== 'predicted' ? 0 : view.yawOffset + residualYaw;
-  view.yawOffset = wrapAngle(offset) * (1 - decayShare);
+  if (!drive) return driveViewFromMirror(view, p, alpha, predictor, snap, decayShare);
+  let offset = 0;
+  if (!snap && view.source === 'predicted') offset = view.yawOffset + residualYaw;
+  else if (!snap && view.source === 'mirror') offset = view.facing - drive.facing;
+  view.yawOffset = glide(offset, decayShare);
   view.source = 'predicted';
+  view.steersHeading = true;
+  view.reconciled = true;
   view.kernelOnGround = drive.onGround;
   view.facing = wrapAngle(drive.facing + view.yawOffset);
   view.velocityX = drive.velocityX;
   view.velocityZ = drive.velocityZ;
-  view.vy = drive.vy;
-  view.handbrake = drive.handbrake;
-  view.collisionImpact = drive.collisionImpact;
+  view.state = drive.state;
   return view;
 }

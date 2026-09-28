@@ -779,6 +779,9 @@ function placeRacer(ctx: SimContext, match: RealmRacersMatch, e: Entity, slot: n
   e.mountCastRemaining = 0;
   ctx.recalcPlayer(e);
   ctx.rebucket(e);
+  // The seat is a relocation too: the same silent marker as a recovery makes
+  // the owning client snap onto the grid instead of gliding a short hop.
+  ctx.emit({ type: 'realmRacersReset', pid: e.id });
 }
 
 /**

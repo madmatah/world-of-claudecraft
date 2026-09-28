@@ -1005,7 +1005,10 @@ const MONOLITHS: MonolithRow[] = [
     // speed FOV, look-ahead, oil drop, local bump bang, airborne pose) moved
     // to one drive view filled by self_drive_view_core.ts on either wire.
     // Exact count.
-    ceiling: 13225,
+    // LOWERED 13225 -> 13223: the camera's kart velocity reads the drive view
+    // whole, and the self kart's surface and scrape effects read its state.
+    // Exact count.
+    ceiling: 13223,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

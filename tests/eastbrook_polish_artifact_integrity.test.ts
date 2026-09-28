@@ -1402,7 +1402,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
   // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
-  '49734e98bca9f346cfeca6f60df139b01999d02a01e80262e844dfb488560972';
+  // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
+  '180ff2c6a4701c012c953d93bed68ed21005694b37418c36de153fd9e92b59ae';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1433,7 +1434,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
   // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
   // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
-  '5e576f1cc1490e7fcf5e7c89fd644f2f201790703eb22af24b965d7cb9c96ac8';
+  // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
+  '31b8232595c17168a5698c35713d01f85db6538d3e6877658d44e6a31d3a4f4a';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2823,7 +2825,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers shared remote racer step.
       // Re-minted for the Realm Racers arrival compile lift for band landings.
       // Re-minted for the Realm Racers self drive view on both wires.
-    ).toBe('1f448769efa681e86d7c2fa165b9c73dba3587e40fcd2a8cd859125acb0dc826');
+      // Re-minted for the Realm Racers drive view heading handoff and kart effects.
+    ).toBe('94c313031130d182fd9c8efa2177ffab6f31d2aa44c664ae0f264cb92a31c0fe');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

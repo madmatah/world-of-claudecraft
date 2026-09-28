@@ -72,10 +72,11 @@ describe('Realm Racers vehicle VFX', () => {
   it('wires all four effects to live vehicle state in the renderer', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(source).toContain('this.vfx.vehicleDriftSmoke(');
-    expect(source).toContain('if (vehicleIsOffRoad(e.drive.dragMult))');
+    expect(source).toContain('const kart = (isSelf && this.selfRender.drive.state) || e.drive;');
+    expect(source).toContain('if (vehicleIsOffRoad(kart.dragMult))');
     expect(source).toContain('this.vfx.vehicleSurfaceDust(');
     expect(source).toContain('this.vfx.vehicleExhaust(');
-    expect(source).toContain('if (e.drive.collisionImpact > 3');
+    expect(source).toContain('if (kart.collisionImpact > 3');
     expect(source).toContain('this.vfx.vehicleScrapeSparks(');
   });
 });

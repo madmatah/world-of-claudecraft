@@ -1127,6 +1127,11 @@ describe('jailing a Realm Racers pilot', () => {
     const { server, moderator, pilot, original } = rig;
     const match = seat(rig);
     expect(match.phase).toBe('loading');
+    // the grid seat marks its own relocation; only what follows the jail counts
+    const seated = server.sim.drainEvents();
+    expect(
+      seated.filter((ev) => ev.type === 'realmRacersReset' && 'pid' in ev && ev.pid === pilot.pid),
+    ).toHaveLength(1);
     command(server, moderator, '/jail "Speedster" 60');
     await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
     expect(match.phase).toBe('finished');

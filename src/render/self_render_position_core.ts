@@ -4,7 +4,6 @@
 // without a camera step. Pure ({x,y,z} in and out, no Three), so the renderer
 // is a thin consumer and a headless latency harness can drive the same math.
 
-import { vehicleProfile } from '../sim/content/vehicles';
 import { type Entity, RUN_SPEED } from '../sim/types';
 import {
   createSelfDriveView,
@@ -28,13 +27,14 @@ import {
 const SELF_MOTION_HANDOFF_RATE = 15;
 export const MAX_SELF_REWIND_YD_PER_SEC = 12;
 
+const SELF_OFFSET_FLUSH_YD = 1e-3;
+
 /** The fallback's rewind cap: a runner's, or scaled by a seated driver's
- *  profile top speed over run speed, so a kart sheds its lead at the same
- *  share of its own pace. */
+ *  speed budget (displaySpeedBudget: profile top speed, raised by a boost)
+ *  over run speed, so a kart sheds its lead at the same share of its pace. */
 export function selfRewindCapYdPerSec(p: Entity): number {
   if (!p.drive) return MAX_SELF_REWIND_YD_PER_SEC;
-  const scale = vehicleProfile(p.drive.profileKey).maxSpeed / RUN_SPEED;
-  return MAX_SELF_REWIND_YD_PER_SEC * Math.max(1, scale);
+  return MAX_SELF_REWIND_YD_PER_SEC * Math.max(1, displaySpeedBudget(p) / RUN_SPEED);
 }
 
 function handoffDecayShare(dt: number): number {
@@ -282,7 +282,6 @@ export function updateSelfRenderPosition(
   }
   const predictorWasActive = state.active;
   state.active = false;
-  driveViewFromMirror(state.drive, p, alpha, state.predictor);
   const playerAlpha = selfSnapshotAlpha(alpha, selfAlphaLead);
   const px = p.prevPos.x + (p.pos.x - p.prevPos.x) * playerAlpha;
   const py = p.prevPos.y + (p.pos.y - p.prevPos.y) * playerAlpha;
@@ -293,6 +292,7 @@ export function updateSelfRenderPosition(
   // it at the rewind cap.
   const discontinuity =
     authoritativeDiscontinuity || targetJumpedTeleport(state, px, py, pz, teleportLimitSq);
+  driveViewFromMirror(state.drive, p, alpha, state.predictor, discontinuity, handoffDecayShare(dt));
   if (discontinuity) {
     clearOffset(state.offset);
   } else if (state.ready && predictorWasActive) {
@@ -323,6 +323,12 @@ export function updateSelfRenderPosition(
       state.offset.x += rewindX * excess;
       state.offset.y += rewindY * excess;
       state.offset.z += rewindZ * excess;
+    }
+    if (
+      p.drive &&
+      Math.hypot(state.offset.x, state.offset.y, state.offset.z) < SELF_OFFSET_FLUSH_YD
+    ) {
+      clearOffset(state.offset);
     }
     state.position.x = px + state.offset.x;
     state.position.y = py + state.offset.y;

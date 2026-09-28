@@ -1635,7 +1635,7 @@ export class Renderer {
    *  camera follower. Null on foot, while inactive, and on the first vehicle
    *  frame before the predictor has adopted the drive state. */
   get selfMotionFacing(): number | null {
-    return this.selfRender.drive.source === 'predicted' ? this.selfRender.drive.facing : null;
+    return this.selfRender.drive.steersHeading ? this.selfRender.drive.facing : null;
   }
 
   private readonly selfAimPoseOut = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
@@ -10513,7 +10513,7 @@ export class Renderer {
       }
       v.group.position.set(x, y, z);
       if (ignivarBossFacingLocked(e)) facing = e.facing;
-      if (id === p.id && this.selfRender.drive.source === 'predicted') {
+      if (id === p.id && this.selfRender.drive.steersHeading) {
         // Driving, the heading is not camera-driven input: it is steered, and
         // the predictor integrates it with the same kernel the server runs. Its
         // value is the zero-latency truth, so the model reads it directly
@@ -11653,14 +11653,15 @@ export class Renderer {
         mountShown && !v.mountCompilePending && runCharacterPresentation,
         mountShown && !v.mountCompilePending && runCharacterPresentation ? this.vfx : null,
       );
-      if (e.drive && settled && !v.isFar) {
-        this.vfx.vehicleDriftSmoke(v.group.position, facing, e.drive.slip, dt);
-        if (vehicleIsOffRoad(e.drive.dragMult))
-          this.vfx.vehicleSurfaceDust(v.group.position, facing, e.drive.speed, dt);
+      const kart = (isSelf && this.selfRender.drive.state) || e.drive;
+      if (kart && settled && !v.isFar) {
+        this.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);
+        if (vehicleIsOffRoad(kart.dragMult))
+          this.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);
         this.vfx.vehicleExhaust(v.group.position, facing, v.vehicleLean.acceleration > 1, dt);
         v.vehicleScrapeCooldown = Math.max(0, v.vehicleScrapeCooldown - dt);
-        if (e.drive.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {
-          const impact = Math.min(1, e.drive.collisionImpact / 24);
+        if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {
+          const impact = Math.min(1, kart.collisionImpact / 24);
           this.tmpV.set(ax, ay + 0.55, az);
           this.vfx.vehicleScrapeSparks(this.tmpV, impact);
           playRealmRacersScrapeAudio(this.audioSink, this.groundSample, ax, az, impact);
@@ -12740,12 +12741,9 @@ export class Renderer {
     }
 
     // Look-ahead lead + speed FOV, fed by the horizontal display velocity.
-    let velX = 0;
-    let velZ = 0;
-    if (p.drive) {
-      velX = this.selfRender.drive.velocityX;
-      velZ = this.selfRender.drive.velocityZ;
-    } else if (this.lastLocalPos && dt > 1e-4) {
+    let velX = p.drive ? this.selfRender.drive.velocityX : 0;
+    let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;
+    if (!p.drive && this.lastLocalPos && dt > 1e-4) {
       velX = (selfPos.x - this.lastLocalPos.x) / dt;
       velZ = (selfPos.z - this.lastLocalPos.z) / dt;
       // A teleport is not velocity.

@@ -396,10 +396,6 @@ export class SelfMotionPredictor {
     return actor?.drive ? vehicleVelocityZ(actor.drive, actor.facing) : 0;
   }
 
-  get vy(): number {
-    return this.actor?.vy ?? 0;
-  }
-
   get drive(): VehicleDrive | null {
     return this.actor?.drive ?? null;
   }

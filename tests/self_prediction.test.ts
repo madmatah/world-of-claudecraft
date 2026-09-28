@@ -598,10 +598,8 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(shown?.facing).toBeCloseTo(normAngle((head.prevFacing as number) + turn * alpha), 12);
     expect(shown?.velocityX).toBe(vehicleVelocityX(drive, head.facing));
     expect(shown?.velocityZ).toBe(vehicleVelocityZ(drive, head.facing));
-    expect(shown?.vy).toBe(head.vy);
     expect(shown?.onGround).toBe(head.onGround);
-    expect(shown?.handbrake).toBe(drive.handbrake);
-    expect(shown?.collisionImpact).toBe(drive.collisionImpact);
+    expect(shown?.state).toBe(drive);
 
     // stood down (driver prediction off), the display hands over no kart
     pipeline.predictDrivers = false;
