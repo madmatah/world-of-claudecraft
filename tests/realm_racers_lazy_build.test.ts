@@ -409,6 +409,40 @@ describe('the seam builds where the pilot needs it', () => {
     expect(seam.buildNow(CIRCUIT.id)).toBe(true);
   });
 
+  it('stops holding a blocking arrival once linked with its sky, before its upload frame draws', async () => {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    prepareRealmRacersCircuits(seam, tracks, fakeSky());
+    const view = viewOf(tracks);
+    const id = realmRacersCircuitPrepareId(CIRCUIT.id);
+    const walker = { queued: false, match: null };
+    setArrivalCover(true);
+    const frame = async () => {
+      seam.frame(seamHost(), walker, LANE.x, LANE.z);
+      tracks.update(LANE.x, LANE.z, 0, null);
+      await flush();
+    };
+    await frame();
+    // A walker standing on the lane: built on that frame.
+    expect(view.built).toBe(true);
+    for (let i = 0; i < 4; i++) await frame();
+    // Linked, sky ready, shown under the cover, but no frame PRESENTED it (the
+    // arrival holds the world draw): the arrival no longer waits on it...
+    expect(seam.stateOf(id)).toBe('preparing');
+    expect(view.group.visible).toBe(true);
+    expect(seam.heldImminentKeys()).toBe(0);
+    // ...and the verdict comes with the first drawn frame.
+    view.group.traverseVisible((object) => {
+      if ((object as THREE.Mesh).isMesh) {
+        object.onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+      }
+    });
+    await frame();
+    await frame();
+    expect(seam.stateOf(id)).not.toBe('preparing');
+    setArrivalCover(false);
+  });
+
   it('names the rule: the own lobby under its cover is the only wait a build spreads over', () => {
     const racing = { circuitId: 'a', phase: 'racing' };
     const loading = { circuitId: 'a', phase: 'loading' };
@@ -440,7 +474,7 @@ describe('the seam builds where the pilot needs it', () => {
 });
 
 describe('the upload frame', () => {
-  it('draws the built view unculled and shadowless once, then gives each mesh its own flags back', async () => {
+  it('draws the built view unculled and shadowless until a render drew it, then gives each mesh its own flags back', async () => {
     const tracks = track.buildRealmRacersTracks();
     const view = viewOf(tracks);
     view.build().finish();
@@ -471,41 +505,68 @@ describe('the upload frame', () => {
       expect(mesh.frustumCulled).toBe(false);
       expect(mesh.castShadow).toBe(false);
     }
+    // Updated again with no render between (a frame loop that skipped its
+    // present): nothing was drawn, so the upload frame is not over.
+    tracks.update(LANE.x, LANE.z, 2, null);
     await flush();
     expect(uploaded).toBe(false);
-    tracks.update(LANE.x, LANE.z, 2, null);
+    expect(meshes.every((mesh) => mesh.frustumCulled === false)).toBe(true);
+    // three draws the view (one node is enough to say the frame drew).
+    meshes[3].onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+    tracks.update(LANE.x, LANE.z, 3, null);
     await flush();
     expect(uploaded).toBe(true);
     expect(meshes.map((mesh) => [mesh.frustumCulled, mesh.castShadow])).toEqual(own);
+    expect(meshes.every((mesh) => !Object.hasOwn(mesh, 'onAfterRender'))).toBe(true);
     // One-shot: a later frame changes nothing.
-    tracks.update(LANE.x, LANE.z, 3, null);
+    tracks.update(LANE.x, LANE.z, 4, null);
     expect(meshes.map((mesh) => [mesh.frustumCulled, mesh.castShadow])).toEqual(own);
   });
 });
 
 describe('the pure halves of a build piece', () => {
-  it('holds each drawable its own culling and shadow flags across the upload frame', () => {
+  it('holds each drawable its own culling, shadow and hook across the upload frame, and names its draw', () => {
+    const calls: string[] = [];
+    const own = function (this: unknown) {
+      calls.push('own');
+    };
+    const proto = { onAfterRender: () => calls.push('proto') };
+    const node = (fields: Record<string, unknown>) => Object.assign(Object.create(proto), fields);
     const nodes = [
-      { isMesh: true, frustumCulled: true, castShadow: true },
-      { isMesh: true, frustumCulled: false, castShadow: true },
-      { isSprite: true, frustumCulled: true, castShadow: false },
-      { frustumCulled: true, castShadow: true },
+      node({ isMesh: true, frustumCulled: true, castShadow: true }),
+      node({ isMesh: true, frustumCulled: false, castShadow: true, onAfterRender: own }),
+      node({ isSprite: true, frustumCulled: true, castShadow: false }),
+      node({ frustumCulled: true, castShadow: true }),
     ];
     const root = {
-      traverse: (visit: (object: (typeof nodes)[number]) => void) => nodes.forEach(visit),
+      traverse: (visit: (object: never) => void) => {
+        for (const n of nodes) visit(n as never);
+      },
     };
-    const held = prepareUploadFrame(root);
+    let drawn = 0;
+    const held = prepareUploadFrame(root, () => drawn++);
     expect(held).toHaveLength(3);
-    expect(nodes.slice(0, 3).every((node) => !node.frustumCulled && !node.castShadow)).toBe(true);
+    expect(nodes.slice(0, 3).every((n) => !n.frustumCulled && !n.castShadow)).toBe(true);
     // A group is no drawable: left alone.
-    expect(nodes[3]).toEqual({ frustumCulled: true, castShadow: true });
+    expect([nodes[3].frustumCulled, nodes[3].castShadow]).toEqual([true, true]);
+    expect(Object.hasOwn(nodes[3], 'onAfterRender')).toBe(false);
+    // three drawing a node is what says the frame drew: its own hook still runs.
+    nodes[1].onAfterRender();
+    nodes[0].onAfterRender();
+    expect(drawn).toBe(2);
+    expect(calls).toEqual(['own', 'proto']);
     restoreAfterUploadFrame(held);
-    expect(nodes.map((node) => [node.frustumCulled, node.castShadow])).toEqual([
+    expect(nodes.map((n) => [n.frustumCulled, n.castShadow])).toEqual([
       [true, true],
       [false, true],
       [true, false],
       [true, true],
     ]);
+    expect(nodes[1].onAfterRender).toBe(own);
+    expect(Object.hasOwn(nodes[0], 'onAfterRender')).toBe(false);
+    expect(Object.hasOwn(nodes[2], 'onAfterRender')).toBe(false);
+    nodes[0].onAfterRender();
+    expect(drawn).toBe(2);
   });
 
   it('cuts the grass into pieces of whole tiles, in order, by cluster count', () => {

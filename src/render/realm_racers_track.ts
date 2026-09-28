@@ -169,10 +169,11 @@ export interface RealmRacersLazyCircuitView extends RealmRacersCircuitView {
   /** Its build: one per circuit per pool, minted on the first ask. */
   build(): RealmRacersTrackBuild;
   /**
-   * Resolves after the built view's first frame shown on the viewer's lane
-   * since the first call: that frame is drawn with every mesh unculled and
-   * casting no shadow, so every vertex and instance buffer a visible mesh holds
-   * uploads there, then each mesh's own culling and shadow flags come back.
+   * Resolves after the first frame that DRAWS the built view on the viewer's
+   * lane since the first call (a render, not an update: a frame loop may skip
+   * the present): that frame draws every mesh unculled and casting no shadow,
+   * so every vertex and instance buffer a visible mesh holds uploads there,
+   * then each mesh's own flags come back (realm_racers_upload_frame_core.ts).
    */
   uploadFrame(): Promise<void>;
 }
@@ -1400,6 +1401,10 @@ function authoredTrackView(
   let uploadAsked: Promise<void> | null = null;
   let markUploaded: (() => void) | null = null;
   let unculled: UploadFrameNode[] | null = null;
+  let uploadDrawn = false;
+  const noteUploadDrawn = (): void => {
+    uploadDrawn = true;
+  };
   return {
     group,
     drawnOnce: () => drawn,
@@ -1435,13 +1440,13 @@ function authoredTrackView(
       const lane = realmRacersLaneAt(px, pz);
       const mine = lane?.circuit.id === circuit.id;
       onLane = mine;
-      // Visible (or unculled) at the last update means drawn so by the frame
-      // between the two.
+      // Visible at the last update means drawn by the frame between the two.
       if (markDrawn && shownLastUpdate) {
         markDrawn();
         markDrawn = null;
       }
-      if (unculled) {
+      // The upload frame ends on a real draw of it, whatever the updates did.
+      if (unculled && uploadDrawn) {
         restoreAfterUploadFrame(unculled);
         unculled = null;
         markUploaded?.();
@@ -1449,7 +1454,9 @@ function authoredTrackView(
       }
       group.visible = mine && !reveal.held(circuit.id);
       shownLastUpdate = group.visible;
-      if (markUploaded && group.visible) unculled = prepareUploadFrame(group);
+      if (markUploaded && !unculled && group.visible) {
+        unculled = prepareUploadFrame(group, noteUploadDrawn);
+      }
       if (!lane || !mine) {
         // The lights are WORLD positions, so a copy that is not being drawn has
         // to give its slots back: left registered, this circuit's lamps would go

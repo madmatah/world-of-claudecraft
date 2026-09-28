@@ -175,6 +175,16 @@ function keysOf(object: THREE.Object3D, material: THREE.Material): string[] {
   return [lines.slice(0, half).join('\n'), lines.slice(half).join('\n')];
 }
 
+/** What three does as it draws `root` in a frame: every visible drawable's
+ *  `onAfterRender` runs (the proof a circuit's upload frame waits on). */
+function renderDraws(root: THREE.Object3D): void {
+  root.traverseVisible((object) => {
+    const node = object as THREE.Mesh;
+    if (!node.isMesh && !(object as THREE.Sprite).isSprite) return;
+    node.onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+  });
+}
+
 /** Every program a draw under `root` links, split by whether its node is a
  *  theme dressing fill. */
 function programSplit(root: THREE.Object3D): { procedural: Set<string>; dressing: Set<string> } {
@@ -941,6 +951,7 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       const drawn = new Set<string>();
       const drawOn = (time: number, match: RealmRacersLaneView) => {
         tracks.update(origin.x, origin.z, time, match);
+        renderDraws(tracks.group);
         for (const { object, material } of drawsUnder(view.group)) {
           if (!object.visible) continue;
           for (const key of keysOf(object, material)) drawn.add(key);
@@ -950,8 +961,8 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
       calls[0].resolve();
       sky.finish(true);
       await flush();
-      // The upload frame: the first frame on the lane since the gate, drawn
-      // unculled, then the verdict.
+      // The upload frame: the first frame drawn on the lane since the gate,
+      // unculled, then the verdict at the update after it.
       drawOn(1, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.1 }));
       await flush();
       expect(verdict).toBeNull();
@@ -1504,6 +1515,7 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
     const frame = () => {
       seam.frame(host, loading(), LANE.x, LANE.z);
       tracks.update(LANE.x, LANE.z, 0, null);
+      renderDraws(tracks.group);
     };
     frame();
     expect(seam.stateOf(REALM_RACERS_COMMON_PREPARE_ID)).toBe('preparing');
@@ -1555,6 +1567,7 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
     const frame = () => {
       seam.frame(host, walker, LANE.x, LANE.z);
       tracks.update(LANE.x, LANE.z, 0, null);
+      renderDraws(tracks.group);
       if (view.group.visible && shownLinked === null) shownLinked = linked.has(view.group);
     };
     const polls: (() => void)[] = [];
@@ -1583,7 +1596,12 @@ describe('the tracks view consults the reveal hold on its own lane', () => {
       for (const release of pending.splice(0)) release();
       await step();
     }
+    // The arrival lifts once the circuit is linked and its sky ready: the
+    // upload frame it still waits on needs a presented frame, which the
+    // arrival's own world-draw hold would keep back.
     expect(lifted).toBe(true);
+    expect(view.group.visible).toBe(false);
+    await step();
     expect(shownLinked).toBe(true);
     expect(view.group.visible).toBe(true);
     setArrivalCover(false);

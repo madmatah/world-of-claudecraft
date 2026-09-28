@@ -262,6 +262,12 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     return this.gated;
   }
 
+  /** Linked and its sky ready: the upload frame left needs a presented frame,
+   *  which a blocking arrival's world-draw hold would otherwise wait out. */
+  arrivalReady(): boolean {
+    return this.gated && this.skyReady;
+  }
+
   async run(
     gate: (target: THREE.Object3D) => Promise<unknown>,
     uncovered: Promise<void>,

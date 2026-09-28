@@ -14,9 +14,12 @@
 // While a preparation is in flight AND the viewer is seated or in the rally
 // band, it holds the arrival curtain like an imminent reveal key
 // (arrival_cover.ts), so a covered landing on the circuit lifts on a proved
-// pool; a queue join in a town never holds an unrelated arrival. That wait
-// only exists where the arrival wait is non-zero (offline, and the online
-// first-spawn establishing shot); the online race lobby brings its own.
+// pool; a queue join in a town never holds an unrelated arrival. A client
+// that says it is `arrivalReady` (a circuit linked, its sky ready) stops
+// holding it: what it still waits on is a presented frame, and a blocking
+// arrival holds the world draw until it lifts. That wait only exists where
+// the arrival wait is non-zero (offline, and the online first-spawn
+// establishing shot); the online race lobby brings its own.
 //
 // Clients root only what they build at `prepare()`: an object added under a
 // root after its gate ran is not covered by that gate. A client whose root
@@ -97,6 +100,10 @@ export interface RealmRacersPrepareClient {
   /** True once the client's own view may be drawn (its programs linked), even
    *  before its verdict: a reveal hold lets go then. */
   revealReady?(): boolean;
+  /** True once what an arrival curtain waits on is done (programs linked, sky
+   *  ready), even before its verdict: what is left needs a PRESENTED frame,
+   *  which a blocking arrival holds back until it lifts. */
+  arrivalReady?(): boolean;
   /** Builds only for the gate (stand-ins), so without one it builds nothing. */
   readonly gateOnly?: boolean;
 }
@@ -221,7 +228,13 @@ export class RealmRacersPrepare {
   }
 
   heldImminentKeys(): number {
-    return this.holding ? this.inFlight : 0;
+    if (!this.holding || this.inFlight === 0) return 0;
+    let held = 0;
+    for (const client of this.clients.values()) {
+      if (this.stateOf(client.prepareId) !== 'preparing') continue;
+      if (!client.arrivalReady?.()) held++;
+    }
+    return held;
   }
 
   /** Whether the circuit's build must run to the end now rather than a piece
