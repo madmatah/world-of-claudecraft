@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { eventAnchor } from '../server/event_delivery';
 import { isDebuffAura } from '../src/sim/aura_classify';
 import {
   REALM_RACERS_ABILITY_ID,
@@ -407,6 +408,29 @@ describe('the drawn effect, in a race', () => {
     expect(named[0]).toMatchObject({ effect: 'nitro', pid: a });
   });
 
+  it('announces the take world-wide with the taker and the box, never the effect', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    const events = takeWithEffect(sim, a, 0, 'slick');
+    const taken = events.filter((event) => event.type === 'realmRacersPickupTaken');
+    expect(taken).toHaveLength(1);
+    const box = required(realmRacersPickupBoxes(RACE_CIRCUIT)[0], 'box 0');
+    const at = realmRacersToWorld(match(sim), box.x, box.z);
+    const x = Math.round(at.x * 100) / 100;
+    const z = Math.round(at.z * 100) / 100;
+    // Exactly these four fields, in this order: no pid (a pid makes an event
+    // personal to that session) and no effect (what the box gave stays the
+    // taker's own business).
+    const wire = JSON.stringify(taken[0]);
+    expect(wire).toBe(`{"type":"realmRacersPickupTaken","takerId":${a},"x":${x},"z":${z}}`);
+    expect(Buffer.byteLength(wire)).toBe(
+      54 + String(a).length + String(x).length + String(z).length,
+    );
+    // World-coordinate anchored, so the server interest-scopes it at the box
+    // instead of broadcasting it realm-wide.
+    expect(eventAnchor(taken[0], sim.entities)).toEqual({ x, y: 0, z });
+  });
+
   it('refills the weapon on a charge draw and nothing else', () => {
     const { sim, pids } = racingGrid();
     const [a] = pids;
@@ -574,6 +598,19 @@ describe('the held effects', () => {
     expect(slicks[0]).toMatchObject({ ownerPid: a });
     expect(slicks[0].expiresTick).toBe(spentTick + REALM_RACERS_SLICK_LIFETIME_TICKS);
     expect(progressOf(sim, a).heldEffect).toBeNull();
+    // Announced once, world-wide, naming the dropper: the readout's patch
+    // carries no owner, and this is what a client draws the spray from.
+    const drops = sim.drainEvents().filter((event) => event.type === 'realmRacersSlickDropped');
+    const machine = required(sim.entities.get(a), 'dropper').pos;
+    const x = Math.round(machine.x * 100) / 100;
+    const z = Math.round(machine.z * 100) / 100;
+    expect(drops).toEqual([{ type: 'realmRacersSlickDropped', sourceId: a, x, z }]);
+    const wire = JSON.stringify(drops[0]);
+    expect(wire).toBe(`{"type":"realmRacersSlickDropped","sourceId":${a},"x":${x},"z":${z}}`);
+    expect(Buffer.byteLength(wire)).toBe(
+      56 + String(a).length + String(x).length + String(z).length,
+    );
+    expect(eventAnchor(drops[0], sim.entities)).toEqual({ x, y: 0, z });
     // And it reaches the readout every racer in the match mirrors, rounded to
     // the hundredth of a yard the shared builder ships.
     expect(sim.realmRacersInfoFor(pids[1]).match?.slicks).toEqual([

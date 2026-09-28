@@ -38,6 +38,9 @@ export interface RendererPrewarmAndGroundFxOwner<T extends RendererDisposable> {
    *  (realm_racers_track_dispose_core.ts). */
   realmRacersTrack?: { group: DisposableGroupLike };
   realmRacersGroundBlasts?: RendererDisposable;
+  /** The field cues' oil-spray pool: its per-slot instance buffers (the shared
+   *  droplet material and geometry are never disposed). */
+  realmRacersFieldCues?: RendererDisposable;
 }
 
 /**
@@ -66,6 +69,7 @@ export function disposeRendererPrewarmAndGroundFx(
   const track = resources.realmRacersTrack;
   if (track) bestEffort(() => disposeRealmRacersTrackGroup(track.group));
   bestEffort(() => resources.realmRacersGroundBlasts?.dispose());
+  bestEffort(() => resources.realmRacersFieldCues?.dispose());
   // The occluder-fade gate and its twins were linked on this renderer's
   // context; a later renderer installs its own (occluder_fade_gate.ts).
   bestEffort(() => uninstallOccluderFadeGate());

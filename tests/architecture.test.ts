@@ -965,6 +965,8 @@ const RENDER_PURE_CORES = [
   'src/render/realm_racers_audio_core.ts',
   'src/render/realm_racers_daylight_core.ts',
   'src/render/realm_racers_grass_core.ts',
+  'src/render/realm_racers_missed_pickup_core.ts',
+  'src/render/realm_racers_oil_spray_core.ts',
   'src/render/realm_racers_pickups_core.ts',
   'src/render/realm_racers_prepare_core.ts',
   'src/render/realm_racers_slicks_core.ts',

@@ -7469,6 +7469,16 @@ export type SimEvent = { pid?: number } & (
   // (`src/ui/realm_racers_pickup_i18n.ts`), exactly like the Card Duel pair
   // below and the gather/craft results above.
   | { type: 'realmRacersPickup'; effect: RallyPickupEffect }
+  // The same take, world-visible and effect-free: WHO took a box and where it
+  // stood (world coordinates, hundredths of a yard). The effect stays the
+  // taker's own business; this is what lets a rival who was closing on the box
+  // see that they missed it.
+  | { type: 'realmRacersPickupTaken'; takerId: number; x: number; z: number }
+  // A pilot laid a patch of oil. World-visible, one per drop: the patch itself
+  // rides the match readout (which names no owner), so this is what lets a
+  // client draw the spray off the machine that laid it. World coordinates of
+  // the machine at the drop, hundredths of a yard.
+  | { type: 'realmRacersSlickDropped'; sourceId: number; x: number; z: number }
   // A ward ate a hostile rally effect (a Ground Blast impact or an oil slick)
   // and broke. Personal, text-free: without it a shell that lands on a warded
   // machine and does nothing is a bug as far as the pilot can tell.

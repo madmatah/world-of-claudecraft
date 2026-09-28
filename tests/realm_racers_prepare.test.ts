@@ -428,6 +428,11 @@ describe('race preparation seam (renderer wiring)', () => {
     expect(
       occurrences('this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);'),
     ).toBe(1);
+    // The field cues' oil-spray pool is a client too, registered once, and
+    // the cues read the seam's start to gate a bystander's spray.
+    expect(occurrences('this.realmRacersFieldCues.joinPrepare(this.realmRacersPrepareSeam);')).toBe(
+      1,
+    );
     // The HUD reads the lobby progress through a read-only slice, never the seam.
     expect(
       occurrences(

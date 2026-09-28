@@ -2184,6 +2184,16 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
     // owns the words, and whether that effect was applied or is now HELD is
     // presentation's business).
     ctx.emit({ type: 'realmRacersPickup', effect, pid: take.pid });
+    const box = boxes[take.box];
+    if (box) {
+      const at = realmRacersToWorld(match, box.x, box.z);
+      ctx.emit({
+        type: 'realmRacersPickupTaken',
+        takerId: take.pid,
+        x: roundReadout(at.x),
+        z: roundReadout(at.z),
+      });
+    }
   }
 }
 
@@ -2311,6 +2321,12 @@ export function realmRacersSpendPickupEffect(
     // already past it.
     const here = realmRacersToCanonical(match, caster.pos.x, caster.pos.z);
     dropRealmRacersSlick(ctx, match, caster.id, here.x, here.z);
+    ctx.emit({
+      type: 'realmRacersSlickDropped',
+      sourceId: caster.id,
+      x: roundReadout(caster.pos.x),
+      z: roundReadout(caster.pos.z),
+    });
   }
   republishKit(ctx, match, caster.id);
 }

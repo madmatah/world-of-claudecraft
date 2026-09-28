@@ -1012,7 +1012,10 @@ const MONOLITHS: MonolithRow[] = [
     // moved to displayedAimPose and selfPredictionLeadMs in
     // self_render_position_core.ts, shared with the latency harness. Exact
     // count.
-    ceiling: 13218,
+    // LOWERED 13218 -> 13203: the oil-slick throw presentation moved to
+    // realm_racers_field_cues.ts with the rival oil spray and the missed-box
+    // cue, which the renderer reaches through one event arm. Exact count.
+    ceiling: 13203,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

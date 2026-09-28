@@ -191,10 +191,16 @@ describe('renderer resource lifecycle', () => {
       }),
     };
     const realmRacersGroundBlasts = { dispose: vi.fn() };
+    const realmRacersFieldCues = { dispose: vi.fn() };
     const errors: unknown[] = [];
 
     disposeRendererPrewarmAndGroundFx(
-      { prewarmDepthMaterials: new Map(), realmRacersTrack: { group }, realmRacersGroundBlasts },
+      {
+        prewarmDepthMaterials: new Map(),
+        realmRacersTrack: { group },
+        realmRacersGroundBlasts,
+        realmRacersFieldCues,
+      },
       (cleanup) => {
         try {
           cleanup();
@@ -210,6 +216,7 @@ describe('renderer resource lifecycle', () => {
     expect(shared.dispose).not.toHaveBeenCalled();
     expect(boxes.dispose).toHaveBeenCalledOnce();
     expect(realmRacersGroundBlasts.dispose).toHaveBeenCalledOnce();
+    expect(realmRacersFieldCues.dispose).toHaveBeenCalledOnce();
     expect(errors).toHaveLength(1);
   });
 
@@ -220,6 +227,9 @@ describe('renderer resource lifecycle', () => {
     expect(renderer).toContain('private realmRacersTrack: RealmRacersTracksView;');
     expect(renderer).toContain(
       'private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();',
+    );
+    expect(renderer).toContain(
+      'private readonly realmRacersFieldCues = new RealmRacersFieldCues(this.views, this.groundSample);',
     );
     expect(renderer).toContain('disposeRendererPrewarmAndGroundFx(this, bestEffort);');
   });

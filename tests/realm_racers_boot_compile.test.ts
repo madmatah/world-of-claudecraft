@@ -74,6 +74,7 @@ import { buildInitialSceneCompileUnits } from '../src/render/initial_scene_compi
 import { prepareRealmRacersCircuits } from '../src/render/realm_racers_circuit_prepare';
 import { realmRacersFills } from '../src/render/realm_racers_fills';
 import { RealmRacersGroundBlastVisuals } from '../src/render/realm_racers_ground_blast';
+import { RealmRacersOilSprayVisuals } from '../src/render/realm_racers_oil_spray';
 import {
   RealmRacersPrepare,
   type RealmRacersPrepareHost,
@@ -130,16 +131,20 @@ async function bootScene() {
   const tracks = track.buildRealmRacersTracks();
   await Promise.all(tracks.circuits.map((view) => realmRacersFills(view.group).landed()));
   const blasts = new RealmRacersGroundBlastVisuals();
+  const sprays = new RealmRacersOilSprayVisuals();
   const seam = new RealmRacersPrepare([blasts]);
   prepareRealmRacersCircuits(seam, tracks, { ensure: vi.fn(() => Promise.resolve(true)) });
   setRenderCategory(tracks.group, 'props');
   scene.add(tracks.group);
   scene.add(blasts.group);
+  seam.addClient(sprays);
+  scene.add(sprays.group);
   // The exclusion is read off the compiled root's DIRECT children: a declared
   // group moved under anything else would silently stop being skipped.
   expect(tracks.group.parent).toBe(scene);
   expect(blasts.group.parent).toBe(scene);
-  return { scene, world, catalog, staged, tracks, blasts, seam };
+  expect(sprays.group.parent).toBe(scene);
+  return { scene, world, catalog, staged, tracks, blasts, sprays, seam };
 }
 
 describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races on %s', (tier) => {
@@ -148,8 +153,8 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
   });
 
   it('links no rally program in the boot, post-paint or resume compile units', async () => {
-    const { scene, world, catalog, staged, tracks, blasts } = await bootScene();
-    const rallyRoots = [tracks.group, blasts.group];
+    const { scene, world, catalog, staged, tracks, blasts, sprays } = await bootScene();
+    const rallyRoots = [tracks.group, blasts.group, sprays.group];
     // What the walk has to skip is real: every circuit's view is built, filled
     // and hidden.
     for (const view of tracks.circuits) {
@@ -194,12 +199,13 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
         expect(under(object, rallyRoots), object.name || object.type).toBe(false);
       }
     }
-    // The Ground Blast pool is not even built before the trigger.
+    // Neither pool is even built before the trigger.
     expect(blasts.group.children).toEqual([]);
+    expect(sprays.group.children).toEqual([]);
   });
 
   it('never calls the world gate for a session that never commits to racing', async () => {
-    const { tracks, blasts, seam } = await bootScene();
+    const { tracks, blasts, sprays, seam } = await bootScene();
     const gate = vi.fn(() => Promise.resolve());
     const host: RealmRacersPrepareHost = {
       worldCompileGate: () => gate,
@@ -214,6 +220,7 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('a player who never races
     expect(seam.worldGate()).toBeUndefined();
     for (const view of tracks.circuits) expect(view.group.visible, view.circuitId).toBe(false);
     expect(blasts.group.children).toEqual([]);
+    expect(sprays.group.children).toEqual([]);
   });
 });
 
@@ -264,10 +271,11 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
     // renderer.ts prewarmZoneAt, the covered arm: the colour link over
     // this.scene, which three's compile walks as is, lifted for a band landing.
     it('links no rally program for a landing elsewhere, and still links the hidden world content', async () => {
-      const { scene, world, staged, tracks, blasts } = await bootScene();
-      // A racer's prepared pool sits in the scene too: skipped all the same.
+      const { scene, world, staged, tracks, blasts, sprays } = await bootScene();
+      // A racer's prepared pools sit in the scene too: skipped all the same.
       blasts.prepare();
-      const rallyRoots = [tracks.group, blasts.group];
+      sprays.prepare();
+      const rallyRoots = [tracks.group, blasts.group, sprays.group];
       const rally = programsOf(drawsUnder(tracks.group).map((draw) => draw.object));
       expect(rally.size).toBeGreaterThan(0);
       const arms = walkingArms(scene);
@@ -288,15 +296,16 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
     });
 
     it('links every rally program in the arrival compile of a landing in the band', async () => {
-      const { scene, world, staged, tracks, blasts } = await bootScene();
+      const { scene, world, staged, tracks, blasts, sprays } = await bootScene();
       blasts.prepare();
+      sprays.prepare();
       const lane = realmRacersLaneOrigin(REALM_RACERS_LANES[0].index);
       const arms = walkingArms(scene);
       await linkColorPrograms(arms.host, scene, false, rallyArrivalLifts(lane.x, lane.z));
       expect(arms.walked).toContain(world);
       expect(arms.walked).toContain(staged);
       const walked = new Set(arms.walked);
-      for (const root of [tracks.group, blasts.group]) {
+      for (const root of [tracks.group, blasts.group, sprays.group]) {
         const draws = drawsUnder(root).map((draw) => draw.object);
         expect(draws.length).toBeGreaterThan(0);
         expect(draws.filter((object) => !walked.has(object))).toEqual([]);
@@ -307,15 +316,16 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       // The lift is for that one call: the next compile skips them again.
       const after = walkingArms(scene);
       await linkColorPrograms(after.host, scene, false);
-      expect(after.walked.filter((object) => under(object, [tracks.group, blasts.group]))).toEqual(
-        [],
-      );
+      expect(
+        after.walked.filter((object) => under(object, [tracks.group, blasts.group, sprays.group])),
+      ).toEqual([]);
     });
 
     it('declares groups that carry no material and hold no light anywhere below them', async () => {
-      const { tracks, blasts } = await bootScene();
+      const { tracks, blasts, sprays } = await bootScene();
       blasts.prepare();
-      for (const root of [tracks.group, blasts.group]) {
+      sprays.prepare();
+      for (const root of [tracks.group, blasts.group, sprays.group]) {
         expect(parentCompileExclusionOf(root), root.name || root.type).toBe('realm-racers-prepare');
         expect((root as THREE.Object3D & { material?: unknown }).material).toBeUndefined();
         const lights: string[] = [];
@@ -325,17 +335,21 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
         expect(lights).toEqual([]);
       }
       expect(drawsUnder(blasts.group).length).toBeGreaterThan(0);
+      expect(drawsUnder(sprays.group).length).toBeGreaterThan(0);
     });
 
     it("leaves the race preparation's own gates linking the whole circuit and pool", async () => {
-      const { scene, tracks, blasts } = await bootScene();
+      const { scene, tracks, blasts, sprays } = await bootScene();
       blasts.prepare();
+      sprays.prepare();
       const arms = walkingArms(scene);
       for (const view of tracks.circuits) await linkColorPrograms(arms.host, view.group, false);
       await linkColorPrograms(arms.host, blasts.group, false);
+      await linkColorPrograms(arms.host, sprays.group, false);
       const expected = [
         ...tracks.circuits.flatMap((view) => drawsUnder(view.group).map((draw) => draw.object)),
         ...drawsUnder(blasts.group).map((draw) => draw.object),
+        ...drawsUnder(sprays.group).map((draw) => draw.object),
       ];
       expect(new Set(arms.walked)).toEqual(new Set(expected));
     });
@@ -367,8 +381,12 @@ describe('renderer wiring of the rally groups', () => {
   // No Renderer can be built headless, so the real wiring is read off its
   // source: each declared group is attached once, straight to the scene, and
   // never handed to any other parent (the exclusion reads direct children).
-  it('attaches the tracks and the Ground Blast pool to the scene itself, and nowhere else', () => {
-    for (const group of ['this.realmRacersTrack.group', 'this.realmRacersGroundBlasts.group']) {
+  it('attaches the tracks and the Ground Blast and oil-spray pools to the scene itself, and nowhere else', () => {
+    for (const group of [
+      'this.realmRacersTrack.group',
+      'this.realmRacersGroundBlasts.group',
+      'this.realmRacersFieldCues.sprays.group',
+    ]) {
       const attaches = [...renderer.matchAll(/(\S+)\.(?:add|attach)\(([^)]*)\)/g)].filter((m) =>
         m[2].split(',').some((arg) => arg.trim() === group),
       );

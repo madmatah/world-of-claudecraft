@@ -670,11 +670,11 @@ import {
 } from './realm_racers_audio';
 import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
+import { RealmRacersFieldCues } from './realm_racers_field_cues';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
 import { RealmRacersPrepare, rallyArrivalLifts } from './realm_racers_prepare';
 import { RealmRacersSky } from './realm_racers_sky';
-import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
@@ -2059,6 +2059,7 @@ export class Renderer {
   readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;
   // seed-bound ground sampler, built once so per-frame drape updates allocate no closure.
   private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);
+  private readonly realmRacersFieldCues = new RealmRacersFieldCues(this.views, this.groundSample);
   /** Bound once: the puff runs per landing and must not allocate a closure. */
   private surfaceAtForPuff = (x: number, z: number, y: number) => this.surfaceAt(x, z, y);
   private selectionDrapeSupportY = 0;
@@ -2673,6 +2674,8 @@ export class Renderer {
     setRenderCategory(this.realmRacersTrack.group, 'props');
     this.scene.add(this.realmRacersTrack.group);
     this.scene.add(this.realmRacersGroundBlasts.group);
+    this.realmRacersFieldCues.joinPrepare(this.realmRacersPrepareSeam);
+    this.scene.add(this.realmRacersFieldCues.sprays.group);
     this.propsView = props;
 
     // Eastbrook's replacement town is a distinct, stable scene subtree. Its
@@ -7952,30 +7955,11 @@ export class Renderer {
         this.playRallyBumpFeedback(ev.x, ev.z, ev.impact, ev.aId, ev.bId);
         break;
       }
-      case 'realmRacersSlicked': {
-        // Oil letting go, in the world: a puff off the tyres in the patch's own
-        // sheen colour (so what threw the machine is legible from the car that
-        // is about to arrive) plus the scrape cue. No HUD line, same as a bump:
-        // this is a driving event and the banner belongs to the moments that
-        // stop a race.
-        //
-        // And deliberately NO camera shake, unlike every other rally impact. A
-        // shell or a contact is a JOLT: the machine keeps pointing where it
-        // pointed, so without a shake nothing says a moment happened. Oil is not
-        // a jolt, it is the road leaving: the machine keeps its heading (the
-        // throw moves the velocity and never the yaw) and slides out from under
-        // the nose, which the world already shows. A shake on top reads as the
-        // picture coming apart rather than as force. An earlier build DID spin
-        // the machine here and the seat verdict was that it felt like the wheel
-        // being yanked, so restoring either one means reckoning with that.
-        this.vfx.groundPuff(
-          new THREE.Vector3(ev.x, this.groundSample(ev.x, ev.z), ev.z),
-          0.9 + ev.impact,
-          REALM_RACERS_SLICK_SHEEN_COLOR,
-        );
-        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
+      case 'realmRacersSlicked':
+      case 'realmRacersSlickDropped':
+      case 'realmRacersPickupTaken':
+        this.realmRacersFieldCues.onEvent(ev, this.sim, this.vfx, this.audioSink, this.selfRender);
         break;
-      }
       // The farm flourishes. These arrive on the viewer's own pid-scoped
       // channel, so there is nothing to filter: the module turns each one into
       // a puff or a sparkle over the bed it names.
@@ -12255,6 +12239,7 @@ export class Renderer {
       realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
     );
     this.realmRacersGroundBlasts.update(dt);
+    this.realmRacersFieldCues.update(dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);
     this.underwaterView.frame(this.camera, this.scene, p.pos, this.sim.cfg.seed, dt);
