@@ -5,6 +5,7 @@ const audioSpies = vi.hoisted(() => ({ realmRacersResult: vi.fn() }));
 vi.mock('../src/game/audio', () => ({ audio: audioSpies }));
 
 import { createOwnBumpFeedback, markLocalBump } from '../src/render/own_bump_feedback_core';
+import * as realmRacersKart from '../src/render/realm_racers_kart_presentation';
 import { Renderer } from '../src/render/renderer';
 import { Hud } from '../src/ui/hud';
 
@@ -72,14 +73,6 @@ interface RendererHarness {
   addShake: ReturnType<typeof vi.fn>;
   punchFov: ReturnType<typeof vi.fn>;
   handleEvent(event: SimEvent): void;
-  syncRealmRacersVehicleAudioForView(
-    entity: { id: number; drive: VehicleDrive | null },
-    view: { vehicleAudioActive: boolean; vehicleLean: { acceleration: number } },
-    audible: boolean,
-    x: number,
-    y: number,
-    z: number,
-  ): void;
 }
 
 function rendererHarness(): RendererHarness {
@@ -221,7 +214,7 @@ describe('Realm Racers coordinator audio wiring', () => {
     expect(renderer.audioSink.realmRacersEvent).toHaveBeenCalledTimes(2);
   });
 
-  it('executes the renderer vehicle-view coordinator through run and race exit', () => {
+  it('executes the kart engine coordinator the renderer calls through run and race exit', () => {
     const renderer = rendererHarness();
     const entity: { id: number; drive: VehicleDrive | null } = { id: 77, drive: drive() };
     const view = { vehicleAudioActive: false, vehicleLean: { acceleration: 6 } };
@@ -231,7 +224,7 @@ describe('Realm Racers coordinator audio wiring', () => {
     const groundFraction = Math.hypot(30, 4) / 60;
     const effort = groundFraction * 0.2 + 6 / 20;
 
-    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    realmRacersKart.syncVehicleAudio(renderer, entity, view, true, 2, 0, 3);
     expect(view.vehicleAudioActive).toBe(true);
     expectVehicleCall(renderer.audioSink.vehicle, [
       77,
@@ -246,7 +239,7 @@ describe('Realm Racers coordinator audio wiring', () => {
     ]);
 
     renderer.sim.playerId = 77;
-    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    realmRacersKart.syncVehicleAudio(renderer, entity, view, true, 2, 0, 3);
     expectVehicleCall(renderer.audioSink.vehicle, [
       77,
       true,
@@ -260,7 +253,7 @@ describe('Realm Racers coordinator audio wiring', () => {
     ]);
 
     entity.drive = null;
-    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    realmRacersKart.syncVehicleAudio(renderer, entity, view, true, 2, 0, 3);
     expect(view.vehicleAudioActive).toBe(false);
     expect(renderer.audioSink.stopVehicle).toHaveBeenCalledWith(77);
   });
@@ -318,8 +311,10 @@ describe('Realm Racers coordinator audio wiring', () => {
       updateCamera: (...args: unknown[]) => void;
     };
     const syncSource = prototype.sync.toString();
+    // The kart module is a namespace import, so its call keeps the member form
+    // under the SSR transform (the module object stands in for the namespace).
     expect(syncSource).toMatch(
-      /this\.syncRealmRacersVehicleAudioForView\(\s*e,\s*v,\s*d2 < SFX_MOVE_RANGE_SQ,\s*ax,\s*ay,\s*az,?\s*\)/,
+      /(?:realmRacersKart|__vite_ssr_import_\d+__)\.syncVehicleAudio\(\s*this,\s*e,\s*v,\s*d2 < SFX_MOVE_RANGE_SQ,\s*ax,\s*ay,\s*az,?\s*\)/,
     );
 
     const cameraSource = prototype.updateCamera

@@ -666,15 +666,12 @@ import {
 import { isOwnedPetHostile } from './reaction';
 import { buildRealmBuilderMonumentPickBody } from './realm_builder_monument_fx';
 import { buildRealmFlora, type RealmFloraView } from './realm_flora';
-import {
-  playRealmRacersEventAudio,
-  playRealmRacersScrapeAudio,
-  syncRealmRacersVehicleAudio,
-} from './realm_racers_audio';
+import { playRealmRacersEventAudio } from './realm_racers_audio';
 import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersFieldCues } from './realm_racers_field_cues';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
+import * as realmRacersKart from './realm_racers_kart_presentation';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
 import { RealmRacersPrepare, rallyArrivalLifts } from './realm_racers_prepare';
 import { RealmRacersSky } from './realm_racers_sky';
@@ -685,8 +682,6 @@ import {
   isRealmRacersCoPilot,
 } from './realm_racers_visibility_core';
 import {
-  createRemoteVehicleDisplay,
-  type RemoteVehicleDisplayState,
   remoteRacerDisplayY,
   remoteRacerMuzzle,
   resetRemoteVehicleDisplay,
@@ -842,12 +837,6 @@ import { createPrewarmGroupSlot, createVariantPrewarmSlot } from './variant_prew
 import { routeVarkhulForgeHammer } from './varkhul_forge_hammer';
 import { VarkhulForgestormVisuals } from './varkhul_forgestorm_visual';
 import { createVehicleCamera, stepRendererVehicleCamera } from './vehicle_camera_core';
-import {
-  createVehicleLean,
-  stepVehicleLean,
-  type VehicleLeanState,
-  vehicleIsOffRoad,
-} from './vehicle_lean_core';
 import type { VehicleSuspensionRig } from './vehicle_suspension_fx';
 import { SCHOOL_COLORS, Vfx } from './vfx';
 import { createOffsetVfxAnchor, createVfxAnchor } from './vfx_anchor';
@@ -1183,7 +1172,10 @@ interface AoeRingSlot {
   elapsed: number; // seconds since spawn; >= AOE_RING_LIFETIME means free
 }
 
-export interface EntityView extends RickshawMountViewState, WorldQuestCarryViewState {
+export interface EntityView
+  extends RickshawMountViewState,
+    WorldQuestCarryViewState,
+    realmRacersKart.ViewState {
   group: THREE.Group;
   /** Last frame's range verdict, kept off group.visible so the cull cannot latch it. */
   inDrawRange: boolean;
@@ -1302,8 +1294,6 @@ export interface EntityView extends RickshawMountViewState, WorldQuestCarryViewS
   wasFalling: boolean;
   // surface-kick beat, 0..1 per splash (never advanced while submerged)
   swimKickPhase: number;
-  vehicleAudioActive: boolean;
-  vehicleScrapeCooldown: number;
   // consecutive frames the foot-height heuristic read airborne (debounce)
   airborneHeurFrames: number;
   // mount summon/dismount transition edge-detects. lastMountKey fires the summon
@@ -1315,9 +1305,6 @@ export interface EntityView extends RickshawMountViewState, WorldQuestCarryViewS
   wasMountCasting: boolean;
   /** Display-only vertical smoothing (step-up/step-down presentation). */
   stepSmooth: StepSmoothState;
-  /** Display-only forward projection of a REMOTE racing machine toward the
-   *  present (remote_vehicle_display_core); inactive outside a race. */
-  remoteVehicle: RemoteVehicleDisplayState;
   /** Previous drawn height, for the display-derived fall speed. */
   prevRenderY: number;
   hasPrevY: boolean;
@@ -1333,7 +1320,6 @@ export interface EntityView extends RickshawMountViewState, WorldQuestCarryViewS
   mountSuspension: VehicleSuspensionRig | null | undefined;
   /** Damped terrain lean plus its cadence-sampled gradient. */
   groundTilt: GroundTiltState;
-  vehicleLean: VehicleLeanState;
   tiltGradX: number;
   tiltGradZ: number;
   tiltOnProp: boolean;
@@ -4276,35 +4262,8 @@ export class Renderer {
 
   /** main.ts injects the spatial sound engine here (render never imports game/). */
   setAudioSink(sink: SpatialAudioSink | null): void {
-    if (this.audioSink && this.audioSink !== sink) {
-      for (const [id, view] of this.views) {
-        if (view.vehicleAudioActive) this.audioSink.stopVehicle(id);
-        view.vehicleAudioActive = false;
-      }
-    }
+    realmRacersKart.stopVehicleAudio(this.audioSink, sink, this.views);
     this.audioSink = sink;
-  }
-
-  private syncRealmRacersVehicleAudioForView(
-    entity: Entity,
-    view: EntityView,
-    audible: boolean,
-    x: number,
-    y: number,
-    z: number,
-  ): void {
-    view.vehicleAudioActive = syncRealmRacersVehicleAudio(
-      this.audioSink,
-      entity.id,
-      entity.id === this.sim.playerId,
-      view.vehicleAudioActive,
-      entity.drive,
-      audible,
-      x,
-      y,
-      z,
-      view.vehicleLean.acceleration,
-    );
   }
 
   // Surface under (x,z) for footstep timbre. Sampled only at a footfall (cheap).
@@ -8429,15 +8388,11 @@ export class Renderer {
       wasSubmerged: false,
       wasFalling: false,
       swimKickPhase: 0,
-      vehicleAudioActive: false,
-      vehicleScrapeCooldown: 0,
       airborneHeurFrames: 0,
       lastMountKey: e.mountKey,
       wasMountCasting: e.mountCastRemaining > 0,
       stepSmooth: createStepSmooth(),
-      remoteVehicle: createRemoteVehicleDisplay(),
       groundTilt: createGroundTilt(),
-      vehicleLean: createVehicleLean(),
       prevRenderY: 0,
       hasPrevY: false,
       fallSpeed: 0,
@@ -8452,6 +8407,8 @@ export class Renderer {
       tiltOnProp: false,
       tiltSample: createEntityGroundSample(),
       groundSample: createEntityGroundSample(entityGroundSamplePhaseS(e.id)),
+      // Last, so every field above stays in the literal's own layout.
+      ...realmRacersKart.createViewState(),
     });
     const view = this.views.get(e.id);
     // Never gate the player's OWN view: it must be on screen immediately, its
@@ -11133,19 +11090,7 @@ export class Renderer {
           settled && !v.tiltOnProp,
           dt,
         );
-        const profile = e.drive ? vehicleProfile(e.drive.profileKey) : null;
-        stepVehicleLean(
-          v.vehicleLean,
-          e.drive?.speed ?? 0,
-          e.drive?.slip ?? 0,
-          profile?.maxSlip ?? 1,
-          dt,
-          !!e.drive && settled && !this.reducedMotion(),
-        );
-        v.visual.setGroundTilt(
-          v.groundTilt.pitch + v.vehicleLean.pitch,
-          v.groundTilt.roll + v.vehicleLean.roll,
-        );
+        realmRacersKart.leanRider(this, v, v.visual, e, settled, dt);
       }
       // Ledge climb: the sim owns the move (Entity.climb offline, the mirrored
       // progress online); the visual poses it by hand, tracking the move's
@@ -11222,7 +11167,7 @@ export class Renderer {
       // --- spatial movement audio (self + others) --------------------------
       // All gated by audibility (squared distance) so far entities cost nothing.
       const sink = this.audioSink;
-      this.syncRealmRacersVehicleAudioForView(e, v, d2 < SFX_MOVE_RANGE_SQ, ax, ay, az);
+      realmRacersKart.syncVehicleAudio(this, e, v, d2 < SFX_MOVE_RANGE_SQ, ax, ay, az);
       if (sink && d2 < SFX_MOVE_RANGE_SQ) {
         const rocketSledMounted = logicallyMounted && mountLook === 'goblin_rocket_sled';
         // jump / land / water-entry edges
@@ -11524,16 +11469,7 @@ export class Renderer {
         groundSample: this.groundSample,
         dt,
       });
-      // A racing machine leans into its own acceleration and rolls with the
-      // ground under it. Applied AFTER the mount's attitude pass, which owns the
-      // mount root's pitch for every ordinary mount, and gated on the body
-      // actually driving so no ordinary mount gains a tilt it never had.
-      if (e.drive && v.mountVisual && mountSpec && mountShown && runCharacterPresentation) {
-        v.mountVisual.setGroundTilt(
-          v.groundTilt.pitch + v.vehicleLean.pitch,
-          v.groundTilt.roll + v.vehicleLean.roll,
-        );
-      }
+      realmRacersKart.leanMount(e, v, !!mountSpec && mountShown && runCharacterPresentation);
       // The rider is placed: carry the body-attached auras to the saddle.
       syncRiderAnchor(v.riderAnchor, v.visual.root);
       const ascensionPlan = paladinAscensionVisualPlanInto(e, this.paladinAscensionPlanScratch);
@@ -11558,22 +11494,7 @@ export class Renderer {
         mountShown && !v.mountCompilePending && runCharacterPresentation,
         mountShown && !v.mountCompilePending && runCharacterPresentation ? this.vfx : null,
       );
-      const kart = (isSelf && this.selfRender.drive.state) || e.drive;
-      if (kart && settled && !v.isFar) {
-        this.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);
-        if (vehicleIsOffRoad(kart.dragMult))
-          this.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);
-        this.vfx.vehicleExhaust(v.group.position, facing, v.vehicleLean.acceleration > 1, dt);
-        v.vehicleScrapeCooldown = Math.max(0, v.vehicleScrapeCooldown - dt);
-        if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {
-          const impact = Math.min(1, kart.collisionImpact / 24);
-          this.tmpV.set(ax, ay + 0.55, az);
-          this.vfx.vehicleScrapeSparks(this.tmpV, impact);
-          playRealmRacersScrapeAudio(this.audioSink, this.groundSample, ax, az, impact);
-          if (isSelf) this.addShake(0.05 + impact * 0.14);
-          v.vehicleScrapeCooldown = 0.18;
-        }
-      }
+      realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);
 
       const emoteId =
         e.kind === 'player' && e.overheadEmoteId && !e.dead ? e.overheadEmoteId : null;

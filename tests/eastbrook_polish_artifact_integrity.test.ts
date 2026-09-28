@@ -1413,7 +1413,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
-  '72d2c8a197e699ee4e8afcf7b86163220ed89723fa69e49ce9a60a8d6e6058be';
+  // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
+  '572722bbe801ccccc77e8e17d7504060a4db6ec8144a6e9aa1e9d3c607529bd7';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1455,7 +1456,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
-  '013262cb299df2b3506f92cd9e6c3d93df24b639308184267bcdbc5623bdf233';
+  // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
+  'f9bdb01f02a6e38f39c3c27fbf1e021109251cb1f1e828f465783333353fe677';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2855,7 +2857,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the carry of PR 4229, the shared spirit veil.
       // Re-minted for the Realm Racers ward and ghost veils on pilot and kart.
       // Re-minted for the racer veil review fixes.
-    ).toBe('abe82b1f0166f1205ce659f3294e135c4cac091bef55b26c0a3a065c87cdbfe4');
+      // Re-minted for the Realm Racers kart presentation move.
+    ).toBe('557ad1325b975e63ab7165148d0963887baa668e3b3ef04d95487c5678f96b4a');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

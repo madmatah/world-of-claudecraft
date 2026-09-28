@@ -719,7 +719,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
-  '013262cb299df2b3506f92cd9e6c3d93df24b639308184267bcdbc5623bdf233';
+  // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
+  'f9bdb01f02a6e38f39c3c27fbf1e021109251cb1f1e828f465783333353fe677';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

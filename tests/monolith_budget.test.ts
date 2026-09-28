@@ -1027,7 +1027,11 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13130 -> 13129: the racer veil decisions moved to the
     // registered ghost_style_core.ts, one import in place of two names, and
     // the veil call takes the view slice. Exact count.
-    ceiling: 13129,
+    // LOWERED 13129 -> 13050: a racing machine's per-view lean, road effects
+    // and engine mix moved to realm_racers_kart_presentation.ts behind the
+    // renderer host, the entity view taking its slice by extension. Exact
+    // count.
+    ceiling: 13050,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

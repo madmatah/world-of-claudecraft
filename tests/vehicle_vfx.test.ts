@@ -70,13 +70,22 @@ describe('Realm Racers vehicle VFX', () => {
   });
 
   it('wires all four effects to live vehicle state in the renderer', () => {
-    const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    expect(source).toContain('this.vfx.vehicleDriftSmoke(');
-    expect(source).toContain('const kart = (isSelf && this.selfRender.drive.state) || e.drive;');
+    // The road effects are the kart presentation's, run from the renderer's
+    // entity loop for every view with the renderer as the host.
+    const source = readFileSync(
+      new URL('../src/render/realm_racers_kart_presentation.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('h.vfx.vehicleDriftSmoke(');
+    expect(source).toContain('const kart = (isSelf && h.selfRender.drive.state) || e.drive;');
     expect(source).toContain('if (vehicleIsOffRoad(kart.dragMult))');
-    expect(source).toContain('this.vfx.vehicleSurfaceDust(');
-    expect(source).toContain('this.vfx.vehicleExhaust(');
+    expect(source).toContain('h.vfx.vehicleSurfaceDust(');
+    expect(source).toContain('h.vfx.vehicleExhaust(');
     expect(source).toContain('if (kart.collisionImpact > 3');
-    expect(source).toContain('this.vfx.vehicleScrapeSparks(');
+    expect(source).toContain('h.vfx.vehicleScrapeSparks(');
+    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    expect(renderer).toContain(
+      'realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
+    );
   });
 });

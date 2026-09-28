@@ -141,6 +141,14 @@ describe('renderer self-kart reads go through the drive view', () => {
   const source = stripComments(
     readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
   );
+  // The road effects are the kart presentation's, which the renderer drives
+  // with itself as the host (`h.selfRender`).
+  const kart = stripComments(
+    readFileSync(
+      new URL('../src/render/realm_racers_kart_presentation.ts', import.meta.url),
+      'utf8',
+    ),
+  );
   const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   /** Occurrences of `needle`, any whitespace run in it matching any other. */
   const count = (needle: string): number => {
@@ -179,14 +187,23 @@ describe('renderer self-kart reads go through the drive view', () => {
       // look-ahead and speed FOV
       'let velX = p.drive ? this.selfRender.drive.velocityX : 0;',
       'let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;',
-      // drift smoke, surface dust, scrape sparks
-      'const kart = (isSelf && this.selfRender.drive.state) || e.drive;',
-      'this.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);',
-      'this.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);',
-      'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {',
-      'const impact = Math.min(1, kart.collisionImpact / 24);',
     ];
     for (const needle of consumers) expect(count(needle), needle).toBe(1);
-    expect(count('this.selfRender.drive.')).toBe(15);
+    expect(count('this.selfRender.drive.')).toBe(14);
+    // drift smoke, surface dust, scrape sparks: the kart presentation's, run
+    // from the entity loop
+    expect(
+      count('realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);'),
+    ).toBe(1);
+    for (const needle of [
+      'const kart = (isSelf && h.selfRender.drive.state) || e.drive;',
+      'h.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);',
+      'h.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);',
+      'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {',
+      'const impact = Math.min(1, kart.collisionImpact / 24);',
+    ]) {
+      expect(kart.split(needle).length - 1, needle).toBe(1);
+    }
+    expect(kart.split('h.selfRender.drive.').length - 1).toBe(1);
   });
 });
