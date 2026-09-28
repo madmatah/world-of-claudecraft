@@ -64,6 +64,9 @@ export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ward
 /** When a ward starts to read as ending, seconds of its aura clock left (the
  *  mirrored `remaining`, which both worlds count down). */
 export const RALLY_WARD_ENDING_SECONDS = 2;
+// The offline clock is a sum of float ticks and the mirror's a rounded
+// deadline: the tolerance lets both flip on the same tick.
+const RALLY_WARD_ENDING_EPS = 1e-6;
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   // The racer reads first: a class veil must never mask one. The ghost wins
@@ -72,7 +75,11 @@ export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   // the tick it ends, and the ward stays in the aura row meanwhile.
   if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
   const ward = e.auras.find((a) => a.kind === 'rally_ward');
-  if (ward) return ward.remaining <= RALLY_WARD_ENDING_SECONDS ? 'ward-ending' : 'ward';
+  if (ward) {
+    return ward.remaining <= RALLY_WARD_ENDING_SECONDS + RALLY_WARD_ENDING_EPS
+      ? 'ward-ending'
+      : 'ward';
+  }
   if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
   if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
   return 'none';

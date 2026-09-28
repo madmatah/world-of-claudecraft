@@ -206,6 +206,11 @@ describe('the ward in its last seconds', () => {
     expect(characterVeilboundState(racer([at(REALM_RACERS_WARD_AURA_SECONDS)]))).toBe('ward');
     expect(characterVeilboundState(racer([at(RALLY_WARD_ENDING_SECONDS + 0.05)]))).toBe('ward');
     expect(characterVeilboundState(racer([at(RALLY_WARD_ENDING_SECONDS)]))).toBe('ward-ending');
+    // a float-tick clock a hair over two flips on the same tick as the
+    // mirror's rounded deadline
+    expect(characterVeilboundState(racer([at(RALLY_WARD_ENDING_SECONDS + 1e-9)]))).toBe(
+      'ward-ending',
+    );
     expect(characterVeilboundState(racer([at(0.05)]))).toBe('ward-ending');
     expect(characterVeilboundState(racer([march, at(1)]))).toBe('ward-ending');
     expect(rallyVeilLook('ward-ending')).toBe('rally-ward-ending');

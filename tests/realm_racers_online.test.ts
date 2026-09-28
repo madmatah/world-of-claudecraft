@@ -40,6 +40,7 @@ import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from '../server/realm_
 import { ClientWorld } from '../src/net/online';
 import { decodeDriveWire } from '../src/net/realm_racers_drive_wire';
 import { decodeRealmRacersKit, realmRacersKnownOr } from '../src/net/realm_racers_self_wire';
+import { characterVeilboundState } from '../src/render/ghost_style_core';
 import {
   REALM_RACERS_NITRO_ABILITY_ID,
   REALM_RACERS_SLICK_ABILITY_ID,
@@ -57,7 +58,7 @@ import {
   realmRacersWarded,
 } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
-import { TICK_RATE } from '../src/sim/types';
+import { type Entity, TICK_RATE } from '../src/sim/types';
 import {
   createRealmRacersReadySender,
   stepRealmRacersReady,
@@ -844,11 +845,26 @@ describe('the ward online', () => {
     // Keep the rival beside the racer while the clock runs down, whatever the
     // machine does meanwhile.
     const wardTicks = REALM_RACERS_WARD_AURA_SECONDS * TICK_RATE;
-    while (server.sim.tickCount < grantedAt + wardTicks - 1) {
-      rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
-      rivalEntity.prevPos = { ...rivalEntity.pos };
-      advance(server);
+    const runTo = (tick: number): void => {
+      while (server.sim.tickCount < tick) {
+        rivalEntity.pos = { ...racer.pos, x: racer.pos.x + 3 };
+        rivalEntity.prevPos = { ...rivalEntity.pos };
+        advance(server);
+      }
+    };
+    // Eight and a half seconds in: both mirrors read the ward as ending (the
+    // input the pulsing veil keys on) and the pilot's strip counts 2.
+    runTo(grantedAt + (17 * TICK_RATE) / 2);
+    catchUp();
+    for (const world of [ownWorld, rivalWorld]) {
+      const seen = wardOn(world);
+      expect(seen?.remaining).toBeCloseTo(1.5, 5);
+      expect(characterVeilboundState(world.entities.get(session.pid) as Entity)).toBe(
+        'ward-ending',
+      );
     }
+    expect(ownWorld.realmRacersInfo.match?.wardIn).toBe(2);
+    runTo(grantedAt + wardTicks - 1);
     catchUp();
     expect(realmRacersWarded(racer)).toBe(true);
     expect(wardOn(rivalWorld)).toBeDefined();
@@ -863,6 +879,7 @@ describe('the ward online', () => {
     expect(wardOn(rivalWorld)).toBeUndefined();
     expect(wardOn(ownWorld)).toBeUndefined();
     expect(ownWorld.realmRacersInfo.match?.warded).toBe(false);
+    expect(ownWorld.realmRacersInfo.match).not.toHaveProperty('wardIn');
     // The pilot is told the aura faded, as for any other buff; nothing broke it.
     expect(events(client, 'aura')).toContainEqual(
       expect.objectContaining({ targetId: session.pid, name: 'Racing Ward', gained: false }),

@@ -241,10 +241,10 @@ const REALM_RACERS_WARD_AURA_NAME = 'Racing Ward';
  * How long the ward lasts, seconds, on the aura clock: the per-tick pass takes
  * DT off `remaining` and drops the aura at zero with the same fade the spend
  * path emits, so every client clears it alike. Inside that window it absorbs
- * the next Ground Blast hit or oil crossing and is spent by it (operator call,
- * 2026-09-28; it used to last until something spent it). Granted in the rally
- * phase, which runs after the aura pass, it covers every hit the rally phase
- * resolves over the next 10 s of ticks and is gone before the one 10 s on.
+ * the next Ground Blast hit or oil crossing and is spent by it. Granted in the
+ * rally phase, which runs after the aura pass, it covers every hit the rally
+ * phase resolves over the next 10 s of ticks and is gone before the one 10 s
+ * on.
  */
 export const REALM_RACERS_WARD_AURA_SECONDS = 10;
 
