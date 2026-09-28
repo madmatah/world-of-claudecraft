@@ -15066,6 +15066,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.circuitName_evergarden_practice': '에버가든 훈련장',
   'hudChrome.rally.circuitName_evergarden_express_tour': '에버가든 익스프레스 투어',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '밤꽃 평원 문웰 런',
+  'hudChrome.rally.circuitName_drakelands_rampart_run': '드레이크랜드 성벽 런',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '동시 결승. 경기 심판진이 무승부를 선언했습니다.',
   'hudChrome.rally.position': '순위 {position}/{total}',

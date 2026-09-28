@@ -14379,6 +14379,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.circuitName_evergarden_practice': '永恆花園訓練場',
   'hudChrome.rally.circuitName_evergarden_express_tour': '永恆花園特快巡迴賽',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '夜綻花野月泉競速賽',
+  'hudChrome.rally.circuitName_drakelands_rampart_run': '龍裔荒原城壘競速賽',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '不分勝負。賽事裁判宣布比賽平手。',
   'hudChrome.rally.position': '名次 {position}/{total}',

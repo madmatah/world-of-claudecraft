@@ -12902,6 +12902,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.rally.bannerLoss'
   | 'hudChrome.rally.bannerWin'
   | 'hudChrome.rally.chase'
+  | 'hudChrome.rally.circuitName_drakelands_rampart_run'
   | 'hudChrome.rally.circuitName_evergarden_express_tour'
   | 'hudChrome.rally.circuitName_evergarden_practice'
   | 'hudChrome.rally.circuitName_nightbloom_moonwell_run'

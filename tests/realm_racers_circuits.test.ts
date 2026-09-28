@@ -530,6 +530,91 @@ describe('Realm Racers circuits: the Nightbloom Moonwell Run', () => {
   });
 });
 
+describe('Realm Racers circuits: the Drakelands Rampart Run', () => {
+  const RAMPART = realmRacersCompetitionCircuits().find(
+    (circuit) => circuit.id === 'drakelands_rampart_run',
+  );
+  if (!RAMPART) throw new Error('the Rampart Run is the competition circuit this pins');
+  const track = realmRacersTrack(RAMPART);
+  const metrics = realmRacersCircuitMetrics(RAMPART);
+
+  it('is a competition circuit wearing its own zone, raced in the afternoon to its own track', () => {
+    expect(RAMPART.roles).toEqual(['competition']);
+    expect(RAMPART.practiceCopies).toBe(0);
+    expect(RAMPART.theme).toBe('drakelands');
+    expect(RAMPART.timeOfDay).toBe('afternoon');
+    expect(RAMPART.musicTrack).toBe('realm_racers_drakelands');
+    expect(realmRacersCircuitErrors(metrics)).toEqual([]);
+  });
+
+  it('takes the next lane after the Moonwell Run, and moves none of the lanes before it', () => {
+    // Appended to the records, so it is appended to the band: every lane that
+    // existed before it keeps its index and its circuit.
+    const moonwell = realmRacersCompetitionCircuits().find(
+      (c) => c.id === 'nightbloom_moonwell_run',
+    );
+    if (!moonwell) throw new Error('the Moonwell Run');
+    expect(realmRacersPublicLane(RAMPART)).toBe(realmRacersPublicLane(moonwell) + 1);
+    expect(realmRacersPublicLane(RAMPART)).toBe(REALM_RACERS_LANES.length - 1);
+    expect(REALM_RACERS_LANES.slice(0, -1).map((lane) => lane.circuit.id)).toEqual([
+      ...Array.from(
+        { length: REALM_RACERS_PRACTICE_CIRCUIT.practiceCopies },
+        () => 'evergarden_practice',
+      ),
+      'evergarden_express_tour',
+      'nightbloom_moonwell_run',
+    ]);
+  });
+
+  it('carries ONE pickup row, on straight road and off the start line', () => {
+    const rows = RAMPART.pickupRows ?? [];
+    expect(rows).toHaveLength(1);
+    const s = rows[0].s * track.length;
+    expect(Math.abs(track.pointAt(s).turnRadius)).toBeGreaterThan(200);
+    expect(rows[0].s).toBeGreaterThan(0.05);
+    expect(rows[0].s).toBeLessThan(0.95);
+  });
+
+  it('runs the Rampart head on against the Smithy straight, in Ground Blast reach', () => {
+    // The two stretches the row sits between: the Smithy straight carrying the
+    // boxes, and the Rampart coming back the other way across the lava.
+    expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
+    expect(metrics.nearestApproach.tangentDot).toBeLessThan(-0.8);
+    expect(metrics.nearestApproach.distance).toBeGreaterThanOrEqual(
+      REALM_RACERS_MIN_STRETCH_SEPARATION,
+    );
+    const row = (RAMPART.pickupRows ?? [])[0].s * track.length;
+    const pinch = [metrics.nearestApproach.s, metrics.nearestApproach.otherS];
+    expect(pinch.some((s) => Math.abs(s - row) < 60)).toBe(true);
+  });
+
+  it('is lit by the Drakelands brazier and by nothing else', () => {
+    const lamps = realmRacersPlacements(RAMPART).props.filter((prop) =>
+      prop.asset.startsWith('lamp'),
+    );
+    expect(lamps.length).toBeGreaterThan(0);
+    for (const lamp of lamps) expect(lamp.asset).toBe('lampDrakelandsBrazier');
+  });
+
+  it('keeps its dressing inside the budget the eager build was priced at', () => {
+    const placements = realmRacersPlacements(RAMPART);
+    expect(placements.scattered.length).toBeGreaterThan(0);
+    expect(placements.scattered.length).toBeLessThanOrEqual(400);
+    expect(placements.props.filter((prop) => prop.solid).length).toBeLessThanOrEqual(170);
+    for (const piece of placements.scattered) expect(piece.solid).toBe(false);
+  });
+
+  it('keeps the lava strip between the two opposed stretches open ground', () => {
+    // Nothing solid stands on the line a shell is fired across, except the
+    // lava pools and the hoard that ARE the strip: no tower, no tree.
+    const strip = new Set(['lavaPool', 'dragonHoard', 'dragonEggs', 'emberLily']);
+    for (const prop of realmRacersPlacements(RAMPART).props) {
+      const inStrip = prop.x > 60 && prop.x < 160 && prop.z > 60 && prop.z < 95;
+      if (inStrip) expect(strip.has(prop.asset), `${prop.asset} at ${prop.x},${prop.z}`).toBe(true);
+    }
+  });
+});
+
 describe('Realm Racers circuits: the pools', () => {
   it('has exactly one practice circuit, and it is the one practice resolves to', () => {
     const practice = REALM_RACERS_CIRCUIT_LIST.filter((c) => c.roles.includes('practice'));

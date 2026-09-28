@@ -2531,6 +2531,7 @@ export const hudChromeStrings = {
     circuitName_evergarden_practice: 'Evergarden Bootcamp',
     circuitName_evergarden_express_tour: 'Evergarden Express Tour',
     circuitName_nightbloom_moonwell_run: 'Nightbloom Moonspring Run',
+    circuitName_drakelands_rampart_run: 'Drakelands Rampart Run',
     // The end-of-race podium: a race time on each step, to a tenth. The heading
     // above the steps is the circuit name, from the keys above.
     podiumTime: '{minutes}:{seconds}.{tenths}',

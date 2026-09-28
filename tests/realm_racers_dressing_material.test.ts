@@ -118,10 +118,16 @@ const SURFACE_SPLIT_URLS = ['hexShipBlue', 'hexShipRed', 'hexShipGreen', 'hexBoa
 /** The world props the shipped circuits place that the world leaves out on low
  *  (`LOW_TIER_PROP_KEYS`): their Lambert programs are the circuit's to link there. */
 const OUTSIDE_LOW_TIER_URLS = [
+  '/models/biome/hex_cannon.glb',
+  '/models/biome/hex_cannonballs.glb',
+  '/models/biome/hex_crate_big.glb',
   '/models/biome/hex_flag.glb',
+  '/models/biome/hex_sack.glb',
   '/models/biome/hex_tower.glb',
+  '/models/biome/hexr_blacksmith.glb',
   '/models/biome/kcas_bench.glb',
   '/models/biome/kcas_torch.glb',
+  '/models/dungeon/crates_stacked.glb',
   '/models/dungeon/pillar.glb',
   '/models/foliage/oak_4.glb',
   '/models/props/crystal_amethyst_cluster.glb',
@@ -141,11 +147,13 @@ const OUTSIDE_LOW_TIER_URLS = [
   '/models/props/pixie_mushroom_house.glb',
   '/models/props/shrub_flowering.glb',
   '/models/props/star_heart_crystal.glb',
+  '/models/props/statue_head.glb',
 ];
 
 /** The models the shipped circuits place that nothing in the world draws. */
 const RACE_ONLY_URLS = [
   '/models/biome/city_fence_wood.glb',
+  '/models/dungeon/banner_patterna_red.glb',
   '/models/dungeon/banner_patterna_white.glb',
   '/models/dungeon/banner_patterna_yellow.glb',
 ];
@@ -170,8 +178,8 @@ function drakelandsKitDraws(): { urls: Set<string>; draws: number } {
 
 /**
  * A Drakelands circuit: the garden's curve wearing the drakelands theme, with
- * EVERY piece its vocabulary offers placed once and both of its walls run.
- * No such circuit ships; this is what one would draw.
+ * EVERY piece its vocabulary offers placed once and both of its walls run. The
+ * shipped Rampart Run places a subset of it; this probe covers the whole set.
  */
 function drakelandsCircuit(): RealmRacersCircuit {
   const theme = CIRCUIT_THEMES.drakelands;
@@ -367,14 +375,22 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
     expect(outside).toEqual(OUTSIDE_LOW_TIER_URLS);
   });
 
-  it('keeps the maze hedge raw as the world draws it, and names every race-only model', async () => {
+  it('keeps the hedge and the ember set raw as the world draws them, and names every race-only model', async () => {
     const byUrl = await rallyDrawsByUrl();
     const routes = new Map<string, string[]>();
     for (const url of byUrl.keys()) {
       const route = realmRacersDressingRoute(url);
       routes.set(route, [...(routes.get(route) ?? []), url]);
     }
-    expect(routes.get('worldRaw')).toEqual(['/models/props/maze_hedge_wall.glb']);
+    // The hedge, and the ember set the Drakelands Rampart Run places, which
+    // rides the parse ember_features keeps.
+    expect([...(routes.get('worldRaw') ?? [])].sort()).toEqual([
+      '/models/props/dragon_eggs.glb',
+      '/models/props/dragon_hoard.glb',
+      '/models/props/ember_lily.glb',
+      '/models/props/lava_pool.glb',
+      '/models/props/maze_hedge_wall.glb',
+    ]);
     expect([...(routes.get('raceOnly') ?? [])].sort()).toEqual(RACE_ONLY_URLS);
     for (const url of routes.get('worldRaw') ?? []) {
       const rally = byUrl.get(url) ?? [];

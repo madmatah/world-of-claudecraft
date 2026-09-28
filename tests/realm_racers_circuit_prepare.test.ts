@@ -491,11 +491,11 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     expect(sky.asked).toEqual(['vale']);
   });
 
-  // No Drakelands circuit ships, so none is in the lobby's pool yet: this is
-  // the one a future Drakelands record would be, every piece its theme offers
-  // placed and both of its walls run, raced from a draft lane through the same
-  // client. The kit pieces are the world's env-prop templates, whose load is a
-  // fill like any fetch, so the gate must wait for it and must then see them.
+  // The whole Drakelands vocabulary: every piece its theme offers placed and
+  // both of its walls run, raced from a draft lane through the same client. The
+  // kit pieces are the world's env-prop templates, whose load is a fill like
+  // any fetch, so the gate must wait for it and must then see them. The shipped
+  // Drakelands circuit is proved on its own record in the case after it.
   it('prepares a Drakelands circuit exactly: every program it draws was under its gate, kit templates included', async () => {
     loaderControl.deferred = true;
     vi.resetModules();
@@ -622,6 +622,111 @@ describe('the circuit client (rallyCircuit:<id>)', () => {
     } finally {
       registry.clearRealmRacersDraftCircuits();
     }
+  });
+
+  it('prepares the shipped Rampart Run exactly on its public lane, kit templates included', async () => {
+    loaderControl.deferred = true;
+    vi.resetModules();
+    const fresh = await import('../src/render/realm_racers_track');
+    const { realmRacersFills: freshFills } = await import('../src/render/realm_racers_fills');
+    const { RealmRacersCircuitPrepare: FreshClient } = await import(
+      '../src/render/realm_racers_circuit_prepare'
+    );
+    const env = await import('../src/render/ignivar_env_props');
+    const route = await import('../src/render/realm_racers_dressing_material');
+    const { CIRCUIT_THEMES } = await import('../src/render/realm_racers_themes');
+    const { REALM_RACERS_PROP_VISUALS } = await import('../src/render/realm_racers_prop_visuals');
+    const { REALM_RACERS_BARRIER_VISUALS } = await import(
+      '../src/render/realm_racers_barrier_visuals'
+    );
+    const records = await import('../src/sim/content/realm_racers_circuits');
+    const layout = await import('../src/sim/realm_racers_layout');
+    const circuit = records.realmRacersCircuitById('drakelands_rampart_run');
+    if (!circuit) throw new Error('the Rampart Run ships');
+    const theme = CIRCUIT_THEMES.drakelands;
+    expect(env.ignivarEnvPropTemplateCount()).toBe(0);
+    const view = fresh.buildRealmRacersTrack(circuit);
+    const fills = freshFills(view.group);
+    expect(fills.total).toBeGreaterThan(1);
+    const sky = fakeSky();
+    const client = new FreshClient(
+      {
+        circuitId: circuit.id,
+        group: view.group,
+        skyBiome: theme.sky.biome,
+        drawnOnce: view.drawnOnce,
+        onViewerLane: view.onViewerLane,
+      },
+      sky.sky,
+    );
+    expect(client.prepareId).toBe(realmRacersCircuitPrepareId('drakelands_rampart_run'));
+    const { gate, calls } = fakeGate();
+    let verdict: boolean | null = null;
+    void client.run(gate, NEVER).then((ok) => {
+      verdict = ok;
+    });
+    for (let round = 0; round < 8 && loaderControl.pending.length > 0; round++) {
+      const ready = loaderControl.pending;
+      loaderControl.pending = [];
+      for (const fill of ready) fill.resolve();
+      await flush();
+    }
+    await flush();
+    expect(fills.done).toBe(fills.total);
+    expect(gate).toHaveBeenCalledTimes(1);
+    expect(calls[0].target).toBe(view.group);
+    // Every kit url the record places or walls with stood under the group when
+    // it was gated, drawn with the world's own template material.
+    const expectedKit = new Set<string>();
+    for (const prop of circuit.props ?? []) {
+      const visual = REALM_RACERS_PROP_VISUALS[prop.asset];
+      if (visual.kind === 'worldKit') expectedKit.add(visual.url);
+    }
+    for (const fence of circuit.fences ?? []) {
+      const visual = REALM_RACERS_BARRIER_VISUALS[fence.kit];
+      for (const url of [
+        visual.panelUrl,
+        ...(visual.corner === 'none' ? [] : [visual.corner.url]),
+      ]) {
+        if (route.realmRacersDressingRoute(url) === 'worldKit') expectedKit.add(url);
+      }
+    }
+    expect(expectedKit.size).toBeGreaterThan(0);
+    const kitSeen = new Set<string>();
+    for (const { object, material } of drawsUnder(view.group)) {
+      if (!object.userData.realmRacersDressing) continue;
+      const url = object.name.slice('realm-racers-dressing:'.length);
+      if (route.realmRacersDressingRoute(url) !== 'worldKit') continue;
+      const key = env.ignivarEnvPropKeyOfUrl(url);
+      const template = key ? env.ignivarEnvPropTemplate(key) : null;
+      expect(material, url).toBe(template?.material);
+      for (const programKey of keysOf(object, material)) {
+        expect(calls[0].keys.has(programKey), url).toBe(true);
+      }
+      kitSeen.add(url);
+    }
+    expect(kitSeen).toEqual(expectedKit);
+    // Through the countdown and the start on its public lane: every program the
+    // view draws was under the gate, dressing and procedural pieces alike.
+    const origin = layout.realmRacersLaneOrigin(layout.realmRacersPublicLane(circuit));
+    const drawn = new Set<string>();
+    const drawOn = (time: number, match: RealmRacersLaneView) => {
+      view.update(origin.x, origin.z, time, match);
+      for (const { object, material } of drawsUnder(view.group)) {
+        if (!object.visible) continue;
+        for (const key of keysOf(object, material)) drawn.add(key);
+      }
+    };
+    drawOn(0, laneMatch(circuit, { phase: 'countdown', countdownTicks: 20 }));
+    calls[0].resolve();
+    sky.finish(true);
+    await flush();
+    drawOn(1, laneMatch(circuit, { phase: 'racing', countdownTicks: 0, elapsed: 0.1 }));
+    await flush();
+    expect(verdict).toBe(true);
+    expect(sky.asked).toEqual(['ember']);
+    expect(drawn.size).toBeGreaterThan(0);
+    expect([...drawn].filter((key) => !calls[0].keys.has(key))).toEqual([]);
   });
 
   it('lands a kit fill whose template never bakes, draws the rest, and never loads the kit twice', async () => {

@@ -2183,6 +2183,7 @@ export const en_XA: EnTranslations = {
       "circuitName_evergarden_practice": "[Éʋéŕĝáŕðéñ Ɓóóţçáɱþ]",
       "circuitName_evergarden_express_tour": "[Éʋéŕĝáŕðéñ Éẋþŕéšš Ţóúŕ]",
       "circuitName_nightbloom_moonwell_run": "[Ñíĝĥţƀļóóɱ Ɱóóñšþŕíñĝ Ŕúñ]",
+      "circuitName_drakelands_rampart_run": "[Ðŕáķéļáñðš Ŕáɱþáŕţ Ŕúñ]",
       "podiumTime": "[{minutes}:{seconds}.{tenths}]",
       "position": "[Þóšíţíóñ {position}/{total}]",
       "lap": "[Ļáþ {lap}/{total}]",

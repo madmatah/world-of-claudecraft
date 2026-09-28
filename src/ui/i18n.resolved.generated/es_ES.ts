@@ -2183,6 +2183,7 @@ export const es_ES: EnTranslations = {
       "circuitName_evergarden_practice": "Evergarden Bootcamp",
       "circuitName_evergarden_express_tour": "Evergarden Express Tour",
       "circuitName_nightbloom_moonwell_run": "Nightbloom Moonspring Run",
+      "circuitName_drakelands_rampart_run": "Drakelands Rampart Run",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "Position {position}/{total}",
       "lap": "Lap {lap}/{total}",

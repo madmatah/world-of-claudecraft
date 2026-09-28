@@ -66,15 +66,19 @@ function probe(circuit: RealmRacersCircuit, index: number, lateral: number) {
 }
 
 describe('Realm Racers water: the shore line carries none of it any more', () => {
-  it('covers every shipped circuit, and every one of them places its water', () => {
+  it('covers every shipped circuit, and every one but the dry Rampart Run places its water', () => {
     // The cardinality floor for everything below: an `it.each` over a list that
     // quietly emptied registers no cases at all.
-    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(3);
+    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(4);
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
-      expect((circuit.ponds?.length ?? 0) > 0, circuit.id).toBe(true);
+      // The Drakelands Rampart Run is the one DRY circuit, which the record
+      // allows: the waste's melt is lava, a modelled solid piece, and a
+      // circuit's water is decoration it may leave out altogether.
+      const dry = circuit.id === 'drakelands_rampart_run';
+      expect((circuit.ponds?.length ?? 0) > 0, circuit.id).toBe(!dry);
       // The record's own IFF: water is placed, and the bank profile exists
       // exactly where something is made of it.
-      expect(Boolean(circuit.basin), circuit.id).toBe(true);
+      expect(Boolean(circuit.basin), circuit.id).toBe(!dry);
     }
   });
 
@@ -168,7 +172,16 @@ describe('Realm Racers water: the shore line carries none of it any more', () =>
 });
 
 describe('Realm Racers water: what a placed pond derives', () => {
-  it.each(REALM_RACERS_CIRCUIT_LIST.map((circuit) => [circuit.id, circuit] as const))(
+  // Every circuit that places water: all of them but the dry Rampart Run, which
+  // the case above pins by name.
+  const WET = REALM_RACERS_CIRCUIT_LIST.filter((circuit) => (circuit.ponds?.length ?? 0) > 0);
+  it('measures the ponds of every wet circuit', () => {
+    expect(WET.map((circuit) => circuit.id)).toEqual(
+      REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== 'drakelands_rampart_run').map((c) => c.id),
+    );
+  });
+
+  it.each(WET.map((circuit) => [circuit.id, circuit] as const))(
     '%s keeps every pond clear of the ground the race is run on',
     (_id, circuit) => {
       const track = realmRacersTrack(circuit);

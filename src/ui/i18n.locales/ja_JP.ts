@@ -15109,6 +15109,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.circuitName_evergarden_practice': 'エバーガーデン練習場',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'エバーガーデン・エクスプレスツアー',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・ムーンウェルラン',
+  'hudChrome.rally.circuitName_drakelands_rampart_run': 'ドレイクランド・ランパートラン',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '同着。レースの審判が引き分けを宣言しました。',
   'hudChrome.rally.position': '順位 {position}/{total}',

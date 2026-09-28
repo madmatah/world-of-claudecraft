@@ -261,6 +261,9 @@ describe('the barrier kit catalog', () => {
           [...worn].flatMap((kit) => {
             const visual = REALM_RACERS_BARRIER_VISUALS[kit];
             expect(visual, `${kit} should be a real kit`).toBeDefined();
+            // A kit drawn from the world's templates never rides it (the case
+            // below), which the Drakelands Rampart Run's two kits are.
+            if (visual.worldTemplate) return [];
             return visual.corner === 'none'
               ? [visual.panelUrl]
               : [visual.panelUrl, visual.corner.url];
@@ -319,6 +322,13 @@ describe('the barrier kit catalog', () => {
     ];
     for (const url of kitUrls) expect(lane, url).not.toContain(url);
     expect(lane).toContain(REALM_RACERS_BARRIER_VISUALS.ironwork.panelUrl);
+    // And on the shipped pool, where a circuit really does author both kits:
+    // they stay out of the lane every player pays for.
+    const worn = new Set(
+      REALM_RACERS_CIRCUIT_LIST.flatMap((c) => c.fences ?? []).map((fence) => fence.kit),
+    );
+    expect(worn.has('fortressWall') && worn.has('keepFence')).toBe(true);
+    for (const url of kitUrls) expect(REALM_RACERS_BARRIER_BOOT_URLS, url).not.toContain(url);
   });
 
   it('gives every theme a vocabulary of real kits', () => {

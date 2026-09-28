@@ -2183,6 +2183,7 @@ export const ko_KR: EnTranslations = {
       "circuitName_evergarden_practice": "에버가든 훈련장",
       "circuitName_evergarden_express_tour": "에버가든 익스프레스 투어",
       "circuitName_nightbloom_moonwell_run": "밤꽃 평원 문웰 런",
+      "circuitName_drakelands_rampart_run": "드레이크랜드 성벽 런",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "순위 {position}/{total}",
       "lap": "바퀴 {lap}/{total}",

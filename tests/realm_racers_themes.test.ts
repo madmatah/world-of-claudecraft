@@ -726,6 +726,33 @@ describe('Realm Racers circuit themes', () => {
       }
     });
 
+    it('dresses the shipped Rampart Run from the zone own vocabulary, one banner in the boot lane', () => {
+      // The one shipped Drakelands circuit places only what this theme offers
+      // and walls only with its two kits, so it wears what the zone draws.
+      const rampart = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === 'drakelands_rampart_run');
+      if (!rampart) throw new Error('the Rampart Run ships');
+      const offered = new Set(theme.props);
+      for (const prop of rampart.props ?? [])
+        expect(offered.has(prop.asset), prop.asset).toBe(true);
+      for (const fence of rampart.fences ?? []) {
+        expect(theme.barriers.includes(fence.kit), fence.kit).toBe(true);
+      }
+      // What shipping it adds to the boot lane every player pays for: the red
+      // grid banner, and nothing of its walls (template-drawn, resident already).
+      const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+      const others = new Set(
+        REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== rampart.id).flatMap((c) =>
+          themeUrls(c.theme),
+        ),
+      );
+      const added = themeUrls('drakelands').filter((url) => !others.has(url));
+      expect(added).toEqual([theme.startFixture.bannerUrl]);
+      for (const url of added) expect(lane.has(url), url).toBe(true);
+      for (const kit of theme.barriers) {
+        expect(lane.has(REALM_RACERS_BARRIER_VISUALS[kit].panelUrl), kit).toBe(false);
+      }
+    });
+
     it('flies the ember storm under the zone own haze, and plants no rim', () => {
       expect(theme.ground).toBe('ember');
       expect(theme.sky.biome).toBe('ember');
