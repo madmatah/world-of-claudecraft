@@ -15,9 +15,9 @@ seated, band), once per HUD, from `RealmRacersUi.sendReady` above the paint cut.
 the race clips (`src/game/realm_racers_sfx.ts`, the table `sfx.ts` plays them from, plus
 the HUD's apply cues of the race auras) that the manifest leaves lazy, through
 `sfx.preload`. Icons: the splash of every pickup effect, the rally slots at the bar size
-and the buff bar's race auras, through `prewarmIconCache` (`src/ui/icon_prewarm.ts`, one
-worker encode in flight, idle slices). Pinned by `tests/realm_racers_race_warm.test.ts`
-and the online case in `tests/realm_racers_online.test.ts`.
+and the buff bar's race auras, through `prewarmIconCache` (`src/ui/icon_prewarm.ts`, eager,
+one worker encode in flight for this pump); a browser with no worker canvas keeps the
+on-demand build. Pinned by `tests/realm_racers_race_warm.test.ts`, offline and online.
 
 The curtain a race opens under while every pilot's machine prepares the circuit
 (the sim's `loading` phase, `src/sim/social/realm_racers_loading.ts`, read through

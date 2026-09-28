@@ -1,7 +1,8 @@
 // The race warm: the sampled clips and procedural icons a Realm Racers race
 // first reaches for at speed (the first shell, bump, drift, pickup and slow),
 // fetched and composed while the race is still ahead, so none of it waits on a
-// fetch or builds a canvas on a racing frame.
+// fetch or builds a canvas on a racing frame. A browser with no worker canvas
+// keeps the icons' on-demand build (icon_prewarm.ts leaves that path alone).
 //
 // It fires on the same commitment trigger as the race GPU preparation
 // (realm_racers_prepare_core.ts): the queue join, a practice seat, a login or
@@ -11,9 +12,9 @@
 // the one band test.
 //
 // Sounds: only the clips the manifest leaves lazy (a startup clip is already
-// resident), through the engine's own preload. Icons: through the idle icon
-// warmer (icon_prewarm.ts), one worker encode in flight at a time, into the
-// caches the splash, the action bar and the buff bar read.
+// resident), through the engine's own preload. Icons: through the icon warmer
+// (icon_prewarm.ts), one worker encode in flight at a time, into the caches the
+// splash, the action bar and the buff bar read.
 
 import { REALM_RACERS_EVENT_SFX, REALM_RACERS_VEHICLE_SFX } from '../../../game/realm_racers_sfx';
 import { SFX_CLIPS, type SfxEntry, type SfxId } from '../../../game/sfx_manifest.generated';
@@ -23,10 +24,7 @@ import {
   type RealmRacersPrepareReason,
   takeRealmRacersPrepare,
 } from '../../../render/realm_racers_prepare_core';
-import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_EFFECT_ABILITIES,
-} from '../../../sim/content/realm_racers';
+import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
 import { REALM_RACERS_GHOST_AURA } from '../../../sim/realm_racers_ghost';
 import { isAtRealmRacersXZ } from '../../../sim/realm_racers_layout';
 import {
@@ -56,7 +54,9 @@ export const REALM_RACERS_SELF_AURAS: readonly { id: string; kind: string }[] = 
  *  The ghost is granted in place and plays none. */
 export const REALM_RACERS_SELF_AURA_CUES: readonly SfxId[] = ['buff_apply', 'debuff_apply'];
 
-/** Every clip a race can play, the startup ones included. */
+/** The clips a race plays through the spatial engine (the rally events and the
+ *  vehicle mix) and the HUD's race aura cues, the startup ones included. The
+ *  GameAudio race stings and the rider's jump and land are startup clips. */
 export function realmRacersRaceSfx(): SfxId[] {
   return [
     ...new Set<SfxId>([
@@ -83,9 +83,7 @@ export function realmRacersRaceWarmIcons(): IconPrewarmEntry[] {
   for (const icon of rallyPickupSplashIcons()) {
     entries.push({ kind: icon.kind, id: icon.id, size: RALLY_SPLASH_ICON_SIZE });
   }
-  for (const id of [REALM_RACERS_ABILITY_ID, ...Object.values(REALM_RACERS_EFFECT_ABILITIES)]) {
-    entries.push({ kind: 'ability', id });
-  }
+  for (const id of Object.keys(REALM_RACERS_ABILITIES)) entries.push({ kind: 'ability', id });
   const auraIcons = new Set(REALM_RACERS_SELF_AURAS.map((aura) => resolveHudAuraIconId(aura)));
   for (const id of auraIcons) entries.push({ kind: 'aura', id, mode: 'procedural' });
   return entries;

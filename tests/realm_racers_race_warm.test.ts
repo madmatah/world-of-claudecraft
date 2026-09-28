@@ -1,4 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
+
+// Postgres is mocked before server/game is imported (tests/CLAUDE.md, Server
+// tests), for the online cases at the end of this file.
+vi.mock('../server/db', () => ({
+  pool: { query: vi.fn(async () => ({ rows: [] })) },
+  saveCharacterState: vi.fn(async () => {}),
+  saveCharacterAndMarketState: vi.fn(async () => {}),
+  openPlaySession: vi.fn(async () => 1),
+  touchCharacterLogin: vi.fn(async () => {}),
+  closePlaySession: vi.fn(async () => {}),
+  insertChatLogs: vi.fn(async () => {}),
+  loadMarketState: vi.fn(async () => ({ listings: [], collections: new Map() })),
+  saveMarketState: vi.fn(async () => {}),
+  loadMailState: vi.fn(async () => ({})),
+  saveMailState: vi.fn(async () => {}),
+  markAccountQuestComplete: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
+  grantAccountMechChroma: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
+  revokeAccountMechChroma: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
+  insertBankLedgerRow: vi.fn(async () => {}),
+  walletForAccount: vi.fn(async () => null),
+  acquireCharacterLease: vi.fn(async () => true),
+  releaseCharacterLease: vi.fn(async () => {}),
+  heartbeatCharacterLeases: vi.fn(async () => {}),
+  releaseAllCharacterLeases: vi.fn(async () => {}),
+  loadAccountFlair: vi.fn(async () => ({ ai: false, streamer: false, links: {} })),
+}));
 
 const prewarmIconCacheSpy = vi.hoisted(() => vi.fn(() => () => {}));
 vi.mock('../src/ui/icon_prewarm', async (importOriginal) => ({
@@ -6,14 +32,21 @@ vi.mock('../src/ui/icon_prewarm', async (importOriginal) => ({
   prewarmIconCache: prewarmIconCacheSpy,
 }));
 
-import { REALM_RACERS_EVENT_SFX, REALM_RACERS_VEHICLE_SFX } from '../src/game/realm_racers_sfx';
+import { type ClientSession, GameServer } from '../server/game';
+import {
+  REALM_RACERS_EVENT_SFX,
+  REALM_RACERS_VEHICLE_SFX,
+  type RealmRacersSfxEvent,
+} from '../src/game/realm_racers_sfx';
 import { sfx } from '../src/game/sfx';
 import { SFX_CLIPS, type SfxId } from '../src/game/sfx_manifest.generated';
+import type { RealmRacersAudioEvent } from '../src/render/audio_sink';
 import {
   REALM_RACERS_ABILITY_ID,
   REALM_RACERS_NITRO_ABILITY_ID,
   REALM_RACERS_SLICK_ABILITY_ID,
 } from '../src/sim/content/realm_racers';
+import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
 import type { RallyPickupEffect } from '../src/sim/realm_racers_pickup_effects';
@@ -29,6 +62,7 @@ import { resolveHudAuraIconId, resolveHudAuraIconUrl } from '../src/ui/aura_icon
 import { auraApplyCue } from '../src/ui/combat_sfx';
 import { actionBarIconBg } from '../src/ui/hud/action_bar/action_bar_icon_bg';
 import { ABILITY_ICON_PREFIX } from '../src/ui/hud/action_bar/action_bar_view';
+import { realmRacersSplashDeps, realmRacersUiDeps } from '../src/ui/hud/realm_racers';
 import {
   REALM_RACERS_SELF_AURA_CUES,
   REALM_RACERS_SELF_AURAS,
@@ -36,10 +70,8 @@ import {
   realmRacersRaceSfx,
   realmRacersRaceWarmIcons,
   realmRacersRaceWarmSfx,
-  realmRacersUiDeps,
-} from '../src/ui/hud/realm_racers';
+} from '../src/ui/hud/realm_racers/realm_racers_race_warm';
 import { type IconPrewarmEntry, prewarmIconDataUrl } from '../src/ui/icon_prewarm';
-import { iconDataUrl } from '../src/ui/icons';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
 import {
@@ -47,6 +79,7 @@ import {
   rallyPickupSplashView,
 } from '../src/ui/realm_racers_pickup_splash_view';
 import type { IWorld, RealmRacersInfo } from '../src/world_api';
+import { bareClient } from './helpers/bare_client';
 import { makeWorld } from './realm_racers_util';
 
 const LAZY_RACE_SFX = [
@@ -91,15 +124,8 @@ function preloaded(spy: { mock: { calls: [SfxId][] } }): string[] {
 }
 
 describe('the race sounds the warm preloads', () => {
-  it('lists every clip the engine plays for a race, and preloads the lazy ones only', () => {
+  it('preloads exactly the race clips the manifest leaves lazy', () => {
     const all = realmRacersRaceSfx();
-    for (const key of [
-      ...Object.values(REALM_RACERS_EVENT_SFX),
-      ...Object.values(REALM_RACERS_VEHICLE_SFX),
-      ...REALM_RACERS_SELF_AURA_CUES,
-    ]) {
-      expect(all).toContain(key);
-    }
     expect(realmRacersRaceWarmSfx().sort()).toEqual(LAZY_RACE_SFX);
     for (const key of LAZY_RACE_SFX) expect(SFX_CLIPS[key as SfxId].preload).toBe('lazy');
     // Already resident from the startup preload, so not the warm's to fetch.
@@ -121,6 +147,9 @@ describe('the race sounds the warm preloads', () => {
   });
 
   it('is the table the engine plays the rally events and the vehicle mix from', () => {
+    // One event union on both sides of the audio sink, so a new kind cannot
+    // compile past the table and play nothing.
+    expectTypeOf<RealmRacersAudioEvent>().toEqualTypeOf<RealmRacersSfxEvent>();
     const playAt = vi.spyOn(sfx, 'playAt').mockReturnValue(false);
     const loop = vi.spyOn(sfx, 'loop').mockImplementation(() => {});
     try {
@@ -217,11 +246,15 @@ describe('the race icons the warm composes', () => {
       await prewarmIconDataUrl(entry.kind, entry.id, entry.size, entry.mode, bridge);
     }
     // Plain Node has no canvas: a cache miss would compose and throw here.
+    const splash = realmRacersSplashDeps({ writerFacet: {} });
     for (const effect of ['charge', 'nitro', 'ward', 'slick'] as const) {
-      const { icon } = rallyPickupSplashView(effect);
-      expect(iconDataUrl(icon.kind, icon.id, RALLY_SPLASH_ICON_SIZE)).toBe('data:race-warm');
+      expect(splash.iconUrl(rallyPickupSplashView(effect).icon)).toBe('data:race-warm');
     }
-    for (const id of [REALM_RACERS_NITRO_ABILITY_ID, REALM_RACERS_SLICK_ABILITY_ID]) {
+    for (const id of [
+      REALM_RACERS_ABILITY_ID,
+      REALM_RACERS_NITRO_ABILITY_ID,
+      REALM_RACERS_SLICK_ABILITY_ID,
+    ]) {
       expect(actionBarIconBg(`${ABILITY_ICON_PREFIX}${id}`)).toBe('url(data:race-warm)');
     }
     for (const aura of REALM_RACERS_SELF_AURAS) {
@@ -302,6 +335,14 @@ describe('the race warm trigger', () => {
     }
     expect(out.preloadSfx).toHaveBeenCalledTimes(LAZY_RACE_SFX.length);
     expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
+    // The recovery ghost, as the race really grants it, is one the warm names.
+    const match = sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    sim.resetRealmRacersPosition();
+    const ghost = sim.player.auras.find((aura) => aura.kind === 'rally_ghost');
+    expect(ghost).toBeDefined();
+    expect(REALM_RACERS_SELF_AURAS).toContainEqual({ id: ghost?.id, kind: ghost?.kind });
   });
 });
 
@@ -342,7 +383,7 @@ describe('the HUD wiring of the race warm', () => {
     expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
   });
 
-  it('hands the engine preload and the idle icon warmer to the race UI', () => {
+  it('hands the engine preload and the eager icon warmer to the race UI', () => {
     const deps = realmRacersUiDeps({
       sim: {},
       renderer: { realmRacersPrepare: { progress: (out: unknown) => out } },
@@ -362,6 +403,105 @@ describe('the HUD wiring of the race warm', () => {
     }
     const entries = realmRacersRaceWarmIcons();
     deps.raceWarm?.prewarmIcons(entries);
-    expect(prewarmIconCacheSpy).toHaveBeenCalledExactlyOnceWith(entries);
+    expect(prewarmIconCacheSpy).toHaveBeenCalledExactlyOnceWith(entries, {
+      eagerCount: entries.length,
+    });
+  });
+});
+
+describe('the race warm online', () => {
+  beforeAll(() =>
+    setActiveWorldContent({ ...BUILTIN_WORLD, camps: [], npcs: {}, groundObjects: [] }),
+  );
+  afterAll(() => setActiveWorldContent(null));
+
+  interface FakeClient {
+    sent: Record<string, unknown>[];
+    ws: { readyState: number; send(payload: string): void };
+  }
+  const fakeClient = (): FakeClient => {
+    const sent: Record<string, unknown>[] = [];
+    return {
+      sent,
+      ws: { readyState: 1, send: (payload) => sent.push(JSON.parse(payload)) },
+    };
+  };
+  const join = (server: GameServer, client: FakeClient, id: number): ClientSession => {
+    const joined = server.join(client.ws as never, id, id, 'Aster', 'hunter', null);
+    if ('error' in joined) throw new Error(joined.error);
+    joined.blockListLoaded = true;
+    return joined;
+  };
+  const advance = (server: GameServer): void => {
+    const host = server as unknown as {
+      routeEvents(events: unknown): void;
+      broadcastSnapshots(): void;
+    };
+    host.routeEvents(server.sim.tick());
+    host.broadcastSnapshots();
+  };
+  const snaps = (client: FakeClient) => client.sent.filter((frame) => frame.t === 'snap');
+  const apply = (world: ReturnType<typeof bareClient>, frame: unknown): void =>
+    (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(frame);
+
+  it('fires once, on the mirrored frame that seats the pilot in the practice lobby', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1);
+    const world = bareClient(session.pid);
+    let applied = 0;
+    const mirror = (): void => {
+      const frames = snaps(client);
+      for (; applied < frames.length; applied++) apply(world, frames[applied]);
+    };
+    const out = sinks();
+    const warm = new RealmRacersRaceWarm(out);
+    advance(server);
+    mirror();
+    warm.step(world);
+    expect(world.player.id).toBe(session.pid);
+    expect(out.preloadSfx).not.toHaveBeenCalled();
+
+    server.handleMessage(
+      session,
+      JSON.stringify({ t: 'cmd', cmd: 'realm_racers_practice', tier: 'rookie' }),
+    );
+    advance(server);
+    mirror();
+    expect(world.realmRacersInfo.match?.phase).toBe('loading');
+    warm.step(world);
+    expect(warm.reason).toBe('practice');
+    expect(preloaded(out.preloadSfx)).toEqual(LAZY_RACE_SFX);
+    expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 20; i++) {
+      advance(server);
+      mirror();
+      warm.step(world);
+    }
+    expect(out.preloadSfx).toHaveBeenCalledTimes(LAZY_RACE_SFX.length);
+    expect(out.prewarmIcons).toHaveBeenCalledTimes(1);
+
+    // A client that logs in with the race already running: its first mirrored
+    // readout is the racing match, and that first frame warms.
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    advance(server);
+    const racingFrame = snaps(client)
+      .filter(
+        (frame) =>
+          (frame.self as { rr?: { match?: { phase?: string } } } | undefined)?.rr?.match?.phase ===
+          'racing',
+      )
+      .at(-1);
+    const late = bareClient(session.pid);
+    apply(late, racingFrame);
+    expect(late.realmRacersInfo.match?.phase).toBe('racing');
+    const lateOut = sinks();
+    const lateWarm = new RealmRacersRaceWarm(lateOut);
+    lateWarm.step(late);
+    expect(lateWarm.reason).toBe('practice');
+    expect(preloaded(lateOut.preloadSfx)).toEqual(LAZY_RACE_SFX);
+    expect(lateOut.prewarmIcons).toHaveBeenCalledTimes(1);
   });
 });

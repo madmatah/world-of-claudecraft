@@ -77,8 +77,10 @@ export function realmRacersUiDeps(hud: object): RealmRacersDeps {
     prepareProgress: (out, circuitId) => h.renderer.realmRacersPrepare.progress(out, circuitId),
     raceWarm: {
       preloadSfx: (key) => sfx.preload(key),
+      // Eager: an idle-only pump can starve behind a busy lobby, and each
+      // encode runs in the worker anyway.
       prewarmIcons: (entries) => {
-        prewarmIconCache(entries);
+        prewarmIconCache(entries, { eagerCount: entries.length });
       },
     },
     ...h.windowFocus('#realm-racers-window'),

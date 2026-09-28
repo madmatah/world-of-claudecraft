@@ -30,11 +30,4 @@ export {
   stepRealmRacersLobbyFailsafe,
 } from './realm_racers_lobby_view';
 export type { RealmRacersRaceWarmSinks } from './realm_racers_race_warm';
-export {
-  REALM_RACERS_SELF_AURA_CUES,
-  REALM_RACERS_SELF_AURAS,
-  RealmRacersRaceWarm,
-  realmRacersRaceSfx,
-  realmRacersRaceWarmIcons,
-  realmRacersRaceWarmSfx,
-} from './realm_racers_race_warm';
+export { RealmRacersRaceWarm } from './realm_racers_race_warm';
