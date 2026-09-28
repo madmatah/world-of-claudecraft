@@ -7,6 +7,10 @@ import {
   YUMI_BAND_X_MAX,
   YUMI_MAZE_X,
 } from '../src/sim/data';
+import {
+  realmRacersSightBlocked,
+  resolveRealmRacersPosition,
+} from '../src/sim/realm_racers_collide';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
 import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
@@ -149,5 +153,36 @@ describe('Realm Racers boundaries', () => {
       // Nothing on the circuit is standable: a racer cannot mantle the wall.
       expect(collider.standable).toBeUndefined();
     }
+  });
+});
+
+describe('Realm Racers collider arms', () => {
+  it('stays out of the way off the band', () => {
+    const solve = () => ({ x: 1, z: 1 });
+    expect(resolveRealmRacersPosition(0, 0, 0.5, solve)).toBeNull();
+    expect(realmRacersSightBlocked(0, 0, 0.5, 1, () => true)).toBeNull();
+  });
+
+  it('solves in the circuit frame and shifts back to world space', () => {
+    const x = REALM_RACERS_ORIGIN.x + 3;
+    const z = REALM_RACERS_ORIGIN.z + 4;
+    const seen: { x: number; z: number; list: unknown }[] = [];
+    const out = resolveRealmRacersPosition(x, z, 0.5, (list, lx, lz) => {
+      seen.push({ x: lx, z: lz, list });
+      return { x: lx + 1, z: lz };
+    });
+    expect(seen).toEqual([{ x: 3, z: 4, list: colliders }]);
+    expect(out).toEqual({ x: x + 1, z });
+    expect(out).toEqual(
+      resolveRealmRacersPosition(x, z, 0.5, (_l, lx, lz) => ({ x: lx + 1, z: lz })),
+    );
+    let skipLow: boolean | undefined;
+    expect(
+      realmRacersSightBlocked(x, z, 0.5, 2, (list, lx, lz, _r, _y, skip) => {
+        skipLow = skip;
+        return list === colliders && lx === 3 && lz === 4;
+      }),
+    ).toBe(true);
+    expect(skipLow).toBe(false);
   });
 });

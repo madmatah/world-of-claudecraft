@@ -112,13 +112,8 @@ import {
   TOWN_WALL_SHORT_PILLAR_TOP_FRAC,
   TOWN_WALL_TALL_PILLAR_ALONG,
 } from './prop_layout';
-import { realmRacersColliders } from './realm_racers_colliders';
-import {
-  isAtRealmRacersXZ,
-  REALM_RACERS_ORIGIN,
-  realmRacersLaneAt,
-  realmRacersLaneOffset,
-} from './realm_racers_layout';
+import { realmRacersSightBlocked, resolveRealmRacersPosition } from './realm_racers_collide';
+import { isAtRealmRacersXZ } from './realm_racers_layout';
 import { riftRegionAt } from './rift_regions';
 import { type PlacedStreetlamp, planStreetlamps, styleStreetlampSites } from './streetlamp_layout';
 import { STREETLAMP_COLLIDER_RADIUS, STREETLAMP_FIXTURE_HEIGHT } from './streetlamp_style';
@@ -1867,28 +1862,8 @@ export function resolvePosition(
   // in the spatial grid at absolute coordinates and its ground is real terrain
   // (groundHeight's band arm), so the grid fall-through below serves it with
   // the full mover contract (pass-over, standable decks) like the open world.
-  const rallyLane = realmRacersLaneAt(x, z);
-  if (rallyLane !== null) {
-    // Every lane holds ONE circuit's geometry at its own origin, so the whole
-    // story is: shift into that circuit's CANONICAL frame (which is the one its
-    // spline and collider set are authored in), solve there, shift back. Lane
-    // 0's offset is zero, so its path is unchanged.
-    const off = realmRacersLaneOffset(rallyLane.index);
-    const o = REALM_RACERS_ORIGIN;
-    // The garden wall is the ONLY thing on a circuit that stops anyone. The
-    // infield used to be clamped too (a containment line derived from the
-    // racing line, wearing water or a hedge), and that whole family is retired:
-    // leaving the road is refereed by a rule now
-    // (`realm_racers_track_limits.ts`), so the garden is open and drivable all
-    // the way to the perimeter on both sides.
-    const local = resolveAgainst(
-      realmRacersColliders(rallyLane.circuit),
-      x - off.x - o.x,
-      z - off.z - o.z,
-      r,
-    );
-    return { x: local.x + off.x + o.x, z: local.z + off.z + o.z };
-  }
+  const rally = resolveRealmRacersPosition(x, z, r, resolveAgainst);
+  if (rally !== null) return rally;
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);
     const local = resolveAgainst(yumiMazeColliders(), x - o.x, z - o.z, r);
@@ -2447,19 +2422,8 @@ function sightBlockedAt(
     const list = grid.cells.get(cellKeyAt(x, z));
     return list ? overlapsAny(list, x, z, r, sightY, true) : false;
   }
-  const rallyOverlapLane = realmRacersLaneAt(x, z);
-  if (rallyOverlapLane !== null) {
-    const off = realmRacersLaneOffset(rallyOverlapLane.index);
-    const o = REALM_RACERS_ORIGIN;
-    return overlapsAny(
-      realmRacersColliders(rallyOverlapLane.circuit),
-      x - off.x - o.x,
-      z - off.z - o.z,
-      r,
-      sightY,
-      false,
-    );
-  }
+  const rallySight = realmRacersSightBlocked(x, z, r, sightY, overlapsAny);
+  if (rallySight !== null) return rallySight;
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);
     return overlapsAny(yumiMazeColliders(), x - o.x, z - o.z, r, sightY, false);
