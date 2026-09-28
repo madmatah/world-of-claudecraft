@@ -157,6 +157,16 @@ export const SPIRIT_VEIL_PALETTES: Readonly<
   },
 };
 
+/**
+ * The veils a player ACTS on (docs/design/graphics-settings-fairness.md): Soul
+ * Rend, and a Realm Racers rival's ward and recovery ghost. They mount on the
+ * frame their state lands, never staged behind the effect gate: a staged veil
+ * that never proves its link would leave the state unread while it holds. A
+ * tuple the boot family has not linked yet links live instead, once.
+ */
+export const SPIRIT_VEIL_NEVER_DEFERRED: ReadonlySet<SpiritVeilPalette> =
+  new Set<SpiritVeilPalette>(['soul-rend', 'rally-ward', 'rally-ghost']);
+
 /** What a veiled rig keeps. The class halo is hidden under every palette. */
 export interface SpiritVeilPolicy {
   castsShadow: boolean;

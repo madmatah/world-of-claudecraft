@@ -10,14 +10,7 @@
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import {
-  type CharacterVeilRig,
-  characterVeilboundState,
-  classVeilActive,
-  classVeilboundState,
-  rallyVeilLook,
-  syncCharacterVeils,
-} from '../src/render/character_effects';
+import { type CharacterVeilRig, syncCharacterVeils } from '../src/render/character_effects';
 import {
   createSpiritVeilMaterial,
   spiritVeilPaletteOf,
@@ -29,6 +22,12 @@ import {
   type SpiritVeilPalette,
 } from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
+import {
+  characterVeilboundState,
+  classVeilActive,
+  classVeilboundState,
+  rallyVeilLook,
+} from '../src/render/ghost_style_core';
 import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
@@ -66,7 +65,10 @@ function tierMaterials(): THREE.Material[] {
 }
 
 /** The veils renderer.ts hands a racer's pilot and machine, the same call. */
-function veilsFor(e: Entity): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
+function veilsFor(
+  e: Entity,
+  opts: { ghostWolf?: boolean; pending?: boolean } = {},
+): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
   const looks = { rider: null as SpiritVeilPalette | null, kart: null as SpiritVeilPalette | null };
   const rig = (slot: 'rider' | 'kart'): CharacterVeilRig => ({
     setGhost(on: boolean, look?: SpiritVeilPalette) {
@@ -74,9 +76,12 @@ function veilsFor(e: Entity): { rider: SpiritVeilPalette | null; kart: SpiritVei
     },
     shareVeilUnit() {},
   });
-  syncCharacterVeils(1, e, false, characterVeilboundState(e), rig('rider'), rig('kart'));
+  const view = { mountVisual: rig('kart'), mountCompilePending: opts.pending === true };
+  syncCharacterVeils(1, e, opts.ghostWolf === true, characterVeilboundState(e), rig('rider'), view);
   return looks;
 }
+
+const stealthBy = (id: string): Aura => ({ ...ghost, id, name: id, kind: 'stealth' });
 
 describe('the ghost veil decision', () => {
   it('reads the ghost off the racer aura, over the ward and any class veil', () => {
@@ -95,6 +100,26 @@ describe('the ghost veil decision', () => {
     expect(veilsFor(racer([ward]))).toEqual({ rider: 'rally-ward', kart: 'rally-ward' });
     // The ghost and the ward never share a palette.
     expect(rallyVeilLook('ghost')).not.toBe(rallyVeilLook('ward'));
+  });
+
+  it('lets stealth and Ghost Wolf keep the pilot while the kart still carries the ghost', () => {
+    expect(veilsFor(racer([stealthBy('vanish'), ghost]))).toEqual({
+      rider: 'stealth-rogue',
+      kart: 'rally-ghost',
+    });
+    expect(veilsFor(racer([stealthBy('greater_invisibility'), ghost]))).toEqual({
+      rider: 'stealth-other',
+      kart: 'rally-ghost',
+    });
+    expect(veilsFor(racer([ghost]), { ghostWolf: true })).toEqual({
+      rider: 'wolf',
+      kart: 'rally-ghost',
+    });
+    // a kart behind its creation gate stays bare; the pilot carries the ghost
+    expect(veilsFor(racer([ghost]), { pending: true })).toEqual({
+      rider: 'rally-ghost',
+      kart: null,
+    });
   });
 
   it('takes no graphics tier', () => {

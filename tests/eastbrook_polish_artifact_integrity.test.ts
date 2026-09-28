@@ -1412,7 +1412,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
-  '897c3fe6cf08263e7ea56dc81b79a7ba769499ac733d9b0cdfd4f5a43e75ea98';
+  // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
+  '72d2c8a197e699ee4e8afcf7b86163220ed89723fa69e49ce9a60a8d6e6058be';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1453,7 +1454,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
-  '8f12f579434cc3835f75499482c559cf1df2c26e143e1084072a33da7eaefe01';
+  // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
+  '013262cb299df2b3506f92cd9e6c3d93df24b639308184267bcdbc5623bdf233';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2852,7 +2854,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
       // Re-minted for the carry of PR 4229, the shared spirit veil.
       // Re-minted for the Realm Racers ward and ghost veils on pilot and kart.
-    ).toBe('3000893d8af8cef95b31b918470069b91d88c12e7e4b8e8e42996167ca9c2692');
+      // Re-minted for the racer veil review fixes.
+    ).toBe('abe82b1f0166f1205ce659f3294e135c4cac091bef55b26c0a3a065c87cdbfe4');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

@@ -6,7 +6,6 @@ import {
   characterPaladinWingsActive,
   characterRecklessnessActive,
   characterSoulRendActive,
-  characterVeilboundState,
   characterWeaponAuraColor,
   characterWeaponAuraInto,
   characterWeaponAuraMode,
@@ -22,6 +21,7 @@ import {
   characterEffectFlags,
   hasCharacterEffect,
 } from '../src/render/character_effects_core';
+import { characterVeilboundState } from '../src/render/ghost_style_core';
 import type { Entity } from '../src/sim/types';
 
 function entity(partial: Partial<Entity>): Entity {

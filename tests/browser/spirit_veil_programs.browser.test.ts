@@ -22,7 +22,6 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { assetsReady } from '../../src/render/assets/preload';
-import { rallyVeilLook } from '../../src/render/character_effects';
 import type { AnimState } from '../../src/render/characters/anim_state';
 import { attachArmorDye } from '../../src/render/characters/armor_dye';
 import { preloadMountAssets } from '../../src/render/characters/assets';
@@ -62,6 +61,7 @@ import { CharacterVisual, type FarBakeGate } from '../../src/render/characters/v
 import { type CompileArmHost, linkColorPrograms } from '../../src/render/compile_arms';
 import { compileTargetPrepared } from '../../src/render/compile_target_readiness';
 import { gfxInternalsForTest } from '../../src/render/gfx';
+import { rallyVeilLook } from '../../src/render/ghost_style_core';
 import { mountVisualSpecFor } from '../../src/render/mount_visuals';
 import { settleProgramVariants } from '../../src/render/program_variant_settle';
 import { spiritVeilFamilyPrewarmEntry } from '../../src/render/spirit_veil_prewarm';

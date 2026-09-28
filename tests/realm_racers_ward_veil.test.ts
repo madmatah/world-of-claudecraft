@@ -14,14 +14,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import {
-  type CharacterVeilRig,
-  characterVeilboundState,
-  classVeilActive,
-  classVeilboundState,
-  rallyVeilLook,
-  syncCharacterVeils,
-} from '../src/render/character_effects';
+import { type CharacterVeilRig, syncCharacterVeils } from '../src/render/character_effects';
 import {
   createSpiritVeilMaterial,
   spiritVeilPaletteOf,
@@ -33,6 +26,13 @@ import {
   type SpiritVeilPalette,
 } from '../src/render/characters/spirit_veil_palette_core';
 import { addRimGlow } from '../src/render/gfx';
+import {
+  characterVeilboundState,
+  classVeilActive,
+  classVeilboundState,
+  rallyVeilLook,
+  riderVeilLook,
+} from '../src/render/ghost_style_core';
 import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import type { Aura, Entity } from '../src/sim/types';
 
@@ -82,14 +82,21 @@ function recordingRig(): CharacterVeilRig & {
   return rig;
 }
 
-/** The veils renderer.ts hands a racer's pilot and machine, the same call. */
-function veilsFor(e: Entity): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
+/** The veils renderer.ts hands a racer's pilot and machine, the same call.
+ *  `pending`: the kart is still behind its creation gate. */
+function veilsFor(
+  e: Entity,
+  opts: { ghostWolf?: boolean; pending?: boolean } = {},
+): { rider: SpiritVeilPalette | null; kart: SpiritVeilPalette | null } {
   const rider = recordingRig();
   const kart = recordingRig();
-  syncCharacterVeils(1, e, false, characterVeilboundState(e), rider, kart);
-  expect(kart.unitOf).toBe(rider);
+  const view = { mountVisual: kart, mountCompilePending: opts.pending === true };
+  syncCharacterVeils(1, e, opts.ghostWolf === true, characterVeilboundState(e), rider, view);
+  if (!opts.pending) expect(kart.unitOf).toBe(rider);
   return { rider: rider.look, kart: kart.look };
 }
+
+const stealthBy = (id: string): Aura => ({ ...ward, id, name: id, kind: 'stealth' });
 
 describe('the ward veil decision', () => {
   it('reads the ward off the racer aura and wears the ward palette on pilot and machine', () => {
@@ -114,6 +121,32 @@ describe('the ward veil decision', () => {
     expect(veilsFor(racer([ward], { ghost: true }))).toEqual({
       rider: 'spirit',
       kart: 'rally-ward',
+    });
+  });
+
+  it('lets spirit, stealth and Ghost Wolf keep the pilot while the kart still carries the ward', () => {
+    // None of these can ride a seated racer (the seat strips every aura, and
+    // the rally kit casts none of them: realm_racers_seat_clean_slate.test.ts),
+    // but the precedence must still never cost the machine its read.
+    expect(veilsFor(racer([stealthBy('stealth'), ward]))).toEqual({
+      rider: 'stealth-rogue',
+      kart: 'rally-ward',
+    });
+    expect(veilsFor(racer([stealthBy('prowl'), ward]))).toEqual({
+      rider: 'stealth-other',
+      kart: 'rally-ward',
+    });
+    expect(veilsFor(racer([ward]), { ghostWolf: true })).toEqual({
+      rider: 'wolf',
+      kart: 'rally-ward',
+    });
+    expect(riderVeilLook(1, racer([ward]), false, 'ward')).toBe('rally-ward');
+  });
+
+  it('leaves a kart behind its creation gate bare, the pilot carrying the ward', () => {
+    expect(veilsFor(racer([ward]), { pending: true })).toEqual({
+      rider: 'rally-ward',
+      kart: null,
     });
   });
 
@@ -143,11 +176,19 @@ describe('the ward veil decision', () => {
     expect(classVeilboundState.length).toBe(1);
     expect(classVeilActive.length).toBe(1);
     expect(rallyVeilLook.length).toBe(1);
+    expect(riderVeilLook.length).toBe(4);
     expect(syncCharacterVeils.length).toBe(6);
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    // Unconditional, between the two statements that frame it: no preset,
+    // governor or cull branch can come between the aura and the rigs.
     expect(renderer).toContain(
-      'syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v.mountVisual);',
+      [
+        '      v.height = active.height;',
+        '      syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v);',
+        '      active.setSoulRend(hasSoulRend);',
+      ].join('\n'),
     );
+    expect(renderer.match(/syncCharacterVeils\(/g)).toHaveLength(1);
   });
 });
 

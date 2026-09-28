@@ -143,10 +143,8 @@ import {
 import {
   type CharacterWeaponAura,
   characterRuneTintColor,
-  characterVeilboundState,
   characterWeaponAuraInto,
   characterWeaponAuraMode,
-  classVeilActive,
   hunterPetFerocityStage,
   hunterPetFrenzyActive,
   hunterPetVisualScale,
@@ -387,6 +385,7 @@ import {
   sharedUniforms,
   urlForcedTier,
 } from './gfx';
+import { characterVeilboundState, classVeilActive } from './ghost_style_core';
 import { GlacialFrontVisual } from './glacial_front_visual';
 import { GoblinRocketSledFx } from './goblin_rocket_sled_fx';
 import { createGpuPrepAdmission } from './gpu_prep_admission';
@@ -8797,7 +8796,7 @@ export class Renderer {
   private readonly mountHost: MountViewHost = {
     reconcileViewLights: (v) => this.reconcileViewLights(v as EntityView),
     gateSwapFlagOnCompile: (root, done) => this.gateSwapFlagOnCompile(root, done),
-    effectGate: this.farBakeGate,
+    effectGate: (target, settle) => this.farBakeGate(target, settle),
     recordBuild: (ms, startedAt) => this.buildLedger.record('view:mount', ms, startedAt),
   };
 
@@ -10903,7 +10902,7 @@ export class Renderer {
         v.clickTarget = active.clickProxy;
       }
       v.height = active.height;
-      syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v.mountVisual);
+      syncCharacterVeils(this.sim.playerId, e, ghostWolf, veilboundState, active, v);
       active.setSoulRend(hasSoulRend);
       // Shadowform tints the base priest rig shadow-purple (no rig swap); Moonkin Form wears
       // the spirit veil in its violet palette on the same body. Metamorphosis grows the

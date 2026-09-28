@@ -120,6 +120,7 @@ import {
 import { configureTightBoneTextures } from './skin_gpu_layout';
 import { applySkinnedCullBounds } from './skinned_cull_bounds';
 import {
+  SPIRIT_VEIL_NEVER_DEFERRED,
   SPIRIT_VEIL_POLICY,
   type SpiritVeilPalette,
   type SpiritVeilPolicy,
@@ -2506,8 +2507,10 @@ export class CharacterVisual {
     // swaps in on the frame it lands, whatever the link state
     // (docs/design/graphics-settings-fairness.md). Its veil is the boot
     // family's, so the exemption costs a live link only for a tuple the
-    // family has not linked yet, which is late-linked for the next mark.
-    const neverDeferred = this.soulRend;
+    // family has not linked yet, which is late-linked for the next mark. A
+    // racer's ward and ghost are exempt on the same terms.
+    const palette = this.activeVeilPalette();
+    const neverDeferred = palette !== null && SPIRIT_VEIL_NEVER_DEFERRED.has(palette);
     const veilMisses: string[] = [];
     const consider = (mesh: THREE.Mesh | null, source: THREE.Material): void => {
       if (!mesh?.geometry) return;

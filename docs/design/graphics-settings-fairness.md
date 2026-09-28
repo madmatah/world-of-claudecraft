@@ -33,8 +33,13 @@ ACTIONABLE (must be identical across every tier; never tiered):
   information expressed as SIZE, static on every preset.
 - A Realm Racers rival's ward (a Ground Blast is wasted on it) and recovery ghost (you drive
   through it): the spirit veil in the `rally-ward` / `rally-ghost` palettes on the pilot and
-  the whole kart, read off the entity aura with no tier input, on every preset and on the far
-  LOD (`tests/realm_racers_kart_veil.test.ts`, the racer far-mesh cases of
+  the whole kart, read off the entity aura with no tier input, on every preset. The pilot's
+  far LOD wears it too; the kart draws its full veiled rig at every distance (a mount never
+  swaps to a far mesh). Both are never deferred (`SPIRIT_VEIL_NEVER_DEFERRED`, the Soul Rend
+  precedent): they mount on the frame the aura lands even while the boot veil family is still
+  linking, where a staged veil could drop unproven and leave the state unread. A kart still
+  behind its creation gate is hidden and stays bare meanwhile, the pilot carrying the read
+  (`tests/realm_racers_kart_veil.test.ts`, the racer cases of
   `tests/character_effect_compile_gate.test.ts`).
 
 COSMETIC (may be tiered down on lower presets):

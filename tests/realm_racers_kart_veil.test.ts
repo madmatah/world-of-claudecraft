@@ -5,12 +5,13 @@
 // The kart is a mount rig (the machine's mount key, never a skin while
 // driving), built here through the real mount factory over the shipped GLB.
 // Veiled in the ward's and the recovery ghost's palettes, every program it can
-// draw (each part's colour arm, its depth pre-pass, the baked far mesh the rig
-// carries) is a tuple the boot family prewarm links (spirit_veil_prewarm.ts).
-// With that family linked the veil commits on the frame the aura lands; with
-// it unlinked it stages behind the renderer's effect gate, never a live link.
-// The real-driver proof of the same (zero programs) is the racer kart leg of
-// tests/browser/spirit_veil_programs.browser.test.ts.
+// draw (each part's colour arm, its depth pre-pass, the hidden far bake the rig
+// carries) is a tuple the boot family prewarm links (spirit_veil_prewarm.ts),
+// so the veil commits on the frame the aura lands. It commits then even with
+// the family unlinked (actionable, never deferred), and never while the kart
+// is behind its creation gate, which must link the kart's own programs. The
+// real-driver proof (zero programs, the gate race included) is the racer kart
+// leg of tests/browser/spirit_veil_programs.browser.test.ts.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -74,7 +75,10 @@ type Modules = {
   family: typeof import('../src/render/characters/spirit_veil_family_core');
   palettes: typeof import('../src/render/characters/spirit_veil_palette_core');
   effects: typeof import('../src/render/character_effects');
+  style: typeof import('../src/render/ghost_style_core');
   prewarm: typeof import('../src/render/spirit_veil_prewarm');
+  lifecycle: typeof import('../src/render/mount_lifecycle');
+  pieces: typeof import('../src/render/compile_gate_pieces');
 };
 
 async function buildKart(
@@ -105,7 +109,10 @@ async function buildKart(
     family: await import('../src/render/characters/spirit_veil_family_core'),
     palettes: await import('../src/render/characters/spirit_veil_palette_core'),
     effects: await import('../src/render/character_effects'),
+    style: await import('../src/render/ghost_style_core'),
     prewarm: await import('../src/render/spirit_veil_prewarm'),
+    lifecycle: await import('../src/render/mount_lifecycle'),
+    pieces: await import('../src/render/compile_gate_pieces'),
   };
 }
 
@@ -115,8 +122,9 @@ afterEach(() => {
   restore = null;
 });
 
-/** Every mesh the kart can draw: its parts and its baked far mesh, never a
- *  depth sibling (those are keyed through their body). */
+/** Every mesh the kart carries: its parts and the far mesh it bakes (hidden:
+ *  the renderer never swaps a mount to it), never a depth sibling (those are
+ *  keyed through their body). */
 function kartBodies(visual: CharacterVisual): THREE.Mesh[] {
   const priv = visual as unknown as {
     originalMaterials: Map<THREE.Mesh, unknown>;
@@ -130,6 +138,19 @@ function kartBodies(visual: CharacterVisual): THREE.Mesh[] {
 function farMeshOf(visual: CharacterVisual): THREE.Mesh | null {
   return (visual as unknown as { farMesh: THREE.Mesh | null }).farMesh;
 }
+
+/** A presented mount, the view slice syncCharacterVeils reads. */
+const presented = (mountVisual: CharacterVisual) => ({ mountVisual, mountCompilePending: false });
+
+/** A racer holding `kind` (rally_ward or rally_ghost), as the entity loop reads it. */
+const racerWith = (kind: string | null) =>
+  ({
+    id: 2,
+    kind: 'player',
+    ghost: false,
+    templateId: 'player',
+    auras: kind ? [{ id: kind, kind }] : [],
+  }) as never;
 
 /** The tuple keys the boot entry links: one stand-in unit per key. */
 function preparedKeys(m: Modules): Set<string> {
@@ -163,8 +184,8 @@ function linkFamily(m: Modules): void {
 }
 
 function racerPalettes(m: Modules): [string, SpiritVeilPalette][] {
-  const ward = m.effects.rallyVeilLook('ward');
-  const ghost = m.effects.rallyVeilLook('ghost');
+  const ward = m.style.rallyVeilLook('ward');
+  const ghost = m.style.rallyVeilLook('ghost');
   if (!ward || !ghost) throw new Error('a racer veil wears no palette');
   return [
     ['ward', ward],
@@ -178,7 +199,7 @@ beforeAll(async () => {
 
 describe('the racer kart wears its veil on the family the boot entry prepares', () => {
   for (const tier of ['standard', 'low'] as const) {
-    it(`draws only prepared tuples for the ward and the ghost, every part and the far mesh, ${tier}`, async () => {
+    it(`draws only prepared tuples for the ward and the ghost, every part and its hidden far bake, ${tier}`, async () => {
       const m = await buildKart(tier);
       const bodies = kartBodies(m.visual);
       // the real machine: a rigid, mapped multi-part rig with a baked far mesh
@@ -199,7 +220,7 @@ describe('the racer kart wears its veil on the family the boot entry prepares', 
       for (const [state, palette] of racerPalettes(m)) {
         m.visual.setGhost(true, palette);
         const { keys, palettes } = drawnKeys(m);
-        // every body wears the racer palette, the far mesh included
+        // every body wears the racer palette, the hidden far bake included
         expect(palettes, state).toEqual(new Set([palette]));
         expect(keys.size, state).toBeGreaterThan(0);
         expect(
@@ -216,20 +237,142 @@ describe('the racer kart wears its veil on the family the boot entry prepares', 
     });
   }
 
-  it('stages behind the effect gate, the kart drawing on, while the family is unlinked', async () => {
+  it('mounts a racer veil on the frame it lands, pilot and kart, even with the family unlinked', async () => {
+    // Actionable, like Soul Rend: a veil staged behind the gate could drop
+    // unproven and leave a whole ward or ghost unread, so it never waits. The
+    // cost is the degraded case only (a family still resuming, a graphics
+    // rebuild): a few family tuples linked once.
     const m = await buildKart();
     m.veil.resetSpiritVeilLedger();
+    const rider = m.another();
     const gateCalls: Parameters<FarBakeGate>[] = [];
-    m.visual.setFarBakeGate((...args) => gateCalls.push(args));
-    const living = kartBodies(m.visual).map((mesh) => mesh.material);
-    const ghost = m.effects.rallyVeilLook('ghost') as SpiritVeilPalette;
-    m.visual.setGhost(true, ghost);
+    for (const visual of [m.visual, rider]) {
+      visual.setFarBakeGate((...args) => gateCalls.push(args));
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const [state, palette] of racerPalettes(m)) {
+      m.effects.syncCharacterVeils(
+        1,
+        racerWith(`rally_${state}`),
+        false,
+        state as never,
+        rider,
+        presented(m.visual),
+      );
+      expect(gateCalls, state).toHaveLength(0);
+      for (const body of [m.visual, rider]) {
+        const worn = new Set(kartBodies(body).flatMap((mesh) => [mesh.material].flat()));
+        expect(new Set([...worn].map((mat) => m.veil.spiritVeilPaletteOf(mat))), state).toEqual(
+          new Set([palette]),
+        );
+      }
+      m.effects.syncCharacterVeils(1, racerWith(null), false, 'none', rider, presented(m.visual));
+    }
+    // A class veil keeps its deferral: the March stages on the pilot.
+    m.effects.syncCharacterVeils(
+      1,
+      racerWith('veilbound_march'),
+      false,
+      'march',
+      rider,
+      presented(m.visual),
+    );
     expect(gateCalls).toHaveLength(1);
-    expect(kartBodies(m.visual).map((mesh) => mesh.material)).toEqual(living);
-    gateCalls[0][1]();
-    m.visual.update(FRAME, IDLE, true);
-    expect(drawnKeys(m).palettes).toEqual(new Set([ghost]));
+    warn.mockRestore();
+    rider.dispose();
     m.visual.dispose();
+  });
+});
+
+describe('the kart is never veiled while its creation gate links it', () => {
+  // The creation gate compiles what the rig wears when its pieces run, later
+  // than the frame that built it. A kart built for a racer already holding the
+  // ward (a rival entering range, a view rebuilt mid-race) and veiled on that
+  // frame would hand the gate the veil set, and its own programs would link
+  // live the moment the ward ended.
+  const emptyView = () => ({
+    group: new THREE.Group(),
+    mountVisual: null as CharacterVisual | null,
+    mountVisualKey: '',
+    mountLamps: null,
+    mountGlows: null,
+    goblinRocketSledFx: null,
+    mountCompilePending: false,
+    mountSeatBone: null,
+    mountPullerVisual: null,
+  });
+
+  it('hands the gate the kart own materials, and links nothing new when the ward ends', async () => {
+    const m = await buildKart();
+    linkFamily(m);
+    const spec = mountVisualSpecFor(REALM_RACERS_MOUNT_KEY, null);
+    if (!spec) throw new Error('the racer machine has no mount visual');
+    const pilot = m.another();
+    /** What the gate's pieces compile when they run: each representative's
+     *  current material. */
+    const gateSees = (root: THREE.Object3D): Set<THREE.Material> =>
+      new Set(
+        m.pieces
+          .linkPiecesOf(root)
+          .flatMap(([representative]) => [(representative as THREE.Mesh).material].flat()),
+      );
+    const build = (veilWhilePending: boolean) => {
+      const v = emptyView();
+      const settles: (() => void)[] = [];
+      const host = {
+        reconcileViewLights: () => {},
+        gateSwapFlagOnCompile: (_root: THREE.Object3D, done: () => void) => settles.push(done),
+        effectGate: () => {},
+        recordBuild: () => {},
+      };
+      m.lifecycle.syncMountVisual(v as never, spec, host);
+      if (!v.mountVisual) throw new Error('the kart did not build');
+      expect(v.mountCompilePending).toBe(true);
+      const own = new Set(kartBodies(v.mountVisual).flatMap((mesh) => [mesh.material].flat()));
+      // The same frame's veil pass, then the gate's pieces run.
+      const slice = veilWhilePending
+        ? presented(v.mountVisual)
+        : { mountVisual: v.mountVisual, mountCompilePending: v.mountCompilePending };
+      m.effects.syncCharacterVeils(1, racerWith('rally_ward'), false, 'ward', pilot, slice);
+      return { v, settles, own, compiled: gateSees(v.mountVisual.root) };
+    };
+
+    // Control: veiled under the pending gate, the pieces would see the veil
+    // and none of the kart's own materials.
+    const control = build(true);
+    expect([...control.compiled].some((mat) => m.veil.spiritVeilPassOf(mat) !== null)).toBe(true);
+    expect([...control.own].filter((mat) => control.compiled.has(mat))).toEqual([]);
+    control.v.mountVisual?.dispose();
+
+    const { v, settles, own, compiled } = build(false);
+    const kart = v.mountVisual as CharacterVisual;
+    expect(own.size).toBeGreaterThan(3);
+    expect([...own].filter((mat) => !compiled.has(mat))).toEqual([]);
+    expect([...compiled].filter((mat) => m.veil.spiritVeilPassOf(mat) !== null)).toEqual([]);
+    // the pilot carries the read meanwhile
+    const pilotWorn = kartBodies(pilot).flatMap((mesh) => [mesh.material].flat());
+    expect(new Set(pilotWorn.map((mat) => m.veil.spiritVeilPaletteOf(mat)))).toEqual(
+      new Set(['rally-ward']),
+    );
+    // The gate settles: the kart is presented and takes the ward.
+    for (const done of settles) done();
+    expect(v.mountCompilePending).toBe(false);
+    m.effects.syncCharacterVeils(1, racerWith('rally_ward'), false, 'ward', pilot, v);
+    const veiled = kartBodies(kart).flatMap((mesh) => [mesh.material].flat());
+    expect(new Set(veiled.map((mat) => m.veil.spiritVeilPaletteOf(mat)))).toEqual(
+      new Set(['rally-ward']),
+    );
+    // The ward ends: every part draws a material the gate already compiled.
+    m.effects.syncCharacterVeils(1, racerWith(null), false, 'none', pilot, v);
+    const drawn: THREE.Material[] = [];
+    kart.root.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh && mesh.visible) drawn.push(...[mesh.material].flat());
+    });
+    expect(drawn.length).toBeGreaterThan(10);
+    expect(drawn.filter((mat) => !compiled.has(mat))).toEqual([]);
+    pilot.dispose();
+    kart.dispose();
   });
 });
 
@@ -242,13 +385,13 @@ describe('the racer kart keeps what its palette says', () => {
       kartBodies(m.visual).filter((mesh) => mesh.castShadow && mesh.visible).length;
     const living = casters();
     expect(living).toBeGreaterThan(5);
-    const ghost = m.effects.rallyVeilLook('ghost') as SpiritVeilPalette;
+    const ghost = m.style.rallyVeilLook('ghost') as SpiritVeilPalette;
     expect(m.palettes.SPIRIT_VEIL_POLICY[ghost].castsShadow).toBe(false);
     m.visual.setGhost(true, ghost);
     expect(casters()).toBe(0);
     m.visual.setGhost(false);
     expect(casters()).toBe(living);
-    const ward = m.effects.rallyVeilLook('ward') as SpiritVeilPalette;
+    const ward = m.style.rallyVeilLook('ward') as SpiritVeilPalette;
     m.visual.setGhost(true, ward);
     expect(casters()).toBe(m.palettes.SPIRIT_VEIL_POLICY[ward].castsShadow ? living : 0);
     m.veil.resetSpiritVeilLedger();
@@ -278,7 +421,7 @@ describe('the kart and its pilot draw as one veiled body', () => {
       templateId: 'player',
       auras: [{ id: 'rally_ghost', kind: 'rally_ghost' }],
     } as never;
-    m.effects.syncCharacterVeils(1, racer, false, 'ghost', rider, m.visual);
+    m.effects.syncCharacterVeils(1, racer, false, 'ghost', rider, presented(m.visual));
     const riderUnits = unitsOf(rider);
     expect(riderUnits.size).toBe(1);
     expect(unitsOf(m.visual)).toEqual(riderUnits);
@@ -334,7 +477,7 @@ describe('an ordinary mount under the effect gate draws exactly as before', () =
     for (const { auras, state } of riders) {
       const e = { id: 2, kind: 'player', ghost: false, templateId: 'player', auras } as never;
       for (let frame = 0; frame < 3; frame++) {
-        m.effects.syncCharacterVeils(1, e, false, state, pilot, m.visual);
+        m.effects.syncCharacterVeils(1, e, false, state, pilot, presented(m.visual));
         m.visual.update(FRAME, IDLE, true);
         ungated.update(FRAME, IDLE, true);
       }

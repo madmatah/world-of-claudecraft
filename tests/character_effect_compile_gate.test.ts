@@ -561,36 +561,38 @@ describe('a transparent character effect swaps in only once its programs are lin
     expect(() => gateCalls[0].settle()).not.toThrow();
   });
 
-  it('draws a racer ward in its veil palette through the same gate, and swaps it on a flip', async () => {
-    const { rallyVeilLook } = await import('../src/render/character_effects');
+  it('commits a racer veil at once, like Soul Rend, where a class or spirit look stages', async () => {
+    const { rallyVeilLook } = await import('../src/render/ghost_style_core');
     const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
-    const look = rallyVeilLook('ward');
-    if (!look) throw new Error('the ward wears no veil');
-    const visual = await makeVisual();
-    const gateCalls: GateCall[] = [];
-    visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
-    const opaque = rigMaterials(visual);
-    visual.setGhost(true, look);
-    // Linked hidden first, like every translucent overlay: never a live link.
-    expect(gateCalls).toHaveLength(1);
-    expect(rigMaterials(visual)).toEqual(opaque);
-    gateCalls[0].settle();
-    visual.update(FRAME, anim(), true);
-    expect(rigIsTranslucent(visual)).toBe(true);
-    expect(spiritVeilPaletteOf(meshNamed(visual, 'body').material as THREE.Material)).toBe(look);
-    // A flip to the released spirit's palette swaps the veil, never the gold.
-    visual.setGhost(true, 'spirit');
-    for (const call of gateCalls.slice(1)) call.settle();
-    visual.update(FRAME, anim(), true);
-    expect(spiritVeilPaletteOf(meshNamed(visual, 'body').material as THREE.Material)).toBe(
-      'spirit',
-    );
-    visual.dispose();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const state of ['ward', 'ghost'] as const) {
+      const look = rallyVeilLook(state);
+      if (!look) throw new Error(`the ${state} wears no veil`);
+      const visual = await makeVisual();
+      const gateCalls: GateCall[] = [];
+      visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
+      // The harness ledger is empty, so this is the degraded case: actionable,
+      // the racer veil never waits behind the gate (it could drop unproven).
+      visual.setGhost(true, look);
+      expect(gateCalls, state).toHaveLength(0);
+      expect(rigIsTranslucent(visual), state).toBe(true);
+      expect(spiritVeilPaletteOf(meshNamed(visual, 'body').material as THREE.Material)).toBe(look);
+      // A flip to the released spirit's palette stages as before.
+      visual.setGhost(true, 'spirit');
+      expect(gateCalls, state).toHaveLength(1);
+      for (const call of gateCalls) call.settle();
+      visual.update(FRAME, anim(), true);
+      expect(spiritVeilPaletteOf(meshNamed(visual, 'body').material as THREE.Material)).toBe(
+        'spirit',
+      );
+      visual.dispose();
+    }
+    warn.mockRestore();
   });
 
   for (const tier of ['standard', 'low'] as const) {
     it(`wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads, ${tier}`, async () => {
-      const { rallyVeilLook } = await import('../src/render/character_effects');
+      const { rallyVeilLook } = await import('../src/render/ghost_style_core');
       const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
       for (const state of ['ghost', 'ward'] as const) {
         const look = rallyVeilLook(state);

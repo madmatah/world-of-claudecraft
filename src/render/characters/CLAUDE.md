@@ -49,18 +49,19 @@ no procedural-rig path here anymore. Reads the world; never mutates the sim.
   `spirit_veil_palette_core.ts` (a released spirit, the Pale Keeper and the
   quest visions; Ghost Wolf; the Veilbound March; stealth by source; Moonkin;
   Soul Rend; the Realm Racers ward and recovery ghost), picked by
-  `../ghost_style_core.ts`, the visual's own Moonkin and Soul Rend flags, and
-  `syncCharacterVeils` (`../character_effects.ts`) for the racer veils, which
-  also dress the racer's kart: the mount's own visual wears the racer palette
+  `../ghost_style_core.ts` (the racer veils' looks too) and the visual's own
+  Moonkin and Soul Rend flags. `syncCharacterVeils` (`../character_effects.ts`)
+  also dresses the racer's kart: the mount's own visual wears the racer palette
   in its rider's sort unit (`shareVeilUnit`, so every depth pre-pass of the
-  pair draws before either body), behind the effect gate every mount gets in
-  `../mount_lifecycle.ts` (`tests/realm_racers_kart_veil.test.ts`). The
-  palette's policy says whether the rig keeps its shadow and weapon-skin VFX.
-  Shadowform is no veil: an opaque tint on the
-  source programs (`shadowform_tint.ts`). A veil tuple not linked yet stages
-  behind the effect gate with the body still drawing (`stageEffectSwap`)
-  and commits only on the gate's readiness proof, never on a bare settle;
-  Soul Rend, actionable raid information, is exempt and commits at once
+  pair draws before either body), never while the mount is still behind its
+  creation gate (that gate compiles what the rig wears when its pieces run)
+  (`tests/realm_racers_kart_veil.test.ts`). The palette's policy says whether
+  the rig keeps its shadow and weapon-skin VFX. Shadowform is no veil: an
+  opaque tint on the source programs (`shadowform_tint.ts`). A veil tuple not
+  linked yet stages behind the effect gate with the body still drawing
+  (`stageEffectSwap`) and commits only on the gate's readiness proof, never on
+  a bare settle; the veils a player acts on (`SPIRIT_VEIL_NEVER_DEFERRED`: Soul
+  Rend and the racer ward and ghost) are exempt and commit at once
   (`tests/character_effect_compile_gate.test.ts`). The lit transparent twin
   of a rig material is gone and must not return
   (`tests/character_effect_twin_guard.test.ts`).

@@ -1024,7 +1024,10 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13133 -> 13130: the pilot's and the kart's veils moved to
     // syncCharacterVeils in character_effects.ts, which the entity loop calls
     // once. Exact count.
-    ceiling: 13130,
+    // LOWERED 13130 -> 13129: the racer veil decisions moved to the
+    // registered ghost_style_core.ts, one import in place of two names, and
+    // the veil call takes the view slice. Exact count.
+    ceiling: 13129,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

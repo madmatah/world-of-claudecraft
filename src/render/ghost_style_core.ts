@@ -7,8 +7,10 @@
 // and the Veilbound March their own. Stealth wears one of two palettes by its
 // source: the rogue's Duskveil and Smokefade, or any other (the druid cat's
 // Stalk, the mage's Greater Invisibility). A dead stealther is a spirit
-// first, and a stealthed Ghost Wolf stays a wolf. Three-free so a Vitest pins
-// the table.
+// first, and a stealthed Ghost Wolf stays a wolf. The Realm Racers ward and
+// recovery ghost wear their own palettes, on the pilot and on the machine
+// (character_effects.ts syncCharacterVeils dresses both). Three-free so a
+// Vitest pins the table.
 //
 // Who sees a stealther at all is the server's call (server/game.ts
 // canObserveEntity never sends one to a hostile viewer), so this only styles
@@ -43,4 +45,69 @@ export function characterGhostLook(
   if (veilbound === 'march') return 'march';
   if (e.templateId.startsWith('vision_') || e.templateId === 'spirit_healer') return 'spirit';
   return null;
+}
+
+/**
+ * The veil family: the paladin's Veilbound March and Mark, and the Realm
+ * Racers ward and recovery ghost, which wear the spirit veil in palettes of
+ * their own (a denser March gold, a cold pale) on the pilot and on the whole
+ * machine.
+ *
+ * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
+ * ghosted one will not block you), so they are read off the entity aura every
+ * client mirrors and drawn on every graphics tier; nothing here takes a tier.
+ * Each is matched by its own aura kind, which nothing else in the game carries.
+ */
+export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ghost';
+
+export function characterVeilboundState(e: Entity): CharacterVeilboundState {
+  // The racer reads first: a class veil must never mask one. The ghost wins
+  // over the ward because it is the short one (it ends the moment the machine
+  // is clear) and the one a rival arriving at speed acts on; the gold is back
+  // the tick it ends, and the ward stays in the aura row meanwhile.
+  if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
+  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
+  if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
+  if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
+  return 'none';
+}
+
+/** The class veil a state carries into characterGhostLook: a racer's is none. */
+export function classVeilboundState(state: CharacterVeilboundState): 'march' | 'mark' | 'none' {
+  return state === 'ward' || state === 'ghost' ? 'none' : state;
+}
+
+/**
+ * Whether the paladin's class look rides the state: the ascension tint and the
+ * holy motes rising over the head. A racer's ward and ghost wear their veil
+ * only.
+ */
+export function classVeilActive(state: CharacterVeilboundState): boolean {
+  return classVeilboundState(state) !== 'none';
+}
+
+/**
+ * The spirit veil palette a racer's ward or recovery ghost wears: on the pilot
+ * unless a released spirit, stealth or Ghost Wolf claims the rig first (none of
+ * which a seated racer can hold), and on the machine always.
+ */
+export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
+  if (state === 'ward') return 'rally-ward';
+  return state === 'ghost' ? 'rally-ghost' : null;
+}
+
+/**
+ * The look a character's own body wears: a released spirit, stealth and Ghost
+ * Wolf keep precedence, then a class veil, then the racer veil. A racer's state
+ * reads first (characterVeilboundState), so its class veil is none.
+ */
+export function riderVeilLook(
+  viewerId: number,
+  e: Entity,
+  ghostWolf: boolean,
+  state: CharacterVeilboundState,
+): CharacterGhostLook | null {
+  return (
+    characterGhostLook(viewerId, e, ghostWolf, classVeilboundState(state)) ?? rallyVeilLook(state)
+  );
 }

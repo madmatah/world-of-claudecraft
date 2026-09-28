@@ -17,7 +17,7 @@ import {
   hasCharacterEffect,
 } from './character_effects_core';
 import type { SpiritVeilPalette } from './characters/spirit_veil_palette_core';
-import { characterGhostLook } from './ghost_style_core';
+import { type CharacterVeilboundState, rallyVeilLook, riderVeilLook } from './ghost_style_core';
 
 export function isAvengingWrathAura(aura: Pick<Aura, 'id' | 'kind'>): boolean {
   return aura.id === 'avenging_wrath' && aura.kind === 'buff_dmg_done';
@@ -147,66 +147,26 @@ export function tithefiendEmpoweredActive(entity: Entity): boolean {
   return !entity.dead && entity.templateId === 'guardian_tithefiend' && entity.scale > 1;
 }
 
-/**
- * The veil family: the paladin's Veilbound March and Mark, and the Realm
- * Racers ward and recovery ghost, which wear the spirit veil in palettes of
- * their own (a denser March gold, a cold pale) on the pilot and on the whole
- * machine.
- *
- * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
- * ghosted one will not block you), so they are read off the entity aura every
- * client mirrors and drawn on every graphics tier; nothing here takes a tier.
- * Each is matched by its own aura kind, which nothing else in the game carries.
- */
-export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ghost';
-
-export function characterVeilboundState(e: Entity): CharacterVeilboundState {
-  // The racer reads first: a class veil must never mask one. The ghost wins
-  // over the ward because it is the short one (it ends the moment the machine
-  // is clear) and the one a rival arriving at speed acts on; the gold is back
-  // the tick it ends, and the ward stays in the aura row meanwhile.
-  if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
-  if (e.auras.some((a) => a.kind === 'rally_ward')) return 'ward';
-  if (e.auras.some((a) => a.id === 'veilbound_march')) return 'march';
-  if (e.auras.some((a) => a.id === 'veilbound_mark')) return 'mark';
-  return 'none';
-}
-
-/** The class veil a state carries into characterGhostLook: a racer's is none. */
-export function classVeilboundState(state: CharacterVeilboundState): 'march' | 'mark' | 'none' {
-  return state === 'ward' || state === 'ghost' ? 'none' : state;
-}
-
-/**
- * Whether the paladin's class look rides the state: the ascension tint and the
- * holy motes rising over the head. A racer's ward and ghost wear their veil
- * only; the tint would also stand in, gold, for a ghost whose veil stages.
- */
-export function classVeilActive(state: CharacterVeilboundState): boolean {
-  return classVeilboundState(state) !== 'none';
-}
-
-/**
- * The spirit veil palette a racer's ward or recovery ghost wears: on the pilot
- * when no spirit, stealth, wolf or class veil read claims the rig first, and
- * on the machine always.
- */
-export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
-  if (state === 'ward') return 'rally-ward';
-  return state === 'ghost' ? 'rally-ghost' : null;
-}
-
 /** A rig the veil decision dresses: the rider's active body, or its mount. */
 export interface CharacterVeilRig {
   setGhost(on: boolean, look?: SpiritVeilPalette): void;
   shareVeilUnit(other: CharacterVeilRig | null): void;
 }
 
+/** The view slice the mount's veil reads: its visual, and whether that visual
+ *  is still hidden behind its creation gate. */
+export interface CharacterVeilMount {
+  mountVisual: CharacterVeilRig | null;
+  mountCompilePending: boolean;
+}
+
 /**
- * This frame's veils on a character and on the mount under it. The mount wears
- * the racer veil alone, so the machine a rival reads always carries the ward or
- * the ghost while a class veil keeps its precedence on the pilot, and a mounted
- * March veils no horse. The mount draws in the rider's sort unit, one body.
+ * This frame's veils on a character and on the mount under it
+ * (ghost_style_core.ts decides both looks). The mount draws in the rider's sort
+ * unit, one body, and wears nothing while its creation gate links it: the gate
+ * compiles what the rig wears when its pieces run, so a veil mounted then would
+ * leave the kart's own programs to link live when the state ends. The pilot,
+ * the one body drawn meanwhile, carries the read.
  */
 export function syncCharacterVeils(
   viewerId: number,
@@ -214,12 +174,13 @@ export function syncCharacterVeils(
   ghostWolf: boolean,
   state: CharacterVeilboundState,
   rider: CharacterVeilRig,
-  mount: CharacterVeilRig | null,
+  view: CharacterVeilMount,
 ): void {
-  const racer = rallyVeilLook(state);
-  const look = characterGhostLook(viewerId, e, ghostWolf, classVeilboundState(state)) ?? racer;
+  const look = riderVeilLook(viewerId, e, ghostWolf, state);
   rider.setGhost(look !== null, look ?? 'spirit');
-  if (!mount) return;
+  const mount = view.mountVisual;
+  if (!mount || view.mountCompilePending) return;
+  const racer = rallyVeilLook(state);
   mount.shareVeilUnit(rider);
   mount.setGhost(racer !== null, racer ?? 'spirit');
 }
