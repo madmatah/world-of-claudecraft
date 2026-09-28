@@ -60,11 +60,23 @@ export const GROUND_BLAST_MAX_FLIGHT = 0.9;
  *  the prediction error a rival holding a straight line may carry and still be
  *  caught. */
 export const GROUND_BLAST_RADIUS = 6;
+/**
+ * The full-force core, yards: a machine whose centre is this close to the
+ * impact takes the whole blast, and the force only starts falling off past it.
+ *
+ * A player judges a hit by the HULL, not by a point: a shell that bursts under
+ * the machine's own footprint reads as dead-on, and a purely linear falloff
+ * paid those shots 36 to 80 percent in playtest because the centres were still
+ * 1.2 to 3.8 yards apart. 1.5 sits just inside the rally machine's body radius
+ * (`bodyRadius` 1.7 on the loaner, pinned against this in the tests), so only a
+ * shell landing under the hull counts as a direct hit.
+ */
+export const GROUND_BLAST_CORE_RADIUS = 1.5;
 /** Where a shell leaves the machine, yards up its nose: the Fired event's
  *  muzzle, and where a client draws a rival's shot from its drawn hull. */
 export const GROUND_BLAST_MUZZLE_NOSE_YD = 2;
 /**
- * Upward velocity a dead-centre hit adds, yd/s. THE knob for how big a hit
+ * Upward velocity a hit in the core adds, yd/s. THE knob for how big a hit
  * feels, and the arithmetic is simple enough to tune against directly: at
  * GRAVITY = 16 the apex is `v^2 / 32` yards and the machine is airborne for
  * `v / 8` seconds. At 11 that is a 3.8 yd apex and 1.4 s off the ground, which
@@ -77,12 +89,12 @@ export const GROUND_BLAST_MUZZLE_NOSE_YD = 2;
  * the machine lands genuinely sideways and has to be caught.
  */
 export const GROUND_BLAST_POP_VELOCITY = 12;
-/** Horizontal shove away from the blast, yd/s at the centre. It survives the
+/** Horizontal shove away from the blast, yd/s in the core. It survives the
  *  whole flight (there is nothing to grip in the air), so this is how far
  *  off-line a hit really throws a rival, not just an initial nudge. */
 export const GROUND_BLAST_PUSH = 22;
 /**
- * Yaw kick at the centre, rad/s, added to the contact SPIN rather than to the
+ * Yaw kick in the core, rad/s, added to the contact SPIN rather than to the
  * steering yaw rate. The steering servo pulls `yawRate` back to the wheel's
  * demand inside about a tenth of a second, so a kick delivered there would be
  * erased before the pilot felt it; `spin` decays on the profile's own clock and
@@ -209,8 +221,9 @@ export interface GroundBlastBody {
 }
 
 /**
- * How hard a blast at (x, z) catches a machine standing at (bx, bz): 1 at the
- * centre, falling to 0 at the rim, and exactly 0 outside it.
+ * How hard a blast at (x, z) catches a machine standing at (bx, bz): 1 across
+ * the whole core (`GROUND_BLAST_CORE_RADIUS`), falling linearly from there to 0
+ * at the rim, and exactly 0 outside it.
  *
  * Split out of the impact resolver so a caller can ask WHETHER a shell caught a
  * machine without the answer already having shoved it: the rally ward has to
@@ -219,11 +232,13 @@ export interface GroundBlastBody {
  */
 export function groundBlastFalloff(bx: number, bz: number, x: number, z: number): number {
   const dist = Math.hypot(bx - x, bz - z);
-  return dist >= GROUND_BLAST_RADIUS ? 0 : 1 - dist / GROUND_BLAST_RADIUS;
+  if (dist >= GROUND_BLAST_RADIUS) return 0;
+  if (dist <= GROUND_BLAST_CORE_RADIUS) return 1;
+  return 1 - (dist - GROUND_BLAST_CORE_RADIUS) / (GROUND_BLAST_RADIUS - GROUND_BLAST_CORE_RADIUS);
 }
 
 export interface GroundBlastResult {
-  /** 1 at the centre, falling to 0 at the rim. Zero means untouched. */
+  /** 1 across the core, falling to 0 at the rim. Zero means untouched. */
   falloff: number;
   /** Upward velocity the caller must add to the body, yd/s. Returned rather
    *  than applied because the drive state carries no vertical component: the

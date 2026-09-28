@@ -33,7 +33,7 @@ vi.mock('../server/db', () => ({
   GUILD_BANK_ROW_MAX_BYTES: 262144,
 }));
 
-import { GROUND_BLAST_RADIUS } from '../src/sim/realm_racers_ground_blast';
+import { GROUND_BLAST_RADIUS, groundBlastFalloff } from '../src/sim/realm_racers_ground_blast';
 import { TICK_RATE } from '../src/sim/types';
 import {
   CONTACT_REACH_YD,
@@ -340,8 +340,8 @@ describe.each(RTTS)('rival frames at RTT %i ms: ceilings and invariants', (rtt) 
     expect(blast.hudClamped).toBe(false);
     expect(blast.serverClamped).toBe(false);
     expect(blast.flightTicks).toBe(Math.round(blast.flightSeconds * TICK_RATE));
-    // The scorer's miss is the server's own geometry: falloff is 1 - d / radius.
-    expect(blast.falloff).toBeCloseTo(Math.max(0, 1 - blast.missYd / GROUND_BLAST_RADIUS), 9);
+    // The scorer's miss is the server's own geometry: the falloff at that miss.
+    expect(blast.falloff).toBeCloseTo(groundBlastFalloff(blast.missYd, 0, 0, 0), 9);
     expect(blast.missYd).toBeLessThanOrEqual(BLAST_MISS_CEIL[rtt]);
     // The lead rule itself lands inside the blast without latency.
     expect(blast.zeroLatencyMissYd).toBeLessThan(GROUND_BLAST_RADIUS);
@@ -463,7 +463,7 @@ describe.each(RTTS)('rival frames at RTT %i ms, driver prediction on', (rtt) => 
     expect(blast.caster).toBe('drawn');
     expect(blast.casterPos).toEqual(blast.drawnSelf);
     expect(blast.serverClamped).toBe(false);
-    expect(blast.falloff).toBeCloseTo(Math.max(0, 1 - blast.missYd / GROUND_BLAST_RADIUS), 9);
+    expect(blast.falloff).toBeCloseTo(groundBlastFalloff(blast.missYd, 0, 0, 0), 9);
     expect(blast.hit).toBe(true);
     expect(blast.missYd).toBeLessThan(GROUND_BLAST_RADIUS);
     expect(Math.abs(blast.missAlongYd)).toBeLessThanOrEqual(SELF_FRAME_BLAST_ALONG_CEIL[rtt]);

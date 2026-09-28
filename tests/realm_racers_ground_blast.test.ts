@@ -20,6 +20,7 @@ import { GRAVITY } from '../src/sim/player_motion';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_BLIND_RANGE,
+  GROUND_BLAST_CORE_RADIUS,
   GROUND_BLAST_MAX_FLIGHT,
   GROUND_BLAST_MAX_RANGE,
   GROUND_BLAST_MIN_FLIGHT,
@@ -31,6 +32,7 @@ import {
   GROUND_BLAST_SHOCK_TICKS,
   GROUND_BLAST_SPEED,
   GROUND_BLAST_YAW_KICK,
+  groundBlastFalloff,
   resolveGroundBlastAim,
   resolveGroundBlastImpact,
 } from '../src/sim/realm_racers_ground_blast';
@@ -222,32 +224,63 @@ describe('Ground Blast: the blast', () => {
     // constants, so on their own they move with a retune. The literal is what
     // says the shipped numbers are the shipped numbers.
     expect(GROUND_BLAST_RADIUS).toBe(6);
+    expect(GROUND_BLAST_CORE_RADIUS).toBe(1.5);
     expect(GROUND_BLAST_SHOCK_TICKS).toBe(30);
   });
 
-  it('falls off with distance and stops at the rim', () => {
+  it("keeps the full-force core under the rally machine's own hull", () => {
+    // A direct hit is a shell bursting under the machine's footprint, so the
+    // core may never reach past the body it is judged against.
+    expect(GROUND_BLAST_CORE_RADIUS).toBeLessThan(vehicleProfile('rally_loaner').bodyRadius);
+    expect(GROUND_BLAST_CORE_RADIUS).toBeGreaterThan(0);
+  });
+
+  it('hits in full across the core, then falls off linearly to the rim', () => {
+    // The playtest table, yards from the centre to percent of the full blast.
+    // A plain linear falloff would read 83, 67, 50, 33, 17, 0 here.
+    const table: [number, number][] = [
+      [0, 1],
+      [1, 1],
+      [1.5, 1],
+      [2, 8 / 9],
+      [3, 2 / 3],
+      [4, 4 / 9],
+      [5, 2 / 9],
+      [6, 0],
+      [7, 0],
+    ];
+    for (const [distance, expected] of table) {
+      expect(groundBlastFalloff(distance, 0, 0, 0), `${distance} yd`).toBeCloseTo(expected, 12);
+    }
+    // Rounded the way the playtest reads it: 100, 89, 67, 44, 22, 0 percent.
+    expect([1, 2, 3, 4, 5, 6].map((d) => Math.round(groundBlastFalloff(0, d, 0, 0) * 100))).toEqual(
+      [100, 89, 67, 44, 22, 0],
+    );
+    // Continuous at the core's edge, so no step in force for a hair of aim.
+    expect(groundBlastFalloff(GROUND_BLAST_CORE_RADIUS + 1e-9, 0, 0, 0)).toBeCloseTo(1, 6);
+  });
+
+  it('carries the falloff into the pop and stops at the rim', () => {
     const centre = resolveGroundBlastImpact(body({ x: 0, z: 0 }), 0, 0);
-    const near = resolveGroundBlastImpact(body({ x: 0, z: GROUND_BLAST_RADIUS * 0.9 }), 0, 0);
+    const core = resolveGroundBlastImpact(body({ x: 0, z: 1.2 }), 0, 0);
+    const near = resolveGroundBlastImpact(body({ x: 0, z: 5 }), 0, 0);
     const rim = resolveGroundBlastImpact(body({ x: 0, z: GROUND_BLAST_RADIUS }), 0, 0);
     expect(centre.falloff).toBeCloseTo(1, 9);
-    expect(near.falloff).toBeCloseTo(0.1, 9);
+    expect(core).toEqual(centre);
+    expect(near.falloff).toBeCloseTo(2 / 9, 9);
     expect(centre.pop).toBeCloseTo(GROUND_BLAST_POP_VELOCITY, 9);
-    expect(centre.pop).toBeGreaterThan(near.pop);
+    expect(near.pop).toBeCloseTo(GROUND_BLAST_POP_VELOCITY * (2 / 9), 9);
     expect(rim).toEqual({ falloff: 0, pop: 0 });
   });
 
   it('shoves the machine directly away from the blast, scaled by the falloff', () => {
     const drive = createVehicleDrive('rally_loaner');
-    // HALF the blast radius behind the impact, facing +z, so the falloff is
-    // exactly one half whatever the radius is tuned to. The shove is straight
-    // backwards, which in the body frame is pure negative forward speed.
-    const result = resolveGroundBlastImpact(
-      body({ x: 0, z: -GROUND_BLAST_RADIUS / 2, drive }),
-      0,
-      0,
-    );
-    expect(result.falloff).toBeCloseTo(0.5, 9);
-    expect(vehicleVelocityZ(drive, 0)).toBeCloseTo(-GROUND_BLAST_PUSH * 0.5, 9);
+    // Three yards behind the impact, facing +z: outside the core, so the
+    // falloff is two thirds. The shove is straight backwards, which in the body
+    // frame is pure negative forward speed.
+    const result = resolveGroundBlastImpact(body({ x: 0, z: -3, drive }), 0, 0);
+    expect(result.falloff).toBeCloseTo(2 / 3, 9);
+    expect(vehicleVelocityZ(drive, 0)).toBeCloseTo(-GROUND_BLAST_PUSH * (2 / 3), 9);
     expect(vehicleVelocityX(drive, 0)).toBeCloseTo(0, 9);
   });
 
@@ -264,12 +297,13 @@ describe('Ground Blast: the blast', () => {
   });
 
   it('spins the machine away from whichever side the blast went off on', () => {
-    // Facing +z, so the machine's right is -x. A blast at -x is on its right.
+    // Facing +z, so the machine's right is -x. A blast at -x is on its right,
+    // four yards out so the kick is scaled by the falloff (4/9), not the core.
     const onRight = createVehicleDrive('rally_loaner');
-    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onRight }), -1, 0);
+    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onRight }), -4, 0);
     const onLeft = createVehicleDrive('rally_loaner');
-    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onLeft }), 1, 0);
-    expect(onRight.spin).toBeCloseTo(GROUND_BLAST_YAW_KICK * (1 - 1 / GROUND_BLAST_RADIUS), 9);
+    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onLeft }), 4, 0);
+    expect(onRight.spin).toBeCloseTo(GROUND_BLAST_YAW_KICK * (4 / 9), 9);
     expect(onLeft.spin).toBeCloseTo(-onRight.spin, 9);
     expect(onRight.spin).toBeGreaterThan(0);
   });
@@ -478,11 +512,12 @@ describe('Ground Blast: landing it in a live race', () => {
   it('throws a rival that held its line into the air, off its line and onto ice', () => {
     const { sim, a, b, live, rival, shell } = stagedShot(14);
     const flightTicks = shell.impactTick - sim.tickCount;
-    // A yard off the marked centre: near enough to be caught well inside the
-    // blast, off-centre enough that the shove has a direction to be in (a hit
-    // taken dead on the centre is symmetric and lifts straight up, which the
-    // leaf suite above pins on its own).
-    teleport(sim, b, rival.pos.x + 1, rival.pos.z);
+    // Three yards off the marked centre: well inside the blast but past the
+    // full-force core, so the in-sim impact carries the falloff (two thirds;
+    // a linear falloff would read one half), and off-centre enough that the
+    // shove has a direction to be in (a hit taken dead on the centre is
+    // symmetric and lifts straight up, which the leaf suite above pins).
+    teleport(sim, b, rival.pos.x + 3, rival.pos.z);
     let hit: { targetId: number | null; impact: number } | null = null;
     for (let tick = 0; tick <= flightTicks; tick++) {
       for (const ev of sim.tick()) {
@@ -490,7 +525,7 @@ describe('Ground Blast: landing it in a live race', () => {
       }
     }
     expect(hit).toMatchObject({ targetId: b, sourceId: a });
-    expect(required(hit, 'hit').impact).toBeCloseTo(1 - 1 / GROUND_BLAST_RADIUS, 6);
+    expect(required(hit, 'hit').impact).toBeCloseTo(2 / 3, 6);
     expect(rival.onGround).toBe(false);
     expect(rival.vy).toBeGreaterThan(0);
     const lifted = rival.pos.y;
