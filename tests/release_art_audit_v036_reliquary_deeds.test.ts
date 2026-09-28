@@ -258,6 +258,8 @@ describe('v0.36 release-audit Reliquary deed art', () => {
       'pvp_rr_fast_lap',
       'pvp_rr_clean_race',
       'pvp_rr_comeback',
+      // The Drakelands Rampart Run's flying lap rides the same crest.
+      'pvp_rr_rampart_lap',
     ]);
     // RE-PINNED at this merge of release/v0.42.0 into feature/masterwrought:
     // 300 live (counted directly off the resolved src/sim/content/deeds.ts
@@ -271,7 +273,8 @@ describe('v0.36 release-audit Reliquary deed art', () => {
     // so the painted count still holds at 289.
     // 325 with the seven Realm Racers placing deeds, all seven on the pending
     // ledger above, so the painted count still holds at 289.
-    expect(DEED_ORDER).toHaveLength(325);
+    // 326 with the Drakelands Rampart Run's flying lap, the ledger's last row.
+    expect(DEED_ORDER).toHaveLength(326);
     expect(DEED_IMAGE_IDS.size).toBe(289);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     expect(sorted(DEED_IMAGE_IDS)).toEqual(

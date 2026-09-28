@@ -3653,6 +3653,17 @@ export const DEEDS: Record<string, DeedDef> = {
     renown: 0,
     trigger: { kind: 'manual' },
   },
+  // The Drakelands Rampart Run's flying lap, the Express Tour's Flying Lap on
+  // the third competition circuit (the per-circuit threshold table sits beside
+  // onRallyLapForDeeds in src/sim/deeds.ts).
+  pvp_rr_rampart_lap: {
+    id: 'pvp_rr_rampart_lap',
+    name: 'Scorching Lap',
+    desc: 'Post a lap of the Drakelands Rampart Run in under 25 seconds.',
+    category: 'pvp',
+    renown: 0,
+    trigger: { kind: 'manual' },
+  },
 };
 
 for (const def of Object.values(DEEDS)) {

@@ -380,10 +380,12 @@ describe('Book of Deeds webp icons', () => {
     // pending set on the exploration crest: 318 live, still 289 painted.
     // The seven Realm Racers placing deeds join the pending set on the pvp crest,
     // appended after the ferry round trip: 325 live, still 289 painted.
-    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(325);
+    // The Drakelands Rampart Run's flying lap joins them on the same crest:
+    // 326 live, still 289 painted.
+    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(326);
     expect(DEED_IMAGE_IDS.size, 'every live deed but the pending set is painted').toBe(289);
-    expect(DEED_ART_PENDING_IDS).toHaveLength(36);
-    expect(DEED_ART_PENDING_IDS.at(-1)).toBe('pvp_rr_comeback');
+    expect(DEED_ART_PENDING_IDS).toHaveLength(37);
+    expect(DEED_ART_PENDING_IDS.at(-1)).toBe('pvp_rr_rampart_lap');
     expect(DEED_ORDER.length - DEED_IMAGE_IDS.size).toBe(DEED_ART_PENDING_IDS.length);
     for (const id of artless) {
       const catCrestId = deedCrestId(id, DEEDS[id].category);

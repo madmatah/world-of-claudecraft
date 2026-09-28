@@ -150,7 +150,9 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // appended after exp_harbor_to_harbor at the release/v0.44.0 merge into
     // feature/realm-racers. Then 325 / 3535 once those seven drop to zero
     // Renown (casual unranked heats never score the board).
-    expect(DEED_ORDER.length).toBe(325);
+    // 326 / 3535 with the Drakelands Rampart Run's flying lap, at zero Renown
+    // like the seven.
+    expect(DEED_ORDER.length).toBe(326);
     expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3535);
   });
 
@@ -184,8 +186,8 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // release side added independently. UNION MERGE: base plus both deltas.
       collection: 41,
       // Release's Thornhollow battlegrounds plus the WARFARE honor ladder, plus
-      // the seven Realm Racers placing deeds.
-      pvp: 42,
+      // the seven Realm Racers placing deeds and the Rampart Run's flying lap.
+      pvp: 43,
       // +2 bank socket ladder deeds (soc_strongbox_outfitter,
       // soc_four_bags_deep; Bank Storage phase 06).
       social: 20,
@@ -420,6 +422,8 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       'pvp_rr_fast_lap',
       'pvp_rr_clean_race',
       'pvp_rr_comeback',
+      // The Drakelands Rampart Run's flying lap, appended after the seven.
+      'pvp_rr_rampart_lap',
     ]);
     expect(DEEDS.dgn_wildheart_basin.renown).toBe(10);
     expect(DEEDS.dgn_wildheart_basin_heroic.renown).toBe(10);
@@ -515,6 +519,9 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     expect(DEEDS.pvp_rr_clean_race.trigger).toEqual({ kind: 'manual' });
     expect(DEEDS.pvp_rr_comeback.renown).toBe(0);
     expect(DEEDS.pvp_rr_comeback.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_rr_rampart_lap.renown).toBe(0);
+    expect(DEEDS.pvp_rr_rampart_lap.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_rr_rampart_lap.category).toBe('pvp');
   });
 
   it('pins the Rift coverage: renown and trigger literals', () => {
@@ -1075,7 +1082,12 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // proof below reproduces it exactly. No shipped trigger or renown value was
   // touched. Re-minted again when those seven (branch-only, never shipped)
   // dropped to zero Renown.
-  const FROZEN_CATALOG_SHA256 = '634e426c7641850226d84904144369179455dcf565f439fce0b323de0681ee58';
+  // Re-baselined for the appended Drakelands Rampart Run flying lap
+  // (pvp_rr_rampart_lap) on feature/realm-racers, re-minted THE AUDITABLE WAY:
+  // the 634e426c... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
+  // proof below reproduces it exactly. No shipped trigger or renown value was
+  // touched.
+  const FROZEN_CATALOG_SHA256 = '5379b4148a3a6f962fa2d2c96fae76ccfc4fba73254e1f3eebf2d04325be5ba2';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(
@@ -1145,32 +1157,27 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   //
   // The seven Realm Racers placing deeds append after exp_harbor_to_harbor at
   // the release/v0.44.0 merge into feature/realm-racers; the previous mint is
-  // the ferry round trip's 8749b988... literal (rotated down here), and
-  // stripping the seven must reproduce it exactly.
+  // the ferry round trip's 8749b988... literal, and stripping the seven
+  // reproduced it exactly.
+  //
+  // The Drakelands Rampart Run's flying lap appends pvp_rr_rampart_lap after
+  // the seven; the previous mint is their 634e426c... literal (rotated down
+  // here), and stripping the one id must reproduce it exactly.
   const PRE_APPEND_CATALOG_SHA256 =
-    '8749b988a2135b7b3c0dee2065b54e6491660e86ce51bf7880924ff763ae1a25';
-  const APPENDED_SINCE: readonly string[] = [
-    'pvp_rr_first_race',
-    'pvp_rr_first_win',
-    'pvp_rr_wins_10',
-    'pvp_rr_wins_25',
-    'pvp_rr_fast_lap',
-    'pvp_rr_clean_race',
-    'pvp_rr_comeback',
-  ];
+    '634e426c7641850226d84904144369179455dcf565f439fce0b323de0681ee58';
+  const APPENDED_SINCE: readonly string[] = ['pvp_rr_rampart_lap'];
 
   it('the catalog minus the ids appended since the previous mint reproduces the previous digest', () => {
     const appended = new Set(APPENDED_SINCE);
     for (const id of APPENDED_SINCE) {
       expect(DEED_ORDER.includes(id), `${id} is in the live catalog`).toBe(true);
     }
-    // The Realm Racers block sits at the true tail after the Clue Scroll
-    // tenth casket and the ferry round trip. Pin its two predecessors too:
-    // this is an append into a known seat, never a scattered insert or a
-    // retro-edit (the digest below proves it).
+    // The flying lap sits at the true tail after the seven Realm Racers placing
+    // deeds. Pin its two predecessors too: this is an append into a known seat,
+    // never a scattered insert or a retro-edit (the digest below proves it).
     expect(DEED_ORDER.slice(-2 - APPENDED_SINCE.length)).toEqual([
-      'exp_clue_ten_caskets',
-      'exp_harbor_to_harbor',
+      'pvp_rr_clean_race',
+      'pvp_rr_comeback',
       ...APPENDED_SINCE,
     ]);
     const priorRows = DEED_ORDER.filter((id) => !appended.has(id)).map((id) => {
@@ -1390,8 +1397,9 @@ describe('table shape', () => {
     // The one-time Forgebreaker quest's hidden celebration appends after it,
     // then the world-quest block, then the faction standing ladder, then the
     // Clue Scroll casket pair, then the release's ferry round trip, then the
-    // Realm Racers placing block as the final entry.
-    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_rr_comeback');
+    // Realm Racers placing block, then the Rampart Run's flying lap as the
+    // final entry.
+    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_rr_rampart_lap');
   });
 
   it('every entry key matches its id and its prefix matches its category', () => {

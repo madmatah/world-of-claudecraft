@@ -77,14 +77,19 @@ function makeGrid(): { sim: Sim; pids: number[] } {
   return { sim, pids };
 }
 
-function startMatch(): { sim: Sim; pids: number[]; a: number; b: number } {
+function startMatch(circuitId = RACE_CIRCUIT.id): {
+  sim: Sim;
+  pids: number[];
+  a: number;
+  b: number;
+} {
   const { sim, pids } = makeGrid();
   // Seated on the NAMED circuit rather than through the queue's draw: the pool
   // holds more than one competition circuit, and every arc below is measured
   // on this one's road.
-  expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+  expect(realmRacersStartMatch(sim.ctx, pids, undefined, circuitId)).toBe(true);
   sim.tick();
-  expect(sim.realmRacers.match?.circuitId).toBe(RACE_CIRCUIT.id);
+  expect(sim.realmRacers.match?.circuitId).toBe(circuitId);
   return { sim, pids, a: pids[0], b: pids[1] };
 }
 
@@ -1661,6 +1666,23 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     const meta = required(sim.players.get(a), 'player meta');
     sim.tickCount = progress.lapStartTick + 40 * TICK_RATE;
     completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
+  it('grants Scorching Lap, and never Flying Lap, on the Rampart Run through the per-tick call site', () => {
+    const { sim, a } = startMatch('drakelands_rampart_run');
+    match(sim).phase = 'racing';
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    const meta = required(sim.players.get(a), 'player meta');
+    // Exactly the 25 s threshold: withheld, and the Express Tour's deed is not
+    // credited by a lap that would have cleared its 26.
+    sim.tickCount = progress.lapStartTick + 25 * TICK_RATE;
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    const again = required(match(sim).progress.get(a), `progress ${a}`);
+    sim.tickCount = again.lapStartTick + Math.round(24.9 * TICK_RATE);
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_rampart_lap')).toBe(true);
     expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
   });
 

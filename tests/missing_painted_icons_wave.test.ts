@@ -698,7 +698,8 @@ describe('missing painted deed and Heroic weapon integration', () => {
     // the pending side on the exploration crest.
     // 325 with the seven Realm Racers placing deeds, appended after the ferry
     // round trip and pending on the deed_cat_pvp crest.
-    expect(DEED_ORDER).toHaveLength(325);
+    // 326 with the Drakelands Rampart Run's flying lap, on the same crest.
+    expect(DEED_ORDER).toHaveLength(326);
     expect(DEED_ART_PENDING.has('hid_forgebreaker')).toBe(true);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');

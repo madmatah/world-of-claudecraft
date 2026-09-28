@@ -845,6 +845,35 @@ describe('Realm Racers sites', () => {
     // Right circuit, fast enough, a human: grants.
     onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', racer.entityId, 25.9);
     expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(true);
+    // And only its own deed: the Express Tour lap never credits the Rampart Run's.
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+  });
+
+  it('pvp_rr_rampart_lap: only the Rampart Run, only under its threshold, never practice or a bot', () => {
+    const sim = makeSim();
+    const racer = addMeta(sim, 'Scorcher');
+    // Another circuit's fast lap never counts here, the Express Tour's included.
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    onRallyLapForDeeds(sim.ctx, false, false, 'nightbloom_moonwell_run', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    // Its own threshold, not the Express Tour's: a 25.9 s lap clears that one
+    // and not this one.
+    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 25.9);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    // Right circuit, exactly at the threshold: the guard is exclusive.
+    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 25);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    // A practice lap and a bot's lap never count.
+    onRallyLapForDeeds(sim.ctx, true, false, 'drakelands_rampart_run', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    const bot = addMeta(sim, 'BotScorcher');
+    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
+    onRallyLapForDeeds(sim.ctx, false, true, 'drakelands_rampart_run', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    // Right circuit, fast enough, a human: grants its own deed and not the Express Tour's.
+    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 24.9);
+    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
   });
 });
 

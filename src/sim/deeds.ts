@@ -2057,13 +2057,13 @@ export function onArenaMatchEndForDeeds(
 // Realm Racers sites
 // ---------------------------------------------------------------------------
 
-// Only the Evergarden Express Tour is authored fast enough (and small enough
-// a pool) to carry a fixed lap-time threshold; a garden-practice lap is a
-// different, much shorter length and never counts. Revisit this once 13b
-// ships a second competition circuit (either a per-circuit table, like the
-// Vale Cup has no equivalent for, or a metrics-derived threshold).
-const RALLY_FAST_LAP_CIRCUIT_ID = 'evergarden_express_tour';
-const RALLY_FAST_LAP_SECONDS = 26;
+// A fixed lap-time threshold per circuit that carries a flying-lap deed, since
+// every circuit's lap is its own length. A circuit absent here (the garden
+// practice loop, or a competition circuit authored without one) never grants.
+const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: number }> = new Map([
+  ['evergarden_express_tour', { deedId: 'pvp_rr_fast_lap', seconds: 26 }],
+  ['drakelands_rampart_run', { deedId: 'pvp_rr_rampart_lap', seconds: 25 }],
+]);
 
 /** One pilot's race-end tableau, already resolved by the rally module (which
  *  owns the progress state this is read from): whether they are a house
@@ -2122,10 +2122,10 @@ export function onRallyLapForDeeds(
   lapSeconds: number,
 ): void {
   if (practice || bot) return;
-  if (circuitId !== RALLY_FAST_LAP_CIRCUIT_ID) return;
-  if (lapSeconds >= RALLY_FAST_LAP_SECONDS) return;
+  const fastLap = RALLY_FAST_LAP_DEEDS.get(circuitId);
+  if (!fastLap || lapSeconds >= fastLap.seconds) return;
   const meta = ctx.players.get(pid);
-  if (meta) grantDeed(ctx, meta, 'pvp_rr_fast_lap');
+  if (meta) grantDeed(ctx, meta, fastLap.deedId);
 }
 
 // ---------------------------------------------------------------------------

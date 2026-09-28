@@ -6047,6 +6047,13 @@ export const GUIDE_DEEDS: GuideDeed[] = [
     "category": "pvp",
     "renown": 0,
     "feat": false
+  },
+  {
+    "id": "pvp_rr_rampart_lap",
+    "name": "Scorching Lap",
+    "category": "pvp",
+    "renown": 0,
+    "feat": false
   }
 ];
 

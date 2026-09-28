@@ -875,12 +875,13 @@ describe('real catalog integration', () => {
     // none feat or hidden).
     // 286 with the release's ferry round trip (exp_harbor_to_harbor).
     // 293 with the seven Realm Racers placing deeds (none feat or hidden).
-    expect(view.summary.visibleTotal).toBe(293);
+    // 294 with the Rampart Run's flying lap (neither feat nor hidden).
+    expect(view.summary.visibleTotal).toBe(294);
     // The bucket sum adds the feat-flagged rows back on top (hidden-unearned
     // deeds never enter a bucket at all, so only the 22 feats separate this
     // from visibleTotal): 268 + 22 = 290, then 298, 305, 307 and 308 by the same
-    // four appends, then 315 with the seven Realm Racers deeds.
-    expect(view.categories.reduce((n, c) => n + c.visible, 0)).toBe(315);
+    // four appends, then 315 with the seven Realm Racers deeds, then 316.
+    expect(view.categories.reduce((n, c) => n + c.visible, 0)).toBe(316);
   });
 
   it('offers exactly the live catalog border deeds once they are earned', () => {
