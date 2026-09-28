@@ -283,8 +283,8 @@ describe.each([
       const offCamera = racing.filter((frame) => frame.cameraFacing !== mainCameraFacing(frame));
       expect(offCamera.map((frame) => frame.tMs)).toEqual([]);
       // Stood down, the drive view never steers the heading, so the camera
-      // follows the interpolated server heading (the v1 case below covers the
-      // predicted arm).
+      // follows the interpolated server heading (the prediction-on blocks below
+      // cover the predicted arm).
       expect(racing.filter((f) => f.predictedDrivingFacing !== null).map((f) => f.tMs)).toEqual([]);
     });
 
@@ -340,16 +340,22 @@ describe.each([
   },
 );
 
-// The chase camera's other arm: on wire v1 the display extrapolator drives the
-// machine and the camera follows its predicted heading, as main.ts reads it
-// off the renderer's previous frame.
+// Wire v1 (script bots, non-negotiating clients) never predicts a kart: the
+// display extrapolator stands down for a seated pilot, who is drawn by the
+// plain interpolated fallback exactly like a stood-down v2 driver, and the
+// chase camera follows the interpolated server heading.
 describe('a seated racer on movement wire v1 (120 ms RTT, key timeline)', () => {
-  it('follows the predicted driving heading with the chase camera', () => {
+  it('draws the kart from the fallback and follows the server heading', () => {
     const racing = runScenario(true, 1).race.frames;
     expect(racing.length).toBeGreaterThan(0);
-    expect(racing.some((frame) => frame.predictedDrivingFacing !== null)).toBe(true);
+    expect(racing.every((frame) => frame.driving)).toBe(true);
+    expect(racing.filter((frame) => frame.predictorActive).map((f) => f.tMs)).toEqual([]);
+    expect(racing.filter((f) => f.predictedDrivingFacing !== null).map((f) => f.tMs)).toEqual([]);
     const offCamera = racing.filter((frame) => frame.cameraFacing !== mainCameraFacing(frame));
     expect(offCamera.map((frame) => frame.tMs)).toEqual([]);
+    const scored = scoreRacingFrames(racing);
+    expect(scored.length).toBeGreaterThan(racing.length / 2);
+    expect(scored.filter((s) => s.aheadYd > 1e-9)).toEqual([]);
   });
 });
 

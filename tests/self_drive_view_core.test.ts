@@ -12,7 +12,6 @@ import {
   displaySpeedBudget,
   SELF_MOTION_SNAP_DIST_SQ,
   type SelfMotionFrame,
-  SelfMotionPredictor,
   updateSelfRenderFallback,
   type Vec3Like,
 } from '../src/render/self_motion';
@@ -21,6 +20,7 @@ import {
   MAX_SELF_REWIND_YD_PER_SEC,
   type ReconciledSelfPrediction,
   type SelfRenderPositionState,
+  selfPredictionLeadMs,
   selfRewindCapYdPerSec,
   teleportGapLimitSq,
   updateSelfRenderPosition,
@@ -28,7 +28,6 @@ import {
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { Sim } from '../src/sim/sim';
 import {
-  DT,
   type Entity,
   emptyMoveInput,
   type MoveInput,
@@ -62,9 +61,6 @@ const v1Frame = (
   displayFacing: 0,
   echoMs: 80,
   jitterMs: 10,
-  authorityToken: 0,
-  driveImpulse: false,
-  popVelocity: 0,
   alpha: 0.5,
   frameDt: FRAME_DT,
   snapAgeMs: 25,
@@ -130,46 +126,25 @@ describe('the self drive view on both wires', () => {
     onGround: false,
   };
 
-  // The v1 predictor draws its heading at its OWN step fraction (its frame
-  // accumulator over DT), not at the frame alpha the v2 display lerps at: the
-  // two wires agree on the heading when both are read at the same alpha.
-  it('fills the same view from a real v1 predictor step and the v2 output for one kart', () => {
+  it('draws a wire v1 driver from the interpolated mirror, like a stood-down v2 driver', () => {
     const { mirror } = seatedMirror();
     const v1 = createSelfRenderPositionState();
-    v1.predictor = new SelfMotionPredictor(SEED);
+    const stoodDown = createSelfRenderPositionState();
     const steer: MoveInput = { ...emptyMoveInput(), forward: true, turnLeft: true };
     for (let frame = 0; frame < 20; frame++) {
       updateSelfRenderPosition(v1, mirror, SEED, 0.5, FRAME_DT, 0.2, v1Frame(steer), false);
+      updateSelfRenderPosition(stoodDown, mirror, SEED, 0.5, FRAME_DT, 0.2, null, false);
+      expect(v1.position).toEqual(stoodDown.position);
     }
-    const internals = v1.predictor as unknown as {
-      actor: PredictedDriveHead & { drive: VehicleDrive };
-      previousStepFacing: number;
-      acc: number;
-    };
-    const actor = internals.actor;
-    expect(v1.drive.source).toBe('predicted');
-    expect(actor.facing).not.toBe(internals.previousStepFacing);
-    const frac = internals.acc / DT;
-    expect(frac).toBeGreaterThan(0);
-    expect(frac).toBeLessThan(1);
-
-    const v2 = createSelfRenderPositionState();
-    const kart: PredictedDriveHead = {
-      drive: actor.drive,
-      prevFacing: internals.previousStepFacing,
-      facing: actor.facing,
-      onGround: actor.onGround,
-    };
-    const output = reconciled(at, headDrive(kart, frac));
-    updateSelfRenderPosition(v2, mirror, SEED, frac, FRAME_DT, 0.2, output, false);
-
-    expect(v2.drive.facing).toBeCloseTo(v1.drive.facing, 12);
-    expect(v2.drive).toEqual({ ...v1.drive, facing: v2.drive.facing, reconciled: true });
-    expect(v1.drive.velocityX).toBe(vehicleVelocityX(actor.drive, actor.facing));
-    expect(v1.drive.velocityZ).toBe(vehicleVelocityZ(actor.drive, actor.facing));
-    expect(v1.drive.state).toBe(actor.drive);
-    expect(v2.drive.state).toBe(actor.drive);
-    expect(v1.drive.kernelOnGround).toBe(actor.onGround);
+    // the v1 predictor never adopts the seat: nothing predicts the kart
+    expect(v1.active).toBe(false);
+    expect(selfPredictionLeadMs(v1)).toBeNull();
+    expect(v1.drive.source).toBe('mirror');
+    expect(v1.drive.steersHeading).toBe(false);
+    expect(v1.drive.facing).toBeCloseTo(0.3, 12);
+    // the kernel ground state is the only field the idle predictor fills, and
+    // the renderer ignores it while nothing predicts the pose
+    expect({ ...v1.drive, kernelOnGround: null }).toEqual(stoodDown.drive);
   });
 
   it('reads the v2 head at the interpolation alpha', () => {
@@ -341,21 +316,6 @@ describe('the self drive view on both wires', () => {
       updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, null, false);
     updateSelfRenderPosition(state, p, SEED, 1, FRAME_DT, 0.2, reconciled(at, predicted), true);
     expect(state.drive.facing).toBe(0.8);
-  });
-
-  it('never holds a v1 heading: the old wire hands straight to the mirror', () => {
-    const { mirror } = seatedMirror();
-    const state = createSelfRenderPositionState();
-    state.predictor = new SelfMotionPredictor(SEED);
-    const steer: MoveInput = { ...emptyMoveInput(), forward: true, turnLeft: true };
-    for (let frame = 0; frame < 20; frame++) {
-      updateSelfRenderPosition(state, mirror, SEED, 0.5, FRAME_DT, 0.2, v1Frame(steer), false);
-    }
-    expect(state.drive.source).toBe('predicted');
-    updateSelfRenderPosition(state, mirror, SEED, 0.5, FRAME_DT, 0.2, null, false);
-    expect(state.drive.source).toBe('mirror');
-    expect(state.drive.steersHeading).toBe(false);
-    expect(state.drive.facing).toBeCloseTo(0.3, 12);
   });
 
   it('keeps a first predicted frame free of a residual it has no drawn heading for', () => {

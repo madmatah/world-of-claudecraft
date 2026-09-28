@@ -1,8 +1,9 @@
-// The local kart as the renderer reads it, on either movement wire: one view
-// filled from the v1 display predictor or from the v2 reconciled prediction,
-// and from the interpolated mirror while nothing predicts the seat. Pure (no
+// The local kart as the renderer reads it: one view filled from the v2
+// reconciled prediction, and from the interpolated mirror while nothing
+// predicts the seat (offline, a stood-down v2 driver, and every wire v1
+// driver, since the v1 display predictor never drives a kart). Pure (no
 // Three), so the renderer stays a one-line reader and a unit test can drive
-// both wires through the same kart state.
+// the kart state directly.
 
 import type { Entity, VehicleDrive } from '../sim/types';
 import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
@@ -30,20 +31,16 @@ export interface PredictedDriveHead {
   onGround: boolean;
 }
 
-/** What the v1 display predictor exposes about its scratch kart. */
+/** The v1 display predictor's kernel ground state (it predicts runners only). */
 export interface DrivePredictorReadout {
-  readonly driving: boolean;
-  readonly facing: number;
-  readonly velocityX: number;
-  readonly velocityZ: number;
   readonly onGround: boolean;
-  readonly drive: VehicleDrive | null;
 }
 
 /**
- * `predicted`: a prediction owns the kart (v1 predictor or v2 reconcile).
+ * `predicted`: the v2 reconcile owns the kart.
  * `mirror`: seated but not predicted (offline, gated, a v2 driver stood
- * down): every field is the interpolated mirror. `none`: on foot.
+ * down, any v1 driver): every field is the interpolated mirror. `none`: on
+ * foot.
  */
 export type SelfDriveSource = 'predicted' | 'mirror' | 'none';
 
@@ -63,8 +60,6 @@ export interface SelfDriveView {
   kernelOnGround: boolean | null;
   /** The heading gap still gliding out of the drawn heading. */
   yawOffset: number;
-  /** The last predicted frame came from the v2 reconcile (v1 never glides). */
-  reconciled: boolean;
 }
 
 export function createSelfDriveView(): SelfDriveView {
@@ -77,7 +72,6 @@ export function createSelfDriveView(): SelfDriveView {
     state: null,
     kernelOnGround: null,
     yawOffset: 0,
-    reconciled: false,
   };
 }
 
@@ -119,7 +113,7 @@ export function driveViewFromMirror(
   view: SelfDriveView,
   p: Entity,
   alpha: number,
-  predictor: Pick<DrivePredictorReadout, 'onGround'> | null,
+  predictor: DrivePredictorReadout | null,
   snap = false,
   decayShare = 0,
 ): SelfDriveView {
@@ -137,7 +131,7 @@ export function driveViewFromMirror(
   }
   const facing = lerpFacing(p.prevFacing, p.facing, Math.min(1, alpha));
   let offset = 0;
-  if (!snap && view.source === 'predicted' && view.reconciled) offset = view.facing - facing;
+  if (!snap && view.source === 'predicted') offset = view.facing - facing;
   else if (!snap && view.source === 'mirror') offset = view.yawOffset;
   view.yawOffset = glide(offset, decayShare);
   view.source = 'mirror';
@@ -145,27 +139,6 @@ export function driveViewFromMirror(
   view.facing = wrapAngle(facing + view.yawOffset);
   view.velocityX = vehicleVelocityX(drive, p.facing);
   view.velocityZ = vehicleVelocityZ(drive, p.facing);
-  return view;
-}
-
-/** Wire v1: the display predictor's scratch kart, once it has adopted the
- *  seat; the mirror until then. */
-export function driveViewFromPredictor(
-  view: SelfDriveView,
-  predictor: DrivePredictorReadout,
-  p: Entity,
-  alpha: number,
-): SelfDriveView {
-  if (!predictor.driving) return driveViewFromMirror(view, p, alpha, predictor);
-  view.source = 'predicted';
-  view.steersHeading = true;
-  view.reconciled = false;
-  view.yawOffset = 0;
-  view.kernelOnGround = predictor.onGround;
-  view.facing = predictor.facing;
-  view.velocityX = predictor.velocityX;
-  view.velocityZ = predictor.velocityZ;
-  view.state = predictor.drive;
   return view;
 }
 
@@ -182,7 +155,7 @@ export function driveViewFromReconciled(
   drive: ReconciledDrive | null,
   p: Entity,
   alpha: number,
-  predictor: Pick<DrivePredictorReadout, 'onGround'> | null,
+  predictor: DrivePredictorReadout | null,
   residualYaw: number,
   snap: boolean,
   decayShare: number,
@@ -194,7 +167,6 @@ export function driveViewFromReconciled(
   view.yawOffset = glide(offset, decayShare);
   view.source = 'predicted';
   view.steersHeading = true;
-  view.reconciled = true;
   view.kernelOnGround = drive.onGround;
   view.facing = wrapAngle(drive.facing + view.yawOffset);
   view.velocityX = drive.velocityX;

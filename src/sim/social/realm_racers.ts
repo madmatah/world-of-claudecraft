@@ -2506,9 +2506,8 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
       pid: hit.pid,
     });
     // A machine that is not moving is not thrown by a puddle, and must not
-    // ANNOUNCE being thrown either: the event re-seeds the online predictor's
-    // whole drive state (`hasAuthoritativeDriveImpulse`), so firing one for a
-    // shove of zero would pay that cost, and play the noise, for nothing.
+    // ANNOUNCE being thrown either: the event plays the slick's cue, so firing
+    // one for a shove of zero would play the noise for nothing.
     if (thrown.strength <= 0) continue;
     // The ceiling is raised HERE rather than waited for, exactly as the nitro
     // raises its own: the surface pass runs earlier in this same tick, so a

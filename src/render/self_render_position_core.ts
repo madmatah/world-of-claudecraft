@@ -8,7 +8,6 @@ import { DT, type Entity, RUN_SPEED } from '../sim/types';
 import {
   createSelfDriveView,
   driveViewFromMirror,
-  driveViewFromPredictor,
   driveViewFromReconciled,
   type ReconciledDrive,
   type SelfDriveView,
@@ -78,9 +77,8 @@ export function isTeleportGap(
 /**
  * The teleport limit for this frame. A seated driver outruns the 23.1 yd/s
  * premise above several times over, so its limit adds the ground its speed
- * budget (self_motion.ts displaySpeedBudget, the same bound the predictor's
- * own snap radius uses) covers in this frame: a racer at speed, or across a
- * render hitch, glides instead of popping.
+ * budget (self_motion.ts displaySpeedBudget) covers in this frame: a racer at
+ * speed, or across a render hitch, glides instead of popping.
  */
 export function teleportGapLimitSq(p: Entity, dt: number): number {
   if (!p.drive) return SELF_MOTION_SNAP_DIST_SQ;
@@ -211,8 +209,9 @@ export function createSelfRenderPositionState(
 /**
  * Perf-overlay telemetry: ms of latency the prediction hides, that is how far
  * ahead of the snapshot it reconciles against the drawn self is, or null while
- * nothing predicts it. On wire v1 it is the extrapolator's latency budget; on
- * wire v2 it is the predicted tick offset over the ack (`selfFrameLeadMs`,
+ * nothing predicts it. On wire v1 it is the extrapolator's latency budget for
+ * a runner (a v1 driver is drawn by the fallback and reads null); on wire v2 it
+ * is the predicted tick offset over the ack (`selfFrameLeadMs`,
  * about the round trip), which the pipeline hands out while a pilot drives, so
  * a v2 runner reads null.
  */
@@ -319,8 +318,9 @@ export function updateSelfRenderPosition(
       decayOffset(state.offset, dt);
       state.reconciledLeadMs =
         reconciled.kind === 'reconciled' ? selfFrameLeadMs(selfMotion) : null;
-      if (reconciled.kind !== 'reconciled' && state.predictor) {
-        driveViewFromPredictor(state.drive, state.predictor, p, alpha);
+      if (reconciled.kind !== 'reconciled') {
+        // The v1 predictor draws runners only: a v1 driver never reaches here.
+        driveViewFromMirror(state.drive, p, alpha, state.predictor);
       } else {
         driveViewFromReconciled(
           state.drive,

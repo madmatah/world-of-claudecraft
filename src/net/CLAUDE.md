@@ -269,7 +269,9 @@ failure, kept as stable English that `main.ts` re-localizes.
   must keep it green. Changing this model is a maintainer decision. The legacy
   display extrapolator (`src/render/self_motion.ts`, leash + servo + block
   episode, pinned by `tests/self_motion.test.ts`) is only the mid-deploy v1
-  fallback under its original latency-cap constraints. Both the v2 exact-match
+  fallback under its original latency-cap constraints, and it never predicts a
+  kart: a seated pilot on v1 (script bots, non-negotiating clients) is drawn
+  by the plain interpolated fallback, like a stood-down v2 driver. Both the v2 exact-match
   predictor and the v1 fallback use the per-`ClientWorld` `riftCollisionToken`
   registered on `riftState` for rift wall resolution, and v1 also strips and
   reapplies the raised-tier lift via `self_motion_rift_lift.ts`. Delves stay

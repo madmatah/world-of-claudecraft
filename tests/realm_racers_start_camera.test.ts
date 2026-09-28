@@ -542,7 +542,7 @@ describe('Realm Racers start camera', () => {
     expect(main).toContain('applyRealmRacersStartCameraFromWorld(');
     expect(main).toContain('renderer.selfMotionFacing');
     expect(main).toMatch(
-      /inputEcho\.jitterMs,\s+net\.lastSnapAt,\s+alpha,\s+frameDt,\s+selfDriveImpulse/,
+      /inputEcho\.jitterMs,\s+alpha,\s+frameDt,\s+Math\.max\(0, cameraLastSnapAge\)/,
     );
     expect(main).toContain('updateCamera(frameDt, onlineCameraFacing)');
     expect(main).toContain('rallyCameraTick(onlineCameraFacing)');

@@ -16,11 +16,8 @@ export interface BufferedSelfMotionFrame extends InstancedMotionState {
   displayFacing: number;
   echoMs: number;
   jitterMs: number;
-  authorityToken: number;
   alpha: number;
   frameDt: number;
-  driveImpulse: boolean;
-  popVelocity: number;
   snapAgeMs: number;
   snapIntervalMs: number;
 }
@@ -34,11 +31,8 @@ export class SelfMotionFrameBuffer {
     displayFacing: number,
     echoMs: number,
     jitterMs: number,
-    authorityToken: number,
     alpha: number,
     frameDt: number,
-    driveImpulse: boolean,
-    popVelocity: number,
     snapAgeMs: number,
     snapIntervalMs: number,
     instanced: InstancedMotionState,
@@ -50,11 +44,8 @@ export class SelfMotionFrameBuffer {
         displayFacing,
         echoMs,
         jitterMs,
-        authorityToken,
         alpha,
         frameDt,
-        driveImpulse,
-        popVelocity,
         snapAgeMs,
         snapIntervalMs,
         riftFloor: instanced.riftFloor,
@@ -67,11 +58,8 @@ export class SelfMotionFrameBuffer {
       this.frame.displayFacing = displayFacing;
       this.frame.echoMs = echoMs;
       this.frame.jitterMs = jitterMs;
-      this.frame.authorityToken = authorityToken;
       this.frame.alpha = alpha;
       this.frame.frameDt = frameDt;
-      this.frame.driveImpulse = driveImpulse;
-      this.frame.popVelocity = popVelocity;
       this.frame.snapAgeMs = snapAgeMs;
       this.frame.snapIntervalMs = snapIntervalMs;
       this.frame.riftFloor = instanced.riftFloor;

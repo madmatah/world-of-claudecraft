@@ -1454,7 +1454,10 @@ const MONOLITHS: MonolithRow[] = [
     // Colorblind Mode's interface body-class extraction also composes with
     // those release-line extractions. Release reconciliation: measured merged
     // tree at 11140 lines, preserving both extraction sets.
-    ceiling: 11140,
+    // LOWERED 11140 -> 11033 when the wire v1 client stopped predicting karts:
+    // the drive-impulse and blast-pop plumbing into the v1 extrapolator frame
+    // left main.ts. wc -l on the tree. Exact count, zero slack.
+    ceiling: 11033,
     seam: 'a src/game/ or src/ui/ sibling module; main.ts is a firewall, not a home',
   },
   {

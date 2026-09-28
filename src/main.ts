@@ -396,7 +396,6 @@ import { setNameplateDotScale } from './render/nameplate_dot_scale';
 import { hazardPaletteModeOf } from './render/nythraxis_hazard_palette_core';
 import { createInitialPrewarmResumeStartGate } from './render/prewarm_resume_start_gate';
 import type { Renderer } from './render/renderer';
-import { authoritativeVerticalPop, hasAuthoritativeDriveImpulse } from './render/self_motion';
 import { MovementPredictionPipeline } from './render/self_prediction';
 import { ensureSkyAssetsAt, navigatorSaveData } from './render/sky';
 import { ARRIVAL_NEIGHBOR_STREAM_RADIUS } from './render/zone_streaming';
@@ -4608,13 +4607,6 @@ async function startGame(
     // this edge across any intervening rAF and exposes it only after that
     // snapshot has updated the self mirror.
     const selfAuthoritativeDiscontinuity = net.consumeSelfPositionDiscontinuity();
-    // A rival shoved the local machine: momentum the predictor cannot simulate,
-    // so it re-seeds its scratch drive from the next authoritative state. The
-    // vertical half of a blast (vy lives on the entity, not the drive state,
-    // and never rides the wire) is reconstructed from the event's falloff and
-    // handed over as a velocity to apply outright.
-    const selfDriveImpulse = hasAuthoritativeDriveImpulse(drainedEvents, net.playerId);
-    const selfPopVelocity = authoritativeVerticalPop(drainedEvents, net.playerId);
     const drainedEventsLength = drainedEvents.length;
     // A spectating session remaps net.playerId to the watched player's pid, so
     // their personal events would read as addressed to us; never notify there.
@@ -4688,11 +4680,8 @@ async function startGame(
               netFacing ?? interpServerFacing,
               inputEcho.echoMs,
               inputEcho.jitterMs,
-              net.lastSnapAt,
               alpha,
               frameDt,
-              selfDriveImpulse,
-              selfPopVelocity,
               Math.max(0, cameraLastSnapAge),
               net.snapInterval,
               refreshInstancedMotionState(

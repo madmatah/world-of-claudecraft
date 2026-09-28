@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { wrapAngle } from '../src/render/facing_smooth';
 import {
-  authoritativeVerticalPop,
   BLOCK_EPISODE_MAX_MS,
-  hasAuthoritativeDriveImpulse,
   SELF_MOTION_CAP_MAX_MS,
   SELF_MOTION_CAP_MIN_MS,
   SELF_MOTION_SNAP_DIST_SQ,
@@ -12,23 +10,16 @@ import {
   updateSelfRenderFallback,
   type Vec3Like,
 } from '../src/render/self_motion';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { DELVES, DUNGEON_FLOOR_Y } from '../src/sim/data';
 import {
   DELVE_DOOR_AISLE_HALF_DEPTH,
   delveDoorClampSolidsFromEntities,
 } from '../src/sim/delves/geometry';
 import { PLAYER_BODY_RADIUS } from '../src/sim/pathfind';
-import {
-  GROUND_BLAST_POP_VELOCITY,
-  resolveGroundBlastImpact,
-} from '../src/sim/realm_racers_ground_blast';
-import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { generateRiftFloor, riftLiftAt } from '../src/sim/rift/rift_gen';
 import { Sim } from '../src/sim/sim';
 import { type Entity, type MoveInput, RUN_SPEED, type VehicleDrive } from '../src/sim/types';
-import { resolveVehicleContact } from '../src/sim/vehicle_contact';
-import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { groundHeight, terrainHeight } from '../src/sim/world';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
@@ -89,12 +80,6 @@ class Lab {
   private localInput = mi();
   private inputLog: { atMs: number; input: MoveInput }[] = [];
   enabled = true;
-  // The authority announced a momentum change (a bump) for the next frame.
-  // Consumed once, like the real event drain in main.ts.
-  driveImpulse = false;
-  // The vertical half of an announced blast, reconstructed from the event's
-  // falloff exactly as main.ts does. Consumed once, like driveImpulse.
-  popVelocity = 0;
   // Scripted broadcast stall: while positive, tick boundaries still advance
   // the server (it never stops simulating) but the mirror and lastSnapMs are
   // suppressed, so the client renders against a frozen snapshot exactly like
@@ -295,11 +280,8 @@ class Lab {
       displayFacing,
       echoMs: this.lagMs,
       jitterMs: 0,
-      authorityToken: this.lastSnapMs,
       alpha,
       frameDt: frameMs / 1000,
-      driveImpulse: this.driveImpulse,
-      popVelocity: this.popVelocity,
       snapAgeMs: this.lastSnapMs > 0 ? this.nowMs - this.lastSnapMs : 0,
       snapIntervalMs: this.deliveryMs,
       // Read fresh every frame, exactly like main.ts reads net.riftFloor: null
@@ -314,8 +296,6 @@ class Lab {
         ? delveDoorClampSolidsFromEntities(this.srv.entities.values())
         : [],
     };
-    this.driveImpulse = false;
-    this.popVelocity = 0;
     const out = this.predictor.step(this.self, frame);
     const a = {
       x: this.self.prevPos.x + (this.self.pos.x - this.self.prevPos.x) * alpha,
@@ -362,118 +342,6 @@ class Lab {
   }
 }
 
-describe('the announced-impulse list', () => {
-  // The registration this list IS. Every authoritative write to the local
-  // machine's drive state has to appear here or the predictor keeps driving a
-  // machine that was never thrown while the position correction drags it back
-  // every frame: the oil slick shipped missing from it and that is exactly what
-  // it looked like. A spin counts as momentum even though it writes only
-  // `spin`, because carried spin is what turns forward speed into slide.
-  const ME = 7;
-  const THEM = 8;
-
-  it('announces every rally impulse aimed at the local machine', () => {
-    expect(
-      hasAuthoritativeDriveImpulse(
-        [{ type: 'realmRacersBump', aId: THEM, bId: ME, x: 0, z: 0, impact: 9 }],
-        ME,
-      ),
-    ).toBe(true);
-    expect(
-      hasAuthoritativeDriveImpulse(
-        [
-          {
-            type: 'realmRacersGroundBlastHit',
-            sourceId: THEM,
-            targetId: ME,
-            x: 0,
-            z: 0,
-            impact: 1,
-          },
-        ],
-        ME,
-      ),
-    ).toBe(true);
-    expect(
-      hasAuthoritativeDriveImpulse(
-        [{ type: 'realmRacersSlicked', targetId: ME, x: 0, z: 0, impact: 0.8 }],
-        ME,
-      ),
-    ).toBe(true);
-  });
-
-  it('ignores the same impulses landing on somebody else', () => {
-    // A rival spinning out is their prediction's business, not ours: re-seeding
-    // the scratch drive off it would throw away a lead that is still correct.
-    expect(
-      hasAuthoritativeDriveImpulse(
-        [{ type: 'realmRacersSlicked', targetId: THEM, x: 0, z: 0, impact: 0.8 }],
-        ME,
-      ),
-    ).toBe(false);
-    expect(
-      hasAuthoritativeDriveImpulse(
-        [
-          { type: 'realmRacersBump', aId: THEM, bId: 9, x: 0, z: 0, impact: 9 },
-          { type: 'realmRacersGo' },
-        ],
-        ME,
-      ),
-    ).toBe(false);
-  });
-
-  it('reconstructs the vertical pop from the blast event, local machine only', () => {
-    // The drive resync cannot carry the pop (the drive state has no vertical
-    // component and the wire carries no vy), but the pop is pure geometry off
-    // the falloff the event already carries, so the client rebuilds the exact
-    // velocity the server applied: GROUND_BLAST_POP_VELOCITY times impact.
-    const hit = (targetId: number | null, impact: number) =>
-      ({
-        type: 'realmRacersGroundBlastHit',
-        sourceId: THEM,
-        targetId,
-        x: 0,
-        z: 0,
-        impact,
-      }) as const;
-    expect(authoritativeVerticalPop([hit(ME, 1)], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY);
-    expect(authoritativeVerticalPop([hit(ME, 0.5)], ME)).toBeCloseTo(
-      GROUND_BLAST_POP_VELOCITY * 0.5,
-    );
-    // A rival's hit, an empty-track crater, and an unrelated event are all zero.
-    expect(authoritativeVerticalPop([hit(THEM, 1)], ME)).toBe(0);
-    expect(authoritativeVerticalPop([hit(null, 0)], ME)).toBe(0);
-    expect(authoritativeVerticalPop([{ type: 'realmRacersGo' }], ME)).toBe(0);
-    // Two shells landing in one drain both count: the server applied both pops.
-    expect(authoritativeVerticalPop([hit(ME, 1), hit(ME, 0.25)], ME)).toBeCloseTo(
-      GROUND_BLAST_POP_VELOCITY * 1.25,
-    );
-  });
-
-  it('pops a local SECOND victim off the per-racer list, and the named one once', () => {
-    const hit = (targetId: number | null, impact: number, hits?: number[]) =>
-      ({
-        type: 'realmRacersGroundBlastHit',
-        sourceId: 3,
-        targetId,
-        x: 0,
-        z: 0,
-        impact,
-        ...(hits ? { hits } : {}),
-      }) as const;
-    // Caught second: the event names the rival, the list names us.
-    const second = hit(THEM, 1, [THEM, 1, ME, 0.444]);
-    expect(authoritativeVerticalPop([second], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY * 0.444);
-    expect(hasAuthoritativeDriveImpulse([second], ME)).toBe(true);
-    // Named AND listed: one pop, off `impact`, never two.
-    const named = hit(ME, 0.8, [ME, 0.8, THEM, 0.2]);
-    expect(authoritativeVerticalPop([named], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY * 0.8);
-    // Not in the list at all: nothing.
-    expect(authoritativeVerticalPop([hit(THEM, 1, [THEM, 1])], ME)).toBe(0);
-    expect(hasAuthoritativeDriveImpulse([hit(THEM, 1, [THEM, 1])], ME)).toBe(false);
-  });
-});
-
 describe('SelfMotionPredictor', () => {
   it('snaps both predictive and fallback poses on a sub-threshold authoritative recovery', () => {
     const sim = new Sim({
@@ -494,7 +362,6 @@ describe('SelfMotionPredictor', () => {
       displayFacing: 0,
       echoMs: 100,
       jitterMs: 0,
-      authorityToken: 1,
       alpha: 1,
       frameDt: 0.05,
       snapAgeMs: 0,
@@ -1396,10 +1263,6 @@ describe('SelfMotionPredictor', () => {
           displayFacing: 0,
           echoMs: 100,
           jitterMs: 0,
-          // Fixed across both arms and every step: this case varies the frame
-          // and snapshot CLOCKS, so a token that moved with them would add a
-          // fresh-authority reset the comparison is not about.
-          authorityToken: 1,
           alpha: 1,
           frameDt,
           snapAgeMs,
@@ -1474,391 +1337,23 @@ describe('SelfMotionPredictor', () => {
     }
     expect(maxRise).toBeGreaterThan(0.3);
   });
-  it('predicts a driving machine: its own drive state, its own steered heading', () => {
-    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
-    const lab = new Lab(150, FRAME_MS, {
-      start: { x: start.x, z: start.z },
-      facing: start.facing,
-      drive: true,
-    });
+  it('stands down for a seated pilot and re-adopts the runner at the unseat', () => {
+    // A wire v1 driver is drawn by the plain interpolated fallback, like a
+    // driver the reconciling pipeline stands down: kart prediction is wire v2's.
+    const lab = new Lab(150, FRAME_MS, { drive: true });
     lab.setInput(mi({ forward: true, turnLeft: true }));
-    for (let i = 0; i < 120; i++) lab.frame(); // 2 s of throttle into a left-hander
-
-    // The predictor is driving, and it integrated its OWN copy of the state.
-    expect(lab.predictor.driving).toBe(true);
-    const predicted = (lab.predictor as unknown as { actor: Entity }).actor.drive;
-    expect(predicted).not.toBe(lab.self.drive);
-    expect(predicted?.speed).toBeGreaterThan(5);
-
-    // Writing back into the mirrored ClientWorld state is forbidden (the
-    // predictor's third safety property). The mirror hands out FROZEN drive
-    // states, so the 120 frames above would already have thrown on a shared
-    // object; the actor's own object also survives them all, rather than being
-    // re-seeded from a wire value an echo old.
-    expect(Object.isFrozen(lab.self.drive)).toBe(true);
-    for (let i = 0; i < 30; i++) lab.frame();
-    expect((lab.predictor as unknown as { actor: Entity }).actor.drive).toBe(predicted);
-
-    // The heading is STEERED, not assigned from the display facing: it moved
-    // off the grid heading, in the direction the pilot steered (left, which
-    // increases facing), and it leads the echo-delayed authoritative one.
-    expect(lab.predictor.facing).not.toBe(start.facing);
-    // At 150 ms echo the local machine must retain a meaningful accumulated
-    // steering lead beyond the delayed wire heading. Re-anchoring to the
-    // mirrored facing before every step leaves only the latest yaw delta and
-    // keeps this gap near zero, despite the comment claiming zero-latency yaw.
-    expect(wrapAngle(lab.predictor.facing - lab.self.facing)).toBeGreaterThan(0.08);
-
-    // ...and the display is not being permanently clamped: a leash budget
-    // sized off RUN_SPEED (not the machine's top speed) would ride the
-    // boundary every frame of a race and read as rubber-banding.
-    const result = lab.frame();
-    const lead = Math.hypot(
-      (result.pose?.x ?? 0) - result.ac.x,
-      (result.pose?.z ?? 0) - result.ac.z,
-    );
-    expect(lead).toBeGreaterThan(lab.budget()); // a machine outruns a runner's budget
-    expect(lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000); // but stays leashed
-  });
-
-  it('keeps steering locally while authoritative driving snapshots are stalled', () => {
-    const lab = new Lab(150, FRAME_MS, {
-      start: { x: 113_700, z: -1_000 },
-      facing: 0,
-      drive: true,
-    });
-    lab.setInput(mi({ forward: true }));
-    for (let i = 0; i < 120; i++) lab.frame();
-    lab.setInput(mi({ forward: true, turnLeft: true }));
-    for (let i = 0; i < 30; i++) lab.frame();
-
-    // Four hundred milliseconds without a delivery: the server keeps ticking,
-    // but the client must not reuse the frozen heading as fresh authority on
-    // every rAF and steer against the still-held local turn.
-    lab.skipDeliveries = 8;
-    let previous = lab.predictor.facing;
-    let totalTurn = 0;
-    let worstStep = Number.POSITIVE_INFINITY;
-    let stalledFrames = 0;
-    for (let guard = 0; guard < 60; guard++) {
-      const result = lab.frame();
-      if (result.delivered) break;
-      const next = lab.predictor.facing;
-      const step = wrapAngle(next - previous);
-      totalTurn += step;
-      worstStep = Math.min(worstStep, step);
-      previous = next;
-      stalledFrames++;
-    }
-    expect(stalledFrames).toBeGreaterThan(20);
-    expect(totalTurn).toBeGreaterThan(0.2);
-    expect(worstStep).toBeGreaterThanOrEqual(-0.005);
-  });
-
-  it('interpolates predicted driving heading between fixed simulation ticks', () => {
-    const lab = new Lab(150, FRAME_MS, {
-      start: { x: 113_700, z: -1_000 },
-      facing: 0,
-      drive: true,
-    });
-    lab.setInput(mi({ forward: true }));
-    for (let i = 0; i < 120; i++) lab.frame();
-    lab.setInput(mi({ forward: true, turnLeft: true }));
-    for (let i = 0; i < 30; i++) lab.frame();
-
-    let previous = lab.predictor.facing;
-    let worstStep = 0;
-    let movingFrames = 0;
     for (let i = 0; i < 30; i++) {
-      lab.frame();
-      const next = lab.predictor.facing;
-      const step = wrapAngle(next - previous);
-      worstStep = Math.max(worstStep, Math.abs(step));
-      if (step > 0.005) movingFrames++;
-      previous = next;
+      expect(lab.frame().pose).toBeNull();
+      expect(lab.predictor.leadMs).toBe(0);
     }
-
-    // A raw 20 Hz heading sits still for two rAFs, then jumps by up to 0.13
-    // rad. The camera-facing value must instead advance on almost every 60 Hz
-    // frame with steps near one third of that size.
-    expect(movingFrames).toBeGreaterThan(24);
-    expect(worstStep).toBeLessThan(0.07);
-  });
-
-  it('reconciles an authority-only driving rotation across the angle seam', () => {
-    const lab = new Lab(150, FRAME_MS, {
-      start: { x: 113_700, z: -1_000 },
-      facing: Math.PI - 0.04,
-      drive: true,
-    });
+    expect(lab.self.drive).not.toBeNull();
+    lab.srv.player.drive = null;
+    lab.srv.player.mountKey = '';
     lab.setInput(mi({ forward: true }));
-    for (let i = 0; i < 120; i++) lab.frame();
-
-    // Model a rotation the local predictor could not know (bump/shell), and
-    // cross +PI to -PI so the servo must take the short arc.
-    lab.rotateAuthority(0.16);
-    let previous = lab.predictor.facing;
-    let worstStep = 0;
-    for (let i = 0; i < 120; i++) {
-      lab.frame();
-      const next = lab.predictor.facing;
-      worstStep = Math.max(worstStep, Math.abs(wrapAngle(next - previous)));
-      previous = next;
-    }
-
-    expect(worstStep).toBeLessThan(0.12);
-    expect(Math.abs(wrapAngle(lab.predictor.facing - lab.self.facing))).toBeLessThan(0.06);
-  });
-
-  it('adopts a bump it could not predict instead of driving against it', () => {
-    // A rival shoves the local machine sideways. The predictor has no idea the
-    // other racer exists, so the shove arrives as an authoritative divergence:
-    // the position correction glides it in, but the momentum has to be adopted
-    // or the scratch machine keeps driving the pre-bump line under it.
-    const race = (announce: boolean) => {
-      const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
-      const lab = new Lab(150, FRAME_MS, {
-        start: { x: start.x, z: start.z },
-        facing: start.facing,
-        drive: true,
-      });
-      lab.setInput(mi({ forward: true }));
-      for (let i = 0; i < 60; i++) lab.frame(); // 1 s down the start straight
-      const server = lab.srv.player;
-      const drive = server.drive;
-      if (!drive) throw new Error('missing drive');
-      const rival = createVehicleDrive('tank');
-      // Slower AND leaning in: the pace difference is what scrapes, so the
-      // contact both shoves the machine sideways and spins it.
-      rival.speed = drive.speed - 14;
-      rival.slip = -9;
-      const right = { x: -Math.cos(server.facing), z: Math.sin(server.facing) };
-      resolveVehicleContact(
-        {
-          x: server.pos.x,
-          z: server.pos.z,
-          facing: server.facing,
-          drive,
-          radius: 1.7,
-          mass: 1,
-        },
-        {
-          x: server.pos.x + right.x * 2.6,
-          z: server.pos.z + right.z * 2.6,
-          facing: server.facing,
-          drive: rival,
-          radius: 1.7,
-          mass: 1,
-        },
-      );
-      expect(Math.abs(drive.slip)).toBeGreaterThan(4); // the shove really landed
-      expect(Math.abs(drive.spin)).toBeGreaterThan(0.5); // and it spun the machine
-      // The event frame reaches the client BEFORE the snapshot carrying its
-      // result, exactly as the server sends them.
-      lab.driveImpulse = announce;
-      // Settle for a second, then measure over a window rather than on one
-      // frame: the display samples at 60 Hz against a 20 Hz authority, so a
-      // single frame's reading carries that phase with it.
-      const frames = 60;
-      const window = 20;
-      // The SPIN is measured over the half second right after the contact,
-      // where it lives: it decays by design, so a tail reading would compare
-      // two numbers that are both nearly zero and prove nothing.
-      const spinFrames = 30;
-      let gap = 0;
-      let worldGap = 0;
-      let spinGap = 0;
-      let lead = 0;
-      for (let i = 0; i < frames; i++) {
-        const result = lab.frame();
-        const predicted = (lab.predictor as unknown as { actor: Entity }).actor.drive;
-        const truth = lab.srv.player.drive;
-        if (i < spinFrames) {
-          spinGap += Math.abs((predicted?.spin ?? 0) - (truth?.spin ?? 0)) / spinFrames;
-        }
-        if (i < frames - window) continue;
-        gap += Math.abs((predicted?.slip ?? 0) - (truth?.slip ?? 0)) / window;
-        if (predicted && truth) {
-          worldGap +=
-            Math.hypot(
-              lab.predictor.velocityX - vehicleVelocityX(truth, lab.srv.player.facing),
-              lab.predictor.velocityZ - vehicleVelocityZ(truth, lab.srv.player.facing),
-            ) / window;
-        }
-        lead +=
-          Math.hypot((result.pose?.x ?? 0) - result.ac.x, (result.pose?.z ?? 0) - result.ac.z) /
-          window;
-      }
-      return { gap, worldGap, spinGap, lead };
-    };
-
-    const adopted = race(true);
-    const ignored = race(false);
-    // Adopted: a second later the predicted machine carries the authority's
-    // WORLD velocity, so its predicted body frame cannot rotate the adopted
-    // speed/slip vector onto a different line.
-    expect(adopted.worldGap).toBeLessThan(3);
-    expect(ignored.worldGap).toBeGreaterThan(5 * adopted.worldGap);
-    expect(ignored.worldGap).toBeGreaterThan(10);
-    // The body-frame lateral component converges too, within the ordinary
-    // 20 Hz-vs-60 Hz sampling phase of the lab.
-    expect(adopted.gap).toBeLessThan(0.6);
-    // Ignored: it is still sliding a different way, which is what the position
-    // correction would have to fight for the rest of the corner.
-    expect(ignored.gap).toBeGreaterThan(4 * adopted.gap);
-    expect(ignored.gap).toBeGreaterThan(0.8);
-    // The rotation comes with it. A predicted machine left at zero spin keeps
-    // deriving a velocity off a body that never turned, which is the same
-    // divergence one axis over.
-    expect(adopted.spinGap).toBeLessThan(0.55);
-    expect(ignored.spinGap).toBeGreaterThan(3 * adopted.spinGap);
-    expect(ignored.spinGap).toBeGreaterThan(0.5);
-    // Either way the pose stays bounded: the resync settles the prediction, it
-    // never lets it run away from (or oscillate around) the authority.
-    expect(adopted.lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000);
-  });
-
-  it('keeps the display steady when the surface cap collapses under a built lead', () => {
-    // Crossing onto deep grass (or taking a shell's slow) drops the SURFACE
-    // speed cap the instant the server says so. The lead the display carries
-    // was built over the last latency window at the OLD ceiling, so a leash
-    // budget sized off the instantaneous cap yanked the machine backward
-    // several yards on every off-road excursion, and shrank the hard snap
-    // threshold toward an ordinary bump gap. The budget is floored at the
-    // profile maximum now: the crossing must read as the server's own gentle
-    // cap decay, never as a backward jump.
-    // The circuit's start straight, for exactly as long as it stays straight:
-    // the open world is too hilly to build racing speed, and holding the grid
-    // heading much past two seconds runs the machine into the garden wall.
-    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
-    const lab = new Lab(150, FRAME_MS, {
-      start: { x: start.x, z: start.z },
-      facing: start.facing,
-      drive: true,
-      // A real downlink: without it the mirror converges within one tick of
-      // the server and the post-impulse gap this test is about never builds.
-      snapshotDelayMs: 75,
-    });
-    lab.setInput(mi({ forward: true }));
-    for (let i = 0; i < 60; i++) lab.frame(); // rolling, predictor adopted
-    const drive = lab.srv.player.drive;
-    if (!drive) throw new Error('missing drive');
-    // Terminal speed, installed through the announced-impulse channel (the
-    // grid straight is not long enough to reach it organically before the
-    // garden wall): the resync adopts it, and half a second later the full
-    // racing lead stands.
-    drive.speed = 57;
-    lab.driveImpulse = true;
-    for (let i = 0; i < 90; i++) lab.frame(); // resync landed, servo settled
-    expect(drive.speed).toBeGreaterThan(50); // the scenario really is at speed
-    // The off-piste collision, in its real order: a hard hit at racing speed
-    // opens a display-versus-anchor gap of several yards inside one echo (the
-    // predictor cannot know the shove until the resync, a downlink away), and
-    // the machine careens onto the deep off-road band in the same moment.
-    // With the leash budget sized off the collapsed surface cap, the whole
-    // excess used to clamp onto the jumped anchor in single-frame steps (the
-    // yank the seat reads as a big stutter); floored at the profile maximum,
-    // the servo glides it in instead.
-    drive.speed = 12;
-    drive.slip = -25;
-    drive.speedCap = 0.5;
-    lab.driveImpulse = true;
-    let lastX: number | null = null;
-    let lastZ: number | null = null;
-    let maxFrameDisp = 0;
-    let maxLead = 0;
-    for (let i = 0; i < 40; i++) {
-      const r = lab.frame();
-      if (!r.pose) continue;
-      maxLead = Math.max(maxLead, Math.hypot(r.pose.x - r.ac.x, r.pose.z - r.ac.z));
-      if (lastX !== null && lastZ !== null) {
-        maxFrameDisp = Math.max(maxFrameDisp, Math.hypot(r.pose.x - lastX, r.pose.z - lastZ));
-      }
-      lastX = r.pose.x;
-      lastZ = r.pose.z;
-    }
-    // The honest post-hit gap here is ~8 yd (the hit's velocity change over
-    // one downlink). The collapsed-cap budget garrotted it at ~4.7: the
-    // display was clamped onto the jumped anchor instead of gliding, which is
-    // the off-piste collision yank. Floored, the gap is TOLERATED...
-    expect(maxLead).toBeGreaterThan(6);
-    // ...and worked off by the servo, never by a step: legitimate motion at
-    // 57 yd/s is 0.95 yd per 60 Hz frame, and the glide adds a bounded
-    // fraction on top.
-    expect(maxFrameDisp).toBeLessThan(1.45);
-  });
-
-  it('rides a ground blast pop into the air instead of staying glued to the floor', () => {
-    // A shell pops the machine vertically (vy on the ENTITY, not the drive
-    // state), so the drive resync structurally cannot carry it and the wire
-    // never will (no vy field). Without the reconstructed pop the scratch
-    // actor stays grounded for the whole 1+ second arc: the kernel re-pins it
-    // to the floor while the correction servo drags it toward the rising
-    // anchor, the flight the player sees is flattened and late, and the
-    // predictor reports onGround the entire time, which is what feeds the
-    // renderer's grounded presentation mid-air.
-    const race = (announcePop: boolean) => {
-      const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
-      const lab = new Lab(150, FRAME_MS, {
-        start: { x: start.x, z: start.z },
-        facing: start.facing,
-        drive: true,
-      });
-      lab.setInput(mi({ forward: true }));
-      for (let i = 0; i < 60; i++) lab.frame(); // 1 s down the start straight
-      const server = lab.srv.player;
-      const drive = server.drive;
-      if (!drive) throw new Error('missing drive');
-      const floorY = server.pos.y;
-      // The blast, applied exactly as social/realm_racers.ts does: horizontal
-      // shove and spin into the drive state, pop onto the entity's own vy.
-      const blast = resolveGroundBlastImpact(
-        { x: server.pos.x, z: server.pos.z, facing: server.facing, drive },
-        server.pos.x - 1,
-        server.pos.z - 1,
-      );
-      expect(blast.pop).toBeGreaterThan(6); // the shell really caught it
-      server.vy += blast.pop;
-      server.onGround = false;
-      server.fallStartY = server.pos.y;
-      // Both halves of the announcement, as main.ts drains them. The horizontal
-      // resync stays on in BOTH arms so the measurement isolates the pop.
-      lab.driveImpulse = true;
-      lab.popVelocity = announcePop ? blast.pop : 0;
-      let apexShown = 0;
-      let apexTrue = 0;
-      let maxErrY = 0;
-      let sawAirborne = false;
-      const frames = 110; // the full arc (~1.2 s) plus the landing settle
-      for (let i = 0; i < frames; i++) {
-        const result = lab.frame();
-        apexTrue = Math.max(apexTrue, lab.srv.player.pos.y - floorY);
-        if (result.pose) {
-          apexShown = Math.max(apexShown, result.pose.y - floorY);
-          maxErrY = Math.max(maxErrY, Math.abs(result.pose.y - result.ac.y));
-        }
-        if (!lab.predictor.onGround) sawAirborne = true;
-      }
-      return { apexShown, apexTrue, maxErrY, sawAirborne, landed: lab.predictor.onGround };
-    };
-
-    const adopted = race(true);
-    const ignored = race(false);
-    // The true arc is a real jump (pop^2 / 2g of height).
-    expect(adopted.apexTrue).toBeGreaterThan(2);
-    // Adopted: the display flies the same arc, through the same kernel, and
-    // the physics state agrees with it (airborne during the flight, grounded
-    // again after the landing).
-    expect(adopted.apexShown).toBeGreaterThan(0.75 * adopted.apexTrue);
-    expect(adopted.sawAirborne).toBe(true);
-    expect(adopted.landed).toBe(true);
-    // Ignored: the floor glue flattens the flight and the predictor never
-    // learns it left the ground, which is the defect this pins away.
-    expect(ignored.sawAirborne).toBe(false);
-    expect(ignored.apexShown).toBeLessThan(0.6 * ignored.apexTrue);
-    // And the adopted arc tracks the authority far tighter than the servo
-    // fight it replaces.
-    expect(adopted.maxErrY).toBeLessThan(0.6 * ignored.maxErrY);
+    let back: FrameResult | null = null;
+    for (let i = 0; i < 10 && !back?.pose; i++) back = lab.frame();
+    expect(lab.self.drive).toBeNull();
+    expect(back?.pose).not.toBeNull();
   });
 });
 

@@ -332,10 +332,6 @@ describe("Paladin Retribution: Valkyr's Calling", () => {
       displayFacing: sim.player.facing,
       echoMs: 100,
       jitterMs: 0,
-      // One fixed token: every step in these cases reads the SAME authoritative
-      // snapshot, so the predictor must not see a fresh-authority edge between
-      // them. What is under test is the flight aura, not a snapshot boundary.
-      authorityToken: 1,
       alpha: 1,
       frameDt: 1 / 60,
       snapAgeMs: 0,

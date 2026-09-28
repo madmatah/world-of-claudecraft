@@ -35,6 +35,7 @@ vi.mock('../server/db', () => ({
   GUILD_BANK_ROW_MAX_BYTES: 262144,
 }));
 
+import { wrapAngle } from '../src/render/facing_smooth';
 import { REALM_RACERS_NITRO_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GROUND_BLAST_SHOCK_TICKS } from '../src/sim/realm_racers_ground_blast';
@@ -351,10 +352,19 @@ interface SoloOptions {
   stalls?: { everyMs: number; stallMs: number; fromMs: number };
 }
 
+/** One predicted racing frame as drawn, with the server tick it ran after. */
+interface DrawnFrame {
+  tick: number;
+  x: number;
+  z: number;
+  dtSec: number;
+}
+
 interface SoloRun {
   watch: PilotWatch;
   rows: ServerRow[];
   heads: Map<number, HeadRow>;
+  drawn: DrawnFrame[];
   goTick: number;
   lapLength: number;
   decisions: AutopilotDecisions;
@@ -428,6 +438,7 @@ function runSolo(opts: SoloOptions): SoloRun {
     const goTick = match.goTick;
     const rows: ServerRow[] = [];
     const heads = new Map<number, HeadRow>();
+    const drawn: DrawnFrame[] = [];
     const marks: Record<string, number> = {};
     const starvedTicks: number[] = [];
     const clocks: Record<string, number> = {};
@@ -530,7 +541,15 @@ function runSolo(opts: SoloOptions): SoloRun {
         travelled: progress?.travelled ?? 0,
       });
     });
-    harness.onClientFrame(() => {
+    harness.onClientFrame((frame) => {
+      if (phase === 'race' && frame.predictorActive) {
+        drawn.push({
+          tick: harness.server.sim.tickCount,
+          x: frame.drawn.x,
+          z: frame.drawn.z,
+          dtSec: frame.frameDtSec,
+        });
+      }
       const head = harness.predictionHead();
       if (phase !== 'race' || !head?.state.drive || heads.has(head.ct)) return;
       heads.set(head.ct, {
@@ -567,6 +586,7 @@ function runSolo(opts: SoloOptions): SoloRun {
       watch,
       rows,
       heads,
+      drawn,
       goTick,
       lapLength: realmRacersTrack(realmRacersCircuitOf(match)).length,
       decisions: rh.autopilotDecisions(),
@@ -1039,6 +1059,249 @@ describe.each(RTTS)('input starvation (%i ms RTT, 40 ms jitter, 180 ms bursts)',
     expect(max(account.xz)).toBeLessThanOrEqual(bound.xz);
     expect(max(account.yaw)).toBeLessThanOrEqual(bound.yaw);
   });
+});
+
+// ---------------------------------------------------------------------------
+// 8. The cases the retired v1 display extrapolator used to own, on wire v2
+// ---------------------------------------------------------------------------
+
+function rowByCt(run: SoloRun): Map<number, ServerRow> {
+  return new Map(run.rows.map((row) => [row.ct, row]));
+}
+
+/** A downlink burst: the snapshots stop arriving while the uplink flows. */
+const DOWNLINK_STALL_MS = 180;
+const HELD_TURN_FROM_MS = 4000;
+const DOWNLINK_STALL_AT_MS = HELD_TURN_FROM_MS + 250;
+const HELD_TURN_UNTIL_MS = HELD_TURN_FROM_MS + 700;
+
+interface DownlinkStallCase {
+  run: SoloRun;
+  stallCt: number;
+  stallTick: number;
+}
+
+const downlinkStalls = new Map<Rtt, DownlinkStallCase>();
+
+function downlinkStallRun(rttMs: Rtt): DownlinkStallCase {
+  const cached = downlinkStalls.get(rttMs);
+  if (cached) return cached;
+  const at = { stallCt: -1, stallTick: -1 };
+  const run = runSolo({
+    rttMs,
+    raceMs: EFFECT_RACE_MS,
+    atRaceMs: {
+      [HELD_TURN_FROM_MS]: (ctx) => {
+        ctx.rh.autopilot(null);
+        ctx.rh.harness.holdIntent({ forward: true, turnLeft: true });
+      },
+      [DOWNLINK_STALL_AT_MS]: (ctx) => {
+        const h = ctx.rh.harness;
+        at.stallCt = h.lastSentClientTick();
+        at.stallTick = ctx.tick;
+        h.link.stall('toClient', h.clock.now() + DOWNLINK_STALL_MS);
+      },
+      [HELD_TURN_UNTIL_MS]: (ctx) => {
+        ctx.rh.harness.holdIntent({ turnLeft: false });
+        ctx.rh.autopilot({ observe: 'predicted' });
+      },
+    },
+  });
+  const out = { run, ...at };
+  downlinkStalls.set(rttMs, out);
+  return out;
+}
+
+describe.each(RTTS)('a downlink stall in a held corner (%i ms RTT)', (rttMs) => {
+  it('keeps steering the predicted kart every client tick, one replay at most per late tick', () => {
+    const { run, stallCt, stallTick } = downlinkStallRun(rttMs);
+    expect(stallCt).toBeGreaterThan(0);
+    const lateTicks = Math.ceil(DOWNLINK_STALL_MS / SERVER_TICK_MS);
+    // Every client tick sent from the stall until its burst lands is
+    // predicted, and the held turn keeps turning the head the same way.
+    const through = Math.ceil((DOWNLINK_STALL_MS + rttMs / 2) / SERVER_TICK_MS) + 1;
+    const facings: number[] = [];
+    for (let ct = stallCt; ct <= stallCt + through; ct++) {
+      const head = run.heads.get(ct);
+      expect({ ct, predicted: head !== undefined }).toEqual({ ct, predicted: true });
+      facings.push(head?.facing ?? Number.NaN);
+    }
+    const steps = facings.slice(1).map((f, i) => wrapAngle(f - facings[i]));
+    const sign = Math.sign(steps.reduce((a, b) => a + b, 0));
+    expect(sign).not.toBe(0);
+    expect(steps.filter((d) => Math.sign(d) !== sign || Math.abs(d) < 1e-6)).toEqual([]);
+    const account = accountReplays(run.watch);
+    expect(replaysAt(account, stallTick, stallTick + through)).toBeLessThanOrEqual(lateTicks);
+    expectEveryReplayExplained(run.watch, run.goTick, run.goTick + EFFECT_RACE_MS / 50);
+    expectPredictedRace(run.watch);
+    expectGoAndEndSuspendsOnly(run.watch);
+  });
+});
+
+/** Clear of a contact between the two hulls, well inside the blast. */
+const SECOND_VICTIM_CLEARANCE_YD = 1;
+
+interface SecondVictimCase {
+  run: SoloRun;
+  pid: number;
+  house: number;
+  hit: { tick: number; targetId: number | null; hits: readonly number[] } | null;
+  frames: { tMs: number; ct: number; onGround: boolean; vy: number }[];
+}
+
+const secondVictims = new Map<Rtt, SecondVictimCase>();
+
+/** A shell centred on a house pilot pulled alongside the local machine: the
+ *  local pilot is caught as a SECOND victim, on the Hit event's per-racer
+ *  `hits` list and never its `targetId`. */
+function secondVictimRun(rttMs: Rtt): SecondVictimCase {
+  const cached = secondVictims.get(rttMs);
+  if (cached) return cached;
+  const out: Omit<SecondVictimCase, 'run'> = {
+    pid: -1,
+    house: -1,
+    hit: null,
+    frames: [],
+  };
+  const run = runSolo({
+    rttMs,
+    raceMs: EFFECT_RACE_MS,
+    atRaceTick: {
+      [EFFECT_AT_TICK]: (ctx) => {
+        const h = ctx.rh.harness;
+        const others = ctx.match.pids.filter((pid) => pid !== h.pid);
+        if (others.length < 2) throw new Error('the practice needs two house pilots');
+        const [house, owner] = others;
+        out.house = house;
+        out.pid = h.pid;
+        const e = h.serverEntity;
+        const drive = e.drive;
+        const rival = h.server.sim.entities.get(house);
+        if (!drive || !rival) throw new Error('the local pilot is not driving');
+        const vx = vehicleVelocityX(drive, e.facing);
+        const vz = vehicleVelocityZ(drive, e.facing);
+        const len = Math.hypot(vx, vz);
+        const next = aheadOf(ctx, DT);
+        const side = 2 * vehicleProfile(drive.profileKey).bodyRadius + SECOND_VICTIM_CLEARANCE_YD;
+        rival.pos.x = next.x - (vz / len) * side;
+        rival.pos.z = next.z + (vx / len) * side;
+        rival.prevPos = { ...rival.pos };
+        ctx.match.groundBlasts.push({
+          ownerPid: owner,
+          x: rival.pos.x,
+          z: rival.pos.z,
+          impactTick: ctx.tick + 1,
+        });
+        const remove = h.onServerTick((events) => {
+          for (const ev of events) {
+            if (ev.type !== 'realmRacersGroundBlastHit') continue;
+            remove();
+            out.hit = {
+              tick: h.server.sim.tickCount,
+              targetId: ev.targetId,
+              hits: ev.hits ?? [],
+            };
+          }
+        });
+        h.onClientFrame((frame) => {
+          const head = h.predictionHead();
+          if (!head) return;
+          out.frames.push({
+            tMs: frame.nowMs,
+            ct: head.ct,
+            onGround: head.state.onGround ?? true,
+            vy: head.state.vy ?? 0,
+          });
+        });
+      },
+    },
+  });
+  const done = { run, ...out };
+  secondVictims.set(rttMs, done);
+  return done;
+}
+
+describe.each(RTTS)('a shell catching the local pilot second (%i ms RTT)', (rttMs) => {
+  it('flies the predicted head with the server twin, at the named target replay count', () => {
+    const c = secondVictimRun(rttMs);
+    const pid = c.pid;
+    const hit = c.hit;
+    expect(hit).not.toBeNull();
+    if (!hit) return;
+    // Caught second: the event names the house pilot, the list carries us.
+    expect(hit.targetId).toBe(c.house);
+    const at = hit.hits.indexOf(pid);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at % 2).toBe(0);
+    expect(hit.hits[at + 1]).toBeGreaterThan(0);
+    expect(hit.hits[at + 1]).toBeLessThan(hit.hits[hit.hits.indexOf(c.house) + 1]);
+    // The server pops the local machine on the hit's own tick.
+    expect(markOf(c.run, 'airborne')).toBe(hit.tick);
+    const serverHit = c.run.rows.find((r) => r.tick === hit.tick);
+    expect(serverHit?.onGround).toBe(false);
+    // The same two replays a named target costs (the shell case above).
+    const account = accountReplays(c.run.watch);
+    expect(replaysAt(account, hit.tick)).toBe(1);
+    expect(replaysAt(account, hit.tick + 1)).toBe(1);
+    expect(replaysAt(account, hit.tick, hit.tick + 1)).toBe(2);
+    // From the replay that adopts the hit on, every predicted head in the
+    // flight is airborne with the server twin's exact vertical speed.
+    const byCt = rowByCt(c.run);
+    const first = account.replays.find((r) => r.fromTick <= hit.tick && r.toTick >= hit.tick);
+    const landed = markOf(c.run, 'landed');
+    expect(first).toBeDefined();
+    const flight = c.frames.filter((f) => {
+      const row = byCt.get(f.ct);
+      return f.tMs >= (first?.note.tMs ?? Number.POSITIVE_INFINITY) && row && row.tick < landed;
+    });
+    expect(flight.length).toBeGreaterThan(5);
+    expect(flight[0].onGround).toBe(false);
+    const off = flight
+      .map((f) => ({
+        ct: f.ct,
+        head: [f.onGround, f.vy],
+        server: [byCt.get(f.ct)?.onGround, byCt.get(f.ct)?.vy],
+      }))
+      .filter((f) => f.head[0] !== f.server[0] || f.head[1] !== f.server[1]);
+    expect(off).toEqual([]);
+    expectEveryReplayExplained(c.run.watch, c.run.goTick, c.run.goTick + EFFECT_RACE_MS / 50);
+    expectPredictedRace(c.run.watch);
+    expectGoAndEndSuspendsOnly(c.run.watch);
+  });
+});
+
+/** What the drawn kart may move in a frame beyond the kart's own travel, yd:
+ *  the handoff glide of a band-edge replay residual. Measured 0.048 worst
+ *  (the verge at 200 ms), rounded up with margin. */
+const BAND_EDGE_SLACK_YD = 0.06;
+
+describe.each(RTTS)('the surface cap collapsing under a built lead (%i ms RTT)', (rttMs) => {
+  it.each(['verge', 'garden'] as const)(
+    '%s: the drawn kart never moves faster than the kart across a band edge',
+    (effect) => {
+      const run = effectRun(effect, rttMs);
+      const bandTicks = multiplierTicks(run.watch, run.goTick, run.goTick + EFFECT_RACE_MS / 50);
+      expect(bandTicks.length).toBeGreaterThanOrEqual(2);
+      const speedAt = new Map(run.rows.map((r) => [r.tick, r.speed]));
+      const rttTicks = Math.ceil(rttMs / SERVER_TICK_MS);
+      const settle = rttTicks + 6;
+      let worst = Number.NEGATIVE_INFINITY;
+      let checked = 0;
+      for (let i = 1; i < run.drawn.length; i++) {
+        const f = run.drawn[i];
+        const prev = run.drawn[i - 1];
+        if (!bandTicks.some((b) => f.tick >= b && f.tick <= b + settle)) continue;
+        let speed = 0;
+        for (let t = f.tick - 2; t <= f.tick + rttTicks + 2; t++) {
+          speed = Math.max(speed, speedAt.get(t) ?? 0);
+        }
+        worst = Math.max(worst, Math.hypot(f.x - prev.x, f.z - prev.z) - speed * f.dtSec);
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(bandTicks.length * 10);
+      expect(worst).toBeLessThanOrEqual(BAND_EDGE_SLACK_YD);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
