@@ -26559,9 +26559,13 @@
     font-size: 14px;
   }
 
+  /* z-index 30 is the minigame HUD tier (the Protect Yumi and ferry readouts):
+   over the frames and trackers it overlaps, under the Esc menu's scrim and
+   every open window, which hud.ts raises into a band from 51. At 58 an open
+   map or character window drew under the strip. */
   #realm-racers-hud {
     position: absolute;
-    z-index: 58;
+    z-index: 30;
     top: 74px;
     left: 50%;
     width: min(420px, calc(100vw - 34px));
@@ -26612,10 +26616,10 @@
    the only evidence the other machines exist.
 
    It is `pointer-events: none`, so a player who queued while grouped still
-   reaches their party frames underneath it. */
+   reaches their party frames underneath it. Same tier as the strip. */
   #realm-racers-standings {
     position: absolute;
-    z-index: 58;
+    z-index: 30;
     left: 12px;
     top: 12px;
     padding: 4px 0;

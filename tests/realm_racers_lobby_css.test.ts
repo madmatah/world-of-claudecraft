@@ -101,3 +101,39 @@ describe('Realm Racers lobby curtain stacking', () => {
     );
   });
 });
+
+// The race strip and the standings are HUD chrome, so an open window draws over
+// them. hud.ts raises every window it shows into a band that starts one above
+// its floor; at z-index 58 both panels sat over a freshly opened map or
+// character window, and over the Esc menu's scrim.
+describe('Realm Racers race strip stacking', () => {
+  const components = read('src/styles/components.css');
+  const hudCss = read('src/styles/hud.css');
+  const mobile = read('src/styles/hud.mobile.css');
+  const hud = read('src/ui/hud.ts');
+  const PANELS = ['#realm-racers-hud', '#realm-racers-standings'];
+
+  it('raises every shown window into a band that starts at 51', () => {
+    expect(hud).toContain('private windowZ = 50;');
+    expect(hud).toContain('this.windowZ = 50;');
+    expect(hud).toContain('el.style.zIndex = String(++this.windowZ);');
+  });
+
+  it('keeps both panels under that band, the Esc scrim and the open touch chat', () => {
+    const scrim = zIndexOf(components, '#ui::before');
+    const touchChat = zIndexOf(mobile, 'body.mobile-touch.mobile-chat-open #chatlog-wrap');
+    for (const panel of PANELS) {
+      const z = zIndexOf(components, panel);
+      expect(z, panel).toBeLessThan(51);
+      expect(z, panel).toBeLessThan(scrim);
+      expect(z, panel).toBeLessThan(touchChat);
+      // ...and still over the party frames the standings is laid over.
+      expect(z, panel).toBeGreaterThan(zIndexOf(hudCss, '#party-frames'));
+    }
+    // The touch sheet re-seats both panels without re-stacking them.
+    for (const panel of PANELS) {
+      const rule = mobile.slice(mobile.indexOf(`body.mobile-touch ${panel} {`));
+      expect(rule.slice(0, rule.indexOf('}')), panel).not.toMatch(/z-index/);
+    }
+  });
+});
