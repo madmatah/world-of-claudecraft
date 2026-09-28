@@ -3,9 +3,20 @@ import type { SimEvent, VehicleDrive } from '../src/sim/types';
 
 const audioSpies = vi.hoisted(() => ({ realmRacersResult: vi.fn() }));
 vi.mock('../src/game/audio', () => ({ audio: audioSpies }));
+// The shell pool mints its marker texture at construction, which needs a DOM
+// canvas; the rest of the textures module is the real one.
+vi.mock('../src/render/textures', async (importOriginal) => {
+  const THREE = await import('three');
+  return {
+    ...(await importOriginal<typeof import('../src/render/textures')>()),
+    rallyGroundBlastMarkerTexture: () =>
+      new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
+  };
+});
 
 import { createOwnBumpFeedback, markLocalBump } from '../src/render/own_bump_feedback_core';
 import * as realmRacersKart from '../src/render/realm_racers_kart_presentation';
+import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import { Renderer } from '../src/render/renderer';
 import { Hud } from '../src/ui/hud';
 
@@ -57,7 +68,6 @@ const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7): 
   }) as SimEvent;
 
 interface RendererHarness {
-  realmRacersGroundBlasts: { fire: ReturnType<typeof vi.fn>; impact: ReturnType<typeof vi.fn> };
   groundSample(x: number, z: number): number;
   vfx: { burst: ReturnType<typeof vi.fn>; groundPuff: ReturnType<typeof vi.fn> };
   audioSink: {
@@ -72,12 +82,10 @@ interface RendererHarness {
   triggerHit: ReturnType<typeof vi.fn>;
   addShake: ReturnType<typeof vi.fn>;
   punchFov: ReturnType<typeof vi.fn>;
-  handleEvent(event: SimEvent): void;
 }
 
 function rendererHarness(): RendererHarness {
   const renderer = Object.create(Renderer.prototype) as unknown as RendererHarness;
-  renderer.realmRacersGroundBlasts = { fire: vi.fn(), impact: vi.fn() };
   renderer.groundSample = (x, z) => x + z;
   renderer.vfx = { burst: vi.fn(), groundPuff: vi.fn() };
   renderer.audioSink = {
@@ -94,6 +102,14 @@ function rendererHarness(): RendererHarness {
   renderer.addShake = vi.fn();
   renderer.punchFov = vi.fn();
   return renderer;
+}
+
+/** The rally scene over the harness, as the renderer builds it over itself;
+ *  the shell pool is a spy (its own suite drives it). */
+function sceneOver(renderer: RendererHarness): RealmRacersScene {
+  const scene = new RealmRacersScene(renderer);
+  (scene as unknown as { groundBlasts: unknown }).groundBlasts = { fire: vi.fn(), impact: vi.fn() };
+  return scene;
 }
 
 const drive = (): VehicleDrive => ({
@@ -150,9 +166,10 @@ describe('Realm Racers coordinator audio wiring', () => {
     ]);
   });
 
-  it('executes the real renderer event branches and preserves kind, ground height, and impact', () => {
+  it('executes the real rally event branches and preserves kind, ground height, and impact', () => {
     const renderer = rendererHarness();
-    renderer.handleEvent({
+    const scene = sceneOver(renderer);
+    scene.onEvent({
       type: 'realmRacersGroundBlastFired',
       sourceId: 1,
       x: 2,
@@ -161,7 +178,7 @@ describe('Realm Racers coordinator audio wiring', () => {
       targetZ: 5,
       flightSeconds: 0.8,
     });
-    renderer.handleEvent({
+    scene.onEvent({
       type: 'realmRacersGroundBlastHit',
       sourceId: 1,
       targetId: null,
@@ -169,7 +186,7 @@ describe('Realm Racers coordinator audio wiring', () => {
       z: 5,
       impact: 0.7,
     });
-    renderer.handleEvent({
+    scene.onEvent({
       type: 'realmRacersBump',
       aId: 1,
       bId: 2,
@@ -191,6 +208,7 @@ describe('Realm Racers coordinator audio wiring', () => {
     // bump inside the window is a new contact and plays, and a bump between
     // two rivals is never suppressed whatever the latch holds.
     const renderer = rendererHarness();
+    const scene = sceneOver(renderer);
     const state = createOwnBumpFeedback();
     // The clock is FROZEN for this case rather than read live. The suppression
     // window is 1200 ms and the consume side reads `performance.now()` itself,
@@ -202,9 +220,9 @@ describe('Realm Racers coordinator audio wiring', () => {
     vi.spyOn(performance, 'now').mockReturnValue(nowMs);
     markLocalBump(state, 2, nowMs);
     markLocalBump(state, 3, nowMs);
-    (renderer as unknown as { ownBumpFeedbackState: unknown }).ownBumpFeedbackState = state;
+    (scene as unknown as { ownBumpFeedback: unknown }).ownBumpFeedback = state;
     const bump = (aId: number, bId: number) => {
-      renderer.handleEvent({ type: 'realmRacersBump', aId, bId, x: 6, z: 7, impact: 12 });
+      scene.onEvent({ type: 'realmRacersBump', aId, bId, x: 6, z: 7, impact: 12 });
     };
     bump(1, 2); // the echo of the local bang: silent
     expect(renderer.audioSink.realmRacersEvent).not.toHaveBeenCalled();

@@ -202,6 +202,9 @@ export function stepCameraFeelForDriving(
   return cameraFovOffset(s, profile);
 }
 
+/** Base FOV plus the feel kicks (speed widen, landing dip, level-up punch);
+ *  the offset is 0 under reduced motion. The base is the player's own
+ *  setCameraFov value, not the constant. */
 export function cameraFeelFovTarget(baseFov: number, feelOffset: number): number {
   return Math.min(100, Math.max(50, baseFov + feelOffset));
 }

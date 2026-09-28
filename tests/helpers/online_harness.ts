@@ -277,7 +277,7 @@ export interface ClientFrameInfo {
   selfMotion: SelfRenderPrediction | null;
   /** The drawn self pose. */
   drawn: Readonly<{ x: number; y: number; z: number }>;
-  /** The pose the HUD's ground-aim clamp measures from: renderer.selfAimPose
+  /** The pose the HUD's ground-aim clamp measures from: renderer.realmRacers.selfAimPose
    *  (displayedAimPose), null while the display is not predicted, where the
    *  HUD falls back to the mirrored player. */
   aimPose: Readonly<{ pos: { x: number; y: number; z: number }; facing: number }> | null;
@@ -675,7 +675,7 @@ function createClientRig(params: ClientRigParams): ClientRig {
     }
 
     // main.ts reads the renderer's PREVIOUS frame for the driving heading
-    // (renderer.selfMotionFacing, the drive view on either wire).
+    // (renderer.realmRacers.selfMotionFacing, the drive view on either wire).
     const predictedDrivingFacing = selfRender.drive.steersHeading ? selfRender.drive.facing : null;
     if (driving) {
       cameraFacing = cameraFollowFacing(

@@ -379,24 +379,32 @@ describe('renderer wiring of the rally groups', () => {
   });
 
   // No Renderer can be built headless, so the real wiring is read off its
-  // source: each declared group is attached once, straight to the scene, and
-  // never handed to any other parent (the exclusion reads direct children).
+  // source: the renderer hands the rally scene its scene root once, and the
+  // rally scene attaches each declared group once, straight to that root, and
+  // never to any other parent (the exclusion reads direct children).
   it('attaches the tracks and the Ground Blast and oil-spray pools to the scene itself, and nowhere else', () => {
+    const scene = stripComments(readFileSync('src/render/realm_racers_scene.ts', 'utf8'));
+    expect(renderer.match(/this\.realmRacers\.attach\(/g)).toHaveLength(1);
+    expect(renderer).toContain('this.realmRacers.attach(this.scene);');
+    expect(scene).toContain('attach(scene: THREE.Scene): void {');
     for (const group of [
-      'this.realmRacersTrack.group',
-      'this.realmRacersGroundBlasts.group',
-      'this.realmRacersFieldCues.sprays.group',
+      'this.track.group',
+      'this.groundBlasts.group',
+      'this.fieldCues.sprays.group',
     ]) {
-      const attaches = [...renderer.matchAll(/(\S+)\.(?:add|attach)\(([^)]*)\)/g)].filter((m) =>
+      const attaches = [...scene.matchAll(/(\S+)\.(?:add|attach)\(([^)]*)\)/g)].filter((m) =>
         m[2].split(',').some((arg) => arg.trim() === group),
       );
       expect(
         attaches.map((m) => m[0]),
         group,
-      ).toEqual([`this.scene.add(${group})`]);
-      expect(renderer).not.toMatch(
+      ).toEqual([`scene.add(${group})`]);
+      expect(scene).not.toMatch(
         new RegExp(`attachSceneGroupGated\\([^)]*${group.replace(/\./g, '\\.')}`),
       );
     }
+    // The renderer never reaches past the rally scene to parent a rally group.
+    expect(renderer).not.toMatch(/realmRacers\.(?:track|groundBlasts|fieldCues)\b[^;]*\.group/);
+    expect(renderer).not.toMatch(/attachSceneGroupGated\([^)]*realmRacers/);
   });
 });

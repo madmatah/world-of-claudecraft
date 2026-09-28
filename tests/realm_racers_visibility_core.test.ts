@@ -1,6 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
+
+// The rally scene's shell pool mints its marker texture at construction, which
+// needs a DOM canvas; the rest of the textures module is the real one.
+vi.mock('../src/render/textures', async (importOriginal) => {
+  const THREE = await import('three');
+  return {
+    ...(await importOriginal<typeof import('../src/render/textures')>()),
+    rallyGroundBlastMarkerTexture: () =>
+      new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
+  };
+});
+
 import { makeQuestObjectGate, type QuestObjectGate } from '../src/render/quest_object_gate_core';
+import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import {
   isOutsideRealmRacersDrawRange,
   isRealmRacersCoPilot,
@@ -18,6 +31,8 @@ interface RequiredViewsHarness {
   viewCreateRetry: { canAttempt(id: number, kind: string, now: number): boolean };
   createView: ReturnType<typeof vi.fn>;
   sampleCreatedViewType: ReturnType<typeof vi.fn>;
+  // The co-pilots are asked of the rally scene, built over the renderer.
+  realmRacers: RealmRacersScene;
   createRequiredViews(
     player: Entity,
     createdViewTypes: string[],
@@ -49,6 +64,7 @@ describe('Realm Racers participant visibility', () => {
     renderer.viewCreateRetry = { canAttempt: () => true };
     renderer.createView = vi.fn();
     renderer.sampleCreatedViewType = vi.fn();
+    renderer.realmRacers = new RealmRacersScene(renderer);
 
     const created = renderer.createRequiredViews(
       { id: 10, targetId: null } as Entity,
@@ -82,6 +98,7 @@ describe('Realm Racers participant visibility', () => {
     renderer.viewCreateRetry = { canAttempt: () => true };
     renderer.createView = vi.fn();
     renderer.sampleCreatedViewType = vi.fn();
+    renderer.realmRacers = new RealmRacersScene(renderer);
     const created = renderer.createRequiredViews(humanEntity, [], info.participantIds);
 
     expect(dx * dx + dz * dz).toBeGreaterThan(96 * 96);
@@ -128,8 +145,18 @@ describe('Realm Racers participant visibility', () => {
 
   it('pins the create, retain, and draw gates to the same fairness predicate', () => {
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    // The CREATE gate: the renderer's required views ask the rally scene for
+    // the co-pilots, which runs each through the predicate into the same
+    // required-view path as the player and their target.
     expect(renderer).toMatch(
-      /createRequiredViews\([\s\S]*isRealmRacersCoPilot\([\s\S]*createRequiredView/,
+      /private createRequiredViews\([\s\S]*?this\.realmRacers\.createCoPilotViews\(participantIds, player\.id, createdViewTypes\)/,
+    );
+    const scene = readFileSync(
+      new URL('../src/render/realm_racers_scene.ts', import.meta.url),
+      'utf8',
+    );
+    expect(scene).toMatch(
+      /createCoPilotViews\([\s\S]*?isRealmRacersCoPilot\(participantIds, playerId, id\)[\s\S]*?h\.createRequiredView\(id, createdViewTypes\)/,
     );
     // The RETAIN gate is no longer a predicate of ours. The release gave every
     // view one shared drop scan (`collectDoomedViewsInto`), and a co-pilot rides

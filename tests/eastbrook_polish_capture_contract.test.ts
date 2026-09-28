@@ -720,7 +720,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
   // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
-  'f9bdb01f02a6e38f39c3c27fbf1e021109251cb1f1e828f465783333353fe677';
+  // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
+  '7a392cab24a4177bc6bf9461e05f0909f8e165f925254cb765ac11edfeecc158';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

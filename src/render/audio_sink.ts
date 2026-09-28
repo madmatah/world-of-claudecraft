@@ -69,7 +69,11 @@ export interface SpatialAudioSink {
   preload?(key: string): void;
   /** Listener pose each frame: camera position/orientation plus the local-player
    *  anchor used by opt-in Realm Racers effects. The player coordinates are
-   *  optional so non-renderer callers retain the camera-relative default. */
+   *  optional so non-renderer callers retain the camera-relative default. The
+   *  listener rides the camera and faces the chase pivot, but the anchor is
+   *  the avatar itself, never that pivot: the pivot lags and leads by yards
+   *  (spring-arm leash plus look-ahead), and an anchor carrying that offset
+   *  misplaces every sound measured from it. */
   setListener(
     x: number,
     y: number,

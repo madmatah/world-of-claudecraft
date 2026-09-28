@@ -8,6 +8,16 @@ import type * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/game/audio', () => ({ audio: {} }));
+// The shell pool mints its marker texture at construction, which needs a DOM
+// canvas; the rest of the textures module is the real one.
+vi.mock('../src/render/textures', async (importOriginal) => {
+  const THREE = await import('three');
+  return {
+    ...(await importOriginal<typeof import('../src/render/textures')>()),
+    rallyGroundBlastMarkerTexture: () =>
+      new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
+  };
+});
 
 import { RealmRacersFieldCues } from '../src/render/realm_racers_field_cues';
 import {
@@ -25,6 +35,7 @@ import {
   rallyOilDropletAt,
   rallyOilSprayPath,
 } from '../src/render/realm_racers_oil_spray_core';
+import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from '../src/render/realm_racers_slicks_core';
 import {
   createRemoteVehicleDisplay,
@@ -393,25 +404,60 @@ describe('the field cues', () => {
 describe('the renderer hands the field events to the cues', () => {
   it('routes the slick throw, the drop and the take through one arm', () => {
     const onEvent = vi.fn();
-    const renderer = Object.create(Renderer.prototype) as Record<string, unknown> & {
-      handleEvent(ev: SimEvent): void;
-    };
     const sim = { playerId: SELF };
     const vfx = vfxSpy();
     const audioSink = { realmRacersEvent: vi.fn() };
-    renderer.realmRacersFieldCues = { onEvent };
-    renderer.sim = sim;
-    renderer.vfx = vfx;
-    renderer.audioSink = audioSink;
     const selfRender = seenSelf();
-    renderer.selfRender = selfRender;
-    const events: SimEvent[] = [
+    // The rally scene over a stub of the renderer members it reads.
+    const scene = new RealmRacersScene({
+      sim,
+      vfx,
+      audioSink,
+      selfRender,
+      views: viewsOf([]),
+      groundSample: (x: number, z: number): number => 0.1 * x + 0.05 * z,
+    });
+    (scene as unknown as { fieldCues: unknown }).fieldCues = { onEvent };
+    const events = [
       { type: 'realmRacersSlicked', targetId: RIVAL, x: 1, z: 2, impact: 0.4 },
       dropped(RIVAL),
       { type: 'realmRacersPickupTaken', takerId: RIVAL, x: 3, z: 4 },
-    ];
-    for (const ev of events) renderer.handleEvent(ev);
+    ] as Parameters<RealmRacersScene['onEvent']>[0][];
+    for (const ev of events) scene.onEvent(ev);
     expect(onEvent.mock.calls).toEqual(events.map((ev) => [ev, sim, vfx, audioSink, selfRender]));
     expect(vfx.groundPuff).not.toHaveBeenCalled();
+  });
+
+  it('is the one renderer arm every rally event takes to the scene', () => {
+    const onEvent = vi.fn();
+    const renderer = Object.create(Renderer.prototype) as Record<string, unknown> & {
+      handleEvent(ev: SimEvent): void;
+    };
+    renderer.realmRacers = { onEvent };
+    const events: SimEvent[] = [
+      {
+        type: 'realmRacersGroundBlastFired',
+        sourceId: RIVAL,
+        x: 1,
+        z: 2,
+        targetX: 3,
+        targetZ: 4,
+        flightSeconds: 0.5,
+      },
+      {
+        type: 'realmRacersGroundBlastHit',
+        sourceId: RIVAL,
+        targetId: null,
+        x: 1,
+        z: 2,
+        impact: 0.5,
+      },
+      { type: 'realmRacersBump', aId: SELF, bId: RIVAL, x: 1, z: 2, impact: 6 },
+      { type: 'realmRacersSlicked', targetId: RIVAL, x: 1, z: 2, impact: 0.4 },
+      dropped(RIVAL),
+      { type: 'realmRacersPickupTaken', takerId: RIVAL, x: 3, z: 4 },
+    ] as SimEvent[];
+    for (const ev of events) renderer.handleEvent(ev);
+    expect(onEvent.mock.calls).toEqual(events.map((ev) => [ev]));
   });
 });

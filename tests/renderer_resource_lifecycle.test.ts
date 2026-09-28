@@ -190,16 +190,14 @@ describe('renderer resource lifecycle', () => {
         throw new Error('track teardown failed');
       }),
     };
-    const realmRacersGroundBlasts = { dispose: vi.fn() };
-    const realmRacersFieldCues = { dispose: vi.fn() };
+    const groundBlasts = { dispose: vi.fn() };
+    const fieldCues = { dispose: vi.fn() };
     const errors: unknown[] = [];
 
     disposeRendererPrewarmAndGroundFx(
       {
         prewarmDepthMaterials: new Map(),
-        realmRacersTrack: { group },
-        realmRacersGroundBlasts,
-        realmRacersFieldCues,
+        realmRacers: { track: { group }, groundBlasts, fieldCues },
       },
       (cleanup) => {
         try {
@@ -215,8 +213,8 @@ describe('renderer resource lifecycle', () => {
     expect(minted.dispose).toHaveBeenCalledOnce();
     expect(shared.dispose).not.toHaveBeenCalled();
     expect(boxes.dispose).toHaveBeenCalledOnce();
-    expect(realmRacersGroundBlasts.dispose).toHaveBeenCalledOnce();
-    expect(realmRacersFieldCues.dispose).toHaveBeenCalledOnce();
+    expect(groundBlasts.dispose).toHaveBeenCalledOnce();
+    expect(fieldCues.dispose).toHaveBeenCalledOnce();
     expect(errors).toHaveLength(1);
   });
 
@@ -224,14 +222,16 @@ describe('renderer resource lifecycle', () => {
     const renderer = stripComments(
       readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
     );
-    expect(renderer).toContain('private realmRacersTrack: RealmRacersTracksView;');
-    expect(renderer).toContain(
-      'private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();',
-    );
-    expect(renderer).toContain(
-      'private readonly realmRacersFieldCues = new RealmRacersFieldCues(this.views, this.groundSample);',
-    );
+    expect(renderer).toContain('readonly realmRacers = new RealmRacersScene(this);');
     expect(renderer).toContain('disposeRendererPrewarmAndGroundFx(this, bestEffort);');
+    // The scene's own field names, which the teardown reads.
+    const scene = stripComments(
+      readFileSync(new URL('../src/render/realm_racers_scene.ts', import.meta.url), 'utf8'),
+    );
+    expect(scene).toContain('track!: RealmRacersTracksView;');
+    expect(scene).toContain('readonly groundBlasts = new RealmRacersGroundBlastVisuals();');
+    expect(scene).toContain('readonly fieldCues: RealmRacersFieldCues;');
+    expect(scene).toContain('this.fieldCues = new RealmRacersFieldCues(h.views, h.groundSample);');
   });
 
   it('drains every battleground copy when one of them fails to release', () => {

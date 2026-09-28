@@ -32,15 +32,18 @@ export interface RendererPrewarmAndGroundFxOwner<T extends RendererDisposable> {
    *  texture, the placement instances, the decals and its share of the
    *  point-light budget. */
   bgViews?: Map<number, RendererDisposable>;
-  /** The Realm Racers circuits (every built track, drafts included) and the
-   *  ground-blast shell pool, both built once at boot and attached for the
-   *  renderer's life. The track group gives back only what its build minted
-   *  (realm_racers_track_dispose_core.ts). */
-  realmRacersTrack?: { group: DisposableGroupLike };
-  realmRacersGroundBlasts?: RendererDisposable;
-  /** The field cues' oil-spray pool: its per-slot instance buffers (the shared
-   *  droplet material and geometry are never disposed). */
-  realmRacersFieldCues?: RendererDisposable;
+  /** The Realm Racers scene (realm_racers_scene.ts): the circuits (every built
+   *  track, drafts included) and the ground-blast shell pool, both built once
+   *  at boot and attached for the renderer's life, plus the field cues'
+   *  oil-spray pool. The track group gives back only what its build minted
+   *  (realm_racers_track_dispose_core.ts); the spray pool its per-slot
+   *  instance buffers (the shared droplet material and geometry are never
+   *  disposed). */
+  realmRacers?: {
+    readonly track?: { group: DisposableGroupLike };
+    readonly groundBlasts: RendererDisposable;
+    readonly fieldCues: RendererDisposable;
+  };
 }
 
 /**
@@ -66,10 +69,11 @@ export function disposeRendererPrewarmAndGroundFx(
   // this is the terminal drain for whatever the teardown catches standing.
   for (const view of resources.bgViews?.values() ?? []) bestEffort(() => view.dispose());
   resources.bgViews?.clear();
-  const track = resources.realmRacersTrack;
+  const rally = resources.realmRacers;
+  const track = rally?.track;
   if (track) bestEffort(() => disposeRealmRacersTrackGroup(track.group));
-  bestEffort(() => resources.realmRacersGroundBlasts?.dispose());
-  bestEffort(() => resources.realmRacersFieldCues?.dispose());
+  bestEffort(() => rally?.groundBlasts.dispose());
+  bestEffort(() => rally?.fieldCues.dispose());
   // The occluder-fade gate and its twins were linked on this renderer's
   // context; a later renderer installs its own (occluder_fade_gate.ts).
   bestEffort(() => uninstallOccluderFadeGate());

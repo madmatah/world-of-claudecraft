@@ -135,7 +135,7 @@ function harness() {
   const clearPickupSplash = vi.fn();
   const touch = { value: false };
   const prepared = { done: 1, total: 1, settled: true };
-  // Hud's production wiring reads `this.renderer.realmRacersPrepare.progress`;
+  // Hud's production wiring reads `this.renderer.realmRacers.prepare.progress`;
   // a test swaps the source the way replaceRenderer swaps the renderer.
   const source = {
     progress: (out: { done: number; total: number; settled: boolean }, _circuitId?: string) =>
@@ -2080,9 +2080,11 @@ describe('the Realm Racers HUD event router and cast affordances', () => {
     const h = {
       sim: { player, realmRacersInfo: { match: null } },
       renderer: {
-        selfAimPose: null,
-        predictOwnGroundBlastFire: vi.fn(),
-        predictOwnSlickDrop: vi.fn(),
+        realmRacers: {
+          selfAimPose: null,
+          predictOwnGroundBlastFire: vi.fn(),
+          predictOwnSlickDrop: vi.fn(),
+        },
       },
       flashActionSlot: vi.fn(),
       showError: vi.fn(),
@@ -2091,6 +2093,6 @@ describe('the Realm Racers HUD event router and cast affordances', () => {
     expect(h.flashActionSlot).not.toHaveBeenCalled();
     expect(rallyAimCaster(h)).toBe(player);
     predictRallySlickDrop(h, 'rally_oil_slick');
-    expect(h.renderer.predictOwnSlickDrop).not.toHaveBeenCalled();
+    expect(h.renderer.realmRacers.predictOwnSlickDrop).not.toHaveBeenCalled();
   });
 });

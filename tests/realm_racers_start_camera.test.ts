@@ -544,7 +544,7 @@ describe('Realm Racers start camera', () => {
     expect(main.match(/rallyCameraTick\(/g)).toHaveLength(2);
     expect(main).toContain('const rallyCameraTick = realmRacers.createStartCameraTick(');
     expect(wiring).toContain('applyRealmRacersStartCameraFromWorld(');
-    expect(main).toContain('renderer.selfMotionFacing');
+    expect(main).toContain('renderer.realmRacers.selfMotionFacing');
     expect(main).toMatch(
       /inputEcho\.jitterMs,\s+alpha,\s+frameDt,\s+Math\.max\(0, cameraLastSnapAge\)/,
     );

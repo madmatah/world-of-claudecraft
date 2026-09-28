@@ -79,9 +79,18 @@ describe('own bump feedback', () => {
   });
 
   it('is the gate the renderer bangs through, with the rival first and the self second', () => {
+    // The bang lives in the rally scene's rival step, which the renderer's
+    // entity loop runs for every view before it places the body.
+    const scene = readFileSync(
+      new URL('../src/render/realm_racers_scene.ts', import.meta.url),
+      'utf8',
+    );
+    expect(scene).toContain(
+      'if (p.drive && localBumpArmed(h.selfRender.drive.source, race, e, p)) {',
+    );
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain(
-      'if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {',
+      'this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
     );
   });
 });

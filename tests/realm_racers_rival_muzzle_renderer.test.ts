@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/game/audio', () => ({ audio: {} }));
+// The shell pool mints its marker texture at construction, which needs a DOM
+// canvas; the rest of the textures module is the real one.
+vi.mock('../src/render/textures', async (importOriginal) => {
+  const THREE = await import('three');
+  return {
+    ...(await importOriginal<typeof import('../src/render/textures')>()),
+    rallyGroundBlastMarkerTexture: () =>
+      new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
+  };
+});
 vi.mock('../src/render/realm_racers_audio', () => ({
   playRealmRacersEventAudio: vi.fn(),
   playRealmRacersScrapeAudio: vi.fn(),
@@ -8,23 +18,18 @@ vi.mock('../src/render/realm_racers_audio', () => ({
 }));
 
 import { playRealmRacersEventAudio } from '../src/render/realm_racers_audio';
+import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import {
   createRemoteVehicleDisplay,
   REMOTE_RACER_MUZZLE_LIFT_YD,
   stepRemoteRacerView,
 } from '../src/render/remote_vehicle_display_core';
-import { Renderer } from '../src/render/renderer';
 import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
-import type { SimEvent } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 
-// The renderer's Ground Blast Fired arm: a RIVAL's shell leaves the barrel of
+// The rally scene's Ground Blast Fired arm: a RIVAL's shell leaves the barrel of
 // the machine as drawn (its projected view), not the server muzzle it has
 // already driven past, on either horizon. The target stays the server's.
-
-interface EventHarness {
-  handleEvent(ev: SimEvent): void;
-}
 
 const SELF = 1;
 const RIVAL = 2;
@@ -44,25 +49,27 @@ function steppedStoodDown() {
 function harness() {
   const fire = vi.fn();
   const burst = vi.fn();
-  const renderer = Object.create(Renderer.prototype) as EventHarness & Record<string, unknown>;
   const rivalView = steppedStoodDown();
-  renderer.realmRacersGroundBlasts = { fire };
-  renderer.vfx = { burst };
-  renderer.groundSample = ground;
-  renderer.audioSink = null;
-  renderer.sim = { playerId: SELF, player: { id: SELF } };
   // The self view carries a live-looking state on purpose: the viewer's own
   // shot must keep the event muzzle whatever its view holds.
   const selfView = createRemoteVehicleDisplay();
   selfView.active = true;
-  renderer.views = new Map([
-    [RIVAL, { remoteVehicle: rivalView }],
-    [SELF, { remoteVehicle: selfView }],
-  ]);
-  return { renderer, fire, burst, rivalView };
+  // The rally scene over a stub of the renderer members it reads.
+  const scene = new RealmRacersScene({
+    vfx: { burst },
+    groundSample: ground,
+    audioSink: null,
+    sim: { playerId: SELF, player: { id: SELF } },
+    views: new Map([
+      [RIVAL, { remoteVehicle: rivalView }],
+      [SELF, { remoteVehicle: selfView }],
+    ]),
+  });
+  (scene as unknown as { groundBlasts: unknown }).groundBlasts = { fire };
+  return { scene, fire, burst, rivalView };
 }
 
-const fired = (sourceId: number): SimEvent => ({
+const fired = (sourceId: number): Parameters<RealmRacersScene['onEvent']>[0] => ({
   type: 'realmRacersGroundBlastFired',
   sourceId,
   x: 30,
@@ -74,9 +81,9 @@ const fired = (sourceId: number): SimEvent => ({
 
 describe('a rival Ground Blast leaves the drawn nose', () => {
   it('stood down: fires the arc and the muzzle at the projected rival, target untouched', () => {
-    const { renderer, fire, burst, rivalView } = harness();
+    const { scene, fire, burst, rivalView } = harness();
     expect(rivalView.active).toBe(true);
-    renderer.handleEvent(fired(RIVAL));
+    scene.onEvent(fired(RIVAL));
     const noseX = rivalView.x + Math.sin(rivalView.facing) * GROUND_BLAST_MUZZLE_NOSE_YD;
     const noseZ = rivalView.z + Math.cos(rivalView.facing) * GROUND_BLAST_MUZZLE_NOSE_YD;
     const [shot] = fire.mock.calls[0];
@@ -92,8 +99,8 @@ describe('a rival Ground Blast leaves the drawn nose', () => {
   });
 
   it('keeps the event muzzle for the local pilot, whatever its own view holds', () => {
-    const { renderer, fire } = harness();
-    renderer.handleEvent(fired(SELF));
+    const { scene, fire } = harness();
+    scene.onEvent(fired(SELF));
     const [shot] = fire.mock.calls[0];
     expect([shot.x, shot.z]).toEqual([30, 5]);
   });

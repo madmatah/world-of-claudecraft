@@ -31,7 +31,7 @@ The curtain a race opens under while every pilot's machine prepares the circuit
     grid in `participantIds` order, named from `standings` (a pid with no standings row is
     dropped rather than shown unnamed); a house pilot is Ready from the seat. The bar is
     this machine's preparation (`RealmRacersPrepare.progress`, read by Hud from its
-    CURRENT renderer through the read-only `Renderer.realmRacersPrepare` slice, so a
+    CURRENT renderer through the read-only `renderer.realmRacers.prepare` slice, so a
     graphics rebuild hands over the new seam; one read per frame is shared by the ready
     send and the paint, and it names the drawn circuit so that circuit's own preparation
     counts before the renderer has asked for it): prepared units over

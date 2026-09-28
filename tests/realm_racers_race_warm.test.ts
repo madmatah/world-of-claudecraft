@@ -386,7 +386,7 @@ describe('the HUD wiring of the race warm', () => {
   it('hands the engine preload and the eager icon warmer to the race UI', () => {
     const deps = realmRacersUiDeps({
       sim: {},
-      renderer: { realmRacersPrepare: { progress: (out: unknown) => out } },
+      renderer: { realmRacers: { prepare: { progress: (out: unknown) => out } } },
       keybinds: { primaryLabel: () => '' },
       writerFacet: {},
       realmRacersSplash: { clear: () => {} },

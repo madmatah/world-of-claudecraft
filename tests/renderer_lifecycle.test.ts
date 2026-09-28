@@ -68,8 +68,10 @@ describe('Renderer lifecycle wiring', () => {
       createRequiredViews(player: Entity, createdViewTypes: string[]): number;
     };
     // No race is running here, so the required-view sweep reads an empty grid:
-    // the default participant argument comes off the world's Realm Racers info.
+    // the default participant argument comes off the world's Realm Racers info,
+    // and the rally scene it is handed to creates no co-pilot.
     renderer.sim = { entities, questLog, realmRacersInfo: { match: null } };
+    renderer.realmRacers = { createCoPilotViews: () => 0 };
     renderer.views = views;
     renderer.questObjectHidden = makeQuestObjectGate({});
     renderer.viewCreateRetry = { canAttempt };

@@ -1031,7 +1031,12 @@ const MONOLITHS: MonolithRow[] = [
     // and engine mix moved to realm_racers_kart_presentation.ts behind the
     // renderer host, the entity view taking its slice by extension. Exact
     // count.
-    ceiling: 13050,
+    // LOWERED 13050 -> 12673: the rest of the Realm Racers presentation (the
+    // tracks, pools, sky and preparation seam, the own shot and oil drop, the
+    // rival projection and bump bang, the rally events, the circuit ambience
+    // and haze, the co-pilot views) moved to realm_racers_scene.ts behind the
+    // renderer host, reached as renderer.realmRacers. Exact count.
+    ceiling: 12673,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

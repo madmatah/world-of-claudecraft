@@ -419,38 +419,46 @@ describe('race preparation seam (renderer wiring)', () => {
     const renderer = stripComments(
       readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
     );
-    const occurrences = (needle: string) => renderer.split(needle).length - 1;
+    // The seam is the rally scene's (realm_racers_scene.ts), which the
+    // renderer owns, attaches once and drives once per world frame.
+    const scene = stripComments(
+      readFileSync(new URL('../src/render/realm_racers_scene.ts', import.meta.url), 'utf8'),
+    );
+    const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
+    expect(occurrences(renderer, 'readonly realmRacers = new RealmRacersScene(this);')).toBe(1);
+    expect(occurrences(renderer, 'new RealmRacersPrepare(')).toBe(0);
     expect(
       occurrences(
-        'private readonly realmRacersPrepareSeam = new RealmRacersPrepare([this.realmRacersGroundBlasts]);',
+        scene,
+        'private readonly prepareSeam = new RealmRacersPrepare([this.groundBlasts]);',
       ),
     ).toBe(1);
     expect(
-      occurrences('this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);'),
+      occurrences(renderer, 'this.realmRacers.frame(realmRacersInfo, p.pos.x, p.pos.z, dt);'),
     ).toBe(1);
+    expect(occurrences(scene, 'this.prepareSeam.frame(h, info, px, pz);')).toBe(1);
     // The field cues' oil-spray pool is a client too, registered once, and
     // the cues read the seam's start to gate a bystander's spray.
-    expect(occurrences('this.realmRacersFieldCues.joinPrepare(this.realmRacersPrepareSeam);')).toBe(
-      1,
-    );
+    expect(occurrences(scene, 'this.fieldCues.joinPrepare(this.prepareSeam);')).toBe(1);
     // The HUD reads the lobby progress through a read-only slice, never the seam.
     expect(
       occurrences(
-        "readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;",
+        scene,
+        "readonly prepare: Pick<RealmRacersPrepare, 'progress'> = this.prepareSeam;",
       ),
     ).toBe(1);
     // The circuits join the seam once the tracks exist, and the seam runs
     // before the tracks so a reveal hold reads this frame's viewer.
     expect(
-      renderer.match(
-        /this\.realmRacersTrack = buildRealmRacersTracks\(\);\s*prepareRealmRacersCircuits\(\s*this\.realmRacersPrepareSeam,\s*this\.realmRacersTrack,\s*this\.realmRacersSky,\s*\);/g,
+      scene.match(
+        /this\.track = buildRealmRacersTracks\(\);\s*prepareRealmRacersCircuits\(this\.prepareSeam, this\.track, this\.sky\);/g,
       ),
     ).toHaveLength(1);
-    const frameAt = renderer.indexOf('this.realmRacersPrepareSeam.frame(');
-    const tracksAt = renderer.indexOf('this.realmRacersTrack.update(');
+    const frameAt = scene.indexOf('this.prepareSeam.frame(');
+    const tracksAt = scene.indexOf('this.track.update(');
     expect(frameAt).toBeGreaterThan(0);
     expect(tracksAt).toBeGreaterThan(frameAt);
-    expect(occurrences('this.realmRacersTrack.update(')).toBe(1);
+    expect(occurrences(scene, 'this.track.update(')).toBe(1);
     // It names the drawn circuit, so a circuit client not asked yet still counts.
     const hud = stripComments(
       readFileSync(
@@ -460,7 +468,7 @@ describe('race preparation seam (renderer wiring)', () => {
     );
     expect(
       hud.split(
-        'prepareProgress: (out, circuitId) => h.renderer.realmRacersPrepare.progress(out, circuitId),',
+        'prepareProgress: (out, circuitId) => h.renderer.realmRacers.prepare.progress(out, circuitId),',
       ).length - 1,
     ).toBe(1);
   });

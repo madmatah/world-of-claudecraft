@@ -104,7 +104,9 @@ describe('Realm Racers circuit-draft chat hook', () => {
   it('passes the sim through and draws on the renderer live at draw time', () => {
     const drawnBy: string[] = [];
     const rendererNamed = (name: string) => ({
-      registerRealmRacersDraftCircuit: (_circuit: RealmRacersCircuit) => drawnBy.push(name),
+      realmRacers: {
+        registerDraftCircuit: (_circuit: RealmRacersCircuit) => drawnBy.push(name),
+      },
     });
     let renderer = rendererNamed('boot');
     const hook = draftChatHook(null, () => renderer);

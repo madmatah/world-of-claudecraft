@@ -2,7 +2,18 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/game/audio', () => ({ audio: {} }));
+// The rally scene's shell pool mints its marker texture at construction, which
+// needs a DOM canvas; the rest of the textures module is the real one.
+vi.mock('../src/render/textures', async (importOriginal) => {
+  const THREE = await import('three');
+  return {
+    ...(await importOriginal<typeof import('../src/render/textures')>()),
+    rallyGroundBlastMarkerTexture: () =>
+      new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
+  };
+});
 
+import { RealmRacersScene, SLICK_DROP_MEAN_TICK_WAIT_SEC } from '../src/render/realm_racers_scene';
 import { Renderer } from '../src/render/renderer';
 import type { ReconciledDrive } from '../src/render/self_drive_view_core';
 import {
@@ -15,21 +26,21 @@ import type { Entity } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { stripComments } from './helpers/strip_comments';
 
-const SLICK_DROP_MEAN_TICK_WAIT_SEC = 0.025;
+/** The provisional oil drop's calibration: half a 20 Hz tick, in seconds. */
+const MEAN_TICK_WAIT_SEC = 0.025;
 
+/** The renderer members the drive view's consumers read (a prototype fixture:
+ *  no Renderer builds headless), with the rally scene built over it the way
+ *  the renderer builds it over itself. */
 interface RendererHarness {
   selfRender: SelfRenderPositionState;
   selfRenderPosition: { x: number; y: number; z: number };
-  selfAimPoseOut: { pos: { x: number; y: number; z: number }; facing: number };
   sim: {
     player: Entity;
     realmRacersInfo: { match: { circuitId: string } | null };
   };
-  realmRacersTrack: { dropProvisionalSlick: ReturnType<typeof vi.fn> };
   time: number;
-  readonly selfAimPose: { pos: { x: number; y: number; z: number }; facing: number } | null;
-  readonly selfMotionFacing: number | null;
-  predictOwnSlickDrop(): void;
+  readonly selfMotionLeadMs: number | null;
 }
 
 const mirror: Entity = {
@@ -52,15 +63,20 @@ const predictedKart: ReconciledDrive = {
   state: createVehicleDrive('rally_loaner'),
 };
 
-function harness(): RendererHarness {
+function harness(): {
+  renderer: RendererHarness;
+  scene: RealmRacersScene;
+  dropProvisionalSlick: ReturnType<typeof vi.fn>;
+} {
   const renderer = Object.create(Renderer.prototype) as RendererHarness;
   renderer.selfRenderPosition = { x: 0, y: 0, z: 0 };
   renderer.selfRender = createSelfRenderPositionState(renderer.selfRenderPosition);
-  renderer.selfAimPoseOut = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
   renderer.sim = { player: mirror, realmRacersInfo: { match: { circuitId: 'probe' } } };
-  renderer.realmRacersTrack = { dropProvisionalSlick: vi.fn() };
   renderer.time = 5;
-  return renderer;
+  const scene = new RealmRacersScene(renderer);
+  const dropProvisionalSlick = vi.fn();
+  scene.track = { dropProvisionalSlick } as unknown as RealmRacersScene['track'];
+  return { renderer, scene, dropProvisionalSlick };
 }
 
 function frame(renderer: RendererHarness, selfMotion: ReconciledSelfPrediction | null): void {
@@ -76,20 +92,20 @@ const v2Kart = (): ReconciledSelfPrediction => ({
 
 describe('renderer self-kart consumers on wire v2', () => {
   it('aims from the predicted heading while the v2 prediction drives the kart', () => {
-    const renderer = harness();
+    const { renderer, scene } = harness();
     frame(renderer, v2Kart());
-    expect(renderer.selfMotionFacing).toBe(1.1);
-    expect(renderer.selfAimPose).toEqual({ pos: { x: 10, y: 0, z: 20 }, facing: 1.1 });
+    expect(scene.selfMotionFacing).toBe(1.1);
+    expect(scene.selfAimPose).toEqual({ pos: { x: 10, y: 0, z: 20 }, facing: 1.1 });
 
     // a stood-down driver aims from the mirror (the HUD falls back to it)
     frame(renderer, null);
     expect(renderer.selfRender.drive.source).toBe('mirror');
-    expect(renderer.selfMotionFacing).toBeNull();
-    expect(renderer.selfAimPose).toBeNull();
+    expect(scene.selfMotionFacing).toBeNull();
+    expect(scene.selfAimPose).toBeNull();
   });
 
   it('reports the v2 prediction lead from the tick offset over the ack while driving', () => {
-    const renderer = harness() as RendererHarness & { readonly selfMotionLeadMs: number | null };
+    const { renderer } = harness();
     // Two ticks ahead of the ack, drawn at alpha 0.4: 1.4 ticks of lead.
     frame(renderer, { ...v2Kart(), tickOffset: 2, tickAlpha: 0.4 });
     expect(renderer.selfMotionLeadMs).toBeCloseTo(70, 9);
@@ -103,107 +119,122 @@ describe('renderer self-kart consumers on wire v2', () => {
   });
 
   it('hands the chase camera the held heading across a suspend on the same seat', () => {
-    const renderer = harness();
+    const { renderer, scene } = harness();
     const near = v2Kart();
     near.position = { x: 3, y: 0, z: 4 };
     frame(renderer, near);
-    expect(renderer.selfMotionFacing).toBe(1.1);
+    expect(scene.selfMotionFacing).toBe(1.1);
     frame(renderer, null);
-    const held = renderer.selfMotionFacing as number;
+    const held = scene.selfMotionFacing as number;
     expect(held).toBeGreaterThan(0.2);
     expect(held).toBeLessThan(1.1);
     for (let i = 0; i < 120; i++) frame(renderer, null);
-    expect(renderer.selfMotionFacing).toBeNull();
+    expect(scene.selfMotionFacing).toBeNull();
   });
 
   it('lags the provisional oil drop by the predicted velocity, never the mirror', () => {
-    const renderer = harness();
+    const { renderer, scene, dropProvisionalSlick } = harness();
+    expect(SLICK_DROP_MEAN_TICK_WAIT_SEC).toBe(MEAN_TICK_WAIT_SEC);
     frame(renderer, v2Kart());
-    renderer.predictOwnSlickDrop();
-    const [circuit, x, z, time] = renderer.realmRacersTrack.dropProvisionalSlick.mock.calls[0];
+    scene.predictOwnSlickDrop();
+    const [circuit, x, z, time] = dropProvisionalSlick.mock.calls[0];
     expect(circuit).toBe('probe');
-    expect(x).toBeCloseTo(10 - 30 * SLICK_DROP_MEAN_TICK_WAIT_SEC, 12);
-    expect(z).toBeCloseTo(20 + 12 * SLICK_DROP_MEAN_TICK_WAIT_SEC, 12);
+    expect(x).toBeCloseTo(10 - 30 * MEAN_TICK_WAIT_SEC, 12);
+    expect(z).toBeCloseTo(20 + 12 * MEAN_TICK_WAIT_SEC, 12);
     expect(time).toBe(5);
 
     frame(renderer, null);
-    renderer.predictOwnSlickDrop();
-    expect(renderer.realmRacersTrack.dropProvisionalSlick.mock.calls[1]).toEqual([
-      'probe',
-      2,
-      3,
-      5,
-    ]);
+    scene.predictOwnSlickDrop();
+    expect(dropProvisionalSlick.mock.calls[1]).toEqual(['probe', 2, 3, 5]);
   });
 });
 
 describe('renderer self-kart reads go through the drive view', () => {
-  const source = stripComments(
-    readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
-  );
-  // The road effects are the kart presentation's, which the renderer drives
-  // with itself as the host (`h.selfRender`).
-  const kart = stripComments(
-    readFileSync(
-      new URL('../src/render/realm_racers_kart_presentation.ts', import.meta.url),
-      'utf8',
-    ),
-  );
-  const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  /** Occurrences of `needle`, any whitespace run in it matching any other. */
-  const count = (needle: string): number => {
-    const pattern = needle.trim().split(/\s+/).map(escapeRegex).join('\\s+');
-    return source.match(new RegExp(pattern, 'g'))?.length ?? 0;
+  // The self kart's consumers live in the renderer and in the two rally
+  // modules the renderer drives (the scene and the kart presentation), which
+  // read the same drive view through their renderer host (`h.selfRender`).
+  const read = (path: string): string =>
+    stripComments(readFileSync(new URL(path, import.meta.url), 'utf8'));
+  const sources = {
+    renderer: read('../src/render/renderer.ts'),
+    scene: read('../src/render/realm_racers_scene.ts'),
+    kart: read('../src/render/realm_racers_kart_presentation.ts'),
   };
+  type Source = keyof typeof sources;
+  const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** Occurrences of `needle` in one source, any whitespace run in it matching any other. */
+  const count = (where: Source, needle: string): number => {
+    const pattern = needle.trim().split(/\s+/).map(escapeRegex).join('\\s+');
+    return sources[where].match(new RegExp(pattern, 'g'))?.length ?? 0;
+  };
+  const everywhere = (needle: string): number =>
+    (Object.keys(sources) as Source[]).reduce((sum, where) => sum + count(where, needle), 0);
 
   it('never reads the v1 predictor object: the latency telemetry goes through the core', () => {
-    expect(count('this.selfRender.predictor')).toBe(0);
-    expect(count('return selfPredictionLeadMs(this.selfRender);')).toBe(1);
+    expect(everywhere('selfRender.predictor')).toBe(0);
+    expect(count('renderer', 'return selfPredictionLeadMs(this.selfRender);')).toBe(1);
   });
 
   it('never rebuilds the self kart velocity from the mirror', () => {
-    expect(count('vehicleVelocityX(p.drive')).toBe(0);
-    expect(count('vehicleVelocityZ(p.drive')).toBe(0);
+    expect(everywhere('vehicleVelocityX(p.drive')).toBe(0);
+    expect(everywhere('vehicleVelocityZ(p.drive')).toBe(0);
   });
 
   it('pins every self-kart consumer on the drive view', () => {
-    const consumers: string[] = [
-      // selfMotionFacing: the aim pose and the chase camera (camera_follow via main.ts)
-      'return this.selfRender.drive.steersHeading ? this.selfRender.drive.facing : null;',
-      'return displayedAimPose(this.selfRender, this.sim.player?.facing ?? 0, this.selfAimPoseOut);',
+    const consumers: [Source, string][] = [
+      // selfMotionFacing: the chase camera (camera_follow via main.ts)
+      ['scene', 'return h.selfRender.drive.steersHeading ? h.selfRender.drive.facing : null;'],
+      // the aim pose (the HUD's ground-aim clamp and the own shot)
+      [
+        'scene',
+        'return displayedAimPose(h.selfRender, h.sim.player?.facing ?? 0, this.selfAimPoseOut);',
+      ],
       // the provisional oil drop's lag and velocity
-      "const lag = this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;",
-      'const vx = this.selfRender.drive.velocityX;',
-      'const vz = this.selfRender.drive.velocityZ;',
+      [
+        'scene',
+        "const lag = h.selfRender.drive.source === 'predicted' ? SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;",
+      ],
+      ['scene', 'const vx = h.selfRender.drive.velocityX;'],
+      ['scene', 'const vz = h.selfRender.drive.velocityZ;'],
       // the local bump bang (and so its duplicate suppression)
-      'if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {',
-      'this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),',
-      'this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),',
+      ['scene', 'if (p.drive && localBumpArmed(h.selfRender.drive.source, race, e, p)) {'],
+      ['scene', 'h.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),'],
+      ['scene', 'h.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),'],
       // the model yaw
-      'if (id === p.id && this.selfRender.drive.steersHeading) {',
-      'facing = this.selfRender.drive.facing;',
+      ['renderer', 'if (id === p.id && this.selfRender.drive.steersHeading) {'],
+      ['renderer', 'facing = this.selfRender.drive.facing;'],
       // the airborne pose
-      'animFromDisplay && this.selfRender.drive.kernelOnGround !== null && !inRift ? !this.selfRender.drive.kernelOnGround',
+      [
+        'renderer',
+        'animFromDisplay && this.selfRender.drive.kernelOnGround !== null && !inRift ? !this.selfRender.drive.kernelOnGround',
+      ],
       // look-ahead and speed FOV
-      'let velX = p.drive ? this.selfRender.drive.velocityX : 0;',
-      'let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;',
+      ['renderer', 'let velX = p.drive ? this.selfRender.drive.velocityX : 0;'],
+      ['renderer', 'let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;'],
+      // drift smoke, surface dust, scrape sparks
+      ['kart', 'const kart = (isSelf && h.selfRender.drive.state) || e.drive;'],
+      ['kart', 'h.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);'],
+      ['kart', 'h.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);'],
+      ['kart', 'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {'],
+      ['kart', 'const impact = Math.min(1, kart.collisionImpact / 24);'],
     ];
-    for (const needle of consumers) expect(count(needle), needle).toBe(1);
-    expect(count('this.selfRender.drive.')).toBe(14);
-    // drift smoke, surface dust, scrape sparks: the kart presentation's, run
-    // from the entity loop
+    for (const [where, needle] of consumers) expect(count(where, needle), needle).toBe(1);
+    expect(count('renderer', 'this.selfRender.drive.')).toBe(6);
+    expect(count('scene', 'h.selfRender.drive.')).toBe(8);
+    expect(count('kart', 'h.selfRender.drive.')).toBe(1);
+    // The two rally modules read it on the renderer's own frame: the rival
+    // step before the body is placed, the road effects after the mount pass.
     expect(
-      count('realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);'),
+      count(
+        'renderer',
+        'this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
+      ),
     ).toBe(1);
-    for (const needle of [
-      'const kart = (isSelf && h.selfRender.drive.state) || e.drive;',
-      'h.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);',
-      'h.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);',
-      'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {',
-      'const impact = Math.min(1, kart.collisionImpact / 24);',
-    ]) {
-      expect(kart.split(needle).length - 1, needle).toBe(1);
-    }
-    expect(kart.split('h.selfRender.drive.').length - 1).toBe(1);
+    expect(
+      count(
+        'renderer',
+        'realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
+      ),
+    ).toBe(1);
   });
 });

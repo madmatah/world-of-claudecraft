@@ -4656,7 +4656,7 @@ async function startGame(
             );
     const onlineCameraFacing = cameraFollowFacing(
       driving,
-      renderer.selfMotionFacing,
+      renderer.realmRacers.selfMotionFacing,
       kbFacing,
       interpServerFacing,
     );

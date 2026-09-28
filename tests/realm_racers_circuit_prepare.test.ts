@@ -1197,13 +1197,22 @@ describe('the circuit sky rides the GPU work queue', () => {
     const renderer = stripComments(
       readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
     );
-    const count = (needle: string) => renderer.split(needle).length - 1;
-    expect(count('ensureRealmRacersSky')).toBe(0);
-    expect(count('new RealmRacersSky({')).toBe(1);
-    expect(renderer).toMatch(
-      /new RealmRacersSky\(\{\s*sky: \(\) => this\.skyView,\s*run: \(work, priority, label\) => this\.backgroundGpuWork\.run\(work, priority, label\),\s*upload: \(texture\) => this\.prewarmTextureInIdle\(texture\),\s*environment: \(biome\) => this\.ensureEnvironmentBiome\(biome\),\s*needsEnvironment: \(\) => !this\.lowGfx && !\(GFX\.constrainedMemory && this\.envRTs\.size > 0\),\s*\}\);/,
+    // The sky is the rally scene's, built over the renderer's own lanes (the
+    // renderer passes itself as the scene's host).
+    const scene = stripComments(
+      readFileSync(new URL('../src/render/realm_racers_scene.ts', import.meta.url), 'utf8'),
     );
-    expect(count('void this.realmRacersSky.ensure(rallyTheme.sky.biome);')).toBe(1);
+    const count = (text: string, needle: string) => text.split(needle).length - 1;
+    expect(count(renderer, 'ensureRealmRacersSky')).toBe(0);
+    expect(count(renderer, 'new RealmRacersSky(')).toBe(0);
+    expect(count(renderer, 'readonly realmRacers = new RealmRacersScene(this);')).toBe(1);
+    expect(count(scene, 'new RealmRacersSky({')).toBe(1);
+    expect(scene).toMatch(
+      /new RealmRacersSky\(\{\s*sky: \(\) => h\.skyView,\s*run: \(work, priority, label\) => h\.backgroundGpuWork\.run\(work, priority, label\),\s*upload: \(texture\) => h\.prewarmTextureInIdle\(texture\),\s*environment: \(biome\) => h\.ensureEnvironmentBiome\(biome\),\s*needsEnvironment: \(\) => !h\.lowGfx && !\(GFX\.constrainedMemory && h\.envRTs\.size > 0\),\s*\}\);/,
+    );
+    // The band asks for its theme's sky from the ambience pass, once a frame.
+    expect(count(scene, 'if (out.theme) void this.sky.ensure(out.theme.sky.biome);')).toBe(1);
+    expect(count(renderer, 'this.realmRacers.ambienceAt(px, pz, this.sim.player.pos.x);')).toBe(1);
     const skySource = stripComments(
       readFileSync(new URL('../src/render/realm_racers_sky.ts', import.meta.url), 'utf8'),
     );

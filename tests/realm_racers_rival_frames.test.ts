@@ -458,7 +458,7 @@ describe.each(RTTS)('rival frames at RTT %i ms, driver prediction on', (rtt) => 
   it('Ground Blast: a visual lead on the drawn rival hits, within the along ceiling', () => {
     const blast = predictedBlastOf(rtt);
     expect(blast.fired).toBe(true);
-    // Predicted, the HUD clamps from the drawn kart (renderer.selfAimPose),
+    // Predicted, the HUD clamps from the drawn kart (renderer.realmRacers.selfAimPose),
     // exactly the self pose that screen draws.
     expect(blast.caster).toBe('drawn');
     expect(blast.casterPos).toEqual(blast.drawnSelf);

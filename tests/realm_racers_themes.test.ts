@@ -235,8 +235,8 @@ describe('Realm Racers circuit themes', () => {
       // The DOME and the day/night GRADE are two questions, and this is the one
       // case that holds them apart. `sky.biome` is a `RallySkyKey`, so it may
       // name the Farshore's place-keyed dome, which is NOT a biome; the grade
-      // tables are keyed by biome, so `renderer.ts` resolves it through
-      // `rallySkyDayNightBiome` before indexing them.
+      // tables are keyed by biome, so the rally scene (`realm_racers_scene.ts`)
+      // resolves it through `rallySkyDayNightBiome` before indexing them.
       //
       // The amplitude arm is the one that matters: an undefined there is a NaN
       // sun angle rather than a crash, so a mis-keyed record would darken a

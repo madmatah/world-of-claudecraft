@@ -47,7 +47,12 @@ export type SelfDriveSource = 'predicted' | 'mirror' | 'none';
 export interface SelfDriveView {
   source: SelfDriveSource;
   /** The view owns the drawn heading: predicted, or a mirror still gliding
-   *  out of the last predicted one. */
+   *  out of the last predicted one. While it does, the heading is not
+   *  camera-driven input: it is steered, and the predictor integrates it with
+   *  the same kernel the server runs. `facing` is then the zero-latency truth,
+   *  so the renderer's model reads it directly instead of the interpolated
+   *  mirror (a full echo behind on every corner) or the camera override (which
+   *  is null while driving). */
   steersHeading: boolean;
   facing: number;
   velocityX: number;

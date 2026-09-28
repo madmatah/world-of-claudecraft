@@ -291,16 +291,22 @@ describe('the own-shot launch is wired behind the local gate', () => {
       'utf8',
     );
     const gate = hud.indexOf('if (rallyCastFeedbackAllowed(hud, id, REALM_RACERS_ABILITY_ID)) {');
-    const call = hud.indexOf('(hud as RallyCastHost).renderer.predictOwnGroundBlastFire(point);');
+    const call = hud.indexOf(
+      '(hud as RallyCastHost).renderer.realmRacers.predictOwnGroundBlastFire(point);',
+    );
     expect(gate).toBeGreaterThan(0);
     expect(call).toBeGreaterThan(gate);
     expect(hud.slice(gate, call)).not.toContain('}');
-    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    const body = renderer.slice(renderer.indexOf('predictOwnGroundBlastFire(point'));
+    // The launch is the rally scene's, reached as renderer.realmRacers.
+    const scene = readFileSync(
+      new URL('../src/render/realm_racers_scene.ts', import.meta.url),
+      'utf8',
+    );
+    const body = scene.slice(scene.indexOf('predictOwnGroundBlastFire(point'));
     const latch = body.indexOf('if (!canMarkOwnShotFeedback(');
-    const launch = body.indexOf('this.realmRacersGroundBlasts.launchOwn(');
+    const launch = body.indexOf('this.groundBlasts.launchOwn(');
     expect(latch).toBeGreaterThan(0);
     expect(launch).toBeGreaterThan(latch);
-    expect(body.slice(0, launch)).toContain('const lead = this.selfRender.reconciledLeadMs;');
+    expect(body.slice(0, launch)).toContain('const lead = h.selfRender.reconciledLeadMs;');
   });
 });

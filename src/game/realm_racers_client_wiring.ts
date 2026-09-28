@@ -52,7 +52,7 @@ export function createStartCameraTick(
  */
 export function draftChatHook(
   sim: RealmRacersDraftHookDeps['sim'],
-  renderer: () => { registerRealmRacersDraftCircuit(circuit: RealmRacersCircuit): void },
+  renderer: () => { realmRacers: { registerDraftCircuit(circuit: RealmRacersCircuit): void } },
 ): RealmRacersDraftHookDeps {
-  return { sim, draw: (circuit) => renderer().registerRealmRacersDraftCircuit(circuit) };
+  return { sim, draw: (circuit) => renderer().realmRacers.registerDraftCircuit(circuit) };
 }

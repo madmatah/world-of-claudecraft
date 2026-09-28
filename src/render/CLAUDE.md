@@ -63,7 +63,14 @@ Everything else is a sibling module in one of these families:
   walks), because the rally lane's map never clears and fourteen kits would pin
   parsed scenes all session for a player who may never race. A theme written a
   zone ahead of its circuit reaches the draw path through `instanceModel`'s
-  fetch-and-fill arm. Rift portals: `door_portal.ts` also builds the
+  fetch-and-fill arm. The renderer reaches the whole rally presentation
+  through `realm_racers_scene.ts` (`renderer.realmRacers`: the tracks, the
+  Ground Blast and oil-spray pools, the theme sky, their preparation seam, the
+  race's instant feedback and the rally events) and the per-view
+  `realm_racers_kart_presentation.ts`; both take the renderer untyped as their
+  host, welded to its private members in `tests/realm_racers_scene.test.ts`
+  and `tests/realm_racers_kart_presentation.test.ts`, and renderer.ts keeps
+  one delegate per call site. Rift portals: `door_portal.ts` also builds the
   bespoke world-rift gate GLB with its rank-tinted energy membrane
   (`buildRiftGateBody`), and `rift_rank.ts` is the floating C/B/A/S rank badge
   above a world rift portal.

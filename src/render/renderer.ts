@@ -7,8 +7,6 @@ import {
   priestMarkerStateForAuras,
 } from '../sim/combat/priest/presentation';
 import { mountPresentationKey, riderSkin } from '../sim/content/mount_skins';
-import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
-import { vehicleProfile } from '../sim/content/vehicles';
 import {
   ABILITIES,
   ARENA_SLOT_COUNT,
@@ -34,8 +32,6 @@ import {
   zoneAt,
 } from '../sim/data';
 import type { DelveModuleId } from '../sim/delve_layout';
-import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
-import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { generateRiftFloor, riftLiftAt } from '../sim/rift/rift_gen';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import {
@@ -46,7 +42,6 @@ import {
   isMechWearer,
   type SimEvent,
 } from '../sim/types';
-import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
 import { groundHeight, waterLevelAt, zoneBiomeAt } from '../sim/world';
 import type { ChatBubbleStyle } from '../ui/chat_bubble_style';
 import { tEntity } from '../ui/entity_i18n';
@@ -530,24 +525,6 @@ import {
   terrainFillBoostTarget,
 } from './outdoor_light_rig_core';
 import {
-  bumpClosingSpeed,
-  consumeLocalBumpSuppression,
-  createOwnBumpFeedback,
-  LOCAL_BUMP_MIN_CLOSING,
-  localBumpArmed,
-  markLocalBump,
-  type OwnBumpFeedbackState,
-  shouldPlayLocalBump,
-} from './own_bump_feedback_core';
-import {
-  canMarkOwnShotFeedback,
-  consumeOwnShotFeedback,
-  createOwnShotFeedback,
-  markOwnShotFeedback,
-  type OwnShotFeedbackState,
-} from './own_shot_feedback_core';
-import { ownShotMuzzle } from './own_shot_launch_core';
-import {
   PALADIN_AEGIS_DOME_RADIUS,
   type PaladinAegisVisual,
   syncPaladinAegisVisual,
@@ -666,28 +643,13 @@ import {
 import { isOwnedPetHostile } from './reaction';
 import { buildRealmBuilderMonumentPickBody } from './realm_builder_monument_fx';
 import { buildRealmFlora, type RealmFloraView } from './realm_flora';
-import { playRealmRacersEventAudio } from './realm_racers_audio';
-import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
-import { RealmRacersFieldCues } from './realm_racers_field_cues';
-import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import * as realmRacersKart from './realm_racers_kart_presentation';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
-import { RealmRacersPrepare, rallyArrivalLifts } from './realm_racers_prepare';
-import { RealmRacersSky } from './realm_racers_sky';
-import { rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
-import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
-import {
-  isOutsideRealmRacersDrawRange,
-  isRealmRacersCoPilot,
-} from './realm_racers_visibility_core';
-import {
-  remoteRacerDisplayY,
-  remoteRacerMuzzle,
-  resetRemoteVehicleDisplay,
-  startRemoteRacerHops,
-  stepRemoteRacerView,
-} from './remote_vehicle_display_core';
+import { rallyArrivalLifts } from './realm_racers_prepare';
+import { RealmRacersScene } from './realm_racers_scene';
+import { realmRacersThemeAt } from './realm_racers_themes';
+import { isOutsideRealmRacersDrawRange } from './realm_racers_visibility_core';
 import {
   RenderBudgetGovernor,
   type RenderBudgetSample,
@@ -756,7 +718,6 @@ import { captureRendererScreenshot } from './screenshot_capture';
 import { drapeRingLocalY } from './selection_ring';
 import {
   createSelfRenderPositionState,
-  displayedAimPose,
   noteSelfIdentity,
   type SelfRenderPrediction,
   selfPredictionLeadMs,
@@ -1622,33 +1583,6 @@ export class Renderer {
     return selfPredictionLeadMs(this.selfRender);
   }
 
-  /** Previous rendered frame's predicted driving heading for main.ts's chase
-   *  camera follower. Null on foot, while inactive, and on the first vehicle
-   *  frame before the predictor has adopted the drive state. */
-  get selfMotionFacing(): number | null {
-    return this.selfRender.drive.steersHeading ? this.selfRender.drive.facing : null;
-  }
-
-  private readonly selfAimPoseOut = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
-
-  /**
-   * The DISPLAYED self pose, for aiming affordances (the ground-aim reticle's
-   * cone/range clamp). Online, the mirror pose the HUD reads is one echo old;
-   * at racing speed that is yards behind the machine the player is looking at,
-   * so a clamp measured from it promises a limit the server will not apply.
-   * The predicted display pose is also the closest estimate of the pose the
-   * server WILL hold when the cast command arrives (one uplink from now).
-   * Null while the predictor is inactive (offline, spectating, gated), where
-   * the mirror pose is already the right reference. Returns a reused object:
-   * per-frame reticle redraw path.
-   */
-  get selfAimPose(): { pos: { x: number; y: number; z: number }; facing: number } | null {
-    // Driving, the drive view's steered heading is the zero-latency truth; on
-    // foot the facing channel is client-authoritative input and the mirror is
-    // already current (displayedAimPose).
-    return displayedAimPose(this.selfRender, this.sim.player?.facing ?? 0, this.selfAimPoseOut);
-  }
-
   // Last yaw applied to the local player while the camera was driving its facing
   // (mouselook / mouse-camera). Null when the override is disengaged, so the next
   // engage re-seeds from the live interpolated facing instead of snapping. See
@@ -2020,20 +1954,10 @@ export class Renderer {
   // plenty of feedback; the FCT numbers are unaffected.
   private healGlowAt = new Map<number, number>();
 
-  private readonly realmRacersSky = new RealmRacersSky({
-    sky: () => this.skyView,
-    run: (work, priority, label) => this.backgroundGpuWork.run(work, priority, label),
-    upload: (texture) => this.prewarmTextureInIdle(texture),
-    environment: (biome) => this.ensureEnvironmentBiome(biome),
-    needsEnvironment: () => !this.lowGfx && !(GFX.constrainedMemory && this.envRTs.size > 0),
-  });
-  private realmRacersTrack: RealmRacersTracksView;
-  private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
-  private readonly realmRacersPrepareSeam = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
-  readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;
   // seed-bound ground sampler, built once so per-frame drape updates allocate no closure.
   private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);
-  private readonly realmRacersFieldCues = new RealmRacersFieldCues(this.views, this.groundSample);
+  /** The Realm Racers circuit, its pools and its race feedback (realm_racers_scene.ts). */
+  readonly realmRacers = new RealmRacersScene(this);
   /** Bound once: the puff runs per landing and must not allocate a closure. */
   private surfaceAtForPuff = (x: number, z: number, y: number) => this.surfaceAt(x, z, y);
   private selectionDrapeSupportY = 0;
@@ -2639,17 +2563,7 @@ export class Renderer {
       () => this.viewLights,
       () => this.lightPulses?.lights ?? NO_POINT_LIGHTS,
     ]);
-    this.realmRacersTrack = buildRealmRacersTracks();
-    prepareRealmRacersCircuits(
-      this.realmRacersPrepareSeam,
-      this.realmRacersTrack,
-      this.realmRacersSky,
-    );
-    setRenderCategory(this.realmRacersTrack.group, 'props');
-    this.scene.add(this.realmRacersTrack.group);
-    this.scene.add(this.realmRacersGroundBlasts.group);
-    this.realmRacersFieldCues.joinPrepare(this.realmRacersPrepareSeam);
-    this.scene.add(this.realmRacersFieldCues.sprays.group);
+    this.realmRacers.attach(this.scene);
     this.propsView = props;
 
     // Eastbrook's replacement town is a distinct, stable scene subtree. Its
@@ -4759,14 +4673,11 @@ export class Renderer {
     participantIds: readonly number[] = this.sim.realmRacersInfo.match?.participantIds ??
       NO_REALM_RACERS_PARTICIPANTS,
   ): number {
-    let created =
+    return (
       this.createRequiredView(player.id, createdViewTypes) +
-      this.createRequiredView(player.targetId, createdViewTypes);
-    for (const id of participantIds) {
-      if (!isRealmRacersCoPilot(participantIds, player.id, id)) continue;
-      created += this.createRequiredView(id, createdViewTypes);
-    }
-    return created;
+      this.createRequiredView(player.targetId, createdViewTypes) +
+      this.realmRacers.createCoPilotViews(participantIds, player.id, createdViewTypes)
+    );
   }
 
   private async createMandatoryLandmarkViews(
@@ -7114,115 +7025,6 @@ export class Renderer {
     return stats;
   }
 
-  /** Mean wait a command spends on the server for the next tick boundary,
-   *  seconds (half of DT): the calibration for the provisional oil drop. */
-  private static readonly SLICK_DROP_MEAN_TICK_WAIT_SEC = 0.025;
-
-  // Latch deduplicating the own Fired event's muzzle cue against the locally
-  // played one (own_shot_feedback_core). Lazily created: hand-built prototype
-  // fixtures (Object.create(Renderer.prototype), see tests/CLAUDE.md) never
-  // run field initializers, and the event path must survive them.
-  private ownShotFeedbackState: OwnShotFeedbackState | undefined;
-  private get ownShotFeedback(): OwnShotFeedbackState {
-    this.ownShotFeedbackState ??= createOwnShotFeedback();
-    return this.ownShotFeedbackState;
-  }
-
-  /**
-   * Instant local feedback for the pilot's OWN rally shot: the muzzle flash,
-   * the fire report and (while the kart is predicted) the shell itself leave
-   * at the press, from the displayed pose toward the point the client sent.
-   * Display and audio only: the Fired event adopts the shell (or it fades
-   * unconfirmed), and the crater stays the server's Hit event.
-   */
-  predictOwnGroundBlastFire(point: { x: number; z: number } | null = null): void {
-    // One report in flight at a time: a re-commit inside the round trip beats
-    // the not-yet-mirrored cooldown, and its shell will never exist.
-    if (!canMarkOwnShotFeedback(this.ownShotFeedback, performance.now())) return;
-    const pose = this.selfAimPose;
-    const p = this.sim.player;
-    const px = pose ? pose.pos.x : p.pos.x;
-    const pz = pose ? pose.pos.z : p.pos.z;
-    const facing = pose ? pose.facing : p.facing;
-    const { x, z } = ownShotMuzzle(px, pz, facing); // the server's muzzle, so no gap
-    const lead = this.selfRender.reconciledLeadMs;
-    this.realmRacersGroundBlasts.launchOwn(px, pz, facing, point, lead, this.groundSample, p.id);
-    this.vfx.burst(new THREE.Vector3(x, 1.1, z), 'arcane', 14, 0.65);
-    playRealmRacersEventAudio(this.audioSink, this.groundSample, {
-      type: 'realmRacersGroundBlastFired',
-      sourceId: this.sim.playerId,
-      x,
-      z,
-      targetX: x,
-      targetZ: z,
-      flightSeconds: 0,
-    });
-    markOwnShotFeedback(this.ownShotFeedback, performance.now());
-  }
-
-  /**
-   * Instant local feedback for the pilot's OWN oil drop: paint the patch under
-   * the displayed machine the frame the cast commits, instead of waiting the
-   * readout's round trip (9 to 15 yards of road at race speed). The slick
-   * layer swaps it for the readout's real patch when that lands, or expires it
-   * if the cast was refused. Local screen only; the hazard every other pilot
-   * steers around stays the readout's.
-   */
-  predictOwnSlickDrop(): void {
-    const match = this.sim.realmRacersInfo.match;
-    if (!match) return;
-    const pose = this.selfAimPose;
-    const p = this.sim.player;
-    // The server lays the real patch under its own pose at the tick the
-    // command lands, which trails the displayed machine by the command's wait
-    // for the tick boundary: zero to one tick, half on average. Painting the
-    // provisional that same half-tick of travel BEHIND the display halves the
-    // typical handoff shift.
-    const lag =
-      this.selfRender.drive.source === 'predicted' ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC : 0;
-    const vx = this.selfRender.drive.velocityX;
-    const vz = this.selfRender.drive.velocityZ;
-    this.realmRacersTrack.dropProvisionalSlick(
-      match.circuitId,
-      (pose ? pose.pos.x : p.pos.x) - vx * lag,
-      (pose ? pose.pos.z : p.pos.z) - vz * lag,
-      this.time,
-    );
-  }
-
-  // Per-rival latch for the local bump bang (own_bump_feedback_core), lazy
-  // for the same prototype-fixture reason as the shot latch above.
-  private ownBumpFeedbackState: OwnBumpFeedbackState | undefined;
-  private get ownBumpFeedback(): OwnBumpFeedbackState {
-    this.ownBumpFeedbackState ??= createOwnBumpFeedback();
-    return this.ownBumpFeedbackState;
-  }
-
-  /** The rally bump cosmetics (sparks, ring, report, shake), shared by the
-   *  authoritative event and the local display-touch bang. */
-  private playRallyBumpFeedback(
-    x: number,
-    z: number,
-    impact: number,
-    aId: number,
-    bId: number,
-  ): void {
-    const force = Math.min(1, impact / 24);
-    this.vfx.burst(new THREE.Vector3(x, 0.9, z), 'physical', 10 + 18 * force, 0.5 + force);
-    this.spawnAoeRing(x, z, 1.6 + 1.4 * force, 'physical');
-    playRealmRacersEventAudio(this.audioSink, this.groundSample, {
-      type: 'realmRacersBump',
-      aId,
-      bId,
-      x,
-      z,
-      impact,
-    });
-    if (aId === this.sim.playerId || bId === this.sim.playerId) {
-      this.addShake(0.12 + 0.28 * force);
-    }
-  }
-
   // Visual reactions to sim events (called by the HUD for every event,
   // including those between other players and mobs).
   private sentenceImpactFeedback(sourceId: number, targetId: number, condemnation: number): void {
@@ -7817,72 +7619,13 @@ export class Renderer {
         });
         if (ev.entityId === this.sim.playerId) this.addShake(0.5);
         break;
-      case 'realmRacersGroundBlastFired': {
-        // Muzzle flash at the barrel as DRAWN, then the arc and the dodge marker.
-        // The marker never scales: only this burst does (the pooled cloud's).
-        const shot = remoteRacerMuzzle(this.views, ev, this.sim.playerId, this.groundSample);
-        this.realmRacersGroundBlasts.fire(shot, this.groundSample(ev.targetX, ev.targetZ));
-        // The local pilot's own muzzle flash and report already played at the
-        // press (predictOwnGroundBlastFire): replaying them reads as a double
-        // shot. The arc and the marker are not duplicated locally.
-        if (
-          !consumeOwnShotFeedback(
-            this.ownShotFeedback,
-            ev.sourceId === this.sim.playerId,
-            performance.now(),
-          )
-        ) {
-          this.vfx.burst(new THREE.Vector3(shot.x, shot.y, shot.z), 'arcane', 14, 0.65);
-          playRealmRacersEventAudio(this.audioSink, this.groundSample, shot);
-        }
-        break;
-      }
-      case 'realmRacersGroundBlastHit': {
-        // The crater fires whether or not anyone was caught: a miss that lands
-        // silently is most of what made the first version read as nothing
-        // happening. Flash and shockwave are the shell module's own pooled
-        // meshes; the ring and the dust are the shared pools.
-        this.realmRacersGroundBlasts.impact(ev.x, ev.z, this.groundSample(ev.x, ev.z));
-        startRemoteRacerHops(this.views, ev, this.sim.playerId);
-        this.spawnAoeRing(ev.x, ev.z, GROUND_BLAST_RADIUS, 'physical');
-        this.vfx.burst(
-          new THREE.Vector3(ev.x, 1.1, ev.z),
-          'arcane',
-          20 + Math.round(24 * ev.impact),
-          0.9 + 0.6 * ev.impact,
-        );
-        this.vfx.groundPuff(
-          new THREE.Vector3(ev.x, this.groundSample(ev.x, ev.z), ev.z),
-          1.1 + ev.impact,
-          0xbfae92,
-        );
-        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
-        if (ev.targetId !== null) this.triggerHit(ev.targetId);
-        if (ev.targetId === this.sim.playerId) {
-          this.addShake(0.2 + 0.35 * ev.impact);
-          this.punchFov(-(1.5 + 3 * ev.impact));
-        }
-        break;
-      }
-      case 'realmRacersBump': {
-        // Sparks and a flash off the contact point, scaled by how hard it was.
-        // For a bump involving the LOCAL machine the same cosmetics may have
-        // already played at the displayed touch (the local bang in the entity
-        // loop); a fresh latch means this event is that bang's echo, and its
-        // physics arrives through the snapshots regardless.
-        if (ev.aId === this.sim.playerId || ev.bId === this.sim.playerId) {
-          const rivalId = ev.aId === this.sim.playerId ? ev.bId : ev.aId;
-          if (consumeLocalBumpSuppression(this.ownBumpFeedback, rivalId, performance.now())) {
-            break;
-          }
-        }
-        this.playRallyBumpFeedback(ev.x, ev.z, ev.impact, ev.aId, ev.bId);
-        break;
-      }
+      case 'realmRacersGroundBlastFired':
+      case 'realmRacersGroundBlastHit':
+      case 'realmRacersBump':
       case 'realmRacersSlicked':
       case 'realmRacersSlickDropped':
       case 'realmRacersPickupTaken':
-        this.realmRacersFieldCues.onEvent(ev, this.sim, this.vfx, this.audioSink, this.selfRender);
+        this.realmRacers.onEvent(ev);
         break;
       // The farm flourishes. These arrive on the viewer's own pid-scoped
       // channel, so there is nothing to filter: the module turns each one into
@@ -9256,32 +8999,15 @@ export class Renderer {
   private updateAmbience(px: number, camY: number, dt: number): void {
     const inside = px > DUNGEON_X_THRESHOLD;
     const pz = this.sim.player.pos.z;
-    const inRally = isAtRealmRacersXZ(px, pz);
+    // A circuit flies its theme's sky at its record's hour (realm_racers_scene.ts).
+    const band = this.realmRacers.ambienceAt(px, pz, this.sim.player.pos.x);
     // The entry-curtain settle is one-shot and belongs to THIS update only:
     // consumed by the outdoor arm below when the entry really is outdoors,
     // discarded otherwise (an interior login must keep its normal eased
     // transition when the player later walks outside).
     const settleVistaEntry = this.vistaEntrySettlePending;
     this.vistaEntrySettlePending = false;
-    // A Realm Racers circuit flies its THEME's sky rather than the band's own
-    // zone answer. Two reasons, and the second is a defect: a circuit is meant
-    // to wear its zone's art wherever the band happens to sit, and
-    // `zoneBiomeAt` out there depends on which LANE a copy of the circuit is
-    // on (the public lane reads vale, the private practice copies read marsh,
-    // jungle, night, amber, ember), so a practice lap was lit by a different
-    // sky than the race it practises for.
-    const rallyTheme = inRally ? realmRacersThemeAt(this.sim.player.pos.x, pz) : null;
-    // ...and raced at the hour its RECORD names: no zone owns the band, so no
-    // clock out here was authored by anybody.
-    const rallyCircuit = inRally ? (realmRacersLaneAt(px, pz)?.circuit ?? null) : null;
-    // The DOME and the day/night GRADE are two questions, and the Farshore is
-    // where they stop having one answer: its sky is place-keyed rather than
-    // biome-keyed, so the grade tables (which are keyed by biome) take the
-    // realm under that dome instead.
-    const biome = rallyTheme
-      ? rallySkyDayNightBiome(rallyTheme.sky.biome)
-      : zoneBiomeAt(this.sim.player.pos.x, pz);
-    if (rallyTheme) void this.realmRacersSky.ensure(rallyTheme.sky.biome);
+    const biome = band.gradeBiome ?? zoneBiomeAt(this.sim.player.pos.x, pz);
     // Per-biome god-ray strength, eased over about half a second so a border
     // crossing fades the shafts with the rest of the ambience.
     const shaftTarget = Renderer.BIOME_GOD_RAYS[biome] ?? 1;
@@ -9293,7 +9019,7 @@ export class Renderer {
     // not the CYCLE (so DAY_ONLY misses it) and is graded on EVERY tier: nobody
     // gets a brighter road, or darker lamps, by turning the graphics down.
     const daylight = realmRacersDaylight(
-      rallyCircuit?.timeOfDay,
+      band.circuit?.timeOfDay,
       currentDayNightPhase(),
       phaseOverride,
     );
@@ -9395,7 +9121,7 @@ export class Renderer {
           }
         }
       }
-    } else if (inside && !inRally) {
+    } else if (inside && !band.inRally) {
       void ensureDungeonAssets().catch(() => undefined);
       // build the interior copy the player is standing in
       for (const dungeon of DUNGEON_LIST) {
@@ -9417,7 +9143,7 @@ export class Renderer {
     // answer it: the instance band belongs to no zone, so it reads out there as
     // an ordinary interior, and the haze a circuit wants comes out of its THEME
     // record, which is render-side data the sim-facing resolver never sees.
-    const desired: FogSceneState | 'rally' = inRally ? 'rally' : fogScene.desired;
+    const desired: FogSceneState | 'rally' = band.inRally ? 'rally' : fogScene.desired;
     const fog = this.scene.fog as THREE.Fog;
     // Procedural rift: dynamic fog from the generated floor style, re-applied when
     // the floor changes (descent keeps fogState='rift' but swaps the palette).
@@ -9447,18 +9173,8 @@ export class Renderer {
     this.riftFogKey = null;
     if (desired !== this.fogState) {
       this.fogState = desired;
-      if (desired === 'rally') {
-        // The circuit's own haze, out of the same theme record as its ground,
-        // its kerbs and its planting. `desired` is only ever 'rally' inside the
-        // band, so the theme here is the one the track under the player is
-        // drawn from (or the default, between two lanes).
-        const rallyFog = (rallyTheme ?? realmRacersThemeAt(px, pz)).sky.fog;
-        fog.color.setHex(rallyFog.color);
-        fog.near = rallyFog.near;
-        fog.far = rallyFog.far;
-      } else {
-        applyFogScenePreset(desired, fog, () => this.outdoorFogPreset());
-      }
+      if (desired === 'rally') this.realmRacers.applyFog(fog, px, pz);
+      else applyFogScenePreset(desired, fog, () => this.outdoorFogPreset());
       // interiors must not leak daylight: drop sun + sky ambient + IBL
       // underground so the torch point lights own the scene; restore outside.
       // The rim glow cranks up instead, silhouettes must split from the murk.
@@ -9558,7 +9274,7 @@ export class Renderer {
     if (usesLiveDayNightLighting(desired) || desired === 'rally') {
       const g = this.dnGrade;
       // A circuit's air is its THEME's, out of the same record as its ground.
-      const rally = desired === 'rally' ? (rallyTheme ?? realmRacersThemeAt(px, pz)) : null;
+      const rally = desired === 'rally' ? (band.theme ?? realmRacersThemeAt(px, pz)) : null;
       const preset =
         rally?.sky.fog ??
         (desired === 'battleground' ? Renderer.BATTLEGROUND_FOG : this.outdoorFogPreset());
@@ -10342,74 +10058,13 @@ export class Renderer {
       // entities interpolate on their own measured cadence via
       // remoteEntityAlpha (unknown-cadence fallback).
       const rp = entityRenderPose(sim, e, ea, isSelf ? selfPos : null, v);
-      const { deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
-      let { x, y, z } = rp;
-      let facing = rp.facing;
-      if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt, p.netUpdatedAt)) {
-        // A remote racing machine is projected off its newest wire pose with
-        // the real vehicle kernel, into the local kart's frame while that kart
-        // is predicted, else by its arrival age; its height is the wire's over
-        // the ground under the drawn hull, or a blast pop drawn from the Hit
-        // event (remote_vehicle_display_core.ts). Display-only.
-        x = v.remoteVehicle.x;
-        z = v.remoteVehicle.z;
-        y = remoteRacerDisplayY(v.remoteVehicle, rp.x, rp.y, rp.z, x, z, this.groundSample, dt);
-        facing = v.remoteVehicle.facing;
-        // The local bump bang: the DISPLAYED hulls are accurate now, so when
-        // they touch with a real closing speed the player sees a collision a
-        // beat before the server's event can say so. Play the bang at the
-        // seen touch (throttled per rival) and let the event's duplicate be
-        // suppressed in handleEvent; the physics still arrives with the
-        // snapshots, untouched. Gated by localBumpArmed: a predicted self
-        // drive, a rival of the LOCAL race in its racing phase (the sim only
-        // resolves contacts over the match's own grid, so a paddock or
-        // post-tableau touch must never bang), and neither machine a recovery
-        // ghost, which the server never collides. The overlap test is the
-        // plain instantaneous circle, not the sim's swept same-tick test, on
-        // purpose: a fast crossing the circle misses simply plays through
-        // the unsuppressed server event. The ghost read is the entity aura
-        // both worlds carry (realm_racers_ghost.ts), so a machine a rival
-        // passes through never bangs on either side of the wire.
-        const race = this.sim.realmRacersInfo.match;
-        if (p.drive && localBumpArmed(this.selfRender.drive.source, race, e, p)) {
-          const reach =
-            vehicleProfile(e.drive.profileKey).bodyRadius +
-            vehicleProfile(p.drive.profileKey).bodyRadius;
-          const dx = x - selfPos.x;
-          const dz = z - selfPos.z;
-          if (dx * dx + dz * dz < reach * reach) {
-            const closing = bumpClosingSpeed(
-              dx,
-              dz,
-              this.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),
-              this.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),
-            );
-            if (
-              closing >= LOCAL_BUMP_MIN_CLOSING &&
-              shouldPlayLocalBump(this.ownBumpFeedback, id, now)
-            ) {
-              markLocalBump(this.ownBumpFeedback, id, now);
-              this.playRallyBumpFeedback(
-                (selfPos.x + x) / 2,
-                (selfPos.z + z) / 2,
-                closing,
-                p.id,
-                id,
-              );
-            }
-          }
-        }
-      } else if (v.remoteVehicle.active) {
-        resetRemoteVehicleDisplay(v.remoteVehicle);
-      }
+      this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);
+      const { x, y, z, deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
       v.group.position.set(x, y, z);
+      let facing = rp.facing;
       if (ignivarBossFacingLocked(e)) facing = e.facing;
       if (id === p.id && this.selfRender.drive.steersHeading) {
-        // Driving, the heading is not camera-driven input: it is steered, and
-        // the predictor integrates it with the same kernel the server runs. Its
-        // value is the zero-latency truth, so the model reads it directly
-        // instead of the interpolated mirror (a full echo behind on every
-        // corner) or the camera override (which is null while driving).
+        // Driving, the model reads the steered heading (SelfDriveView.steersHeading).
         facing = this.selfRender.drive.facing;
         this.selfFacingOverride = null;
         this.selfFacingLastTarget = null;
@@ -12075,18 +11730,7 @@ export class Renderer {
     this.galeFeatures?.update(this.time);
     this.birds.update(p.pos.x, p.pos.z, dt);
     this.impactSite.update(p.pos.x, p.pos.z, dt);
-    this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
-    // A seated pilot reads their own match; a bystander at the fence reads the
-    // lane's trackside view, so the lights, the boxes and the oil stay honest
-    // for anyone looking at the circuit (same shape as the Vale Cup spectate).
-    this.realmRacersTrack.update(
-      p.pos.x,
-      p.pos.z,
-      this.time,
-      realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
-    );
-    this.realmRacersGroundBlasts.update(dt);
-    this.realmRacersFieldCues.update(dt);
+    this.realmRacers.frame(realmRacersInfo, p.pos.x, p.pos.z, dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);
     this.underwaterView.frame(this.camera, this.scene, p.pos, this.sim.cfg.seed, dt);
@@ -12390,18 +12034,6 @@ export class Renderer {
   }
 
   /**
-   * Dev only: draw a circuit that was drawn in the editor rather than authored
-   * in the records module, so `/dev rallydraft` has something to look at.
-   *
-   * A one-line delegate on purpose: the lifecycle (build on registration, swap
-   * and dispose on re-registration) lives in the sibling the tracks view
-   * composes, not here.
-   */
-  registerRealmRacersDraftCircuit(circuit: RealmRacersCircuit): void {
-    this.realmRacersTrack.registerDraft(circuit);
-  }
-
-  /**
    * Re-mesh the terrain from the current active world content (after a sculpt or
    * biome-paint edit). With a `region` (world-space bounds of the edit), only the
    * chunks intersecting it re-mesh in place (cheap enough for a live brush drag);
@@ -12647,9 +12279,6 @@ export class Renderer {
     // pose: the vehicle camera decides the boom, the shoulder offsets it. A
     // racing machine holds the stride bob out: its road speed is not a stride.
     this.actionCam.step(dt, reduce, this.selfSubmerged || p.dead || driving, velX, velZ, selfPos.y);
-    // The rally profile lowers the eye and lengthens the arm, so the boom
-    // distance and eye height come from the active profile rather than the
-    // on-foot constants (the default profile carries the on-foot values).
     const boomDistance = cameraBoomDistance(pose.dist, boomProfile);
     const shoulder = this.actionCam.offset(pose.yaw, boomDistance);
     const px = pose.x + shoulder.x;
@@ -12672,9 +12301,6 @@ export class Renderer {
     // way the old terrain walls lifted it.
     groundY += gardenMazeCameraLift(cx, cz);
     this.camera.position.set(cx, Math.max(cy, groundY), cz);
-    // Base FOV plus the feel kicks (speed widen, landing dip, level-up punch);
-    // the offset is 0 under reduced motion. The base is the player's own
-    // setCameraFov value, not the constant.
     const fovTarget = Math.min(
       100,
       cameraFeelFovTarget(this.baseFov, feelFovOffset) + shoulder.fov,
@@ -12701,10 +12327,7 @@ export class Renderer {
         fy = eye.y - cpy,
         fz = eye.z - cpz;
       const fl = Math.hypot(fx, fy, fz) || 1;
-      // The listener rides the camera and faces the chase pivot, but the
-      // player-distance anchor is the avatar itself, never that pivot: the
-      // pivot lags and leads by yards (spring-arm leash plus look-ahead), and
-      // an anchor carrying that offset misplaces every sound measured from it.
+      // The distance anchor is the avatar, never the lagging pivot (setListener).
       sink.setListener(cpx, cpy, cpz, fx / fl, fy / fl, fz / fl, selfPos.x, selfPos.y, selfPos.z);
       const amb = sampleAmbienceInto(this.ambience, eye.x, eye.z, seed, this.weatherOn);
       this.riftAmbience.collect(this.sim, this.sim.player.pos.x, this.riftAmbienceScratch);

@@ -18,9 +18,11 @@ import { type AimPoint, localRallyCastFeedbackAllowed } from '../action_bar/grou
 interface RallyCastHost {
   sim: Pick<IWorld, 'player' | 'realmRacersInfo'>;
   renderer: {
-    readonly selfAimPose: Pick<Entity, 'pos' | 'facing'> | null;
-    predictOwnGroundBlastFire(point: AimPoint): void;
-    predictOwnSlickDrop(): void;
+    readonly realmRacers: {
+      readonly selfAimPose: Pick<Entity, 'pos' | 'facing'> | null;
+      predictOwnGroundBlastFire(point: AimPoint): void;
+      predictOwnSlickDrop(): void;
+    };
   };
   flashActionSlot(barSlot: number): void;
   showError(text: string): void;
@@ -32,7 +34,7 @@ interface RallyCastHost {
  *  the world's own player pose (offline it is exact). */
 export function rallyAimCaster(hud: object): Pick<Entity, 'pos' | 'facing'> {
   const h = hud as RallyCastHost;
-  return h.renderer.selfAimPose ?? h.sim.player;
+  return h.renderer.realmRacers.selfAimPose ?? h.sim.player;
 }
 
 /** Every mirror the client can see says the sim will accept this rally
@@ -66,7 +68,7 @@ export function predictRallyGroundBlastFire(hud: object, id: string, point: AimP
   // realmRacersFireGroundBlast's refusals); the Fired event adopts the
   // shell, and the crater stays server-authoritative.
   if (rallyCastFeedbackAllowed(hud, id, REALM_RACERS_ABILITY_ID)) {
-    (hud as RallyCastHost).renderer.predictOwnGroundBlastFire(point);
+    (hud as RallyCastHost).renderer.realmRacers.predictOwnGroundBlastFire(point);
   }
 }
 
@@ -82,7 +84,7 @@ export function predictRallySlickDrop(hud: object, id: string): void {
   // redundant); online the mirror only moves when the server
   // echoes, so the gate still sees the pre-cast state.
   if (rallyCastFeedbackAllowed(hud, id, REALM_RACERS_SLICK_ABILITY_ID)) {
-    (hud as RallyCastHost).renderer.predictOwnSlickDrop();
+    (hud as RallyCastHost).renderer.realmRacers.predictOwnSlickDrop();
   }
 }
 

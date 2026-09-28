@@ -225,7 +225,7 @@ export function selfPredictionLeadMs(state: SelfRenderPositionState): number | n
  * cone and range clamp), written into `out`: the drawn position, and while
  * driving the drive view's heading, else the mirror's facing. Null while the
  * display is not predicted, where the mirror pose is already the right
- * reference. The renderer's `selfAimPose` and the latency harness both read it.
+ * reference. The rally scene's `selfAimPose` and the latency harness both read it.
  */
 export function displayedAimPose<T extends { pos: Vec3Like; facing: number }>(
   state: SelfRenderPositionState,

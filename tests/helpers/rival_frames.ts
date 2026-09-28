@@ -396,7 +396,7 @@ export type AimCasterSource = 'drawn' | 'mirror';
 export interface DrawnRivalShot {
   sent: { x: number; z: number } | null;
   hudClamped: boolean;
-  /** 'drawn': renderer.selfAimPose (the predicted display); 'mirror': the
+  /** 'drawn': renderer.realmRacers.selfAimPose (the predicted display); 'mirror': the
    *  mirrored player the HUD falls back to while the display is not predicted. */
   caster: AimCasterSource | null;
   /** The caster the clamp measured from, and the drawn self on that frame. */
@@ -407,7 +407,7 @@ export interface DrawnRivalShot {
 /**
  * Fire the shooter's Ground Blast at its DRAWN rival with a visual lead, on the
  * next frame it draws: the HUD commit path (clampAimToRange from the aim
- * caster, `renderer.selfAimPose ?? sim.player`: the drawn pose while the kart
+ * caster, `renderer.realmRacers.selfAimPose ?? sim.player`: the drawn pose while the kart
  * is predicted, the mirrored self while it is stood down, then
  * castAbilityAt). Returns the aim it sent, filled on that frame.
  */

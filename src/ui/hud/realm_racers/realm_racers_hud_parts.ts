@@ -21,11 +21,13 @@ import { rallyControlKeys } from '../../realm_racers_view';
 interface RealmRacersPartsHost {
   sim: IWorld;
   renderer: {
-    realmRacersPrepare: {
-      progress(
-        out: RealmRacersPrepareProgress,
-        circuitId: string | null,
-      ): RealmRacersPrepareProgress;
+    realmRacers: {
+      prepare: {
+        progress(
+          out: RealmRacersPrepareProgress,
+          circuitId: string | null,
+        ): RealmRacersPrepareProgress;
+      };
     };
   };
   keybinds: { primaryLabel(bind: string): string };
@@ -74,7 +76,7 @@ export function realmRacersUiDeps(hud: object): RealmRacersDeps {
     // The race UI owns the match-end edge; the splash it clears is this class's.
     clearPickupSplash: () => h.realmRacersSplash.clear(),
     writers: h.writerFacet,
-    prepareProgress: (out, circuitId) => h.renderer.realmRacersPrepare.progress(out, circuitId),
+    prepareProgress: (out, circuitId) => h.renderer.realmRacers.prepare.progress(out, circuitId),
     raceWarm: {
       preloadSfx: (key) => sfx.preload(key),
       // Eager: an idle-only pump can starve behind a busy lobby, and each
