@@ -104,8 +104,9 @@ export interface RallyCircuitTheme {
    * texture would multiply against the tint and muddy every hue).
    */
   flowers: { card: FlowerKind[]; colours: readonly number[] };
-  /** What is planted along a pond's rim. */
-  reedUrl: string;
+  /** What is planted along a pond's rim, or null for a realm whose own lakes
+   *  the world leaves bare (`water_flora_core.ts` skips its biome). */
+  reedUrl: string | null;
   /**
    * The zone's own scenery vocabulary: catalog keys of
    * `src/sim/content/realm_racers_props.ts` that BELONG on a circuit wearing
@@ -164,8 +165,9 @@ export interface RallyCircuitTheme {
  *  Highwatch show-jumping start gate, so a rally start line inherits a fixture
  *  the world has established rather than inventing one. */
 const COURSE_ARCH_URL = '/models/props/course_arch.glb';
-/** Reeds are reeds: every theme plants the same rim, by design, and the suite
- *  holds the exemption open so it stays auditable rather than accidental. */
+/** Reeds are reeds: every theme that plants a rim plants the same one, by
+ *  design, and the suite holds the exemption open so it stays auditable rather
+ *  than accidental. */
 const REEDS_URL = '/models/props/reeds.glb';
 
 /**
@@ -547,63 +549,111 @@ const THORNPEAK: RallyCircuitTheme = {
 };
 
 /**
- * The Drakelands: scorched basalt under an ember storm, walled by a battlement.
+ * The Drakelands: the ember storm over the far north, dressed as the world
+ * builds the zone today.
  *
- * The one theme with no grass at all, and not by omission:
- * `GRASS_BIOME_DENSITY.ember` is zero because the Drakelands are cinders, so
- * the circuit's lawn is bare ash and every blade of green a pilot sees out
- * there would be a lie about the zone.
+ * Almost nothing here is castle-set stock any more, because almost nothing in
+ * the zone is: Wyrmwatch and the Last Keep were rebuilt out of the owner's
+ * rebuild kit (`/models/drakelands_kit/`) and the Forgefather's Isle is the
+ * fortress kit (`ignivar_prop_*`), all placed from
+ * `FORGEFATHER_FORTRESS_PLACEMENTS`, and the waste carries the ember zone's own
+ * lava, dragon dens and ember lilies (`ember_features.ts`). A circuit draws
+ * both families through the world's own templates and parse (the `worldKit`
+ * and `worldRaw` dressing routes), so it wears the exact materials the zone
+ * does, the kit's warm grade included, and links no program the zone does not.
+ *
+ * Three things are left bare because the world leaves them bare:
+ *  - the grass: `GRASS_BIOME_DENSITY.ember` is zero, so the lawn is ash;
+ *  - the pond rim: the world's water flora skips the ember biome
+ *    (`water_flora_core.ts`), so Greenshade Pool and the Last Spring carry no
+ *    reeds and no lilies, and neither does a pond here;
+ *  - the water's colour: the zone's lakes are the world's own water. Its LAVA
+ *    is a modelled piece rather than water, and the pool a circuit may place
+ *    (`lavaPool`) is solid scenery with no mechanic, exactly as the world's own
+ *    pools carry none. A lava-tinted pond would be a lie a racer could swim in.
  */
 const DRAKELANDS: RallyCircuitTheme = {
   ground: 'ember',
-  // Basalt under molten orange: the darkest kerb base in the registry, because
-  // a bone-pale block on black ash reads as a hole rather than an edge.
-  kerb: { base: 0x2e2622, stripe: 0xe06030 },
+  // The zone's own basalt (`emberBasalt`, terrain_palette.ts) under the melt
+  // orange its lava pools glow with (ember_features.ts): the darkest kerb base
+  // in the registry, because a bone-pale block on black ash reads as a hole.
+  kerb: { base: 0x4e3c34, stripe: 0xff5a18 },
   startGrid: { light: 0xefe0cc, dark: 0x1c1512 },
-  barriers: ['battlement', 'curtainWall', 'mountainWall'],
+  // The fortress curtain and the Last Keep's palisade: what the zone is walled
+  // with, both drawn from the world's own templates.
+  barriers: ['fortressWall', 'keepFence'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
-    // Drakelands red, the colourway the zone's own hexr town flies.
+    // Red cloth in pattern A: the colour the Last Keep's own hall banners fly
+    // (`KEEP_DRESSING_KEYS`, lastkeep_dressing.ts).
     bannerUrl: '/models/dungeon/banner_patterna_red.glb',
   },
   flowers: {
     // The zone's own card, copied byte for byte from `FLOWER_PALETTES.ember`:
-    // firebloom reds and oranges, which is what the meadows round Wyrmwatch
-    // read as at a distance.
+    // the firebloom of the always-bloom meadows round Wyrmwatch and down the
+    // Gatewood road (`DRAKELANDS_FLOWER_MEADOWS`). It is the only flower the
+    // zone grows, and it grows nowhere on the waste.
     card: [
       { p: [244, 70, 48], c: [130, 28, 16] },
       { p: [250, 142, 46], c: [150, 72, 20] },
       { p: [238, 96, 60], c: [125, 40, 22] },
     ],
-    // AUTHORED off that card: the Drakelands have no bloom-tint table of their
-    // own, so the border takes the card's own three hues plus a sulphur gold.
-    colours: [0xf44630, 0xfa8e2e, 0xee603c, 0xd8b04a],
+    // The card's own three petals, plus the cinder-bloom the zone's flora glows
+    // with after dark (`FLORA_TINT.ember`, night_accents_core.ts).
+    colours: [0xf44630, 0xfa8e2e, 0xee603c, 0xff8a4a],
   },
-  reedUrl: REEDS_URL,
+  reedUrl: null,
   props: [
     'lampDrakelandsBrazier',
-    'kcasRubbleLarge',
-    'kcasRubbleHalf',
-    'kcasRocks',
-    'kcasTorchMounted',
-    'kcasColumn',
-    'kcasWall',
-    'kcasWallBroken',
-    'kcasWallCracked',
-    'kcasBarrier',
-    'kcasFoundation',
-    'kcasShrine',
-    'hexFlagRed',
-    'hexrCastle',
-    'hexrTownhall',
-    'hexrBarracks',
-    'hexrTent',
-    'hexrWatchtower',
-    'oreRocks',
+    // Wyrmwatch and the Last Keep: the rebuild kit's halls, houses, chapel,
+    // stables, dragon statues, churchyard stones and training yard.
+    'dkBuilding1',
+    'dkBuilding2',
+    'dkBuildingBase',
+    'dkBuildingBaseRoof',
+    'dkChurch',
+    'dkStables',
+    'dkDragonStatue',
+    'dkGravestone2',
+    'dkGravestone3',
+    'dkDummy',
+    'dkShieldRack',
+    // The Forgefather's Isle: the fortress kit's towers, dragon pillars,
+    // cannon, gear walls and bridge piers.
+    'ffTowerPillar',
+    'ffTowerBase',
+    'ffDragonPillar',
+    'ffCannon',
+    'ffGearWall',
+    'ffBridgePillar',
+    // The waste: the melt, the dragon dens and the ember lilies.
+    'lavaPool',
+    'dragonHoard',
+    'dragonEggs',
+    'emberLily',
+    // What the zone still places out of the world's prop catalog: Smith Mara's
+    // forge, the two cannon stations, the ruin rings, the churchyards, the
+    // forge quest's well and Scout Yerrin's campfire.
+    'hexrBlacksmith',
+    'hexCannon',
+    'hexCannonballs',
+    'kcasCratesStacked',
+    'hexCrateBig',
+    'hexSack',
+    'column',
+    'columnBroken',
+    'statueHead',
+    'statueBlock',
+    'graveRound',
+    'graveCross',
+    'well',
+    'bonfire',
   ],
   sky: {
+    // The ember storm dome, under the zone's own haze colour
+    // (`Renderer.BIOME_FOG.ember`); the depth is the band's, as for every theme.
     biome: 'ember',
-    fog: { color: 0xc07a4a, near: 85, far: 430 },
+    fog: { color: 0x9a5844, near: 85, far: 430 },
   },
 };
 
@@ -1199,7 +1249,11 @@ export function realmRacersThemeAt(x: number, z: number): RallyCircuitTheme {
  * lane.
  */
 function themeKitUrls(theme: RallyCircuitTheme): readonly string[] {
-  return [theme.startFixture.archUrl, theme.startFixture.bannerUrl, theme.reedUrl];
+  return [
+    theme.startFixture.archUrl,
+    theme.startFixture.bannerUrl,
+    ...(theme.reedUrl ? [theme.reedUrl] : []),
+  ];
 }
 
 /**

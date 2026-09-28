@@ -50,7 +50,13 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => ({
 }));
 
 import { attachBiomeHaze } from '../src/render/biome_haze_field';
+import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
 import { GFX_TIER_RANK, type GfxSettings, type GfxTier } from '../src/render/gfx';
+import {
+  ignivarEnvPropKeyOfUrl,
+  ignivarEnvPropTemplate,
+  prepareIgnivarEnvProps,
+} from '../src/render/ignivar_env_props';
 import { materialProgramSignature } from '../src/render/prewarm_policy';
 import {
   PROP_ASSET_DEFS,
@@ -63,12 +69,18 @@ import { REALM_RACERS_BARRIER_VISUALS } from '../src/render/realm_racers_barrier
 import {
   realmRacersDressingPart,
   realmRacersDressingRoute,
+  realmRacersWorldKitPart,
 } from '../src/render/realm_racers_dressing_material';
 import { realmRacersFills } from '../src/render/realm_racers_fills';
 import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
+import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import { buildRealmRacersTrack, buildRealmRacersTracks } from '../src/render/realm_racers_track';
 import { disposeRealmRacersTrackGroup } from '../src/render/realm_racers_track_dispose_core';
-import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_CIRCUIT_LIST,
+  REALM_RACERS_PRACTICE_CIRCUIT,
+  type RealmRacersCircuit,
+} from '../src/sim/content/realm_racers_circuits';
 
 afterAll(gfxProfileRestorer());
 
@@ -137,6 +149,33 @@ const RACE_ONLY_URLS = [
 ];
 
 type Draw = { object: THREE.Object3D; material: THREE.Material };
+
+/**
+ * A Drakelands circuit: the garden's curve wearing the drakelands theme, with
+ * EVERY piece its vocabulary offers placed once and both of its walls run.
+ * No such circuit ships; this is what one would draw.
+ */
+function drakelandsCircuit(): RealmRacersCircuit {
+  const theme = CIRCUIT_THEMES.drakelands;
+  return {
+    ...REALM_RACERS_PRACTICE_CIRCUIT,
+    id: 'drakelands_dressing_probe',
+    theme: 'drakelands',
+    props: theme.props.map((asset, i) => ({
+      asset,
+      at: { x: -260 + (i % 12) * 20, z: 120 + Math.floor(i / 12) * 10 },
+      scale: 4,
+    })),
+    fences: theme.barriers.map((kit, i) => ({
+      kit,
+      points: [
+        { x: -280, z: -120 + i * 20 },
+        { x: -240, z: -120 + i * 20 },
+        { x: -240, z: -90 + i * 20 },
+      ],
+    })),
+  };
+}
 
 /** Every model draw of the shipped circuits, by the url it instances. */
 async function rallyDrawsByUrl(): Promise<Map<string, Draw[]>> {
@@ -336,6 +375,70 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])('the circuit dressing on 
       }
       expect(keysOf(rally), url).toEqual(keysOf(rawDraws(url)));
     }
+  });
+
+  it('draws a Drakelands circuit with the zone own templates, raw ember parse and world props', async () => {
+    // The world's env-prop templates load in the deferred lane at world entry;
+    // headless, the lane is this call, on the same mirrored files.
+    await prepareIgnivarEnvProps();
+    const view = buildRealmRacersTrack(drakelandsCircuit());
+    await realmRacersFills(view.group).landed();
+    const byUrl = new Map<string, Draw[]>();
+    for (const draw of drawsUnder(view.group)) {
+      if (!draw.object.userData.realmRacersDressing) continue;
+      const url = draw.object.name.slice(PREFIX.length);
+      byUrl.set(url, [...(byUrl.get(url) ?? []), draw]);
+    }
+    const routes = new Map<string, string[]>();
+    for (const url of byUrl.keys()) {
+      const route = realmRacersDressingRoute(url);
+      routes.set(route, [...(routes.get(route) ?? []), url]);
+    }
+    // Every kit piece and both walls, through the template.
+    const kitUrls = routes.get('worldKit') ?? [];
+    expect(kitUrls.length).toBeGreaterThanOrEqual(18);
+    for (const url of kitUrls) {
+      const key = ignivarEnvPropKeyOfUrl(url);
+      const template = key ? ignivarEnvPropTemplate(key) : null;
+      expect(template, url).not.toBeNull();
+      if (!template) continue;
+      expect(realmRacersWorldKitPart(url)).toBe(template);
+      // The very objects the world instances, so the very program.
+      const world = new THREE.InstancedMesh(template.geometry, template.material, 1);
+      for (const { object, material } of byUrl.get(url) ?? []) {
+        expect(material, url).toBe(template.material);
+        expect((object as THREE.Mesh).geometry, url).toBe(template.geometry);
+        expect(threeProgramKeys(material, object), url).toBe(
+          threeProgramKeys(template.material, world),
+        );
+      }
+    }
+    // The ember set wears its own raw materials, as ember_features draws it.
+    const ember = new Set<string>(Object.values(EMBER_PROP_URLS));
+    const raw = (routes.get('worldRaw') ?? []).filter((url) => ember.has(url)).sort();
+    expect(raw).toEqual(
+      [
+        EMBER_PROP_URLS.pool,
+        EMBER_PROP_URLS.hoard,
+        EMBER_PROP_URLS.eggs,
+        EMBER_PROP_URLS.lily,
+      ].sort(),
+    );
+    for (const url of raw) expect(keysOf(byUrl.get(url) ?? []), url).toEqual(keysOf(rawDraws(url)));
+    // The rest are world props on the world's own converted material...
+    for (const url of routes.get('worldProp') ?? []) {
+      const worldMaterials = new Set(worldPropDraws(url).map(({ material }) => material));
+      for (const { material } of byUrl.get(url) ?? []) {
+        expect(worldMaterials.has(material), `${url} ${material.name}`).toBe(true);
+      }
+    }
+    // ...and the one model the circuit alone draws is its start banner, like
+    // every shipped circuit's.
+    expect(routes.get('raceOnly')).toEqual([CIRCUIT_THEMES.drakelands.startFixture.bannerUrl]);
+    // No rim planting, as the zone's own lakes have none, on a curve that has
+    // ponds for it to be a claim about.
+    expect(REALM_RACERS_PRACTICE_CIRCUIT.ponds?.length ?? 0).toBeGreaterThan(0);
+    expect(byUrl.has('/models/props/reeds.glb')).toBe(false);
   });
 
   it('survives the editor preview rebuild: the dispose core frees no shared material or geometry', async () => {

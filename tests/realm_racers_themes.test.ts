@@ -8,14 +8,19 @@
 // ids resolve both ways, nothing references a model the client cannot load,
 // every consumer really reads the record, and a theme cannot reach physics.
 
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
+import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
+import { ignivarEnvPropKeyOfUrl } from '../src/render/ignivar_env_props';
 import {
   REALM_RACERS_BARRIER_BOOT_URLS,
   REALM_RACERS_BARRIER_VISUALS,
 } from '../src/render/realm_racers_barrier_visuals';
+import { realmRacersDressingRoute } from '../src/render/realm_racers_dressing_material';
+import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
 import {
   CIRCUIT_THEMES,
   REALM_RACERS_THEME_ASSET_URLS,
@@ -25,7 +30,9 @@ import {
 } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { rallyBorderFlowerSpots } from '../src/render/realm_racers_track_core';
+import { WATER_FLORA_SKIP_BIOMES } from '../src/render/water_flora_core';
 import { DEEP_COLOR, SHALLOW_COLOR } from '../src/render/water_surface_material';
+import { DRAKELANDS_PROPS, DRAKELANDS_ZONE } from '../src/sim/content/drakelands';
 import { REALM_RACERS_BARRIERS } from '../src/sim/content/realm_racers_barriers';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
@@ -35,12 +42,15 @@ import {
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import { VEHICLE_STATIONS } from '../src/sim/content/vehicle_stations';
 import { ZONES } from '../src/sim/data';
+import { FORGEFATHER_FORTRESS_PLACEMENTS } from '../src/sim/forgefather_fortress';
 import {
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
+import { STREETLAMP_STYLE_BY_ZONE } from '../src/sim/streetlamp_style';
 
 // The builder mints procedural canvas textures, so the build cases below need
 // the same texture stub every other headless render suite uses.
@@ -97,7 +107,17 @@ const GALECREST_CIRCUIT = probeCircuit('galecrest');
 /** Every model url a theme names, whatever the shape of the piece naming it. */
 function themeUrls(themeId: string): string[] {
   const theme = CIRCUIT_THEMES[themeId];
-  return [theme.startFixture.archUrl, theme.startFixture.bannerUrl, theme.reedUrl];
+  return [
+    theme.startFixture.archUrl,
+    theme.startFixture.bannerUrl,
+    ...(theme.reedUrl ? [theme.reedUrl] : []),
+  ];
+}
+
+/** The world-map zone a theme is the record of: the zone id with its article
+ *  dropped, the naming rule the ids are authored under. */
+function zoneOfTheme(themeId: string) {
+  return ZONES.find((zone) => zone.id.replace(/_(vale|marsh|heights|isle)$/, '') === themeId);
 }
 
 describe('Realm Racers circuit themes', () => {
@@ -140,7 +160,20 @@ describe('Realm Racers circuit themes', () => {
     // SHARED BY DESIGN, and listed so the exemption is auditable rather than
     // an omission: one race arch serves every zone, and reeds are reeds.
     expect(theme.startFixture.archUrl).toBe(garden.startFixture.archUrl);
-    expect(theme.reedUrl).toBe(garden.reedUrl);
+    if (theme.reedUrl !== null) {
+      expect(theme.reedUrl).toBe(garden.reedUrl);
+      return;
+    }
+    // ...or no rim at all, and only where that is the WORLD's answer rather
+    // than a taste: the realm's own lakes are ones the world's water flora
+    // leaves bare. The lakes check keeps it from passing on a realm that has
+    // no water to be bare.
+    const zone = zoneOfTheme(themeId);
+    expect(zone, themeId).toBeDefined();
+    expect(WATER_FLORA_SKIP_BIOMES.has(zone?.biome ?? ''), `${themeId} lakes are planted`).toBe(
+      true,
+    );
+    expect(zone?.lakes?.length ?? 0, `${themeId} has lakes`).toBeGreaterThan(0);
   });
 
   it('every shipped circuit names a theme the game authors', () => {
@@ -593,6 +626,98 @@ describe('Realm Racers circuit themes', () => {
         expect(material.vertexShader).toContain('vSurf = wp.xz - uSurfaceOrigin;');
         expect(material.fragmentShader).toContain('texture2D(uNorm1, vSurf * 0.055');
       });
+    });
+  });
+  describe('the Drakelands, as the world builds the zone today', () => {
+    // The record was rewritten against the zone itself, and these hold it
+    // there: every piece it offers is one the zone draws, through a route that
+    // shares the zone's own material, so a retired kit or a borrowed castle
+    // cannot creep back in as "Drakelands".
+    const theme = CIRCUIT_THEMES.drakelands;
+    const inZone = (x: number, z: number): boolean =>
+      x >= (DRAKELANDS_ZONE.xMin ?? -Infinity) &&
+      x <= (DRAKELANDS_ZONE.xMax ?? Infinity) &&
+      z >= DRAKELANDS_ZONE.zMin &&
+      z <= DRAKELANDS_ZONE.zMax;
+    const decorKeys = new Set((DRAKELANDS_PROPS.decorProps ?? []).map((prop) => prop.key));
+    /** The catalog pieces the zone places itself, each with WHERE it does. */
+    const PLACED_BY_THE_ZONE: Record<string, () => boolean> = {
+      lampDrakelandsBrazier: () => STREETLAMP_STYLE_BY_ZONE.drakelands === 'drakelands_brazier',
+      // Smith Mara's forge and the two cannon stations' dressing.
+      hexrBlacksmith: () => decorKeys.has('hexrBlacksmith'),
+      hexCannonballs: () => decorKeys.has('hexCannonballs'),
+      kcasCratesStacked: () => decorKeys.has('kcasCratesStacked'),
+      hexCrateBig: () => decorKeys.has('hexCrateBig'),
+      hexSack: () => decorKeys.has('hexSack'),
+      // The stations themselves stand the same hex cannon (quest_objects.ts).
+      hexCannon: () => VEHICLE_STATIONS.some((station) => inZone(station.x, station.z)),
+      // The four ruin rings, their columns and their relic hearts.
+      column: () => DRAKELANDS_PROPS.ruinRings.length > 0,
+      columnBroken: () => DRAKELANDS_PROPS.ruinRings.length > 0,
+      statueHead: () => DRAKELANDS_PROPS.ruinRings.length > 0,
+      statueBlock: () => DRAKELANDS_PROPS.ruinRings.length > 0,
+      graveRound: () => DRAKELANDS_PROPS.graveyards.length > 0,
+      graveCross: () => DRAKELANDS_PROPS.graveyards.length > 0,
+      well: () => DRAKELANDS_PROPS.wells.length > 0,
+      bonfire: () => DRAKELANDS_PROPS.campfires.length > 0,
+    };
+    const worldKitKeys = new Set<string>(
+      FORGEFATHER_FORTRESS_PLACEMENTS.map((placement) => placement.key),
+    );
+    const emberUrls = new Set<string>(Object.values(EMBER_PROP_URLS));
+
+    it('offers only pieces the zone draws, each through a route that shares its material', () => {
+      let kit = 0;
+      let ember = 0;
+      for (const key of theme.props) {
+        const visual = REALM_RACERS_PROP_VISUALS[key];
+        expect(visual, key).toBeDefined();
+        if (visual.kind === 'worldKit') {
+          // A template the fortress table itself places.
+          const kitKey = ignivarEnvPropKeyOfUrl(visual.url);
+          expect(kitKey !== undefined && worldKitKeys.has(kitKey), key).toBe(true);
+          expect(realmRacersDressingRoute(visual.url), key).toBe('worldKit');
+          kit++;
+          continue;
+        }
+        if (visual.kind === 'gltf' && emberUrls.has(visual.url)) {
+          expect(realmRacersDressingRoute(visual.url), key).toBe('worldRaw');
+          ember++;
+          continue;
+        }
+        const placed = PLACED_BY_THE_ZONE[key];
+        expect(placed, `${key} is offered with no evidence the zone places it`).toBeDefined();
+        expect(placed?.(), key).toBe(true);
+      }
+      // The two families carry the zone's look; the floors keep them offered.
+      expect(kit).toBeGreaterThanOrEqual(10);
+      expect(ember).toBe(4);
+    });
+
+    it('walls with the fortress curtain and the keep palisade, drawn from the templates', () => {
+      expect(theme.barriers).toEqual(['fortressWall', 'keepFence']);
+      for (const kit of theme.barriers) {
+        const visual = REALM_RACERS_BARRIER_VISUALS[kit];
+        const urls = [visual.panelUrl, ...(visual.corner === 'none' ? [] : [visual.corner.url])];
+        for (const url of urls) {
+          expect(realmRacersDressingRoute(url), `${kit} ${url}`).toBe('worldKit');
+          expect(worldKitKeys.has(ignivarEnvPropKeyOfUrl(url) ?? ''), url).toBe(true);
+        }
+      }
+    });
+
+    it('flies the ember storm under the zone own haze, and plants no rim', () => {
+      expect(theme.ground).toBe('ember');
+      expect(theme.sky.biome).toBe('ember');
+      // The zone's fog colour, read off the renderer's own table rather than
+      // restated, so a retint of the world's haze shows up here.
+      const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+      const fog = /\bember: \{ color: (0x[0-9a-f]{6}), near:/.exec(renderer);
+      expect(fog, 'the ember row of BIOME_FOG').not.toBeNull();
+      expect(theme.sky.fog.color).toBe(Number(fog?.[1]));
+      // The zone's lakes are the world's own water, and bare.
+      expect(theme.water).toBeUndefined();
+      expect(theme.reedUrl).toBeNull();
     });
   });
 });

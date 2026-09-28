@@ -769,6 +769,7 @@ function buildBasin(
   // and the same clumps scattered along an authored shore. One instanced draw
   // for both: it is one model, and a shore and a pond rim are the same waterline
   // seen from opposite sides.
+  if (!theme.reedUrl) return;
   const planted = [
     ...(basin ? rallyPondReedSpots(circuit).map((spot) => ({ ...spot, y: basin.waterY })) : []),
     ...rallyShoreSpots(circuit).map((spot) => ({ ...spot, y: seaBasin.waterY })),

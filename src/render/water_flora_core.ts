@@ -23,13 +23,14 @@ export interface WaterFloraRegion {
   reeds: WaterFloraPlacement[];
 }
 
-const SKIP_BIOMES = new Set(['frost', 'ember']);
+/** The realms whose lakes carry no lilies and no reeds. */
+export const WATER_FLORA_SKIP_BIOMES: ReadonlySet<string> = new Set(['frost', 'ember']);
 const SKIP_ZONES = new Set(['willowfen', 'palmreach']); // dress their own water
 
 export function waterFloraRegions(seed: number): WaterFloraRegion[] {
   const regions: WaterFloraRegion[] = [];
   for (const zone of ZONES) {
-    if (SKIP_BIOMES.has(zone.biome)) continue;
+    if (WATER_FLORA_SKIP_BIOMES.has(zone.biome)) continue;
     if (SKIP_ZONES.has(zone.id)) continue;
     const lilySpots: WaterFloraPlacement[] = [];
     const reedSpots: WaterFloraPlacement[] = [];
