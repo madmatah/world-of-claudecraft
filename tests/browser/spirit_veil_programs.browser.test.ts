@@ -5,7 +5,8 @@
 // (the composed library as modularVariant builds it, stubble decal included, a
 // fixed class rig and a held weapon), for extra uv sets, and through a real
 // CharacterVisual on Low (its live tinted Lambert set, decals, weapon and far
-// mesh). The pixel legs prove what the depth pre-pass, the per-rig sort and
+// mesh), and on the Realm Racers kart, the mount a racer's ward or recovery
+// ghost veils with its pilot. The pixel legs prove what the depth pre-pass, the per-rig sort and
 // the decal variant are for: a ghost's inner surfaces never blend twice, a
 // ghost behind a camera-faded wall still shows through it, and a decal's clear
 // texels stay clear. The knob legs hold a released spirit to the shader before
@@ -21,8 +22,10 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { assetsReady } from '../../src/render/assets/preload';
+import { rallyVeilLook } from '../../src/render/character_effects';
 import type { AnimState } from '../../src/render/characters/anim_state';
 import { attachArmorDye } from '../../src/render/characters/armor_dye';
+import { preloadMountAssets } from '../../src/render/characters/assets';
 import {
   createSpiritVeilMaterial,
   installSpiritVeil,
@@ -34,6 +37,7 @@ import {
   spiritVeilPassOf,
 } from '../../src/render/characters/ghost_veil';
 import { buildGloamveilStandIn } from '../../src/render/characters/gloamveil_veil';
+import { createMountVisual } from '../../src/render/characters/index';
 import {
   DEFAULT_APPEARANCE,
   fullSet,
@@ -58,8 +62,10 @@ import { CharacterVisual, type FarBakeGate } from '../../src/render/characters/v
 import { type CompileArmHost, linkColorPrograms } from '../../src/render/compile_arms';
 import { compileTargetPrepared } from '../../src/render/compile_target_readiness';
 import { gfxInternalsForTest } from '../../src/render/gfx';
+import { mountVisualSpecFor } from '../../src/render/mount_visuals';
 import { settleProgramVariants } from '../../src/render/program_variant_settle';
 import { spiritVeilFamilyPrewarmEntry } from '../../src/render/spirit_veil_prewarm';
+import { REALM_RACERS_MOUNT_KEY } from '../../src/sim/social/realm_racers';
 
 const SIZE = 96;
 
@@ -1205,4 +1211,70 @@ describe('an unproven effect swap on a real CharacterVisual', () => {
       restoreGfx();
     }
   });
+});
+
+describe('the racer kart veil on a real CharacterVisual', () => {
+  const kartKey = mountVisualSpecFor(REALM_RACERS_MOUNT_KEY, null)?.visualKey ?? '';
+
+  beforeAll(async () => {
+    await assetsReady();
+    await preloadMountAssets(kartKey);
+  }, 60_000);
+
+  for (const standardMaterials of [false, true]) {
+    for (const offscreen of [false, true]) {
+      const tier = standardMaterials ? 'standard (above Low)' : 'Lambert (Low)';
+      const arm = offscreen ? 'render-target (composer tiers)' : 'canvas (direct tiers)';
+      it(`links nothing for the ward or the ghost on the whole kart once the family ran, ${tier}, ${arm}`, async () => {
+        const restoreGfx = gfxInternalsForTest.overrideSettings({ standardMaterials });
+        try {
+          expect(kartKey).toBe('mount_terrorspark_groundshaker');
+          const w = world(offscreen);
+          w.camera.position.set(0, 2, 6);
+          w.camera.lookAt(0, 0.8, 0);
+          const kart = createMountVisual(kartKey);
+          disposers.push(() => kart.dispose());
+          kart.update(1 / 60, IDLE, true);
+          kart.setShadow(true);
+          w.scene.add(kart.root);
+          const empty = w.programs();
+          w.draw();
+          w.draw();
+          // the harness really draws the kart: its living set links here
+          expect(w.programs()).toBeGreaterThan(empty);
+          await linkFamily(w);
+          w.draw();
+          const before = w.programs();
+          const worn = (): Set<string | null> => {
+            const out = new Set<string | null>();
+            kart.root.traverse((object) => {
+              const mesh = object as THREE.Mesh;
+              if (
+                mesh.isMesh &&
+                mesh.visible &&
+                spiritVeilPassOf([mesh.material].flat()[0]) !== 'depth'
+              )
+                for (const m of [mesh.material].flat()) out.add(spiritVeilPaletteOf(m));
+            });
+            return out;
+          };
+          for (const state of ['ward', 'ghost'] as const) {
+            const palette = rallyVeilLook(state);
+            if (!palette) throw new Error(`the ${state} wears no veil`);
+            kart.setGhost(true, palette);
+            w.draw();
+            w.draw();
+            // every drawn part wears it, and nothing linked
+            expect(worn(), state).toEqual(new Set([palette]));
+            expect(w.programs(), state).toBe(before);
+            kart.setGhost(false);
+            w.draw();
+            expect(w.programs(), `${state} off`).toBe(before);
+          }
+        } finally {
+          restoreGfx();
+        }
+      });
+    }
+  }
 });

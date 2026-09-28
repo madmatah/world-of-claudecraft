@@ -31,6 +31,11 @@ ACTIONABLE (must be identical across every tier; never tiered):
   profile-free by `tests/professions_graphics_fairness.test.ts`.
 - The node prop tier ladder in the 3D world (`nodeTierScale`): tier is actionable
   information expressed as SIZE, static on every preset.
+- A Realm Racers rival's ward (a Ground Blast is wasted on it) and recovery ghost (you drive
+  through it): the spirit veil in the `rally-ward` / `rally-ghost` palettes on the pilot and
+  the whole kart, read off the entity aura with no tier input, on every preset and on the far
+  LOD (`tests/realm_racers_kart_veil.test.ts`, the racer far-mesh cases of
+  `tests/character_effect_compile_gate.test.ts`).
 
 COSMETIC (may be tiered down on lower presets):
 - Floating combat text volume and lifetime (the live-floater cap and how long each number

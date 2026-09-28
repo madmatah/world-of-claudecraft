@@ -14,7 +14,8 @@
 // the composed library as the real part selection and merge compose it, and
 // the procedural shapes the rig adds (the baked far mesh and the face decals).
 // The other veil users add the form rigs they wear, the quest visions (mobs on
-// fixed player rigs) and the Pale Keeper's composed look.
+// fixed player rigs) and the Pale Keeper's composed look, and the Realm Racers
+// machine, the one mount a veil covers (a racer's ward or recovery ghost).
 //
 // The composed library is modelled the way assets.ts modularVariant builds it:
 // modularPartNames picks the nodes of a look, and mergeSkinnedParts folds the
@@ -76,7 +77,9 @@ import {
   type SpiritVeilShape,
   spiritVeilTupleKey,
 } from '../src/render/characters/spirit_veil_family_core';
+import { mountVisualSpecFor } from '../src/render/mount_visuals';
 import { MOBS } from '../src/sim/data';
+import { REALM_RACERS_MOUNT_KEY } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
 
 interface GltfPrimitive {
@@ -291,6 +294,20 @@ function formRigUrls(): string[] {
   return [...urls];
 }
 
+/** The racer's machine, both tiers' assets: the mount under every veiled racer
+ *  (riderSkin is null while driving, so no mount skin stands in for it). */
+function racerKartUrls(): string[] {
+  const spec = mountVisualSpecFor(REALM_RACERS_MOUNT_KEY, null);
+  if (!spec) throw new Error('the racer machine has no mount visual');
+  const def = VISUALS[spec.visualKey];
+  const urls = new Set<string>();
+  for (const url of [def.url, ...(def.attach ?? []).map((a) => a.url)]) {
+    urls.add(url);
+    urls.add(visualAssetUrlForGraphics(url, false));
+  }
+  return [...urls];
+}
+
 /** The keeper's composed look, as npc_looks.ts authors it, plus its props. */
 function keeperParts(): { url: string; part: Part }[] {
   const look = NPC_LOOKS[KEEPER];
@@ -379,6 +396,9 @@ function census(): Map<string, string> {
     for (const part of allParts(url)) add(partKeys(url, part), part.where);
   }
   for (const { url, part } of keeperParts()) add(partKeys(url, part), `${KEEPER} ${part.where}`);
+  for (const url of racerKartUrls()) {
+    for (const part of allParts(url)) add(partKeys(url, part), `racer kart ${part.where}`);
+  }
   return needed;
 }
 
@@ -396,7 +416,7 @@ describe('the spirit veil family covers the catalogue', () => {
     expect(missing.map(([key, where]) => `${key} <- ${where}`)).toEqual([]);
   });
 
-  it('covers the other veil users: the forms they wear, the visions, the keeper', () => {
+  it('covers the other veil users: the forms they wear, the visions, the keeper, the racer kart', () => {
     // A vision is a mob drawn on a fixed player rig, which the walk above
     // already covers; a keeper is a composed NPC.
     expect(VISION_TEMPLATES.length).toBeGreaterThanOrEqual(3);
@@ -417,9 +437,15 @@ describe('the spirit veil family covers the catalogue', () => {
         'form_metamorph',
       ]),
     );
+    const kart = racerKartUrls().flatMap((url) =>
+      allParts(url).flatMap((part) => partKeys(url, part)),
+    );
+    // the machine's many rigid, mapped parts
+    expect(kart.length).toBeGreaterThan(10);
     const users = [
       ...formRigUrls().flatMap((url) => allParts(url).flatMap((part) => partKeys(url, part))),
       ...keeperParts().flatMap(({ url, part }) => partKeys(url, part)),
+      ...kart,
     ];
     expect(users.length).toBeGreaterThan(10);
     expect(users.filter((key) => !SPIRIT_VEIL_FAMILY_KEYS.has(key))).toEqual([]);

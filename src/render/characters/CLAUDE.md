@@ -48,9 +48,15 @@ no procedural-rig path here anymore. Reads the world; never mutates the sim.
   (`tests/spirit_veil_census.test.ts`). The users and their palettes are
   `spirit_veil_palette_core.ts` (a released spirit, the Pale Keeper and the
   quest visions; Ghost Wolf; the Veilbound March; stealth by source; Moonkin;
-  Soul Rend), picked by `../ghost_style_core.ts` and the visual's own Moonkin
-  and Soul Rend flags; the palette's policy says whether the rig keeps its
-  shadow and weapon-skin VFX. Shadowform is no veil: an opaque tint on the
+  Soul Rend; the Realm Racers ward and recovery ghost), picked by
+  `../ghost_style_core.ts`, the visual's own Moonkin and Soul Rend flags, and
+  `syncCharacterVeils` (`../character_effects.ts`) for the racer veils, which
+  also dress the racer's kart: the mount's own visual wears the racer palette
+  in its rider's sort unit (`shareVeilUnit`, so every depth pre-pass of the
+  pair draws before either body), behind the effect gate every mount gets in
+  `../mount_lifecycle.ts` (`tests/realm_racers_kart_veil.test.ts`). The
+  palette's policy says whether the rig keeps its shadow and weapon-skin VFX.
+  Shadowform is no veil: an opaque tint on the
   source programs (`shadowform_tint.ts`). A veil tuple not linked yet stages
   behind the effect gate with the body still drawing (`stageEffectSwap`)
   and commits only on the gate's readiness proof, never on a bare settle;

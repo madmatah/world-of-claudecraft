@@ -138,7 +138,11 @@ function scratchOf(visual: CharacterVisual): THREE.Group | null {
 
 type GateCall = { target: THREE.Object3D; settle: Parameters<FarBakeGate>[1] };
 
-async function makeVisual(): Promise<CharacterVisual> {
+let restoreGfx: (() => void) | null = null;
+
+async function makeVisual(tier: 'standard' | 'low' = 'standard'): Promise<CharacterVisual> {
+  restoreGfx?.();
+  restoreGfx = null;
   vi.resetModules();
   vi.doMock('../src/render/assets/loader', () => ({
     loadGltf: vi.fn(() => Promise.resolve(stubGltf())),
@@ -147,6 +151,10 @@ async function makeVisual(): Promise<CharacterVisual> {
     loadKtx2Texture: vi.fn(() => new Promise(() => undefined)),
     releaseGltf: vi.fn(),
   }));
+  if (tier === 'low') {
+    const { gfxInternalsForTest } = await import('../src/render/gfx');
+    restoreGfx = gfxInternalsForTest.overrideSettings(gfxInternalsForTest.settingsFor('low'));
+  }
   const { preloadTrainingDummyAssets } = await import('../src/render/characters/assets');
   await preloadTrainingDummyAssets();
   const { createCharacterVisual } = await import('../src/render/characters/index');
@@ -580,28 +588,44 @@ describe('a transparent character effect swaps in only once its programs are lin
     visual.dispose();
   });
 
-  it('wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads', async () => {
-    const { rallyVeilLook } = await import('../src/render/character_effects');
-    const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
-    for (const state of ['ghost', 'ward'] as const) {
-      const look = rallyVeilLook(state);
-      if (!look) throw new Error(`the ${state} wears no veil`);
-      const visual = await makeVisual();
-      const gateCalls: GateCall[] = [];
-      visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
-      const farMesh = (visual as unknown as { farMesh: THREE.Mesh | null }).farMesh;
-      if (!farMesh) throw new Error('the harness rig bakes no far mesh');
-      visual.setGhost(true, look);
-      for (const call of gateCalls) call.settle();
-      visual.update(FRAME, anim(), true);
-      const far = farMesh.material;
-      const mats = Array.isArray(far) ? far : [far];
-      expect(mats.length, state).toBeGreaterThan(0);
-      for (const material of mats) {
-        expect(material.transparent, state).toBe(true);
-        expect(spiritVeilPaletteOf(material), state).toBe(look);
+  for (const tier of ['standard', 'low'] as const) {
+    it(`wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads, ${tier}`, async () => {
+      const { rallyVeilLook } = await import('../src/render/character_effects');
+      const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
+      for (const state of ['ghost', 'ward'] as const) {
+        const look = rallyVeilLook(state);
+        if (!look) throw new Error(`the ${state} wears no veil`);
+        expect(look).toBe(state === 'ward' ? 'rally-ward' : 'rally-ghost');
+        const visual = await makeVisual(tier);
+        const gateCalls: GateCall[] = [];
+        visual.setFarBakeGate((target, onSettled) => gateCalls.push({ target, settle: onSettled }));
+        const farMesh = (visual as unknown as { farMesh: THREE.Mesh | null }).farMesh;
+        if (!farMesh) throw new Error('the harness rig bakes no far mesh');
+        const living = rigMaterials(visual);
+        // the tier's own living set: the lowest preset rebuilds the rig as Lambert
+        expect(
+          living.some((m) => (m as THREE.MeshLambertMaterial).isMeshLambertMaterial),
+          tier,
+        ).toBe(tier === 'low');
+        visual.setGhost(true, look);
+        for (const call of gateCalls) call.settle();
+        visual.update(FRAME, anim(), true);
+        // the far LOD the renderer swaps a distant racer to wears the veil too
+        visual.setFar(true);
+        visual.update(FRAME, anim(), true);
+        expect(visual.displayedFarBody, `${tier} ${state}`).toBe(farMesh);
+        const far = farMesh.material;
+        const mats = Array.isArray(far) ? far : [far];
+        expect(mats.length, state).toBeGreaterThan(0);
+        for (const material of mats) {
+          expect(material.transparent, state).toBe(true);
+          expect(spiritVeilPaletteOf(material), state).toBe(look);
+        }
+        expect(rigIsTranslucent(visual), `${tier} ${state}`).toBe(true);
+        visual.dispose();
       }
-      visual.dispose();
-    }
-  });
+      restoreGfx?.();
+      restoreGfx = null;
+    });
+  }
 });
