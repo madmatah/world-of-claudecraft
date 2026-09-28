@@ -39,6 +39,7 @@ import { createStaticBladeCluster } from './blade_grass';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
+import { prepareIgnivarEnvProps } from './ignivar_env_props';
 import {
   biomeGroundTint,
   buildInstanceGroundMaterial,
@@ -51,7 +52,11 @@ import {
   realmRacersBarrierVisual,
 } from './realm_racers_barrier_visuals';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
-import { realmRacersDressingPart } from './realm_racers_dressing_material';
+import {
+  realmRacersDressingPart,
+  realmRacersDressingRoute,
+  realmRacersWorldKitPart,
+} from './realm_racers_dressing_material';
 import { recordRealmRacersFill } from './realm_racers_fills';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
@@ -248,21 +253,17 @@ interface ModelSpot {
  */
 function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpot[]): void {
   if (spots.length === 0) return;
+  if (realmRacersDressingRoute(url) === 'worldKit') {
+    instanceWorldKit(group, url, spots);
+    return;
+  }
   const scene = loaded.get(url);
   if (!scene) {
     if (typeof window === 'undefined') return;
     const fill = loadGltf(url)
       .then((gltf) => {
         loaded.set(url, gltf.scene);
-        const gate = fillGates.get(group)?.();
-        if (!gate) {
-          drawInstances(group, url, gltf.scene, spots);
-          return;
-        }
-        const piece = new THREE.Group();
-        piece.name = 'realm-racers-dressing-fill';
-        drawInstances(piece, url, gltf.scene, spots);
-        void attachSceneGroupGated(group, piece, gate);
+        landFill(group, (target) => drawInstances(target, url, gltf.scene, spots));
       })
       .catch((err) => {
         // Named rather than swallowed, and that changed with the boot lane's
@@ -279,6 +280,67 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
     return;
   }
   drawInstances(group, url, scene, spots);
+}
+
+/** Draw a fill that has just landed: straight onto the group, or through the
+ *  world gate (hidden until linked) once the race preparation has started. */
+function landFill(group: THREE.Group, draw: (target: THREE.Object3D) => void): void {
+  const gate = fillGates.get(group)?.();
+  if (!gate) {
+    draw(group);
+    return;
+  }
+  const piece = new THREE.Group();
+  piece.name = 'realm-racers-dressing-fill';
+  draw(piece);
+  void attachSceneGroupGated(group, piece, gate);
+}
+
+/**
+ * A model the world draws from one of its env-prop templates (the fortress and
+ * the Drakelands rebuild kits): the circuit instances the template itself, so
+ * it wears exactly the material the world's own instances link, and adds no
+ * fetch or parse of its own. The templates load in the deferred lane at world
+ * entry, so the wait arm below is for a host that has not opened it yet; it
+ * rides the fill ledger like a fetch, so the race preparation gates only once
+ * it has landed.
+ */
+function instanceWorldKit(group: THREE.Group, url: string, spots: readonly ModelSpot[]): void {
+  if (realmRacersWorldKitPart(url)) {
+    drawWorldKit(group, url, spots);
+    return;
+  }
+  if (typeof window === 'undefined') return;
+  const fill = prepareIgnivarEnvProps().then(() => {
+    if (realmRacersWorldKitPart(url)) landFill(group, (target) => drawWorldKit(target, url, spots));
+    // Dev-channel English, per the render i18n carve-out.
+    else console.warn('Realm Racers: world kit template missing', url);
+  });
+  recordRealmRacersFill(group, fill);
+}
+
+function drawWorldKit(group: THREE.Object3D, url: string, spots: readonly ModelSpot[]): void {
+  const template = realmRacersWorldKitPart(url);
+  if (!template) return;
+  const mesh = new THREE.InstancedMesh(template.geometry, template.material, spots.length);
+  mesh.name = `realm-racers-dressing:${url}`;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const v = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  spots.forEach((spot, i) => {
+    q.setFromAxisAngle(up, spot.yaw);
+    v.set(spot.x, spot.y, spot.z);
+    sc.set(spot.sx, spot.sy, spot.sz);
+    mesh.setMatrixAt(i, m.compose(v, q, sc));
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.computeBoundingSphere();
+  mesh.userData.realmRacersDressing = true;
+  group.add(mesh);
 }
 
 function drawInstances(
@@ -820,7 +882,7 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Dr
       }
       continue;
     }
-    if (visual.kind === 'gltf') {
+    if (visual.kind === 'gltf' || visual.kind === 'worldKit') {
       instanceModel(
         group,
         visual.url,

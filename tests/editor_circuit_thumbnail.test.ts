@@ -205,12 +205,15 @@ describe('what the rig owns of what it draws', () => {
     expect(thumbnailOwnsGeometry('gltf')).toBe(false);
     // A streetlamp fixture is a GLB clone like any other model on disk.
     expect(thumbnailOwnsGeometry('streetlamp')).toBe(false);
+    // A kit piece is the world's own env-prop template, shared with every
+    // Drakelands build that draws it.
+    expect(thumbnailOwnsGeometry('worldKit')).toBe(false);
   });
 
   it('covers every kind the visual registry actually has', () => {
     // Both ways, so a fourth kind added render-side cannot silently default to
     // "we own it" and start disposing a cache.
     const kinds = new Set(Object.values(REALM_RACERS_PROP_VISUALS).map((visual) => visual.kind));
-    expect([...kinds].sort()).toEqual(['gltf', 'group', 'instanced', 'streetlamp']);
+    expect([...kinds].sort()).toEqual(['gltf', 'group', 'instanced', 'streetlamp', 'worldKit']);
   });
 });

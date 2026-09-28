@@ -36,12 +36,13 @@ export const THUMBNAIL_MIN_DISTANCE = 0.35;
  * material out of a SHARED cache, and a GLB clone shares its parents' buffers
  * with the loader's parsed scene: freeing either would take every authored
  * circuit's props down with the tile. A `streetlamp` is photographed as its own
- * GLB clone for the same reason and takes the same answer. Three of the four
- * answers are "leave it alone", which is exactly why it is worth stating once
- * and pinning.
+ * GLB clone for the same reason and takes the same answer, and a `worldKit`
+ * piece as the world's own env-prop template, which every Drakelands build
+ * draws. Four of the five answers are "leave it alone", which is exactly why it
+ * is worth stating once and pinning.
  */
 export function thumbnailOwnsGeometry(
-  kind: 'group' | 'instanced' | 'gltf' | 'streetlamp',
+  kind: 'group' | 'instanced' | 'gltf' | 'streetlamp' | 'worldKit',
 ): boolean {
   return kind === 'group';
 }

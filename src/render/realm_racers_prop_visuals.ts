@@ -24,6 +24,9 @@
 // entry is minted through `gltf()`, never a hand-written url: the helper is
 // typed against `PROP_ASSET_DEFS`, which is what makes "the client already
 // fetches this at world entry" true by construction rather than by review.
+// The Drakelands entries take the same guarantee from their own world tables,
+// through `ember()` and `worldKit()`: the ember zone's set and the env-prop
+// templates, both loaded in the deferred lane at world entry.
 //
 // A model is seated at its own authored origin, not re-based to its lowest
 // vertex the way `propAsset` re-bases the world's placed props, so a piece whose
@@ -40,12 +43,24 @@
 import type * as THREE from 'three';
 import { REALM_RACERS_LAMP_STYLES } from '../sim/content/realm_racers_props';
 import type { StreetlampStyleId } from '../sim/streetlamp_style';
+import { EMBER_PROP_URLS, type EmberPropKey } from './ember_prop_urls';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
+import type { IgnivarEnvPropKey } from './ignivar_dressing_plan_core';
+import { IGNIVAR_ENV_PROP_URLS } from './ignivar_env_props';
 import { PROP_ASSET_DEFS } from './props';
 import { STREETLAMP_ASSET_DEFS } from './streetlamp_assets';
 
 export type RallyPropVisual =
   | { kind: 'gltf'; url: string }
+  /**
+   * A piece the world draws from one of its env-prop TEMPLATES (the Drakelands
+   * rebuild kit and the Forgefather fortress kit): the circuit instances that
+   * template's own geometry and material rather than the file
+   * (realm_racers_dressing_material.ts, the `worldKit` route). The url is the
+   * file the template is baked from, so anything that only wants to look at the
+   * model (the editor's thumbnail rig) can treat it as a plain gltf.
+   */
+  | { kind: 'worldKit'; url: string }
   /**
    * A streetlamp FIXTURE: the world's own lit posts, which are not props at all
    * (`streetlamp_assets.ts` prepares them, with an authored light socket,
@@ -68,6 +83,14 @@ export type RallyPropVisual =
 const gltf = (key: keyof typeof PROP_ASSET_DEFS): RallyPropVisual => ({
   kind: 'gltf',
   url: PROP_ASSET_DEFS[key].url,
+});
+
+/** The ember zone's own models, drawn with the parse the world keeps. */
+const ember = (key: EmberPropKey): RallyPropVisual => ({ kind: 'gltf', url: EMBER_PROP_URLS[key] });
+
+const worldKit = (key: Exclude<IgnivarEnvPropKey, 'street_lamp'>): RallyPropVisual => ({
+  kind: 'worldKit',
+  url: IGNIVAR_ENV_PROP_URLS[key],
 });
 
 /** Every lamp key the sim catalog authors, mirrored off the SAME table, so the
@@ -299,6 +322,30 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
   // planting
   mushroomRed: gltf('mushroomRed'),
   mushroomTan: gltf('mushroomTan'),
+
+  // the Drakelands: the Wyrmwatch and Last Keep rebuild kit, the Forgefather
+  // fortress kit, and the ember zone's lava, dens and lilies
+  dkBuilding1: worldKit('building_1'),
+  dkBuilding2: worldKit('building_2'),
+  dkBuildingBase: worldKit('building_base'),
+  dkBuildingBaseRoof: worldKit('building_base_roof'),
+  dkChurch: worldKit('church'),
+  dkStables: worldKit('stables'),
+  dkDragonStatue: worldKit('dragon_statue'),
+  dkGravestone2: worldKit('gravestone_2'),
+  dkGravestone3: worldKit('gravestone_3'),
+  dkDummy: worldKit('dummy'),
+  dkShieldRack: worldKit('shield_rack'),
+  ffTowerPillar: worldKit('tower_pillar'),
+  ffTowerBase: worldKit('tower_base'),
+  ffDragonPillar: worldKit('dragon_pillar'),
+  ffCannon: worldKit('cannon'),
+  ffGearWall: worldKit('gear_wall_rusty'),
+  ffBridgePillar: worldKit('bridge_pillar'),
+  lavaPool: ember('pool'),
+  dragonHoard: ember('hoard'),
+  dragonEggs: ember('eggs'),
+  emberLily: ember('lily'),
 };
 
 /**
@@ -312,4 +359,13 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
  */
 export const REALM_RACERS_PROP_URLS: readonly string[] = Object.values(REALM_RACERS_PROP_VISUALS)
   .filter((visual): visual is { kind: 'gltf'; url: string } => visual.kind === 'gltf')
+  .map((visual) => visual.url);
+
+/** Every file a `worldKit` entry's template is baked from: nothing the rally
+ *  fetches (the template is the world's), and what the disk and manifest
+ *  guards cover for that family. */
+export const REALM_RACERS_WORLD_KIT_URLS: readonly string[] = Object.values(
+  REALM_RACERS_PROP_VISUALS,
+)
+  .filter((visual): visual is { kind: 'worldKit'; url: string } => visual.kind === 'worldKit')
   .map((visual) => visual.url);

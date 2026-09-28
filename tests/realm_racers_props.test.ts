@@ -14,7 +14,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import * as THREE from 'three';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
 import { CAMERA_ZOOM_MAX } from '../src/game/input';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
@@ -22,11 +22,14 @@ import {
   cameraBoomDistance,
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
+import { EMBER_PROP_URLS } from '../src/render/ember_prop_urls';
+import { ignivarEnvPropKeyOfUrl } from '../src/render/ignivar_env_props';
 import { PROP_ASSET_DEFS, propPreloadInternalsForTest } from '../src/render/props';
 import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
 import {
   REALM_RACERS_PROP_URLS,
   REALM_RACERS_PROP_VISUALS,
+  REALM_RACERS_WORLD_KIT_URLS,
 } from '../src/render/realm_racers_prop_visuals';
 import { CIRCUIT_THEMES, REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
@@ -41,6 +44,7 @@ import {
   REALM_RACERS_LAMP_STYLES,
   REALM_RACERS_PROPS,
 } from '../src/sim/content/realm_racers_props';
+import { FORGEFATHER_FORTRESS_PLACEMENTS } from '../src/sim/forgefather_fortress';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
   realmRacersCircuitErrors,
@@ -75,6 +79,10 @@ import { glbBounds } from './helpers/glb_bounds';
 
 const SEED = 42;
 const publicDir = path.join(process.cwd(), 'public');
+
+/** The ember zone's own models: the one table besides `PROP_ASSET_DEFS` a
+ *  `gltf` entry may name (ember_prop_urls.ts). */
+const EMBER_URLS: ReadonlySet<string> = new Set(Object.values(EMBER_PROP_URLS));
 
 /**
  * The rally catalog's models as they stood before the breadth pass promoted the
@@ -163,8 +171,13 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     for (const url of REALM_RACERS_PROP_URLS) {
       // Through the world's OWN registry, never a second one: that is what
       // keeps the manifest and preload guards covering it and what makes an
-      // Evergarden circuit wear the Evergarden's vocabulary.
-      expect(known.has(url), `${url} should be registered in PROP_ASSET_DEFS`).toBe(true);
+      // Evergarden circuit wear the Evergarden's vocabulary. The ember zone's
+      // set is the one other world table allowed, for the same reason: it is
+      // the Drakelands' own, loaded for every player (the lane case below).
+      expect(
+        known.has(url) || EMBER_URLS.has(url),
+        `${url} should be registered in PROP_ASSET_DEFS`,
+      ).toBe(true);
       const rel = url.replace(/^\//, '');
       expect(existsSync(path.join(publicDir, rel)), `${url} should exist under public/`).toBe(true);
       expect(MEDIA_ASSETS[rel], `${url} should be in the media manifest`).toBeDefined();
@@ -202,6 +215,81 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     // preload, so a circuit placing one adds no fetch to anybody's session.
     const lampUrls = new Set(Object.values(STREETLAMP_ASSET_DEFS).map((def) => def.url));
     expect(REALM_RACERS_PROP_URLS.filter((url) => lampUrls.has(url))).toEqual([]);
+  });
+
+  it('draws every KIT piece out of the world env-prop templates, one the world instances', () => {
+    // The Drakelands family that cannot come through `PROP_ASSET_DEFS`: the
+    // rebuild kit and the fortress kit reach the world only as env-prop
+    // templates (ignivar_env_props.ts), baked once and instanced from there,
+    // so a circuit draws the template too rather than a second copy of the
+    // file with a material the world never links.
+    const kit = Object.entries(REALM_RACERS_PROP_VISUALS).filter(
+      ([, visual]) => visual.kind === 'worldKit',
+    );
+    expect(kit.length).toBeGreaterThanOrEqual(15);
+    expect(REALM_RACERS_WORLD_KIT_URLS).toHaveLength(kit.length);
+    const placements = new Map<string, number>();
+    for (const placement of FORGEFATHER_FORTRESS_PLACEMENTS) {
+      placements.set(placement.key, (placements.get(placement.key) ?? 0) + 1);
+    }
+    for (const [key, visual] of kit) {
+      const kitKey = ignivarEnvPropKeyOfUrl(visual.kind === 'worldKit' ? visual.url : '');
+      expect(kitKey, key).toBeDefined();
+      // The lamp's template is the placer's preview only: the world lights its
+      // instances through streetlamps.ts, and the catalog has the real one.
+      expect(kitKey, key).not.toBe('street_lamp');
+      // Instanced by the world, which it does for a key placed twice or more:
+      // one the world draws as a lone mesh would be an instancing variant of
+      // its program only the circuit ever links.
+      expect(placements.get(kitKey ?? '') ?? 0, `${key} is instanced by the world`).toBeGreaterThan(
+        1,
+      );
+      const rel = (visual.kind === 'worldKit' ? visual.url : '').replace(/^\//, '');
+      expect(existsSync(path.join(publicDir, rel)), `${key} on disk`).toBe(true);
+      expect(MEDIA_ASSETS[rel], `${key} manifested`).toBeDefined();
+    }
+    // ...and the rally never fetches one: they are out of the url list it
+    // loads models from.
+    const fetched = new Set(REALM_RACERS_PROP_URLS);
+    expect(REALM_RACERS_WORLD_KIT_URLS.filter((url) => fetched.has(url))).toEqual([]);
+  });
+
+  it('draws the Drakelands out of two lanes the world opens at entry for every player', async () => {
+    // What lets the ember set and the kit templates keep the catalog's promise
+    // without being props: the modules that own them register every file in
+    // the deferred lane when they load, and the renderer loads them. Proved by
+    // running those registrations rather than by reading them.
+    vi.resetModules();
+    const asked: string[] = [];
+    vi.doMock('../src/render/assets/preload', () => ({
+      registerPreload: vi.fn(),
+      registerDeferredPreload: (start: () => Promise<unknown>) => {
+        void start().catch(() => undefined);
+      },
+    }));
+    vi.doMock('../src/render/assets/loader', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../src/render/assets/loader')>()),
+      loadGltf: vi.fn((url: string) => {
+        asked.push(url);
+        return new Promise(() => undefined);
+      }),
+      releaseGltf: vi.fn(),
+    }));
+    vi.stubGlobal('window', {});
+    try {
+      await import('../src/render/ember_features');
+      for (const url of EMBER_URLS) expect(asked, url).toContain(url);
+      for (const url of REALM_RACERS_WORLD_KIT_URLS) expect(asked, url).toContain(url);
+      const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+      expect(renderer).toMatch(
+        /import \{[^}]*\bbuildEmberFeatures\b[^}]*\} from '\.\/ember_features'/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.doUnmock('../src/render/assets/preload');
+      vi.doUnmock('../src/render/assets/loader');
+      vi.resetModules();
+    }
   });
 
   it('offers every theme its own zone lamp, leading its vocabulary', () => {
@@ -296,7 +384,7 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       ),
     );
     const alreadyLoaded = (url: string): boolean =>
-      RALLY_URLS_BEFORE_THE_PROMOTION.has(url) || worldEntryUrls.has(url);
+      RALLY_URLS_BEFORE_THE_PROMOTION.has(url) || worldEntryUrls.has(url) || EMBER_URLS.has(url);
 
     expect(REALM_RACERS_PROP_URLS.length).toBeGreaterThan(150);
     for (const url of REALM_RACERS_PROP_URLS) expect(alreadyLoaded(url), url).toBe(true);
@@ -398,6 +486,30 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       }
     }
     expect(checked).toBeGreaterThan(150);
+  });
+
+  it('commits the size of every KIT piece in the frame its template is drawn in', () => {
+    // A kit piece is drawn as the world bakes it: long axis turned onto x,
+    // centred, seated at y = 0 (ignivar_env_props.ts `canonicalGeometry`), so
+    // its footprint is measured there rather than in the file's own frame.
+    const ROUNDING = 0.005;
+    let checked = 0;
+    for (const [key, visual] of Object.entries(REALM_RACERS_PROP_VISUALS)) {
+      if (visual.kind !== 'worldKit') continue;
+      const def = REALM_RACERS_PROPS[key];
+      const size = glbBounds(visual.url).getSize(new THREE.Vector3());
+      const long = Math.max(size.x, size.z);
+      const short = Math.min(size.x, size.z);
+      checked++;
+      expect(def.height, `${key} height`).toBeCloseTo(size.y, 2);
+      if (def.footprint.kind === 'circle') {
+        expect(def.footprint.r, `${key} radius`).toBeLessThanOrEqual(long / 2 + ROUNDING);
+      } else {
+        expect(def.footprint.hw, `${key} hw`).toBeLessThanOrEqual(long / 2 + ROUNDING);
+        expect(def.footprint.hd, `${key} hd`).toBeLessThanOrEqual(short / 2 + ROUNDING);
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(15);
   });
 
   it('never makes an ankle-high piece solid', () => {

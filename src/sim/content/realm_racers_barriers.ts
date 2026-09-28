@@ -24,10 +24,11 @@
 // and the alternative to promoting them was deleting them and re-deriving a
 // handful later. Zero new art, zero new judgement.
 //
-// Fourteen configurations became eleven kits. Three of them drew ONE model: the
-// world ships `hex_wall.glb` and `hexn_palisade.glb` as separate files whose
-// binary chunks are byte for byte identical, and the registry described them as
-// a town wall and a log palisade. Two kits differing only in `scale` are not two
+// Fourteen configurations became eleven kits (the Drakelands' fortress wall and
+// keep fence came later, from the zone's own kits). Three of them drew ONE
+// model: the world ships `hex_wall.glb` and `hexn_palisade.glb` as separate
+// files whose binary chunks are byte for byte identical, and the registry
+// described them as a town wall and a log palisade. Two kits differing only in `scale` are not two
 // kits, because a scale is a field on the record. A fourteenth was dropped for a
 // different reason, recorded in the render half: its module is authored a whole
 // unit off its own origin.
@@ -114,6 +115,14 @@ export const REALM_RACERS_BARRIERS: Record<string, RallyBarrierDef> = {
   battlement: { halfThickness: 0.37, height: 1.65 },
   // kcas_wall at 1.2: 4.80 long, 4.80 tall, 1.20 deep. The castle curtain wall.
   curtainWall: { halfThickness: 0.6, height: 4.8 },
+  // ignivar_prop_fortress_wall at 5: 4.99 long, 4.66 tall, 1.12 deep. The
+  // Forgefather fortress curtain, drawn from the world's own template.
+  fortressWall: { halfThickness: 0.56, height: 4.66 },
+
+  // --- the Drakelands rebuild kit ---
+  // drakelands_kit/fence at 5: 5.00 long, 2.29 tall, 0.71 deep. The Last Keep's
+  // spiked palisade, drawn from the world's own template.
+  keepFence: { halfThickness: 0.35, height: 2.29 },
 };
 
 /** The def for a kit key, or undefined for one nothing authors. Undefined is a

@@ -6,9 +6,10 @@
 // which carries the thickness and the height a collider needs;
 // `tests/realm_racers_barriers.test.ts` fails on a key only one of the two knows.
 //
-// Every entry is one of the fourteen kit configurations the THEME registry used
-// to carry as its `perimeter` field, promoted verbatim along with the reasoning
-// each one was chosen for. That field dressed a DERIVED rectangle: one kit, four
+// Every entry but the two Drakelands kits is one of the fourteen kit
+// configurations the THEME registry used to carry as its `perimeter` field,
+// promoted verbatim along with the reasoning each one was chosen for; those two
+// were added from the zone as the world builds it today. That field dressed a DERIVED rectangle: one kit, four
 // straight faces, four right angles, which is what made every circuit read as a
 // box however different its road was. Nothing draws that box any more, so these
 // are what an operator reaches for instead.
@@ -63,8 +64,12 @@
 // from where it was drawn. Correcting it would mean a lateral offset field one
 // kit in the registry uses, so the Galecrest takes the harbour parapet instead.
 
-import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_CIRCUIT_LIST,
+  type RealmRacersCircuit,
+} from '../sim/content/realm_racers_circuits';
 import { GARDEN_MAZE_WALL_URL } from './garden_maze_core';
+import { IGNIVAR_ENV_PROP_URLS, ignivarEnvPropKeyOfUrl } from './ignivar_env_props';
 
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
 const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
@@ -79,6 +84,9 @@ const CRACKED_WALL_URL = '/models/dungeon/wall_cracked.glb';
 const MOUNTAIN_WALL_URL = '/models/biome/dungeon_wall_stone.glb';
 const BATTLEMENT_URL = '/models/biome/kcas_barrier.glb';
 const CURTAIN_WALL_URL = '/models/biome/kcas_wall.glb';
+const FORTRESS_WALL_URL = IGNIVAR_ENV_PROP_URLS.fortress_wall;
+const FORTRESS_TOWER_URL = IGNIVAR_ENV_PROP_URLS.tower_pillar;
+const KEEP_FENCE_URL = IGNIVAR_ENV_PROP_URLS.fence;
 
 export interface RallyBarrierVisual {
   panelUrl: string;
@@ -211,6 +219,28 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     lengthAxis: 'x',
     corner: 'none',
   },
+  // The Forgefather fortress curtain, capped the way the fortress caps it: a
+  // tower pillar at every joint, the kit's own most placed piece. Both modules
+  // are the world's env-prop templates (the `worldKit` route), seated and
+  // turned as the fortress has them, so the numbers are the template's.
+  fortressWall: {
+    panelUrl: FORTRESS_WALL_URL,
+    panelYards: 4.9,
+    scale: 5,
+    lengthAxis: 'x',
+    corner: { url: FORTRESS_TOWER_URL, yards: 2.6 },
+  },
+
+  // --- the Drakelands rebuild kit ---
+  // The Last Keep's palisade. Its run overlaps at a joint, as the keep's own
+  // fence lines do.
+  keepFence: {
+    panelUrl: KEEP_FENCE_URL,
+    panelYards: 4.9,
+    scale: 5,
+    lengthAxis: 'x',
+    corner: 'none',
+  },
 };
 
 /** The visual for a kit key, or undefined for one nothing authors. */
@@ -245,12 +275,25 @@ export const REALM_RACERS_BARRIER_ASSET_URLS: readonly string[] = [
  * nothing, which is the honest answer while the shipped pool has none: the lane
  * is empty, and a draft or a dev preview reaches a kit through `instanceModel`'s
  * fetch-and-fill arm, one bounded fetch at circuit build.
+ *
+ * A kit drawn from the world's env-prop templates never rides it, whoever
+ * authors it: the template is resident from world entry, and a parse of its
+ * file here would be a second copy nothing draws.
  */
-export const REALM_RACERS_BARRIER_BOOT_URLS: readonly string[] = [
-  ...new Set(
-    REALM_RACERS_CIRCUIT_LIST.flatMap((circuit) => circuit.fences ?? [])
-      .map((fence) => REALM_RACERS_BARRIER_VISUALS[fence.kit])
-      .filter((visual): visual is RallyBarrierVisual => Boolean(visual))
-      .flatMap(kitUrls),
-  ),
-];
+export function realmRacersBarrierBootUrls(
+  circuits: readonly RealmRacersCircuit[],
+): readonly string[] {
+  return [
+    ...new Set(
+      circuits
+        .flatMap((circuit) => circuit.fences ?? [])
+        .map((fence) => REALM_RACERS_BARRIER_VISUALS[fence.kit])
+        .filter((visual): visual is RallyBarrierVisual => Boolean(visual))
+        .flatMap(kitUrls)
+        .filter((url) => ignivarEnvPropKeyOfUrl(url) === undefined),
+    ),
+  ];
+}
+
+export const REALM_RACERS_BARRIER_BOOT_URLS: readonly string[] =
+  realmRacersBarrierBootUrls(REALM_RACERS_CIRCUIT_LIST);

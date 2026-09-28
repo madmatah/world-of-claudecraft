@@ -17,22 +17,11 @@ import { hash2 } from '../sim/rng';
 import { terrainHeight } from '../sim/world';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
+import { EMBER_PROP_URLS, type EmberPropKey } from './ember_prop_urls';
 import { buildForgefatherFortress } from './forgefather_fortress';
 import { GFX } from './gfx';
 import { lavaChainPlacements } from './lava_chain_core';
 
-// the Drakelands prop models (built by build_drakelands_props.mjs)
-const EMBER_PROP_URLS = {
-  // the lava vocabulary is exactly three pieces: a pool, the river middle
-  // that connects, and the river end that terminates a spill
-  pool: '/models/props/lava_pool.glb',
-  riverMid: '/models/props/lava_river_mid.glb',
-  riverEnd: '/models/props/lava_river_end.glb',
-  hoard: '/models/props/dragon_hoard.glb',
-  eggs: '/models/props/dragon_eggs.glb',
-  lily: '/models/props/ember_lily.glb',
-} as const;
-type EmberPropKey = keyof typeof EMBER_PROP_URLS;
 const propScenes: Partial<Record<EmberPropKey, THREE.Group>> = {};
 for (const key of Object.keys(EMBER_PROP_URLS) as EmberPropKey[]) {
   registerDeferredPreload(() =>

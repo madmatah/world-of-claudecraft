@@ -10,6 +10,7 @@ import {
   REALM_RACERS_BARRIER_ASSET_URLS,
   REALM_RACERS_BARRIER_BOOT_URLS,
   REALM_RACERS_BARRIER_VISUALS,
+  realmRacersBarrierBootUrls,
 } from '../src/render/realm_racers_barrier_visuals';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import { rallyFencePieces } from '../src/render/realm_racers_track_core';
@@ -272,6 +273,35 @@ describe('the barrier kit catalog', () => {
     expect(REALM_RACERS_BARRIER_BOOT_URLS.length).toBeLessThan(
       REALM_RACERS_BARRIER_ASSET_URLS.length,
     );
+  });
+
+  it('keeps a kit drawn from the world templates out of the boot lane, whoever authors it', () => {
+    // The fortress wall and its tower caps are the world's own env-prop
+    // templates, resident from world entry; a lane parse of their files would
+    // be a second copy nothing draws. A plain kit on the same record still
+    // rides it, which is what keeps this from passing on an empty lane.
+    const run = (kit: string): RallyFence => ({
+      kit,
+      points: [
+        { x: -60, z: -40 },
+        { x: -60, z: 40 },
+      ],
+    });
+    const circuit: RealmRacersCircuit = {
+      ...REALM_RACERS_CIRCUIT_LIST[0],
+      id: 'barrier_boot_probe',
+      fences: [run('fortressWall'), run('keepFence'), run('ironwork')],
+    };
+    const lane = realmRacersBarrierBootUrls([circuit]);
+    const fortress = REALM_RACERS_BARRIER_VISUALS.fortressWall;
+    expect(fortress.corner).not.toBe('none');
+    const kitUrls = [
+      fortress.panelUrl,
+      fortress.corner === 'none' ? '' : fortress.corner.url,
+      REALM_RACERS_BARRIER_VISUALS.keepFence.panelUrl,
+    ];
+    for (const url of kitUrls) expect(lane, url).not.toContain(url);
+    expect(lane).toContain(REALM_RACERS_BARRIER_VISUALS.ironwork.panelUrl);
   });
 
   it('gives every theme a vocabulary of real kits', () => {

@@ -28,7 +28,10 @@
 // game client ALREADY fetches at world entry for every player. `props.ts`
 // registers EVERY `PROP_ASSET_DEFS` entry in the deferred preload lane that
 // `startGame` opens, so a catalog key pointing at one of those files adds no
-// download to world entry. A model that arrives on zone proximity or on
+// download to world entry. Two other world lanes keep the same promise and are
+// the only others admitted: the env-prop templates (`ignivar_env_props.ts`) and
+// the ember zone's own set (`ember_prop_urls.ts`), both registered in that same
+// deferred lane when the renderer's modules load. A model that arrives on zone proximity or on
 // instance entry is a different promise, and `tests/realm_racers_props.test.ts`
 // fails on one. The RESIDENT half of that promise is the rally track builder's
 // business rather than this file's: it fetches a dressing model when a circuit
@@ -397,6 +400,39 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
   // --- planting, added to the block above: drivable by design ---
   mushroomRed: { footprint: { kind: 'circle', r: 0.08 }, solid: false, height: 0.2 },
   mushroomTan: { footprint: { kind: 'circle', r: 0.09 }, solid: false, height: 0.15 },
+
+  // --- the Drakelands as the world builds it today. Two families from outside
+  // `PROP_ASSET_DEFS`, both fetched at world entry for every player: the
+  // Wyrmwatch and Last Keep rebuild kit plus the Forgefather fortress kit
+  // (the env-prop templates, `ignivar_env_props.ts`), and the ember zone's own
+  // set (`ember_prop_urls.ts`). Every kit piece is authored at unit size and
+  // measured in its TEMPLATE's frame, which is the one a circuit draws: long
+  // axis on x, centred, seated at y = 0. Only pieces the world itself draws
+  // instanced are offered, so a circuit shares that program. The world seats
+  // the buildings at scale seven to twelve, the statues and graves at two to
+  // six, the pillars at six to fourteen. The lily takes the world's own rocky
+  // bed collider (ember_lilies.ts: a fifth of its footprint on the big tiers) ---
+  dkBuilding1: { footprint: { kind: 'obb', hw: 0.49, hd: 0.4 }, solid: true, height: 0.84 },
+  dkBuilding2: { footprint: { kind: 'obb', hw: 0.36, hd: 0.36 }, solid: true, height: 1.0 },
+  dkBuildingBase: { footprint: { kind: 'obb', hw: 0.49, hd: 0.41 }, solid: true, height: 0.55 },
+  dkBuildingBaseRoof: { footprint: { kind: 'obb', hw: 0.49, hd: 0.44 }, solid: true, height: 0.45 },
+  dkChurch: { footprint: { kind: 'obb', hw: 0.37, hd: 0.27 }, solid: true, height: 1.0 },
+  dkStables: { footprint: { kind: 'obb', hw: 0.49, hd: 0.36 }, solid: true, height: 0.69 },
+  dkDragonStatue: { footprint: { kind: 'obb', hw: 0.3, hd: 0.26 }, solid: true, height: 1.0 },
+  dkGravestone2: { footprint: { kind: 'obb', hw: 0.42, hd: 0.16 }, solid: true, height: 1.0 },
+  dkGravestone3: { footprint: { kind: 'obb', hw: 0.49, hd: 0.14 }, solid: true, height: 0.85 },
+  dkDummy: { footprint: { kind: 'obb', hw: 0.29, hd: 0.19 }, solid: true, height: 1.0 },
+  dkShieldRack: { footprint: { kind: 'obb', hw: 0.49, hd: 0.19 }, solid: true, height: 0.81 },
+  ffTowerPillar: { footprint: { kind: 'circle', r: 0.26 }, solid: true, height: 1.0 },
+  ffTowerBase: { footprint: { kind: 'obb', hw: 0.48, hd: 0.41 }, solid: true, height: 1.0 },
+  ffDragonPillar: { footprint: { kind: 'obb', hw: 0.27, hd: 0.22 }, solid: true, height: 1.0 },
+  ffCannon: { footprint: { kind: 'obb', hw: 0.49, hd: 0.47 }, solid: true, height: 0.96 },
+  ffGearWall: { footprint: { kind: 'obb', hw: 0.49, hd: 0.17 }, solid: true, height: 0.67 },
+  ffBridgePillar: { footprint: { kind: 'obb', hw: 0.34, hd: 0.24 }, solid: true, height: 1.0 },
+  lavaPool: { footprint: { kind: 'circle', r: 0.44 }, solid: true, height: 0.32 },
+  dragonHoard: { footprint: { kind: 'circle', r: 0.46 }, solid: true, height: 0.34 },
+  dragonEggs: { footprint: { kind: 'circle', r: 0.39 }, solid: true, height: 0.49 },
+  emberLily: { footprint: { kind: 'circle', r: 0.19 }, solid: true, height: 0.58 },
 
   // --- the fourteen streetlamp fixtures, so a circuit can be LIT after dark
   // rather than only darkened (see REALM_RACERS_LAMP_STYLES above) ---

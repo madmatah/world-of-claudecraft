@@ -29,7 +29,11 @@
 import * as THREE from 'three';
 import { loadGltf } from '../../render/assets/loader';
 import { REALM_RACERS_BARRIER_VISUALS } from '../../render/realm_racers_barrier_visuals';
-import { realmRacersDressingPart } from '../../render/realm_racers_dressing_material';
+import {
+  realmRacersDressingPart,
+  realmRacersDressingRoute,
+  realmRacersWorldKitPart,
+} from '../../render/realm_racers_dressing_material';
 import { REALM_RACERS_PROP_VISUALS } from '../../render/realm_racers_prop_visuals';
 import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
 import {
@@ -53,6 +57,12 @@ const BACKDROP = 0x232733;
 /** A clone of a model, each part wearing what a circuit draws it with. The
  *  swapped geometry and material are shared caches, never ours to dispose. */
 function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
+  // A kit piece is the world's template, not the file; the file stands in
+  // only until the template has landed.
+  if (realmRacersDressingRoute(url) === 'worldKit') {
+    const template = realmRacersWorldKitPart(url);
+    return template ? new THREE.Mesh(template.geometry, template.material) : object;
+  }
   object.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -179,7 +189,7 @@ export class PropThumbnailRig {
       const gltf = await loadGltf(visual.url);
       const clone = gltf.scene.clone(true);
       return {
-        object: visual.kind === 'gltf' ? dressed(clone, visual.url) : clone,
+        object: visual.kind === 'streetlamp' ? clone : dressed(clone, visual.url),
         owned: thumbnailOwnsGeometry(visual.kind),
       };
     } catch {

@@ -144,7 +144,7 @@ const SHADOW_CASTERS: ReadonlySet<IgnivarEnvPropKey> = new Set([
   'tower_top',
 ]);
 
-interface IgnivarEnvPropTemplate {
+export interface IgnivarEnvPropTemplate {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
 }
@@ -356,6 +356,23 @@ export function appendIgnivarEnvProps(
 
 export function ignivarEnvPropTemplateCount(): number {
   return templates.size;
+}
+
+/** The baked template a key draws with, or null until its load has landed. */
+export function ignivarEnvPropTemplate(key: IgnivarEnvPropKey): IgnivarEnvPropTemplate | null {
+  return templates.get(key) ?? null;
+}
+
+const KEY_BY_URL = new Map(
+  (Object.entries(IGNIVAR_ENV_PROP_URLS) as [IgnivarEnvPropKey, string][]).map(([key, url]) => [
+    url,
+    key,
+  ]),
+);
+
+/** The key whose template `url` is baked into, or undefined for any other model. */
+export function ignivarEnvPropKeyOfUrl(url: string): IgnivarEnvPropKey | undefined {
+  return KEY_BY_URL.get(url);
 }
 
 export const ignivarEnvPropsInternalsForTest = {
