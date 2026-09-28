@@ -812,7 +812,6 @@ export { eloDelta } from './social/arena';
 import { FINDER_ACTIVITIES, type FinderListingTag } from './content/dungeon_finder';
 import { setHelmHidden as setHelmHiddenMod } from './helm_visibility';
 import { collectPartyInfo } from './party_frame_info';
-import { isRallyDriverTier } from './realm_racers_driver';
 import { DungeonFinderMachine } from './social/dungeon_finder';
 import * as fiestaMod from './social/fiesta';
 // A3: Fiesta tuning consts moved to social/fiesta.ts; these five are read back here
@@ -829,8 +828,8 @@ import { PartyMachine } from './social/party';
 import * as pullTimerMod from './social/pull_timer';
 import * as readyCheckMod from './social/ready_check';
 import * as realmRacersMod from './social/realm_racers';
-import { createRealmRacersState, type RealmRacersState } from './social/realm_racers';
 import * as realmRacersBotsMod from './social/realm_racers_bots';
+import { realmRacersContextBindings, updateRealmRacersPhase } from './social/realm_racers_context';
 import { SpatialGrid } from './spatial';
 import { diminishedCrowdControlDuration as diminishedCrowdControlDurationImpl } from './stun_dr';
 import { Targeting } from './targeting';
@@ -1305,7 +1304,9 @@ export type JoinableChannel = (typeof JOINABLE_CHANNELS)[number];
 
 // Per-player progression and bags. The entity holds combat state; this holds
 // everything that belongs to the character sheet.
-export interface PlayerMeta extends worldQuestState.WorldQuestPlayerState {
+export interface PlayerMeta
+  extends worldQuestState.WorldQuestPlayerState,
+    realmRacersMod.RealmRacersPlayerMeta {
   entityId: number;
   // Stable database character id when running on the server. Offline/sim-only
   // callers fall back to entityId for systems that need a rename-proof owner key.
@@ -1565,9 +1566,6 @@ export interface PlayerMeta extends worldQuestState.WorldQuestPlayerState {
   bgLosses: number;
   bgDraws: number;
   bgCaptures: number;
-  // Temporary Realm Racers kit/vehicle marker. Session-only and never
-  // persisted; null outside a live Rally match.
-  realmRacersMatchId: number | null;
   // The retired Vale Cup's persisted standings (the minigame left with the
   // New Eastbrook program; docs/design/eastbrook-revamp/master-plan.md). The
   // W/L/D standing persists in CharacterState, absent until the first result,
@@ -1585,11 +1583,6 @@ export interface PlayerMeta extends worldQuestState.WorldQuestPlayerState {
   vcupBetWins: number;
   vcupBetLosses: number;
   vcupBetNet: number;
-  // Realm Racers (docs/design/deeds.md, the Book of Deeds entry): first-place
-  // finishes in a rated (non-practice) heat, feeding the placing-based win
-  // deeds. Racing is placing-based (a four-pilot heat has a 2nd/3rd/4th, not a
-  // loss), so there is no rrLosses counterpart.
-  rrWins: number;
   // Talents & Specializations. `talents` is the active allocation; `talentMods`
   // is its precomputed flat struct — resolved only on allocation/respec/loadout
   // change (recomputeTalents), never walked on the combat or stat hot path.
@@ -2017,7 +2010,7 @@ export class Sim {
   readonly bgProposalLockouts = new Map<number, number>();
   nextBgProposalId = 1;
   // The Realm Racers FIFO and single instanced match.
-  realmRacers: RealmRacersState = createRealmRacersState();
+  realmRacers: realmRacersMod.RealmRacersState = realmRacersMod.createRealmRacersState();
   // per-player chat token bucket (anti-spam); refilled lazily by sim time
   private chatTokens = new Map<number, { tokens: number; at: number }>();
   // per-player set of opt-in global channels (world, lfg) joined via /join
@@ -5732,17 +5725,7 @@ export class Sim {
       bgOnPlayerDamaged: (victim, source) => bgMod.bgOnPlayerDamaged(sim.ctx, victim, source),
       bgOnPlayerHealed: (target, source) => bgMod.bgOnPlayerHealed(sim.ctx, target, source),
       bgCancelFlagAura: (e, auraId) => bgMod.bgCancelCarriedFlagAura(sim.ctx, e, auraId),
-      // The Realm Racers rally arms (social/realm_racers.ts).
-      realmRacersFireGroundBlast: (caster) =>
-        realmRacersMod.realmRacersFireGroundBlast(sim.ctx, caster),
-      realmRacersSpendPickupEffect: (caster, effect) =>
-        realmRacersMod.realmRacersSpendPickupEffect(sim.ctx, caster, effect),
-      realmRacersDevRace: (circuitId, tier, pid) =>
-        isRallyDriverTier(tier)
-          ? realmRacersBotsMod.startRealmRacersDevRace(sim, circuitId, tier, pid)
-          : false,
-      realmRacersDevGrantKit: (pid, charges) =>
-        realmRacersMod.realmRacersDevGrantKit(sim.ctx, pid, charges),
+      ...realmRacersContextBindings(sim),
     };
     return createSimContext(host);
   }
@@ -6214,7 +6197,7 @@ export class Sim {
     // value per pickup box that changes hands (the weighted effect draw, 22b),
     // plus the one circuit draw a queued race takes when it seats a grid; a tick
     // where nobody takes a box and nobody is seated draws nothing at all.
-    this.updateRealmRacers();
+    updateRealmRacersPhase(this);
     lap?.('realmRacers');
     worldPvpMod.updateWorldPvp(this.ctx); // the /pvp clock, zone pass + books sweep; zero rng
     lap?.('worldPvp');
@@ -9951,13 +9934,7 @@ export class Sim {
 
   // --- The Realm Racers (social/realm_racers.ts + social/realm_racers_bots.ts):
   // state stays on Sim (`this.realmRacers`), thin delegates serve the IWorld
-  // facet, the server, and tests. House pilots drive in the same tick phase, so
-  // offline Practice and the server's queue backfill run identical code. ---
-
-  private updateRealmRacers(): void {
-    realmRacersMod.updateRealmRacers(this.ctx);
-    realmRacersBotsMod.updateRealmRacersBots(this);
-  }
+  // facet, the server, and tests. ---
 
   realmRacersQueueJoin(pid?: number): void {
     realmRacersMod.realmRacersQueueJoin(this.ctx, pid);

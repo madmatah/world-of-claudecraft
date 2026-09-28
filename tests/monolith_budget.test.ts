@@ -1230,7 +1230,9 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 11642). Exact count, zero slack.
-    ceiling: 11785,
+    // LOWERED 11785 -> 11762: the Realm Racers PlayerMeta fields, SimContext arms and tick
+    // phase moved to social/realm_racers.ts and social/realm_racers_context.ts.
+    ceiling: 11762,
     seam: 'a sim system module behind SimContext (src/sim/CLAUDE.md)',
   },
   {

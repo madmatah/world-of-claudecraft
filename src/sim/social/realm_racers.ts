@@ -541,6 +541,18 @@ export interface RealmRacersMatch {
   totalLaps: number;
 }
 
+/** The Realm Racers fields of PlayerMeta (sim.ts extends this). */
+export interface RealmRacersPlayerMeta {
+  // Temporary Realm Racers kit/vehicle marker. Session-only and never
+  // persisted; null outside a live Rally match.
+  realmRacersMatchId: number | null;
+  // Realm Racers (docs/design/deeds.md, the Book of Deeds entry): first-place
+  // finishes in a rated (non-practice) heat, feeding the placing-based win
+  // deeds. Racing is placing-based (a four-pilot heat has a 2nd/3rd/4th, not a
+  // loss), so there is no rrLosses counterpart.
+  rrWins: number;
+}
+
 export interface RealmRacersState {
   queue: number[];
   /** The one PUBLIC race, on circuit copy 0: what the queue pairs into. */
