@@ -503,12 +503,13 @@ describe('Realm Racers circuits: the Nightbloom Moonwell Run', () => {
     for (const lamp of lamps) expect(lamp.asset).toBe('lampNightbloomMoonflower');
   });
 
-  it('keeps its dressing inside the budget the eager build was priced at', () => {
+  it('keeps its dressing inside the budget its lobby build was priced at', () => {
     // The first shipped circuit to sow scatters, and the largest lap: the
     // build cost tracks the scatter (one spline projection per candidate
-    // cell), so the count is pinned as a ceiling rather than left to a prose
-    // budget in `src/render/realm_racers_track.ts`. Raising it is a decision
-    // to re-measure that build, not a free edit.
+    // cell), and a circuit is built in its race lobby, the placements in one
+    // piece that cannot be cut, so the count is pinned as a ceiling rather
+    // than left to a prose budget in `src/render/realm_racers_track.ts`.
+    // Raising it is a decision to re-measure that lobby build, not a free edit.
     const placements = realmRacersPlacements(MOONWELL);
     expect(placements.scattered.length).toBeGreaterThan(500);
     expect(placements.scattered.length).toBeLessThanOrEqual(1800);
@@ -607,7 +608,7 @@ describe('Realm Racers circuits: the Drakelands Rampart Run', () => {
     for (const lamp of lamps) expect(lamp.asset).toBe('lampDrakelandsBrazier');
   });
 
-  it('keeps its dressing inside the budget the eager build was priced at', () => {
+  it('keeps its dressing inside the budget its lobby build was priced at', () => {
     const placements = realmRacersPlacements(RAMPART);
     expect(placements.scattered.length).toBeGreaterThan(0);
     expect(placements.scattered.length).toBeLessThanOrEqual(400);

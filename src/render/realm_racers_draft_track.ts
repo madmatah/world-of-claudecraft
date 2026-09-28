@@ -3,11 +3,11 @@
 //
 // It is a sibling of the track builder rather than an arm inside it because
 // what it owns is a LIFECYCLE the authored circuits do not have. Those are
-// built once, eagerly, at renderer construction (deliberately: a lazy build
-// would land half a megabyte of geometry on the frame a viewer arrives at a
-// circuit, which is the countdown). A draft is built at REGISTRATION, which is
-// a dev moment nobody is racing through, and rebuilt whenever the operator
-// saves and re-runs the command.
+// built at most once per renderer, when a pilot commits to one (its race
+// preparation builds it in the lobby, realm_racers_circuit_prepare.ts), and
+// kept for the session. A draft is built at REGISTRATION, which is a dev
+// moment nobody is racing through, and rebuilt whenever the operator saves
+// and re-runs the command.
 //
 // Replacing a draft frees what its group OWNED (see
 // `realm_racers_track_dispose_core.ts`, which is careful about what it does

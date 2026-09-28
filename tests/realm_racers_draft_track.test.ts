@@ -1,10 +1,10 @@
 // The dev draft arm's VISUAL lifecycle: build on registration, swap and free
 // on re-registration.
 //
-// The authored circuits have no lifecycle at all (built once, eagerly, at
-// renderer construction), which is exactly why this is a sibling module: the
-// operator's loop is save, race, redraw, race again, and each pass replaces a
-// circuit's worth of geometry. Driven with fakes, so the contract under test is
+// The authored circuits have no such lifecycle (each built at most once per
+// renderer, when a pilot commits to it, and kept), which is exactly why this
+// is a sibling module: the operator's loop is save, race, redraw, race again,
+// and each pass replaces a circuit's worth of geometry. Driven with fakes, so the contract under test is
 // the ORDER of build, add, remove and dispose rather than anything Three does.
 
 import { afterEach, describe, expect, it } from 'vitest';

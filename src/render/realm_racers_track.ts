@@ -632,8 +632,8 @@ function drawFlowers(
 /**
  * The border flower's crossed card, built once.
  *
- * Every track build used to mint its own, which is invisible while circuits are
- * built once at boot and a leak the moment one is REBUILT (the editor preview
+ * Every track build used to mint its own, which is invisible while a circuit is
+ * built once and a leak the moment one is REBUILT (the editor preview
  * on every edit, a dev draft on every `/dev rallydraft`). It is also what makes
  * the group's shared-vs-owned split true: `realm_racers_track_dispose_core.ts`
  * frees a plain mesh's geometry and never an `InstancedMesh`'s, on the promise
@@ -1500,13 +1500,12 @@ function authoredTrackView(
  * as the first step of its race preparation (`rallyCircuit:<id>`,
  * realm_racers_circuit_prepare.ts): in the race lobby while the other pilots
  * load, on the first frame of a login or a graphics rebuild mid-race, or for a
- * walker in the band, the lane underfoot or the one being approached. It used
- * to be the other way round, every circuit at renderer construction, which by
- * four circuits cost 0.7 to 0.9 s of main thread per boot on a fast desktop
- * and some 40 MB for a player who never races, both linear in the circuit
- * count (tmp measurements, EAGER_BUILD.md). A built circuit stays for the life
- * of the pool: disposing its last material would free its programs, and the
- * next race there would link them again.
+ * walker standing on its lane. It used to be the other way round, every
+ * circuit at renderer construction, which by four circuits cost 0.7 to 0.9 s
+ * of main thread per boot on a fast desktop and some 40 MB for a player who
+ * never races, both growing with every circuit added. A built circuit stays
+ * for the life of the pool: disposing its last material would free its
+ * programs, and the next race there would link them again.
  *
  * Where a build's time goes, so the next circuit can be judged before it is
  * drawn: the flower FIELD (one spline projection per candidate, about half of
