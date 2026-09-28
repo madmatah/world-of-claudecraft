@@ -80,6 +80,7 @@ import {
   PERFECTING_SKILL_REQ,
 } from '../../src/sim/professions/perfecting';
 import { stationsOfType } from '../../src/sim/professions/stations';
+import { realmRacersGhosted } from '../../src/sim/realm_racers_ghost';
 import { realmRacersPickupBoxes } from '../../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
 import { riftRankForBaseLevel } from '../../src/sim/rift/ranks';
@@ -87,6 +88,7 @@ import { type ArenaMatch, type PlayerMeta, Sim } from '../../src/sim/sim';
 import { ARENA_MIN_LEVEL } from '../../src/sim/social/arena';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_RESET_LOCK_TICKS,
   REALM_RACERS_RETURN_TICKS,
   realmRacersCircuitOf,
   realmRacersReady,
@@ -6556,6 +6558,7 @@ function realmRacersRace(): Scenario {
       'loading lobby: every pilot ready closes it on one tick',
       'countdown lock + vehicle kernel drive on the circuit copy',
       'rival contact: the swept same-tick resolve, depenetration, impulse and bump event',
+      'recovery ghost: a manual reset with a rival parked on the recovered hull, held past the lock, contact back at the cap',
       'pickup take (the one weighted effect draw per box that changes hands)',
       'ground blast landing: a core victim at full force and a falloff-band victim, per-racer hits',
       'forfeit cascade -> endMatch classification -> tableau return -> teardown',
@@ -6611,6 +6614,39 @@ function realmRacersRace(): Scenario {
       rammerProgress.trackIndex = onLap.index;
       rec.tick(2); // the contact pass: one announced bump for the pair
       rec.snapshot('contact');
+      // The recovery ghost: the second pilot resets by hand and the fourth is
+      // parked on the recovered hull, both stopped. Past the lock the ghost
+      // still holds (overlapped, so no bump); at the cap it goes and the
+      // contact pass pushes the pair apart. Any change to the ghost's window
+      // or to the contact skip moves these two beats.
+      const recovered = sim.entities.get(pids[1]) as AnyEntity;
+      const parker = sim.entities.get(pids[3]) as AnyEntity;
+      const recoveredProgress = liveMatch.progress.get(pids[1]);
+      if (!recoveredProgress || !parker.drive) throw new Error('missing ghost pilots');
+      for (const pid of [pids[1], pids[3]]) {
+        const meta = sim.players.get(pid);
+        if (meta) meta.moveInput.forward = false;
+      }
+      parker.drive.speed = 0;
+      parker.drive.slip = 0;
+      parker.drive.yawRate = 0;
+      sim.realmRacersResetPosition(pids[1]);
+      teleport(sim, parker, recovered.pos.x + 1, recovered.pos.z);
+      parker.facing = recovered.facing;
+      const parkedAt = realmRacersToCanonical(liveMatch, parker.pos.x, parker.pos.z);
+      const parkedOnLap = lap.project(parkedAt.x, parkedAt.z, rammerProgress.trackIndex);
+      rammerProgress.lastS = parkedOnLap.s;
+      rammerProgress.trackIndex = parkedOnLap.index;
+      rec.tick(REALM_RACERS_RESET_LOCK_TICKS + 4); // past the lock, still overlapped
+      rec.notes.ghostHeldPastLock = realmRacersGhosted(recovered);
+      rec.snapshot('ghost-held');
+      rec.tick(recoveredProgress.ghostCapTick - sim.tickCount); // to the cap
+      rec.notes.ghostGoneAtCap = !realmRacersGhosted(recovered);
+      rec.snapshot('ghost-cap');
+      for (const pid of [pids[1], pids[3]]) {
+        const meta = sim.players.get(pid);
+        if (meta) meta.moveInput.forward = true;
+      }
       // A deterministic take: stand the leader on box 0 with the bookkeeping a
       // machine that DROVE there would carry. A bare jump reads as a cut and
       // the referee returns it before the take can fire.
