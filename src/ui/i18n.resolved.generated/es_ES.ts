@@ -2197,6 +2197,7 @@ export const es_ES: EnTranslations = {
       "pickupWard": "Ward up",
       "pickupSlick": "Oil ready",
       "wardHeld": "WARD",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "Ward broken",
       "countdown": "Engines locked. Start in {seconds}",
       "go": "GO!",

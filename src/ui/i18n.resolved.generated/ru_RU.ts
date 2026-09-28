@@ -2197,6 +2197,7 @@ export const ru_RU: EnTranslations = {
       "pickupWard": "Щит активен",
       "pickupSlick": "Масло готово",
       "wardHeld": "ЩИТ",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "Щит разрушен",
       "countdown": "Двигатели заблокированы. Старт через {seconds}",
       "go": "Старт!",

@@ -2197,6 +2197,7 @@ export const zh_TW: EnTranslations = {
       "pickupWard": "護盾就緒",
       "pickupSlick": "油漬就緒",
       "wardHeld": "護盾",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "護盾破碎",
       "countdown": "引擎鎖定。{seconds} 秒後出發",
       "go": "出發！",

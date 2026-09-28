@@ -2197,6 +2197,7 @@ export const ja_JP: EnTranslations = {
       "pickupWard": "守護発動",
       "pickupSlick": "オイル準備完了",
       "wardHeld": "守護",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "守護が砕けた",
       "countdown": "エンジン固定中。開始まで{seconds}秒",
       "go": "スタート！",

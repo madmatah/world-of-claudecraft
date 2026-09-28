@@ -350,6 +350,21 @@ describe('Realm Racers pure views', () => {
     expect(wardedSig).toBe(bareSig);
   });
 
+  it('carries the seconds the ward has left, out of the signature, and 0 without one', () => {
+    expect(buildRealmRacersHudView(info({ match: live({ warded: true, wardIn: 8 }) })).wardIn).toBe(
+      8,
+    );
+    // A count with no ward behind it is never shown.
+    expect(
+      buildRealmRacersHudView(info({ match: live({ warded: false, wardIn: 8 }) })).wardIn,
+    ).toBe(0);
+    expect(buildRealmRacersHudView(info({ match: live({ warded: true }) })).wardIn).toBe(0);
+    expect(buildRealmRacersHudView(info({ match: live({}) })).wardIn).toBe(0);
+    const ticking = buildRealmRacersHudView(info({ match: live({ warded: true, wardIn: 3 }) })).sig;
+    const later = buildRealmRacersHudView(info({ match: live({ warded: true, wardIn: 2 }) })).sig;
+    expect(later).toBe(ticking);
+  });
+
   it('resolves the track-limits banner to ONE line, countdown before notice', () => {
     // Two alarms cannot both be the loudest thing on the strip, and the two
     // states cannot legitimately co-occur anyway: a pilot the referee has just

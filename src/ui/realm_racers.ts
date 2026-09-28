@@ -619,7 +619,12 @@ export class RealmRacersUi {
       // Written even while hidden, so a locale flip lands on the text. Visibility
       // rides setStyleProp, whose own (element, 'display') slot keeps the two
       // writes eliding independently (the same shape the limits line below uses).
-      w.setText(this.wardEl, t('hudChrome.rally.wardHeld'));
+      w.setText(
+        this.wardEl,
+        view.wardIn > 0
+          ? t('hudChrome.rally.wardHeldFor', { seconds: num(view.wardIn) })
+          : t('hudChrome.rally.wardHeld'),
+      );
       w.setStyleProp(this.wardEl, 'display', view.warded ? 'block' : 'none');
     }
     if (this.wrongWayEl) {

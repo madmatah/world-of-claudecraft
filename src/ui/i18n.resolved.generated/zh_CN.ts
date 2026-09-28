@@ -2197,6 +2197,7 @@ export const zh_CN: EnTranslations = {
       "pickupWard": "护盾就绪",
       "pickupSlick": "油渍就绪",
       "wardHeld": "护盾",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "护盾破碎",
       "countdown": "引擎锁定。{seconds} 秒后出发",
       "go": "出发！",

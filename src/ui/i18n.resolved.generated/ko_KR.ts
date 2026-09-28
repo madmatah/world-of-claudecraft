@@ -2197,6 +2197,7 @@ export const ko_KR: EnTranslations = {
       "pickupWard": "보호막 발동",
       "pickupSlick": "기름 준비",
       "wardHeld": "보호막",
+      "wardHeldFor": "WARD {seconds}",
       "wardBroken": "보호막 파괴",
       "countdown": "엔진 잠금 중. {seconds}초 뒤 출발",
       "go": "출발!",

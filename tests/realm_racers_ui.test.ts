@@ -1056,6 +1056,28 @@ describe('Realm Racers race-feel HUD', () => {
     expect(h.resetRealmRacersPosition).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the ward with the seconds it has left, and hides it once it is gone', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'racing', warded: true, wardIn: 7 });
+    h.ui.update();
+    const chip = h.layer.querySelector('.rallyhud-ward') as HTMLElement;
+    expect(chip.textContent).toBe(t('hudChrome.rally.wardHeldFor', { seconds: '7' }));
+    expect(chip.textContent).toBe('WARD 7');
+    expect(chip.style.display).toBe('block');
+    h.info.match = match({ phase: 'racing', warded: true, wardIn: 1 });
+    h.ui.update();
+    expect(h.layer.querySelector('.rallyhud-ward')).toBe(chip);
+    expect(chip.textContent).toBe(t('hudChrome.rally.wardHeldFor', { seconds: '1' }));
+    // A mirror that has not carried the count yet still shows the ward.
+    h.info.match = match({ phase: 'racing', warded: true });
+    h.ui.update();
+    expect(chip.textContent).toBe(t('hudChrome.rally.wardHeld'));
+    expect(chip.style.display).toBe('block');
+    h.info.match = match({ phase: 'racing', warded: false });
+    h.ui.update();
+    expect(chip.style.display).toBe('none');
+  });
+
   it('disables recovery during the authoritative post-reset lock', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing', resetLocked: false });

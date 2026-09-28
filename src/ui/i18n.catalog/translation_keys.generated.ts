@@ -12988,6 +12988,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.rally.waiting'
   | 'hudChrome.rally.wardBroken'
   | 'hudChrome.rally.wardHeld'
+  | 'hudChrome.rally.wardHeldFor'
   | 'hudChrome.rally.won'
   | 'hudChrome.rally.wonReturn'
   | 'hudChrome.rally.wrongWay'

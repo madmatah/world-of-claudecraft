@@ -181,6 +181,9 @@ export interface RealmRacersMatchInfo {
    * player can plan around rather than a toast they may have missed.
    */
   warded: boolean;
+  /** Whole seconds the viewer's ward has left, rounded up; present only while
+   *  `warded`, so a race without one pays nothing per tick. */
+  wardIn?: number;
   /** True for a private practice race on its own copy of the circuit. */
   practice: boolean;
   result: RealmRacersResult;

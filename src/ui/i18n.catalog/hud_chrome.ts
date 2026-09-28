@@ -2558,9 +2558,11 @@ export const hudChromeStrings = {
     pickupWard: 'Ward up',
     pickupSlick: 'Oil ready',
     // The ward, on the two surfaces it needs: a standing pip on the race strip
-    // for as long as it is carried, and the moment it pays for itself, so a hit
-    // that does nothing reads as the ward working rather than the weapon failing.
+    // for as long as it is carried, with the seconds it has left before it runs
+    // out, and the moment it pays for itself, so a hit that does nothing reads
+    // as the ward working rather than the weapon failing.
     wardHeld: 'WARD',
+    wardHeldFor: 'WARD {seconds}',
     wardBroken: 'Ward broken',
     countdown: 'Engines locked. Start in {seconds}',
     go: 'GO!',

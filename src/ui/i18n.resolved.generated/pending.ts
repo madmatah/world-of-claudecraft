@@ -137,6 +137,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -269,6 +270,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -401,6 +403,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -533,6 +536,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -666,6 +670,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -798,6 +803,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -811,7 +817,8 @@ export const pending: Record<string, readonly string[]> = {
     "devCommand.fields.rallyKitCharges",
     "devCommand.fields.rallyTier",
     "hudChrome.rally.raceVoid",
-    "hudChrome.rally.standingsBot"
+    "hudChrome.rally.standingsBot",
+    "hudChrome.rally.wardHeldFor"
   ],
   "zh_TW": [
     "devCommand.actions.rally.description",
@@ -822,7 +829,8 @@ export const pending: Record<string, readonly string[]> = {
     "devCommand.fields.rallyKitCharges",
     "devCommand.fields.rallyTier",
     "hudChrome.rally.raceVoid",
-    "hudChrome.rally.standingsBot"
+    "hudChrome.rally.standingsBot",
+    "hudChrome.rally.wardHeldFor"
   ],
   "ko_KR": [
     "devCommand.actions.rally.description",
@@ -833,7 +841,8 @@ export const pending: Record<string, readonly string[]> = {
     "devCommand.fields.rallyKitCharges",
     "devCommand.fields.rallyTier",
     "hudChrome.rally.raceVoid",
-    "hudChrome.rally.standingsBot"
+    "hudChrome.rally.standingsBot",
+    "hudChrome.rally.wardHeldFor"
   ],
   "ja_JP": [
     "devCommand.actions.rally.description",
@@ -844,7 +853,8 @@ export const pending: Record<string, readonly string[]> = {
     "devCommand.fields.rallyKitCharges",
     "devCommand.fields.rallyTier",
     "hudChrome.rally.raceVoid",
-    "hudChrome.rally.standingsBot"
+    "hudChrome.rally.standingsBot",
+    "hudChrome.rally.wardHeldFor"
   ],
   "pt_BR": [
     "devCommand.actions.rally.description",
@@ -974,6 +984,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -987,7 +998,8 @@ export const pending: Record<string, readonly string[]> = {
     "devCommand.fields.rallyKitCharges",
     "devCommand.fields.rallyTier",
     "hudChrome.rally.raceVoid",
-    "hudChrome.rally.standingsBot"
+    "hudChrome.rally.standingsBot",
+    "hudChrome.rally.wardHeldFor"
   ],
   "cs_CZ": [
     "devCommand.actions.rally.description",
@@ -1117,6 +1129,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1249,6 +1262,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1381,6 +1395,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1513,6 +1528,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1645,6 +1661,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1777,6 +1794,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -1909,6 +1927,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
@@ -2041,6 +2060,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.waiting",
     "hudChrome.rally.wardBroken",
     "hudChrome.rally.wardHeld",
+    "hudChrome.rally.wardHeldFor",
     "hudChrome.rally.won",
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"

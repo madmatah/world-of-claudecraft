@@ -2197,6 +2197,7 @@ export const en_XA: EnTranslations = {
       "pickupWard": "[Ŵáŕð úþ]",
       "pickupSlick": "[Óíļ ŕéáðý]",
       "wardHeld": "[ŴÁŔÐ]",
+      "wardHeldFor": "[ŴÁŔÐ {seconds}]",
       "wardBroken": "[Ŵáŕð ƀŕóķéñ]",
       "countdown": "[Éñĝíñéš ļóçķéð. Šţáŕţ íñ {seconds}]",
       "go": "[ĜÓ!]",

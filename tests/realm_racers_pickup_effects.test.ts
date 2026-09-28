@@ -931,6 +931,33 @@ describe('the ward runs out on its own', () => {
     expect(expiry.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
     // And the readout the race strip reads follows the aura it is derived from.
     expect(sim.realmRacersInfoFor(a).match?.warded).toBe(false);
+    expect(sim.realmRacersInfoFor(a).match).not.toHaveProperty('wardIn');
+  });
+
+  it('counts its seconds down on the readout the race strip reads, rounded up', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    const readout = () => sim.realmRacersInfoFor(a).match;
+    expect(readout()?.warded).toBe(false);
+    expect(readout()).not.toHaveProperty('wardIn');
+    takeWithEffect(sim, a, 0, 'ward');
+    const grantedAt = sim.tickCount;
+    expect(readout()).toMatchObject({ warded: true, wardIn: REALM_RACERS_WARD_AURA_SECONDS });
+    const seen = new Map<number, number>();
+    while (sim.tickCount < grantedAt + WARD_TICKS - 1) {
+      sim.tick();
+      const wardIn = readout()?.wardIn ?? 0;
+      seen.set(wardIn, (seen.get(wardIn) ?? 0) + 1);
+      // Whole seconds left, never under what the clock really holds.
+      const remaining = required(wardAuraOf(sim, a), 'ward aura').remaining;
+      expect(wardIn).toBeGreaterThanOrEqual(remaining - 1e-9);
+      expect(wardIn - remaining).toBeLessThan(1);
+    }
+    // Every second from ten down to one, each a full second of ticks but the
+    // first (the take's own tick already read ten).
+    expect([...seen.keys()]).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+    expect(seen.get(10)).toBe(TICK_RATE - 1);
+    for (let second = 1; second < 10; second++) expect(seen.get(second)).toBe(TICK_RATE);
   });
 
   it('never announces a break for a ward that ran out, however long the race goes on', () => {

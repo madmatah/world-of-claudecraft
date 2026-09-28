@@ -157,6 +157,9 @@ export interface RealmRacersHudView {
    * mid-race and must not rebuild the strip.
    */
   warded: boolean;
+  /** Whole seconds the ward has left, 0 while none is carried (or a mirror
+   *  that has not carried the count yet); out of the signature with `warded`. */
+  wardIn: number;
   /** Seconds left in the winner's chase window, 0 when it is not running. */
   chaseIn: number;
   /** Whether the RACE is over, which is when the podium takes the headline. */
@@ -192,6 +195,7 @@ const HUD_OFF: RealmRacersHudView = {
   trackLimit: 'none',
   offTrackIn: 0,
   warded: false,
+  wardIn: 0,
   chaseIn: 0,
   decided: false,
   voided: false,
@@ -303,6 +307,7 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
   view.trackLimit = match.offTrackIn > 0 ? 'offTrack' : match.cutReturned ? 'cutReturned' : 'none';
   view.offTrackIn = match.offTrackIn;
   view.warded = match.warded;
+  view.wardIn = match.warded ? (match.wardIn ?? 0) : 0;
   view.chaseIn = match.chaseIn;
   view.decided = match.decided;
   view.voided = match.voided === true;

@@ -132,7 +132,7 @@ import {
 } from '../realm_racers_track_limits';
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
-import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
+import { CAST_COMPLETE_EPS, type Entity, TICK_RATE, type VehicleDrive } from '../types';
 import {
   type ContactBody,
   resolveVehicleContactSwept,
@@ -258,6 +258,14 @@ const REALM_RACERS_UNTIMED_AURA_SECONDS = 9999;
  *  asks, so nothing re-implements the lookup. */
 export function realmRacersWarded(racer: Entity | undefined | null): boolean {
   return !!racer?.auras.some((aura) => aura.id === REALM_RACERS_WARD_AURA);
+}
+
+/** Whole seconds the machine's ward has left, rounded up so a ward about to
+ *  go still reads 1, or 0 without one. The epsilon is the aura pass's own
+ *  expiry tolerance, so the accumulated tick drift never shows a stale second. */
+export function realmRacersWardSecondsLeft(racer: Entity | undefined | null): number {
+  const ward = racer?.auras.find((aura) => aura.id === REALM_RACERS_WARD_AURA);
+  return ward ? Math.max(0, Math.ceil(ward.remaining - CAST_COMPLETE_EPS)) : 0;
 }
 
 /** Grant the ward. Refreshing an existing one is a no-op by construction: the
@@ -3012,6 +3020,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
   const elapsedTicks = preRace(match)
     ? 0
     : Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick);
+  const racerEntity = ctx.entities.get(pid);
   const info: RealmRacersMatchInfo = {
     id: match.id,
     circuitId: match.circuitId,
@@ -3027,7 +3036,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     standings,
     gridSize: match.gridSize,
     decided: match.phase === 'finished',
-    speed: Math.abs(ctx.entities.get(pid)?.drive?.speed ?? 0),
+    speed: Math.abs(racerEntity?.drive?.speed ?? 0),
     wrongWay: me.wrongWay,
     // The referee's two banners, both derived rather than stored: how long this
     // pilot has left off the road before they are put back, and whether they
@@ -3041,7 +3050,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     // source of truth rather than tracked twice. The strip's pip reads this; the
     // buff bar under the portrait (and a rival's target frame) get the aura
     // itself off the ordinary entity wire.
-    warded: realmRacersWarded(ctx.entities.get(pid)),
+    warded: realmRacersWarded(racerEntity),
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the
@@ -3066,6 +3075,8 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
   };
   if (shared.loading && myEndTick === null) info.loading = shared.loading;
   if (match.voided) info.voided = true;
+  const wardIn = realmRacersWardSecondsLeft(racerEntity);
+  if (wardIn > 0) info.wardIn = wardIn;
   return info;
 }
 
