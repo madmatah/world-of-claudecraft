@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 import type { ZoneDef } from '../src/sim/types';
 import { resolveMapZone } from '../src/ui/hud/map/map_zone_focus_core';
 
@@ -24,6 +25,19 @@ describe('resolveMapZone', () => {
   it('inside a dungeon frames the zone its door stands in', () => {
     const at = resolveMapZone(null, 'frostveil', { x: 9_000, z: 0 }, lookup({ x: -1, z: 0 }));
     expect(at.id).toBe('eastbrook_vale');
+  });
+
+  it('on a Realm Racers circuit frames the zone the circuit belongs to, not the frozen one', () => {
+    // The zone tracker freezes past the instance threshold, so the committed id
+    // is wherever the pilot queued from; the circuit names its own zone.
+    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    if (!lane) throw new Error('expected the Lagoon Run lane');
+    const origin = realmRacersLaneOrigin(lane.index);
+    expect(resolveMapZone(null, 'frostveil', origin, lookup()).id).toBe('palmreach');
+    const practice = realmRacersLaneOrigin(REALM_RACERS_LANES.find((l) => l.practice)?.index ?? 0);
+    expect(resolveMapZone(null, 'frostveil', practice, lookup()).id).toBe('evergarden');
+    // An atlas pick still wins there, as it does everywhere else.
+    expect(resolveMapZone('mirefen_marsh', 'frostveil', origin, lookup()).id).toBe('mirefen_marsh');
   });
 
   it('an override wins over the dungeon and the committed zone, and degrades to the position if stale', () => {

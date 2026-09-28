@@ -1,10 +1,12 @@
 // Which zone the overworld map frames. Pure, extracted from Hud.updateMapWindow
 // (the monolith ratchet): inside a dungeon, the zone its door stands in
-// (dungeonAt owns the instance x-band layout); in any other instance band the
-// zone the player entered from (the zone tracker freezes past
+// (dungeonAt owns the instance x-band layout); on a Realm Racers circuit, the
+// zone the circuit belongs to (realmRacersZoneAt); in any other instance band
+// the zone the player entered from (the zone tracker freezes past
 // DUNGEON_X_THRESHOLD, so `lastZoneId` carries it); outdoors, the committed
 // zone, so border-straddling cannot thrash the cached terrain regen. A dev or
-// atlas override wins over all three.
+// atlas override wins over all of them.
+import { realmRacersZoneAt } from '../../../sim/realm_racers_zone';
 import type { ZoneDef } from '../../../sim/types';
 
 export interface MapZoneFocusLookup {
@@ -29,5 +31,7 @@ export function resolveMapZone(
   if (mapZoneOverride !== null) return byId(mapZoneOverride) ?? lookup.zoneAt(pos.x, pos.z);
   const dungeon = lookup.dungeonAt(pos.x);
   if (dungeon) return lookup.zoneAt(dungeon.doorPos.x, dungeon.doorPos.z);
+  const circuit = realmRacersZoneAt(pos.x, pos.z);
+  if (circuit) return circuit;
   return byId(lastZoneId) ?? lookup.zoneAt(pos.x, pos.z);
 }

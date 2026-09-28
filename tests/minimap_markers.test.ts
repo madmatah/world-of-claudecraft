@@ -22,6 +22,7 @@ import {
   zoneAt,
 } from '../src/sim/data';
 import { isProfessionQuest } from '../src/sim/quests/ambient_quest_marker';
+import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 import { isQuestTurnInNpc } from '../src/sim/types';
 import { WORLD_BOSSES, worldBossLockoutId } from '../src/sim/world_boss';
 import { STABLE_MAP_NAVIGATION_LANDMARKS } from '../src/ui/map_navigation_landmarks_core';
@@ -981,6 +982,30 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
     expect(typeof model.zoneId).toBe('string');
     expect(model.zoneId.length).toBeGreaterThan(0);
   });
+
+  // The circuit each Realm Racers lane holds and the zone it belongs to. The
+  // band sits on the instance plane, where zoneAt answers with whichever zone
+  // band a lane's z shares (the Lagoon Run read The Drakelands).
+  const CIRCUIT_ZONE: Record<string, string> = {
+    evergarden_practice: 'evergarden',
+    evergarden_express_tour: 'evergarden',
+    nightbloom_moonwell_run: 'nightbloom',
+    drakelands_rampart_run: 'drakelands',
+    palmreach_lagoon_run: 'palmreach',
+  };
+
+  it.each(REALM_RACERS_LANES.map((lane) => [lane.index, lane.circuit.id] as const))(
+    'names the circuit zone for the #zone-label on lane %i (%s)',
+    (index, circuitId) => {
+      const origin = realmRacersLaneOrigin(index);
+      for (const shape of ['sim', 'client'] as const) {
+        const world = makeWorld(shape);
+        (world.player as { pos: { x: number; z: number } }).pos = { x: origin.x, z: origin.z };
+        const model = createMinimapMarkers().build(world, S, PPY);
+        expect(model.zoneId, shape).toBe(CIRCUIT_ZONE[circuitId]);
+      }
+    },
+  );
 });
 
 describe('determinism', () => {

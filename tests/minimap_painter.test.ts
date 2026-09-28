@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BG_HALF_X, BG_HALF_Z, bgFieldPlanWalls } from '../src/sim/battleground_layout';
 import { battlegroundOrigin, GATHER_NODES, NPCS, QUESTS, YUMI_BAND_X_MIN } from '../src/sim/data';
+import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 import { TH_GRAVEYARDS } from '../src/sim/thornhollow_field.generated';
 import { EASTBROOK_NOTICEBOARD_TEMPLATE_ID } from '../src/sim/types';
 import {
@@ -2486,5 +2487,36 @@ describe('minimap_painter: the battleground raster bakes the shared atlas plate'
     // and no landmark label is baked into the sheet (see the header: at this
     // scale a name is a few pixels tall and the blit is a moving sub-rect).
     expect(trace.ops.filter((o) => o.op === 'fillText' || o.op === 'strokeText')).toEqual([]);
+  });
+});
+
+describe('minimap_painter: the #zone-label on a Realm Racers circuit', () => {
+  it('writes the circuit zone through the elided setText, not the band the lane shares', () => {
+    const trace = newTrace();
+    installGlyphGlobals(trace);
+    const setText = vi.fn();
+    const p = new MinimapPainter(
+      { setText } as never,
+      () => 'cls-color',
+      (zoneId: string) => `zone:${zoneId}`,
+      (name: string) => name,
+      () => 'Thornhollow Fields',
+    );
+    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    if (!lane) throw new Error('expected the Lagoon Run lane');
+    const origin = realmRacersLaneOrigin(lane.index);
+    const world = glyphWorld([], 'available');
+    (world.player as { pos: { x: number; z: number } }).pos = { x: origin.x, z: origin.z };
+    const label = {} as HTMLElement;
+
+    p.paintOverworld(
+      fakeMinimapContext(trace),
+      world,
+      label,
+      { width: 2048 } as HTMLCanvasElement,
+      1,
+    );
+
+    expect(setText).toHaveBeenCalledWith(label, 'zone:palmreach');
   });
 });
