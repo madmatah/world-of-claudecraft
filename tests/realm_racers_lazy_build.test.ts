@@ -70,6 +70,20 @@ vi.mock('../src/render/realm_racers_pickups', async (importOriginal) => {
   };
 });
 
+// A build piece that throws: the start arch, on demand. Only the track's import
+// is replaced; the start lights' own placement reads the core's real one.
+const archControl = vi.hoisted(() => ({ fail: false }));
+vi.mock('../src/render/realm_racers_track_core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/render/realm_racers_track_core')>();
+  return {
+    ...actual,
+    rallyStartArchPlacement: (circuit: Parameters<typeof actual.rallyStartArchPlacement>[0]) => {
+      if (archControl.fail) throw new Error('arch failed');
+      return actual.rallyStartArchPlacement(circuit);
+    },
+  };
+});
+
 // A representative must never register a light site.
 vi.mock('../src/render/night_light_field', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/render/night_light_field')>();
@@ -120,6 +134,7 @@ afterAll(gfxProfileRestorer());
 
 beforeEach(() => {
   pickupControl.fail = false;
+  archControl.fail = false;
   activateTier('high');
   resetArrivalCoverForTest();
   vi.stubGlobal('window', {});
@@ -282,12 +297,12 @@ describe('the circuit client builds its circuit first', () => {
     // label's tail and in the build ledger, which is not the admission ledger.
     expect(new Set(q.labels.map(gpuPrepKindOfLabel))).toEqual(new Set(['rally-build']));
     const pieceNames = new Set(q.labels.map((label) => label.split(':')[1]));
-    for (const piece of ['spline', 'ground', 'placements', 'surfaces', 'flowers', 'finish']) {
+    for (const piece of ['spline', 'ground', 'placements', 'surfaces', 'flowers', 'fences']) {
       expect(pieceNames.has(piece), piece).toBe(true);
     }
     expect(q.records).toHaveLength(pieces);
     for (const kind of q.records) expect(kind).toMatch(/^zone:rally-[a-z]+$/);
-    for (const piece of ['placements', 'flowers']) {
+    for (const piece of ['placements', 'flowers', 'pickups', 'slicks', 'fences']) {
       expect(q.records, piece).toContain(`zone:rally-${piece}`);
     }
     // The gate ran once, over the built group.
@@ -409,6 +424,46 @@ describe('when something goes wrong', () => {
       await flush();
       expect(verdict).toBe(false);
       expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the slicks and every authored fence when the pickup boxes throw', async () => {
+    const reference = track.buildRealmRacersTracks();
+    viewOf(reference).build().finish();
+    const fences = realmRacersFills(viewOf(reference).group).total;
+    pickupControl.fail = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const tracks = track.buildRealmRacersTracks();
+      const view = viewOf(tracks);
+      view.build().finish();
+      expect(view.build().failures).toBe(1);
+      expect(view.group.getObjectByName('realm-racers-pickups')).toBeUndefined();
+      expect(view.group.getObjectByName('realm-racers-slicks')).toBeDefined();
+      // Every fence (and every other model fill) was still asked for.
+      expect(realmRacersFills(view.group).total).toBe(fences);
+      await realmRacersFills(view.group).landed();
+      const fenceDraws = drawsUnder(view.group).filter((draw) =>
+        draw.object.name.startsWith('realm-racers-dressing:'),
+      );
+      expect(fenceDraws.length).toBeGreaterThan(0);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the start lights when the start arch throws', () => {
+    archControl.fail = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const tracks = track.buildRealmRacersTracks();
+      const view = viewOf(tracks);
+      view.build().finish();
+      expect(view.build().failures).toBe(1);
+      expect(view.group.getObjectByName('realm-racers-start-lights')).toBeDefined();
+      expect(view.group.getObjectByName('realm-racers-slicks')).toBeDefined();
     } finally {
       warn.mockRestore();
     }
@@ -554,10 +609,13 @@ describe('the seam builds where the pilot needs it', () => {
     setArrivalCover(false);
     frame();
     expect(view.built).toBe(true);
-    // The unit still in the queue then runs nothing.
+    // The unit still in the queue then runs nothing, and records no sample
+    // that would teach the budget a near-zero cost for its kind.
     const children = view.group.children.length;
+    const records = q.records.length;
     await q.drain((unit) => unit.label.startsWith('rally-build:'));
     expect(view.group.children.length).toBe(children);
+    expect(q.records.length).toBe(records);
   });
 
   it('builds the lane underfoot too when the viewer walks off onto another circuit with a match on', () => {

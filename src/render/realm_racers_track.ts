@@ -1083,19 +1083,24 @@ export function rallyGrassCluster(tint: number): {
  * paints from the circuit's own random stream (textures.ts), so when and in
  * which order circuits are built never shifts a texture painted after them.
  */
-/** What a build piece does, for its queue label and its build-ledger kind: the
- *  budget prices a 67 ms memo and a 10 ms band apart. */
+/** What a build piece does: its build-ledger kind (`zone:rally-<kind>`) and
+ *  the tail of its queue label. A piece that throws costs its own part only
+ *  (`RealmRacersTrackBuild.step`), so each separate thing a pilot reads (the
+ *  start lights, the boxes, the oil, the walls) is a piece of its own. */
 export type RallyBuildPieceKind =
   | 'spline'
   | 'ground'
   | 'placements'
   | 'surfaces'
   | 'basin'
-  | 'fixtures'
+  | 'arch'
+  | 'lights'
   | 'flowers'
   | 'grass'
   | 'props'
-  | 'finish';
+  | 'pickups'
+  | 'slicks'
+  | 'fences';
 
 interface RallyBuildPiece {
   kind: RallyBuildPieceKind;
@@ -1278,8 +1283,8 @@ export function realmRacersTrackBuild(
       );
     }),
     piece('basin', () => buildBasin(circuit, theme, group, palette)),
-    piece('fixtures', () => {
-      buildStartArch(circuit, theme, group);
+    piece('arch', () => buildStartArch(circuit, theme, group)),
+    piece('lights', () => {
       startLightLenses = buildStartLights(circuit, group, palette);
     }),
     piece('flowers', () => {
@@ -1309,18 +1314,20 @@ export function realmRacersTrackBuild(
       // the seeded fills, from the one resolver the collision set reads too ---
       dressing = buildDressingProps(circuit, group);
     }),
-    piece('finish', () => {
+    piece('pickups', () => {
       // --- the pickup boxes, under THIS circuit's group so they inherit the
       // lane transform and the "not my lane" hide the view already resolves ---
       pickups = buildRealmRacersPickups(circuit);
       group.add(pickups.group);
-
+    }),
+    piece('slicks', () => {
       // --- and the oil a drawn pickup leaves behind, on the same group for the
       // same reasons. It takes no circuit: where the patches are is a live fact
       // of the race, not of the geometry ---
       slicks = buildRealmRacersSlicks();
       group.add(slicks.group);
-
+    }),
+    piece('fences', () => {
       // --- the AUTHORED barriers: what a circuit's visible edge is made of ---
       //
       // The perimeter box used to be drawn here, from four derived corners

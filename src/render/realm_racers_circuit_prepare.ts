@@ -348,7 +348,11 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   }
 
   private stepPiece(job: RealmRacersTrackBuild): void {
-    this.buildCpu += timedPiece(this.host, `rally-${job.nextKind ?? 'finish'}`, () => job.step());
+    // A unit still queued after `hurry` finished the build runs nothing and
+    // records nothing: a near-zero sample would teach the budget a false cost.
+    if (job.finished) return;
+    const kind = job.nextKind;
+    this.buildCpu += timedPiece(this.host, `rally-${kind}`, () => job.step());
   }
 
   /** The view's build, a piece per queue unit and task, or to the end at once
