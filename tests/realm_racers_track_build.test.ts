@@ -352,5 +352,37 @@ describe('a circuit build and the shared texture random sequence', () => {
       expect(drawnByBuilds.length).toBeGreaterThan(0);
       expect(painted(() => textures.macroNoiseTexture())).toEqual(second);
     });
+
+    it(`draws nothing from it when the race preparation makes its representatives, on ${tier}`, async () => {
+      activateTier(tier);
+      const control = await import('../src/render/textures');
+      const first = painted(() => control.macroNoiseTexture());
+      const second = painted(() => control.macroNoiseTexture());
+
+      vi.resetModules();
+      const textures = await import('../src/render/textures');
+      const { RealmRacersCommonPrepare } = await import(
+        '../src/render/realm_racers_circuit_prepare'
+      );
+      const { realmRacersCommonBuild } = await import('../src/render/realm_racers_common_pieces');
+      const { createRealmRacersTrackPalette } = await import(
+        '../src/render/realm_racers_track_palette'
+      );
+      const { REALM_RACERS_CIRCUIT_LIST } = await import(
+        '../src/sim/content/realm_racers_circuits'
+      );
+      expect(painted(() => textures.macroNoiseTexture())).toEqual(first);
+      // The queue join's representatives, on a fresh palette: its ground
+      // material, a flower card, the pickups' sparkle, the lamps' glow.
+      const palette = createRealmRacersTrackPalette();
+      const client = new RealmRacersCommonPrepare(() =>
+        realmRacersCommonBuild(REALM_RACERS_CIRCUIT_LIST, palette),
+      );
+      log = [];
+      expect(await client.run(() => Promise.resolve())).toBe(true);
+      expect(log.length).toBeGreaterThan(0);
+      expect(client.prepare().children.length).toBeGreaterThan(0);
+      expect(painted(() => textures.macroNoiseTexture())).toEqual(second);
+    });
   }
 });
