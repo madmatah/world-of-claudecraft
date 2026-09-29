@@ -62,6 +62,7 @@ import type {
   RealmRacersTrackBuild,
   RealmRacersTracksView,
 } from './realm_racers_track';
+import { textureRandomStream, withTextureRandomStream } from './texture_random_stream';
 
 type Drawable = THREE.Object3D & {
   isMesh?: boolean;
@@ -158,6 +159,9 @@ export class RealmRacersCommonPrepare implements RealmRacersPrepareClient {
   readonly gateOnly = true;
   private readonly root = new THREE.Group();
   private readonly steps: RealmRacersPrepareUnits = { done: 0, total: 1 };
+  /** Whatever a representative paints, it paints from here: the queue join
+   *  comes at a varying moment, which must shift no shared texture. */
+  private readonly stream = textureRandomStream('realm-racers:common');
 
   constructor(
     private readonly source: () => RallyCommonBuild,
@@ -182,7 +186,10 @@ export class RealmRacersCommonPrepare implements RealmRacersPrepareClient {
       for (const piece of build.pieces) {
         // At the queue join this runs in town, live: the ordinary budget paces it.
         await this.host.run(
-          () => timedPiece(this.host, `rally-common-${piece.kind}`, () => piece.run()),
+          () =>
+            timedPiece(this.host, `rally-common-${piece.kind}`, () =>
+              withTextureRandomStream(this.stream, () => piece.run()),
+            ),
           GPU_WORK_PRIORITY.VISIBLE_PREWARM,
           `rally-common-${piece.kind}`,
         );
@@ -203,6 +210,8 @@ export class RealmRacersCommonPrepare implements RealmRacersPrepareClient {
   }
 }
 
+const TRUE = (): true => true;
+
 function lazyOf(view: RealmRacersCircuitView): RealmRacersLazyCircuitView | null {
   return 'build' in view ? (view as RealmRacersLazyCircuitView) : null;
 }
@@ -217,10 +226,12 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   private drawn = false;
   private skyReady = false;
   /** The build's main-thread and wall milliseconds once it ran, null before
-   *  (and for a view built elsewhere): the local readout that keeps building
-   *  apart from linking, which the verdict's age mixes. */
+   *  (and for a view built elsewhere): the local readout (probes reach it
+   *  through the seam) that keeps building apart from linking, which the
+   *  verdict's age mixes. */
   buildMs: number | null = null;
   buildWallMs: number | null = null;
+  private buildCpu = 0;
 
   /**
    * `view` is the pool's lazy view, which this client builds first, or a view
@@ -281,7 +292,8 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       this.skyReady = true;
       return ok;
     });
-    if (!(await this.build())) return false;
+    const build = await this.build();
+    if (build === 'stopped') return false;
     // `want` is read before the wait, so a fill started during it is gated by
     // the next round. Once the cover is gone, what exists is gated and a fill
     // landing later rides its own gated attach (realm_racers_track.ts).
@@ -298,44 +310,66 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     // proves its first visible frame, which uploads what the camera saw.
     if (covered && this.view.onViewerLane()) {
       const lazy = lazyOf(this.view);
-      await Promise.race([lazy ? lazy.uploadFrame() : this.view.drawnOnce(), lifted]);
+      const drawn = lazy ? lazy.uploadFrame().then(TRUE) : this.view.drawnOnce().then(TRUE);
+      // The cover ended first: the upload frame is withdrawn, never drawn in
+      // the open (an unculled, shadowless frame of the whole circuit).
+      if (!(await Promise.race([drawn, lifted]))) lazy?.cancelUploadFrame();
     }
     this.drawn = true;
-    return Promise.race([sky, lifted]);
+    const skyOk = await Promise.race([sky, lifted]);
+    // A build with a failed piece still gates and shows what it built, and
+    // reads as unproven.
+    return skyOk && build === 'built';
+  }
+
+  /** Run what is left of the build at once: the seam calls it the frame its
+   *  rule says the road is on screen (`buildNow`), so a piece waiting in the
+   *  queue for frame headroom never keeps it off the lane. */
+  hurry(): void {
+    const job = this.job;
+    if (!job || job.finished) return;
+    while (!job.finished) this.stepPiece(job);
+  }
+
+  private stepPiece(job: RealmRacersTrackBuild): void {
+    this.buildCpu += timedPiece(this.host, `rally-${job.nextKind ?? 'finish'}`, () => job.step());
   }
 
   /** The view's build, a piece per queue unit and task, or to the end at once
-   *  when the seam says so; false when it did not finish (the queue shut down
-   *  under a renderer teardown, a piece threw). */
-  private async build(): Promise<boolean> {
+   *  when the seam says so. `failed` when a piece threw (the rest was built,
+   *  see `RealmRacersTrackBuild.step`), `stopped` when it never finished (its
+   *  queue shut down under a renderer teardown, or the pool was given back). */
+  private async build(): Promise<'built' | 'failed' | 'stopped'> {
     const lazy = lazyOf(this.view);
-    if (!lazy) return true;
+    if (!lazy) return 'built';
     const job = lazy.build();
     this.job = job;
     const id = this.view.circuitId;
     const startedAt = this.host.now();
-    let cpu = 0;
-    const step = (): void => {
-      cpu += timedPiece(this.host, `rally-${job.nextKind ?? 'finish'}`, () => job.step());
-    };
     try {
       while (!job.finished) {
         if (this.buildNow()) {
-          while (!job.finished) step();
+          this.hurry();
           break;
         }
-        await this.host.run(step, GPU_WORK_PRIORITY.LIVE_VIEW, `rally-build-${job.nextKind}:${id}`);
+        await this.host.run(
+          () => this.stepPiece(job),
+          GPU_WORK_PRIORITY.LIVE_VIEW,
+          `rally-build-${job.nextKind}:${id}`,
+        );
         if (!job.finished) await this.host.yieldTask();
       }
     } catch (error) {
-      // Dev-channel English, per the render i18n carve-out.
-      if (!isGpuQueueShutdown(error)) console.warn('Realm Racers: circuit build failed', id, error);
-      return false;
+      if (isGpuQueueShutdown(error)) return 'stopped';
+      // Any other queue failure: the lane still needs its road. Dev-channel
+      // English, per the render i18n carve-out.
+      console.warn('Realm Racers: circuit build queue failed', id, error);
+      this.hurry();
     }
-    if (!lazy.built) return false;
-    this.buildMs = cpu;
+    if (!lazy.built) return 'stopped';
+    this.buildMs = this.buildCpu;
     this.buildWallMs = this.host.now() - startedAt;
-    return true;
+    return job.failures > 0 ? 'failed' : 'built';
   }
 }
 

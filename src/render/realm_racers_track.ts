@@ -176,12 +176,15 @@ export interface RealmRacersLazyCircuitView extends RealmRacersCircuitView {
    * then each mesh's own flags come back (realm_racers_upload_frame_core.ts).
    */
   uploadFrame(): Promise<void>;
+  /** Withdraw the upload frame (its cover ended first): any node it holds gets
+   *  its own flags back now, and no later frame is drawn unculled. */
+  cancelUploadFrame(): void;
 }
 
 /** The authored view plus what the race preparation reads of it. */
 type AuthoredTrackView = RealmRacersTrackView &
   Pick<RealmRacersCircuitView, 'drawnOnce' | 'onViewerLane'> &
-  Pick<RealmRacersLazyCircuitView, 'uploadFrame'>;
+  Pick<RealmRacersLazyCircuitView, 'uploadFrame' | 'cancelUploadFrame'>;
 
 /** The reveal hold a view consults when it is on the viewer's lane. */
 interface RevealHold {
@@ -1112,6 +1115,8 @@ export interface RealmRacersTrackBuild {
   step(): void;
   /** Run every piece left and return the view. */
   finish(): AuthoredTrackView;
+  /** Pieces that threw (each warned): the view is made of what the others built. */
+  readonly failures: number;
   /** Stop: no piece runs any more (the pool was given back). */
   cancel(): void;
 }
@@ -1135,7 +1140,11 @@ export function realmRacersTrackBuild(
   let ground: THREE.Material | null = null;
   let startLightLenses: THREE.Mesh[] = [];
   let dressing: DressingProps = { breathing: [], lamps: null };
+  let pickups: ReturnType<typeof buildRealmRacersPickups> | null = null;
+  let slicks: ReturnType<typeof buildRealmRacersSlicks> | null = null;
   let view: AuthoredTrackView | null = null;
+  let failures = 0;
+  let cancelled = false;
 
   const pieces: RallyBuildPiece[] = [];
   let next = 0;
@@ -1303,13 +1312,13 @@ export function realmRacersTrackBuild(
     piece('finish', () => {
       // --- the pickup boxes, under THIS circuit's group so they inherit the
       // lane transform and the "not my lane" hide the view already resolves ---
-      const pickups = buildRealmRacersPickups(circuit);
+      pickups = buildRealmRacersPickups(circuit);
       group.add(pickups.group);
 
       // --- and the oil a drawn pickup leaves behind, on the same group for the
       // same reasons. It takes no circuit: where the patches are is a live fact
       // of the race, not of the geometry ---
-      const slicks = buildRealmRacersSlicks();
+      slicks = buildRealmRacersSlicks();
       group.add(slicks.group);
 
       // --- the AUTHORED barriers: what a circuit's visible edge is made of ---
@@ -1321,15 +1330,6 @@ export function realmRacersTrackBuild(
       // What stands at a circuit's edge is placed by hand now, from the same
       // resolver the collision set reads, so a hedge is where a machine hits one.
       buildFences(circuit, group);
-
-      view = authoredTrackView(circuit, group, reveal, {
-        startLightLenses,
-        startLights: palette.startLights(),
-        breathingProps: dressing.breathing,
-        lamps: dressing.lamps,
-        pickups,
-        slicks,
-      });
     }),
   );
 
@@ -1349,16 +1349,39 @@ export function realmRacersTrackBuild(
     get nextKind() {
       return pieces[next]?.kind ?? null;
     },
+    get failures() {
+      return failures;
+    },
     step() {
       if (next >= pieces.length) return;
-      withTextureRandomStream(stream, pieces[next++].run);
+      const piece = pieces[next++];
+      try {
+        withTextureRandomStream(stream, piece.run);
+      } catch (error) {
+        // A piece that throws costs its own part of the circuit, never the
+        // rest: the lane still gets its road, walls and boxes, which the sim
+        // races on whether they are drawn or not. Dev-channel English.
+        failures++;
+        console.warn('Realm Racers: circuit build piece failed', circuit.id, piece.kind, error);
+      }
     },
     finish() {
       while (next < pieces.length) job.step();
-      if (!view) throw new Error(`Realm Racers: circuit build ${circuit.id} ended without a view`);
+      if (cancelled) throw new Error(`Realm Racers: circuit build ${circuit.id} was given back`);
+      // Made here, out of every piece, so no failed piece can leave the lane
+      // without a view.
+      view ??= authoredTrackView(circuit, group, reveal, {
+        startLightLenses,
+        startLights: palette.startLights(),
+        breathingProps: dressing.breathing,
+        lamps: dressing.lamps,
+        pickups,
+        slicks,
+      });
       return view;
     },
     cancel() {
+      cancelled = true;
       next = pieces.length;
     },
   };
@@ -1379,8 +1402,8 @@ interface AuthoredTrackParts {
   startLights: RallyStartLightMaterials;
   breathingProps: BreathingProp[];
   lamps: RallyLampsView | null;
-  pickups: ReturnType<typeof buildRealmRacersPickups>;
-  slicks: ReturnType<typeof buildRealmRacersSlicks>;
+  pickups: ReturnType<typeof buildRealmRacersPickups> | null;
+  slicks: ReturnType<typeof buildRealmRacersSlicks> | null;
 }
 
 function authoredTrackView(
@@ -1414,9 +1437,14 @@ function authoredTrackView(
       });
       return uploadAsked;
     },
+    cancelUploadFrame() {
+      markUploaded = null;
+      if (unculled) restoreAfterUploadFrame(unculled);
+      unculled = null;
+    },
     onViewerLane: () => onLane,
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {
-      if (circuitId !== circuit.id) return;
+      if (circuitId !== circuit.id || !slicks) return;
       // The slick layer lives in the lane frame this group was moved onto;
       // resolve the world point into it through the live transform.
       slicks.group.updateWorldMatrix(true, false);
@@ -1491,10 +1519,10 @@ function authoredTrackView(
       // The boxes: only ever ticked on the lane the viewer is standing on, and
       // only against a race on THIS circuit. A match on another circuit is
       // another lane's, so its taken set says nothing about these boxes.
-      pickups.update(time, match?.circuitId === circuit.id ? match : null);
+      pickups?.update(time, match?.circuitId === circuit.id ? match : null);
       // Same gate for the oil: a race on another circuit is another lane's, and
       // its hazards are not standing on this road.
-      slicks.update(time, match?.circuitId === circuit.id ? match : null);
+      slicks?.update(time, match?.circuitId === circuit.id ? match : null);
     },
   };
 }
@@ -1626,6 +1654,9 @@ function lazyCircuitView(
     },
     uploadFrame() {
       return builtView()?.uploadFrame() ?? NEVER_UPLOADED;
+    },
+    cancelUploadFrame() {
+      builtView()?.cancelUploadFrame();
     },
     onViewerLane: () => onLane,
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {

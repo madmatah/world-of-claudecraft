@@ -57,6 +57,19 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => ({
   }),
 }));
 
+// A build piece that throws: the pickup boxes, on demand.
+const pickupControl = vi.hoisted(() => ({ fail: false }));
+vi.mock('../src/render/realm_racers_pickups', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/render/realm_racers_pickups')>();
+  return {
+    ...actual,
+    buildRealmRacersPickups: (circuit: Parameters<typeof actual.buildRealmRacersPickups>[0]) => {
+      if (pickupControl.fail) throw new Error('pickups failed');
+      return actual.buildRealmRacersPickups(circuit);
+    },
+  };
+});
+
 // A representative must never register a light site.
 vi.mock('../src/render/night_light_field', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/render/night_light_field')>();
@@ -105,6 +118,7 @@ beforeAll(async () => {
 afterAll(gfxProfileRestorer());
 
 beforeEach(() => {
+  pickupControl.fail = false;
   activateTier('high');
   resetArrivalCoverForTest();
   vi.stubGlobal('window', {});
@@ -355,6 +369,77 @@ describe('the circuit client builds its circuit first', () => {
   });
 });
 
+describe('when something goes wrong', () => {
+  it('builds the rest of the circuit when a piece throws, and reads unproven', async () => {
+    pickupControl.fail = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const tracks = track.buildRealmRacersTracks();
+      const view = viewOf(tracks);
+      const client = new RealmRacersCircuitPrepare(view, fakeSky(), manualHost().host, () => true);
+      const { gate } = immediateGate();
+      let verdict: boolean | null = null;
+      void client.run(gate, NEVER).then((ok) => {
+        verdict = ok;
+      });
+      // The road, the walls and the lights are there, and the view drives them.
+      expect(view.built).toBe(true);
+      expect(view.build().failures).toBe(1);
+      expect(view.group.getObjectByName('realm-racers-start-lights')).toBeDefined();
+      expect(view.group.getObjectByName('realm-racers-pickups')).toBeUndefined();
+      tracks.update(LANE.x, LANE.z, 0, null);
+      expect(view.group.visible).toBe(true);
+      await flush();
+      expect(gate).toHaveBeenCalled();
+      // Drawn (the upload frame), then the verdict.
+      tracks.update(LANE.x, LANE.z, 1, null);
+      view.group.traverseVisible((object) => {
+        if ((object as THREE.Mesh).isMesh) {
+          object.onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+        }
+      });
+      tracks.update(LANE.x, LANE.z, 2, null);
+      await flush();
+      expect(verdict).toBe(false);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('withdraws the upload frame when its cover ends first: nothing is ever drawn unculled in the open', async () => {
+    const tracks = track.buildRealmRacersTracks();
+    const view = viewOf(tracks);
+    let uncover: () => void = () => undefined;
+    const uncovered = new Promise<void>((resolve) => {
+      uncover = resolve;
+    });
+    const client = new RealmRacersCircuitPrepare(view, fakeSky(), manualHost().host, () => true);
+    let verdict: boolean | null = null;
+    tracks.update(LANE.x, LANE.z, 0, null);
+    void client.run(immediateGate().gate, uncovered).then((ok) => {
+      verdict = ok;
+    });
+    await flush();
+    // Gated and asked; the next frame on the lane readies the upload frame.
+    tracks.update(LANE.x, LANE.z, 1, null);
+    const meshes: THREE.Object3D[] = [];
+    view.group.traverse((object) => {
+      if ((object as THREE.Mesh).isMesh) meshes.push(object);
+    });
+    expect(meshes.some((mesh) => !mesh.frustumCulled)).toBe(true);
+    // The cover ends before any render drew it.
+    uncover();
+    await flush();
+    expect(verdict).toBe(true);
+    expect(meshes.every((mesh) => mesh.frustumCulled)).toBe(true);
+    for (let frame = 2; frame < 5; frame++) {
+      tracks.update(LANE.x, LANE.z, frame, null);
+      expect(meshes.every((mesh) => mesh.frustumCulled)).toBe(true);
+    }
+  });
+});
+
 describe('the seam builds where the pilot needs it', () => {
   for (const cover of [false, true]) {
     it(`builds the pilot's circuit inside the seam's first frame of a login mid-race${cover ? ', covered for that frame' : ''}`, () => {
@@ -441,6 +526,44 @@ describe('the seam builds where the pilot needs it', () => {
     await frame();
     expect(seam.stateOf(id)).not.toBe('preparing');
     setArrivalCover(false);
+  });
+
+  it('finishes a queued lobby build on the frame its curtain falls, without waiting on the queue', async () => {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    const q = manualHost();
+    prepareRealmRacersCircuits(seam, tracks, fakeSky(), q.host);
+    const view = viewOf(tracks);
+    const frame = () => seam.frame(seamHost(), lobby(), LANE.x, LANE.z);
+    frame();
+    setArrivalCover(true);
+    frame();
+    await flush();
+    await q.drainOne();
+    // A piece waits in the queue (the budget refusing it, say) when the lobby
+    // curtain falls on a lost connection, the phase still loading.
+    expect(q.queued.some((unit) => unit.label.startsWith('rally-build-'))).toBe(true);
+    expect(view.built).toBe(false);
+    setArrivalCover(false);
+    frame();
+    expect(view.built).toBe(true);
+    // The unit still in the queue then runs nothing.
+    const children = view.group.children.length;
+    await q.drain((unit) => unit.label.startsWith('rally-build-'));
+    expect(view.group.children.length).toBe(children);
+  });
+
+  it('builds the lane underfoot too when the viewer walks off onto another circuit with a match on', () => {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    prepareRealmRacersCircuits(seam, tracks, fakeSky(), manualHost().host);
+    const other = REALM_RACERS_LANES.find((lane) => lane.circuit.id !== CIRCUIT.id);
+    if (!other) throw new Error('one circuit only');
+    const at = realmRacersLaneOrigin(other.index);
+    seam.frame(seamHost(), lobby('finished'), at.x, at.z);
+    const underfoot = tracks.circuits.find((view) => view.circuitId === other.circuit.id);
+    expect(underfoot?.built).toBe(true);
+    expect(seam.buildNow(other.circuit.id)).toBe(true);
   });
 
   it('names the rule: the own lobby under its cover is the only wait a build spreads over', () => {

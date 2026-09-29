@@ -104,6 +104,9 @@ export interface RealmRacersPrepareClient {
    *  ready), even before its verdict: what is left needs a PRESENTED frame,
    *  which a blocking arrival holds back until it lifts. */
   arrivalReady?(): boolean;
+  /** Run what is left of the client's own build at once: called on the frame
+   *  its circuit's build must stop waiting on the queue (`buildNow`). */
+  hurry?(): void;
   /** Builds only for the gate (stand-ins), so without one it builds nothing. */
   readonly gateOnly?: boolean;
 }
@@ -258,7 +261,11 @@ export class RealmRacersPrepare {
     this.viewerMatch = match;
     this.laneCircuit = underfoot;
     const circuitId = realmRacersPrepareCircuit(match?.circuitId ?? null, underfoot);
-    const circuitDue = circuitId !== null && !this.askedCircuits.has(circuitId);
+    // The lane underfoot is asked too when a match names another circuit (a
+    // finished race's viewer walking on): its walls collide, drawn or not.
+    const laneDue =
+      underfoot !== null && underfoot !== circuitId && !this.askedCircuits.has(underfoot);
+    const circuitDue = laneDue || (circuitId !== null && !this.askedCircuits.has(circuitId));
     if (this.latch.reason !== null && this.inFlight === 0 && !circuitDue) return;
     const commitment = this.commitment;
     commitment.queued = viewer.queued;
@@ -271,12 +278,19 @@ export class RealmRacersPrepare {
       this.uncoverWaits.delete(id);
       release();
     }
+    // A build still spread over the queue whose road is now on screen (its
+    // lobby's curtain fell, the viewer stepped onto it) finishes on this frame.
+    for (const [circuit, clientId] of this.circuitClientIds) {
+      if (this.stateOf(clientId) !== 'preparing' || !this.buildNow(circuit)) continue;
+      this.clients.get(clientId)?.hurry?.();
+    }
     if (takeRealmRacersPrepare(this.latch, commitment) !== null) {
       this.host = host;
       for (const client of this.clients.values()) this.start(host, client);
     }
     if (!circuitDue || this.latch.reason === null) return;
     if (circuitId !== null) this.askCircuit(circuitId);
+    if (laneDue && underfoot !== null) this.askCircuit(underfoot);
   }
 
   /** The lobby arm of the cover: from the frame the viewer's race is loading
