@@ -81,6 +81,7 @@ import {
   GPU_QUEUE_SHUTDOWN_ERROR_NAME,
   GPU_WORK_PRIORITY,
 } from '../src/render/background_gpu_queue';
+import { gpuPrepKindOfLabel } from '../src/render/gpu_prep_budget_core';
 import { registerStaticNightLights } from '../src/render/night_light_field';
 import {
   prepareRealmRacersCircuits,
@@ -262,10 +263,11 @@ describe('the circuit client builds its circuit first', () => {
     let pieces = 0;
     while (q.queued.length > 0) {
       // One unit in flight at a time, each the next piece, at the live-view
-      // priority, labelled by what it does.
+      // priority, one label kind for the whole build (the text before the
+      // first colon is what the admission budget prices).
       expect(q.queued).toHaveLength(1);
       expect(q.queued[0].priority).toBe(GPU_WORK_PRIORITY.LIVE_VIEW);
-      expect(q.queued[0].label).toMatch(new RegExp(`^rally-build-[a-z]+:${CIRCUIT.id}$`));
+      expect(q.queued[0].label).toMatch(new RegExp(`^rally-build:[a-z]+:${CIRCUIT.id}$`));
       expect(gate).not.toHaveBeenCalled();
       await q.drainOne();
       pieces++;
@@ -276,13 +278,18 @@ describe('the circuit client builds its circuit first', () => {
     expect(pieces).toBe(job.total);
     expect(pieces).toBeGreaterThan(8);
     expect(q.yields()).toBe(pieces - 1);
-    // Every piece class got its own label, and a ledger kind.
-    const kinds = new Set(q.labels.map((label) => label.slice(0, label.indexOf(':'))));
-    for (const kind of ['spline', 'ground', 'placements', 'surfaces', 'flowers', 'finish']) {
-      expect(kinds.has(`rally-build-${kind}`), kind).toBe(true);
+    // One queue label kind for every piece; the pieces stay apart in the
+    // label's tail and in the build ledger, which is not the admission ledger.
+    expect(new Set(q.labels.map(gpuPrepKindOfLabel))).toEqual(new Set(['rally-build']));
+    const pieceNames = new Set(q.labels.map((label) => label.split(':')[1]));
+    for (const piece of ['spline', 'ground', 'placements', 'surfaces', 'flowers', 'finish']) {
+      expect(pieceNames.has(piece), piece).toBe(true);
     }
     expect(q.records).toHaveLength(pieces);
     for (const kind of q.records) expect(kind).toMatch(/^zone:rally-[a-z]+$/);
+    for (const piece of ['placements', 'flowers']) {
+      expect(q.records, piece).toContain(`zone:rally-${piece}`);
+    }
     // The gate ran once, over the built group.
     await flush();
     expect(gate).toHaveBeenCalled();
@@ -454,7 +461,7 @@ describe('the seam builds where the pilot needs it', () => {
       // Built before any frame the cover no longer hides, on the first frame.
       expect(seam.reason).toBe('seated');
       expect(view.built).toBe(true);
-      expect(q.labels.filter((label) => label.startsWith('rally-build-'))).toEqual([]);
+      expect(q.labels.filter((label) => label.startsWith('rally-build:'))).toEqual([]);
       tracks.update(LANE.x, LANE.z, 0, null);
       expect(view.group.children.length).toBeGreaterThan(0);
     });
@@ -473,7 +480,7 @@ describe('the seam builds where the pilot needs it', () => {
     frame();
     expect(view.built).toBe(false);
     await flush();
-    expect(q.queued.some((unit) => unit.label.startsWith('rally-build-'))).toBe(true);
+    expect(q.queued.some((unit) => unit.label.startsWith('rally-build:'))).toBe(true);
     const out = { done: 0, total: 0, settled: false };
     seam.progress(out, CIRCUIT.id);
     expect(out.settled).toBe(false);
@@ -489,7 +496,7 @@ describe('the seam builds where the pilot needs it', () => {
     // road is on screen now, so the rest of the build runs at once.
     setArrivalCover(false);
     frame();
-    await q.drain((unit) => unit.label.startsWith('rally-build-'));
+    await q.drain((unit) => unit.label.startsWith('rally-build:'));
     expect(view.built).toBe(true);
     expect(seam.buildNow(CIRCUIT.id)).toBe(true);
   });
@@ -542,14 +549,14 @@ describe('the seam builds where the pilot needs it', () => {
     await q.drainOne();
     // A piece waits in the queue (the budget refusing it, say) when the lobby
     // curtain falls on a lost connection, the phase still loading.
-    expect(q.queued.some((unit) => unit.label.startsWith('rally-build-'))).toBe(true);
+    expect(q.queued.some((unit) => unit.label.startsWith('rally-build:'))).toBe(true);
     expect(view.built).toBe(false);
     setArrivalCover(false);
     frame();
     expect(view.built).toBe(true);
     // The unit still in the queue then runs nothing.
     const children = view.group.children.length;
-    await q.drain((unit) => unit.label.startsWith('rally-build-'));
+    await q.drain((unit) => unit.label.startsWith('rally-build:'));
     expect(view.group.children.length).toBe(children);
   });
 
@@ -647,6 +654,40 @@ describe('the upload frame', () => {
   });
 });
 
+describe('the admission budget sees the build as two kinds', () => {
+  it('adds at most two queue label kinds over a full race: the queue join, the lobby, the countdown', async () => {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    const q = manualHost();
+    prepareRealmRacersCircuits(seam, tracks, fakeSky(), q.host);
+    const view = viewOf(tracks);
+    // The queue join in town: the representatives.
+    seam.frame(seamHost(), { queued: true, match: null }, 0, 0);
+    await flush();
+    await q.drain();
+    // The pop: the lobby, covered, builds the drawn circuit a piece at a time.
+    setArrivalCover(true);
+    for (let i = 0; i < 400 && !view.built; i++) {
+      seam.frame(seamHost(), lobby(), LANE.x, LANE.z);
+      tracks.update(LANE.x, LANE.z, i, null);
+      await q.drainOne();
+    }
+    expect(view.built).toBe(true);
+    setArrivalCover(false);
+    for (const phase of ['countdown', 'racing', 'finished']) {
+      seam.frame(seamHost(), lobby(phase), LANE.x, LANE.z);
+      tracks.update(LANE.x, LANE.z, 0, null);
+      await q.drain();
+    }
+    const kinds = new Set(q.labels.map(gpuPrepKindOfLabel));
+    expect(kinds).toEqual(new Set(['rally-common', 'rally-build']));
+    expect(kinds.size).toBeLessThanOrEqual(2);
+    // The pieces are still told apart where it helps: the label's tail, and
+    // the build ledger, which is not the admission ledger.
+    expect(new Set(q.labels.map((label) => label.split(':')[1])).size).toBeGreaterThan(8);
+  });
+});
+
 describe('the pure halves of a build piece', () => {
   it('holds each drawable its own culling, shadow and hook across the upload frame, and names its draw', () => {
     const calls: string[] = [];
@@ -717,7 +758,7 @@ describe('the common client (rallyCommon) without a built circuit', () => {
     seam.frame(seamHost(false), { queued: true, match: null }, 0, 0);
     await flush();
     expect(seam.stateOf(REALM_RACERS_COMMON_PREPARE_ID)).toBe('unproven');
-    expect(q.labels.filter((label) => label.startsWith('rally-common-'))).toEqual([]);
+    expect(q.labels.filter((label) => label.startsWith('rally-common:'))).toEqual([]);
   });
 
   it('makes its representatives in queue pieces at the queue join, gates them once, and registers no light', async () => {
@@ -739,7 +780,7 @@ describe('the common client (rallyCommon) without a built circuit', () => {
     let pieces = 0;
     while (q.queued.length > 0) {
       expect(q.queued[0].priority).toBe(GPU_WORK_PRIORITY.VISIBLE_PREWARM);
-      expect(q.queued[0].label).toMatch(/^rally-common-[a-z]+$/);
+      expect(q.queued[0].label).toMatch(/^rally-common:[a-z]+$/);
       expect(root.children).toEqual([]);
       await q.drainOne();
       pieces++;

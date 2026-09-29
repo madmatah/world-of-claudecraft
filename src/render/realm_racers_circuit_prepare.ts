@@ -17,8 +17,11 @@
 // `rallyCircuit:<id>` prepares the drawn circuit once it is known. Its FIRST
 // step is to build it: nothing of a circuit exists before this client runs.
 // The build's pieces (realm_racers_track.ts `realmRacersTrackBuild`) ride the
-// renderer's GPU work queue one unit each, labelled by what they do so the
-// budget prices a memo and a band apart, with a task turn between two pieces:
+// renderer's GPU work queue one unit each, under ONE label kind
+// (`rally-build:<piece>:<id>`: the admission budget learns a cost per kind, the
+// text before the first colon, out of a bounded ledger, and a kind per piece
+// filled it; the pieces stay apart in the build ledger), with a task turn
+// between two pieces:
 // under the lobby's cover the admission takes every unit at once and the queue
 // drains synchronous units back to back, so without the turn the whole build
 // would still be one long task and the lobby would freeze. The seam says when
@@ -191,7 +194,7 @@ export class RealmRacersCommonPrepare implements RealmRacersPrepareClient {
               withTextureRandomStream(this.stream, () => piece.run()),
             ),
           GPU_WORK_PRIORITY.VISIBLE_PREWARM,
-          `rally-common-${piece.kind}`,
+          `rally-common:${piece.kind}`,
         );
         this.steps.done++;
         await this.host.yieldTask();
@@ -355,7 +358,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
         await this.host.run(
           () => this.stepPiece(job),
           GPU_WORK_PRIORITY.LIVE_VIEW,
-          `rally-build-${job.nextKind}:${id}`,
+          `rally-build:${job.nextKind}:${id}`,
         );
         if (!job.finished) await this.host.yieldTask();
       }
