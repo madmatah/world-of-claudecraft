@@ -1438,7 +1438,10 @@ function authoredTrackView(
       return uploadAsked;
     },
     cancelUploadFrame() {
+      // Withdrawn for good: a later ask starts a fresh upload frame rather
+      // than returning the withdrawn one's promise, which would never resolve.
       markUploaded = null;
+      uploadAsked = null;
       if (unculled) restoreAfterUploadFrame(unculled);
       unculled = null;
     },

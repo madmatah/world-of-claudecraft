@@ -107,6 +107,10 @@ export interface RealmRacersPrepareClient {
   /** Run what is left of the client's own build at once: called on the frame
    *  its circuit's build must stop waiting on the queue (`buildNow`). */
   hurry?(): void;
+  /** The cover this client races has ended: called inside the seam frame that
+   *  noticed it, before the frame's draw (the `uncovered` promise of `run`
+   *  resolves only a microtask later). */
+  coverEnded?(): void;
   /** Builds only for the gate (stand-ins), so without one it builds nothing. */
   readonly gateOnly?: boolean;
 }
@@ -273,10 +277,9 @@ export class RealmRacersPrepare {
     commitment.inBand = inBand;
     commitment.shot = this.anyClientBuilt();
     this.holding = realmRacersPrepareHolds(commitment);
-    for (const [id, release] of this.uncoverWaits) {
+    for (const id of this.uncoverWaits.keys()) {
       if (this.coveredFor(this.clientCircuits.get(id) ?? null)) continue;
-      this.uncoverWaits.delete(id);
-      release();
+      this.releaseCover(id);
     }
     // A build still spread over the queue whose road is now on screen (its
     // lobby's curtain fell, the viewer stepped onto it) finishes on this frame.
@@ -320,6 +323,15 @@ export class RealmRacersPrepare {
     this.circuitClientIds.set(circuitId, client.prepareId);
     this.clientCircuits.set(client.prepareId, circuitId);
     if (!this.clients.has(client.prepareId)) this.addClient(client);
+  }
+
+  /** Tell a client its cover ended, synchronously, then resolve its wait. */
+  private releaseCover(id: string): void {
+    const release = this.uncoverWaits.get(id);
+    if (!release) return;
+    this.uncoverWaits.delete(id);
+    this.clients.get(id)?.coverEnded?.();
+    release();
   }
 
   private anyClientBuilt(): boolean {
@@ -367,8 +379,7 @@ export class RealmRacersPrepare {
       // Started in the open (a walker, a login once its cover is gone): it
       // races no cover, so it is told at once rather than a frame later.
       if (this.uncoverWaits.has(id) && !this.coveredFor(this.clientCircuits.get(id) ?? null)) {
-        this.uncoverWaits.delete(id);
-        release();
+        this.releaseCover(id);
       }
     } else {
       work = gate(root).then(TRUE, TRUE);

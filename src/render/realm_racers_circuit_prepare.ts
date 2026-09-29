@@ -235,6 +235,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   buildMs: number | null = null;
   buildWallMs: number | null = null;
   private buildCpu = 0;
+  private coverGone = false;
 
   /**
    * `view` is the pool's lazy view, which this client builds first, or a view
@@ -282,15 +283,25 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     return this.gated && this.skyReady;
   }
 
+  /** The seam's word, inside the frame that noticed it, that the cover this
+   *  client raced has ended: the upload frame is withdrawn before that frame's
+   *  track update, which would otherwise draw the circuit unculled in the
+   *  open. The `uncovered` promise says the same a microtask later. */
+  coverEnded(): void {
+    this.coverGone = true;
+    lazyOf(this.view)?.cancelUploadFrame();
+  }
+
   async run(
     gate: (target: THREE.Object3D) => Promise<unknown>,
     uncovered: Promise<void>,
   ): Promise<boolean> {
-    let covered = true;
+    let released = false;
     const lifted = uncovered.then(() => {
-      covered = false;
+      released = true;
       return false;
     });
+    const covered = (): boolean => !released && !this.coverGone;
     const sky = this.sky.ensure(this.view.skyBiome).then((ok) => {
       this.skyReady = true;
       return ok;
@@ -302,16 +313,18 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     // landing later rides its own gated attach (realm_racers_track.ts).
     for (;;) {
       const want = this.fills.total;
-      if (covered && this.fills.done < want) await Promise.race([this.fills.landed(), lifted]);
+      if (covered() && this.fills.done < want) {
+        await Promise.race([this.fills.landed(), lifted]);
+      }
       await gate(this.view.group).catch(() => undefined);
-      if (!covered || (this.fills.total === want && this.fills.done === want)) break;
+      if (!covered() || (this.fills.total === want && this.fills.done === want)) break;
     }
     this.gated = true;
     // The linked view's upload frame (drawn unculled, see `uploadFrame`)
     // uploads every vertex and instance buffer it shows: held until it
     // happened, so that lands under the curtain too. A view built elsewhere
     // proves its first visible frame, which uploads what the camera saw.
-    if (covered && this.view.onViewerLane()) {
+    if (covered() && this.view.onViewerLane()) {
       const lazy = lazyOf(this.view);
       const drawn = lazy ? lazy.uploadFrame().then(TRUE) : this.view.drawnOnce().then(TRUE);
       // The cover ended first: the upload frame is withdrawn, never drawn in

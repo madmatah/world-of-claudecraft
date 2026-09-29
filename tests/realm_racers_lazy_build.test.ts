@@ -654,6 +654,87 @@ describe('the upload frame', () => {
   });
 });
 
+describe('the upload frame is withdrawn on the frame its cover ends', () => {
+  /** A walker on the lane under an arrival cover: built at once, gated, sky
+   *  ready, the upload frame asked and armed by the frame's update, and no
+   *  render drew it (the arrival holds the present). */
+  async function armedUnderArrival() {
+    const seam = new RealmRacersPrepare();
+    const tracks = track.buildRealmRacersTracks();
+    prepareRealmRacersCircuits(seam, tracks, fakeSky());
+    const view = viewOf(tracks);
+    const walker = { queued: false, match: null };
+    setArrivalCover(true);
+    const frame = () => {
+      seam.frame(seamHost(), walker, LANE.x, LANE.z);
+      tracks.update(LANE.x, LANE.z, 0, null);
+    };
+    for (let i = 0; i < 4; i++) {
+      frame();
+      await flush();
+    }
+    const meshes: THREE.Object3D[] = [];
+    view.group.traverse((object) => {
+      if ((object as THREE.Mesh).isMesh) meshes.push(object);
+    });
+    return { seam, tracks, view, frame, meshes, id: realmRacersCircuitPrepareId(CIRCUIT.id) };
+  }
+
+  it('restores every mesh inside the seam frame that notices the cover ended, with no microtask in between', async () => {
+    const { seam, frame, meshes, id } = await armedUnderArrival();
+    // Armed: the frame under the cover would draw it unculled.
+    expect(meshes.some((mesh) => !mesh.frustumCulled)).toBe(true);
+    expect(seam.stateOf(id)).toBe('preparing');
+    // The arrival lifts (the linked circuit stopped holding it); the next frame
+    // is the first one presented, and it must draw the circuit culled.
+    setArrivalCover(false);
+    frame();
+    expect(meshes.every((mesh) => mesh.frustumCulled)).toBe(true);
+    expect(meshes.every((mesh) => !Object.hasOwn(mesh, 'onAfterRender'))).toBe(true);
+    // Never armed again, and the verdict still comes.
+    for (let i = 0; i < 3; i++) {
+      frame();
+      expect(meshes.every((mesh) => mesh.frustumCulled)).toBe(true);
+    }
+    await flush();
+    expect(seam.stateOf(id)).not.toBe('preparing');
+  });
+
+  it('never re-arms it when the client resumes after the cover ended', async () => {
+    const { tracks, frame, meshes } = await armedUnderArrival();
+    setArrivalCover(false);
+    frame();
+    await flush();
+    for (let i = 0; i < 3; i++) {
+      tracks.update(LANE.x, LANE.z, i + 10, null);
+      expect(meshes.every((mesh) => mesh.frustumCulled)).toBe(true);
+    }
+  });
+
+  it('asks a fresh upload frame after a withdrawal, which a draw resolves', async () => {
+    const tracks = track.buildRealmRacersTracks();
+    const view = viewOf(tracks);
+    view.build().finish();
+    const first = view.uploadFrame();
+    view.cancelUploadFrame();
+    const second = view.uploadFrame();
+    expect(second).not.toBe(first);
+    let resolved = false;
+    void second.then(() => {
+      resolved = true;
+    });
+    tracks.update(LANE.x, LANE.z, 0, null);
+    view.group.traverseVisible((object) => {
+      if ((object as THREE.Mesh).isMesh) {
+        object.onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+      }
+    });
+    tracks.update(LANE.x, LANE.z, 1, null);
+    await flush();
+    expect(resolved).toBe(true);
+  });
+});
+
 describe('the admission budget sees the build as two kinds', () => {
   it('adds at most two queue label kinds over a full race: the queue join, the lobby, the countdown', async () => {
     const seam = new RealmRacersPrepare();
