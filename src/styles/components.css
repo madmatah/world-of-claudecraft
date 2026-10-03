@@ -27286,10 +27286,9 @@
   /* The track-limits line: the referee talking, not an alarm. Same box as the
    wrong-way banner so the strip keeps one shape, in the amber the readout pills
    already use rather than the wrong-way red, at a size that needs no mobile
-   override (the whole rally section sits outside @layer components, so a
-   layered hud-mobile rule for it would be inert). It never pulses: one of its
-   two lines is already a per-second countdown, and the other is an explanation
-   of something that has finished happening. */
+   override. It never pulses: one of its two lines is already a per-second
+   countdown, and the other is an explanation of something that has finished
+   happening. */
   .rallyhud-limits {
     width: max-content;
     max-width: 100%;
