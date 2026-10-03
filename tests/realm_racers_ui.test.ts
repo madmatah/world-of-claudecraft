@@ -2115,7 +2115,7 @@ describe('the Realm Racers HUD event router and cast affordances', () => {
     expect(
       applyRealmRacersEventPresentation(h, { type: 'realmRacersGo', pid: 7 } as SimEvent),
     ).toBe(true);
-    expect(h.showBanner).toHaveBeenCalledWith(t('hudChrome.rally.bannerGo'));
+    expect(h.showBanner).not.toHaveBeenCalled();
     expect(go).toHaveBeenCalledOnce();
     expect(
       applyRealmRacersEventPresentation(h, { type: 'realmRacersUnqueued', pid: 8 } as SimEvent),

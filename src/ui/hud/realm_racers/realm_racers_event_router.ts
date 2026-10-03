@@ -48,10 +48,9 @@ export function applyRealmRacersEventPresentation(hud: object, ev: SimEvent): bo
       if (ev.pid === sim.playerId) audio.realmRacersFound();
       return true;
     case 'realmRacersGo':
-      if (ev.pid === sim.playerId) {
-        h.showBanner(t('hudChrome.rally.bannerGo'));
-        audio.realmRacersGo();
-      }
+      // Cue only: the race strip already reads GO! on this frame, and a banner
+      // above it would show the word twice.
+      if (ev.pid === sim.playerId) audio.realmRacersGo();
       return true;
     case 'realmRacersReset':
       // A silent recovery marker for the online position predictor.
