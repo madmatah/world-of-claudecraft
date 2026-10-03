@@ -4089,6 +4089,8 @@ export const pl_PL: EnTranslations = {
       "temporalEcho": "Obrażenia od Arkanów rzucającego leczą cię za {singlePct}% obrażeń jednocelowych lub {areaPct}% obrażeń obszarowych. Przypływ eteru i Eteryczne Pociski otrzymują premię x4 przy indywidualnym Echu Czasu. Grupowe Echa tworzą równą rezerwę leczenia, rozdzielaną według brakującego zdrowia między naznaczonych sojuszników poniżej 60% zdrowia",
       "arcaneCharge": "{stacks} Ładunków Eteru: Przypływ eteru zadaje o {damagePct}% więcej obrażeń, rzuca się o {castPct}% szybciej i kosztuje {costMult}x many",
       "physicalReduction": "Zmniejsza otrzymywane obrażenia fizyczne o {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Odporny i niezdolny do działania; przywraca zdrowie i przyspiesza regenerację czasu odnowienia. Kliknij prawym przyciskiem myszy, aby anulować.",
       "tongues": "Erhöht Zauberzeit um {pct}%",
       "combustionCrit": "Twoje czary Ognia zawsze trafiają krytycznie",

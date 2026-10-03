@@ -4089,6 +4089,8 @@ export const da_DK: EnTranslations = {
       "temporalEcho": "Kasterens Arkane skade helbreder dig for {singlePct}% af enkeltmåls- eller {areaPct}% af områdeskade. Arkan kraft og Æterpile får en x4-bonus på et individuelt Temporal Echo. Gruppeekkoer skaber en tilsvarende helingsreserve, fordelt efter manglende helbred blandt markerede allierede under 60% helbred",
       "arcaneCharge": "{stacks} Arkane Ladninger: Arkan kraft gør {damagePct}% mere skade, kastes {castPct}% hurtigere og koster {costMult}x mana",
       "physicalReduction": "Reducerer Fysisk skade modtaget med {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immun og ude af stand til at handle; gendanner helbred og fremskynder nedkølingsgendannelse. Højreklik for at annullere.",
       "tongues": "Erhöht Zauberzeit um {pct}%",
       "combustionCrit": "Dine Ild-trolddomme rammer altid kritisk",

@@ -15496,6 +15496,10 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.pickupSlick': '기름 준비',
   'hudChrome.rally.wardHeld': '보호막',
   'hudChrome.rally.wardBroken': '보호막 파괴',
+  'hudChrome.auraEffect.rallyWard':
+    '다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.',
+  'hudChrome.auraEffect.rallyGhost':
+    '트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.',
   'entities.abilities.rally_nitro.name': '니트로',
   'entities.abilities.rally_nitro.description':
     '니트로를 태워 기체 속도 상한을 잠시 넘어서는 가속을 얻습니다.',

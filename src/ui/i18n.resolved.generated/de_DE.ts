@@ -4089,6 +4089,8 @@ export const de_DE: EnTranslations = {
       "temporalEcho": "Der Arkanschaden des Wirkers heilt Euch um {singlePct}% bei Einzelziel- oder {areaPct}% bei Flächenschaden",
       "arcaneCharge": "{stacks} Arkane Ladungen: Ätherschwall verursacht {damagePct}% mehr Schaden, wirkt {castPct}% schneller und kostet {costMult}x Mana",
       "physicalReduction": "Verringert erlittenen physischen Schaden um {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immun und handlungsunfähig; stellt Gesundheit wieder her und beschleunigt die Abklingzeit-Regeneration. Rechtsklick zum Abbrechen.",
       "tongues": "Erhöht Zauberzeit um {pct}%",
       "combustionCrit": "Deine Feuerzauber treffen immer kritisch",

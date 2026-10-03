@@ -4089,6 +4089,8 @@ export const sv_SE: EnTranslations = {
       "temporalEcho": "Kastarens arkanskada läker dig för {singlePct}% av enmålsskada eller {areaPct}% av områdesskada. Etersvall och Eterpilar får en x4-bonus på ett individuellt Tidsmässigt eko. Gruppekona skapar en lika stor läkningsreserv, fördelad efter saknad hälsa bland märkta allierade under 60% hälsa",
       "arcaneCharge": "{stacks} Arkanladdningar: Etersvall gör {damagePct}% mer skada, kastas {castPct}% snabbare och kostar {costMult}x mana",
       "physicalReduction": "Minskar mottagen fysisk skada med {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immun och oförmögen att handla; återställer hälsa och accelererar nedkylningsåterhämtning. Högerklicka för att avbryta.",
       "tongues": "Erhöht Zauberzeit um {pct}%",
       "combustionCrit": "Dina Eld-besvärjelser kritikträffar alltid",

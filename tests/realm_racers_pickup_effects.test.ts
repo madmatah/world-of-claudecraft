@@ -51,7 +51,11 @@ import {
 } from '../src/sim/social/realm_racers';
 import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { advanceVehicleDrive, vehicleMaxSpeed } from '../src/sim/vehicle_motion';
+import { auraEffectDescriptor } from '../src/ui/aura_effect';
 import { createAurasView, isAuraDebuff } from '../src/ui/auras_view';
+import { ensureLocaleLoaded, formatNumber, setLanguage } from '../src/ui/i18n';
+import { hudChromeStrings } from '../src/ui/i18n.catalog/hud_chrome';
+import { renderAuraEffectLine } from './helpers/aura_effect_line';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
@@ -727,6 +731,36 @@ describe('the ward', () => {
     // And it blinks as it runs out, like every other timed buff.
     const ending = view.tick({ auras: [{ ...aura, remaining: 2.5 }] });
     expect(ending.slots[0]).toMatchObject({ durationText: '3s', expiring: true });
+  });
+
+  it('explains itself in its tooltip, with the duration the box granted', async () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const aura = required(wardAuraOf(sim, a), 'ward aura');
+    expect(auraEffectDescriptor(aura)).toEqual({
+      key: 'hudChrome.auraEffect.rallyWard',
+      nums: { seconds: aura.duration },
+    });
+    expect(renderAuraEffectLine(aura)).toBe(
+      `Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts ${formatNumber(REALM_RACERS_WARD_AURA_SECONDS)} sec. Does not stop bumps from other machines.`,
+    );
+    // The duration reaches the copy only through its placeholder, in English
+    // and in every non-Latin fill the M16 rule requires.
+    expect(hudChromeStrings.auraEffect.rallyWard).toContain('{seconds}');
+    expect(hudChromeStrings.auraEffect.rallyWard).not.toMatch(/\d/);
+    const english = renderAuraEffectLine(aura);
+    try {
+      for (const lang of ['zh_CN', 'zh_TW', 'ja_JP', 'ko_KR', 'ru_RU'] as const) {
+        await ensureLocaleLoaded(lang);
+        setLanguage(lang);
+        const line = renderAuraEffectLine(aura);
+        expect(line, lang).not.toBe(english);
+        expect(line, lang).toContain(formatNumber(REALM_RACERS_WARD_AURA_SECONDS));
+      }
+    } finally {
+      setLanguage('en');
+    }
   });
 
   it('absorbs exactly one Ground Blast, then breaks', () => {

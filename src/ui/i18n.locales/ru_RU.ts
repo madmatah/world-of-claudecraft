@@ -15785,7 +15785,8 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Эвергардена',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Эвергардена',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного колодца Ночецветья',
-  'hudChrome.rally.circuitName_drakelands_rampart_run': 'Гонка вдоль крепостного вала Земель Драконов',
+  'hudChrome.rally.circuitName_drakelands_rampart_run':
+    'Гонка вдоль крепостного вала Земель Драконов',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': 'Гонка по лагуне Пальмового Берега',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': 'Одновременный финиш. Судьи гонки объявили ничью.',
@@ -15803,6 +15804,10 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.pickupSlick': 'Масло готово',
   'hudChrome.rally.wardHeld': 'ЩИТ',
   'hudChrome.rally.wardBroken': 'Щит разрушен',
+  'hudChrome.auraEffect.rallyWard':
+    'Поглощает следующий Наземный взрыв или масляное пятно, которое вас настигнет, и разрушается. Действует {seconds} сек. Не защищает от столкновений с другими машинами.',
+  'hudChrome.auraEffect.rallyGhost':
+    'После возврата на трассу машины соперников проезжают сквозь вас. Длится не меньше {minSeconds} сек. и пока вы снова не сможете ехать, затем заканчивается, как только вы отъедете от всех соперников, но не позже чем через {marginSeconds} сек. Наземный взрыв и масляные пятна по-прежнему действуют на вас.',
   'entities.abilities.rally_nitro.name': 'Нитро',
   'entities.abilities.rally_nitro.description':
     'Сжигает заряд нитро, ненадолго разгоняя машину выше её предела скорости.',

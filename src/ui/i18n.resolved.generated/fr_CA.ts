@@ -4089,6 +4089,8 @@ export const fr_CA: EnTranslations = {
       "temporalEcho": "Les dégâts d'Arcanes du lanceur vous soignent de {singlePct}% en cas de dégâts ciblés ou de {areaPct}% en cas de dégâts de zone",
       "arcaneCharge": "{stacks} Charges des Arcanes : Déferlante d'Aether inflige {damagePct}% de dégâts en plus, s'incante {castPct}% plus vite, et coûte {costMult}x de mana",
       "physicalReduction": "Réduit les dégâts physiques subis de {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immunisé et incapable d'agir ; restaure la vie et accélère la récupération des temps de recharge. Clic droit pour annuler.",
       "tongues": "Accroît le temps d'incantation de {pct}%",
       "combustionCrit": "Vos sorts de Feu obtiennent toujours un coup critique",

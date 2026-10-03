@@ -4089,6 +4089,8 @@ export const nl_NL: EnTranslations = {
       "temporalEcho": "De Arcaneschade van de werper geneest je voor {singlePct}% van schade voor één doelwit of {areaPct}% van gebiedsschade. Aethergolf en Aetherpijlen krijgen een x4-bonus op een individuele Temporal Echo. Groepsecho’s maken een even grote genezingsreserve, verdeeld naar ontbrekende gezondheid onder gemarkeerde bondgenoten met minder dan 60% gezondheid",
       "arcaneCharge": "{stacks} Arcaneladingen: Arcanekracht brengt {damagePct}% meer schade toe, wordt {castPct}% sneller gespreukt, en kost {costMult}x mana",
       "physicalReduction": "Vermindert opgelopen Fysieke schade met {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immuun en niet in staat te handelen; herstelt gezondheid en versnelt afkoeltijdherstel. Klik met rechts om te annuleren.",
       "tongues": "Erhöht Zauberzeit um {pct}%",
       "combustionCrit": "Je Vuurspreuken treffen altijd kritiek",

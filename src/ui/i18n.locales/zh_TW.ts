@@ -14803,6 +14803,10 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.pickupSlick': '油漬就緒',
   'hudChrome.rally.wardHeld': '護盾',
   'hudChrome.rally.wardBroken': '護盾破碎',
+  'hudChrome.auraEffect.rallyWard':
+    '吸收下一次命中你的震地爆破或油漬，隨後破碎。持續 {seconds} 秒。無法阻擋其他機車的碰撞。',
+  'hudChrome.auraEffect.rallyGhost':
+    '比賽把你送回賽道後，對手的機車會從你身上穿過。至少持續 {minSeconds} 秒，並持續到你能再次駕駛為止；之後一旦與所有對手分開便立即結束，最多再延續 {marginSeconds} 秒。震地爆破和油漬仍會命中你。',
   'entities.abilities.rally_nitro.name': '氮氣加速',
   'entities.abilities.rally_nitro.description': '點燃一管氮氣，讓機車短暫突破速度上限。',
   'entities.abilities.rally_oil_slick.name': '油漬',

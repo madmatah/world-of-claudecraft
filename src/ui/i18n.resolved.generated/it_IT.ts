@@ -4089,6 +4089,8 @@ export const it_IT: EnTranslations = {
       "temporalEcho": "I danni Arcani del lanciatore ti curano per il {singlePct}% dei danni a bersaglio singolo o il {areaPct}% dei danni ad area. Potere d'Etere e Dardi d’Etere ottengono un bonus di 4 volte con un Eco Temporale individuale. Gli Echi di gruppo creano una riserva di cure equivalente, condivisa tra gli alleati segnati sotto il 60% di salute in base alla salute mancante",
       "arcaneCharge": "{stacks} Cariche Arcane: Potere d'Etere infligge il {damagePct}% di danni in più, si lancia il {castPct}% più veloce e costa {costMult}x mana",
       "physicalReduction": "Riduce i danni Fisici subiti del {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immune e impossibilitato ad agire; ripristina la salute e accelera il recupero dei tempi di recupero. Clic destro per annullare.",
       "tongues": "Aumenta il tempo di lancio del {pct}%",
       "combustionCrit": "I tuoi incantesimi del Fuoco colpiscono sempre criticamente",

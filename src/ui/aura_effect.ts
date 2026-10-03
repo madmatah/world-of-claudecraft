@@ -99,6 +99,11 @@ import {
   NYTHRAXIS_ENRAGE_HASTE_BONUS,
 } from '../sim/nythraxis_enrage_clock';
 import { NYTHRAXIS_KINGS_WRATH_AURA_ID } from '../sim/nythraxis_kings_wrath';
+import {
+  REALM_RACERS_GHOST_MARGIN_TICKS,
+  REALM_RACERS_GHOST_MIN_TICKS,
+} from '../sim/realm_racers_ghost';
+import { REALM_RACERS_WARD_AURA_SECONDS } from '../sim/social/realm_racers';
 import type { AuraKind } from '../sim/types';
 import {
   CAT_FORM_MOVE_MULT,
@@ -108,6 +113,7 @@ import {
   FAERIE_FIRE_ARMOR_PCT,
   RECKLESSNESS_RAGE_GEN,
   SUNDER_ARMOR_PCT_PER_STACK,
+  TICK_RATE,
 } from '../sim/types';
 import { VARKHUL_ASSEMBLY_BURDEN_TICK_SECONDS } from '../sim/varkhul_assembly';
 import {
@@ -940,6 +946,17 @@ export function auraEffectDescriptor(
       return { key: `${KEY}.damageReduction`, nums: { pct: pctFromFrac(a.value) } };
     case 'buff_dr_phys':
       return { key: `${KEY}.physicalReduction`, nums: { pct: pctFromFrac(a.value) } };
+
+    case 'rally_ward':
+      return { key: `${KEY}.rallyWard`, nums: { seconds: REALM_RACERS_WARD_AURA_SECONDS } };
+    case 'rally_ghost':
+      return {
+        key: `${KEY}.rallyGhost`,
+        nums: {
+          minSeconds: REALM_RACERS_GHOST_MIN_TICKS / TICK_RATE,
+          marginSeconds: REALM_RACERS_GHOST_MARGIN_TICKS / TICK_RATE,
+        },
+      };
 
     default:
       // NOT exhaustive by design: the class wave adds aura kinds that carry no

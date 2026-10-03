@@ -4089,6 +4089,8 @@ export const pt_BR: EnTranslations = {
       "temporalEcho": "O dano Arcano do conjurador cura você em {singlePct}% do dano de alvo único ou {areaPct}% do dano em área. Onda de Éter e Dardos de Éter recebem um bônus de x4 com um Eco Temporal individual. Ecos de grupo criam uma reserva de cura equivalente, distribuída conforme a vida perdida entre aliados marcados com menos de 60% de vida",
       "arcaneCharge": "{stacks} Cargas Arcanas: Onda de Éter causa {damagePct}% mais dano, conjura {castPct}% mais rápido e custa {costMult}x de mana",
       "physicalReduction": "Reduz o dano Físico sofrido em {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Imune e incapaz de agir; restaura vida e acelera a recuperação de recarga. Clique com o botão direito para cancelar.",
       "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
       "combustionCrit": "Seus feitiços de Fogo sempre causam acerto crítico",

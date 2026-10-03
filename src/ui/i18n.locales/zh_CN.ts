@@ -14799,6 +14799,10 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.pickupSlick': '油渍就绪',
   'hudChrome.rally.wardHeld': '护盾',
   'hudChrome.rally.wardBroken': '护盾破碎',
+  'hudChrome.auraEffect.rallyWard':
+    '吸收下一次命中你的震地爆破或油渍，随后破碎。持续 {seconds} 秒。无法阻挡其他机车的碰撞。',
+  'hudChrome.auraEffect.rallyGhost':
+    '比赛把你送回赛道后，对手的机车会从你身上穿过。至少持续 {minSeconds} 秒，并持续到你能再次驾驶为止；之后一旦与所有对手分开便立即结束，最多再延续 {marginSeconds} 秒。震地爆破和油渍仍会命中你。',
   'entities.abilities.rally_nitro.name': '氮气加速',
   'entities.abilities.rally_nitro.description': '点燃一管氮气，让机车短暂突破速度上限。',
   'entities.abilities.rally_oil_slick.name': '油渍',

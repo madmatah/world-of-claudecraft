@@ -4089,6 +4089,8 @@ export const en_CA: EnTranslations = {
       "temporalEcho": "The caster's Arcane damage heals you for {singlePct}% of single-target or {areaPct}% of area damage. Aether Surge and Aether Darts use a 4x bonus on an individual Temporal Echo. Group Echoes create an equal healing reserve, shared among marked allies below 60% health according to missing health",
       "arcaneCharge": "{stacks} Arcane Charges: Aether Surge deals {damagePct}% more damage, casts {castPct}% faster, and costs {costMult}x mana",
       "physicalReduction": "Reduces Physical damage taken by {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immune and unable to act; restores health and accelerates cooldown recovery. Right-click to cancel.",
       "tongues": "Increases casting time by {pct}%",
       "combustionCrit": "Your Fire spells always critically strike",

@@ -4089,6 +4089,8 @@ export const id_ID: EnTranslations = {
       "temporalEcho": "Kerusakan Arkana dari perapal menyembuhkanmu sebesar {singlePct}% dari kerusakan bertarget tunggal atau {areaPct}% dari kerusakan area. Gelombang Aether dan Panah Aether mendapat bonus x4 pada Gema Temporal individual. Gema grup membuat cadangan penyembuhan yang sama, dibagikan menurut kesehatan yang hilang di antara sekutu bertanda dengan kesehatan di bawah 60%",
       "arcaneCharge": "{stacks} Muatan Arkana: Kekuatan Arkan memberikan {damagePct}% kerusakan lebih besar, dirapal {castPct}% lebih cepat, dan menghabiskan {costMult}x mana",
       "physicalReduction": "Mengurangi kerusakan Fisik yang diterima sebesar {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Kebal dan tidak dapat bertindak; memulihkan kesehatan dan mempercepat pemulihan jeda. Klik kanan untuk membatalkan.",
       "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
       "combustionCrit": "Mantra Api-mu selalu menghasilkan serangan kritis",

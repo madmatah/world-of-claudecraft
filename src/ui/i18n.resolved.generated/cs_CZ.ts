@@ -4089,6 +4089,8 @@ export const cs_CZ: EnTranslations = {
       "temporalEcho": "Seslatelovo arkánní poškození tě léčí za {singlePct}% poškození na jeden cíl nebo {areaPct}% plošného poškození. Příval éteru a Éterové šipky získávají u individuální Časové ozvěny čtyřnásobný bonus. Skupinové ozvěny vytvářejí stejnou rezervu léčení, která se rozdělí podle chybějícího zdraví mezi označené spojence pod 60% zdraví",
       "arcaneCharge": "{stacks} Éterických nábojů: Aether Surge způsobuje o {damagePct} % více poškození, sesílá se o {castPct} % rychleji a stojí {costMult}x many",
       "physicalReduction": "Snižuje utrpěné fyzické poškození o {pct} %",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Nezranitelný/á a neschopný/á jednat; obnovuje zdraví a urychluje obnovu cooldownu. Klikni pravým tlačítkem pro zrušení.",
       "tongues": "Zvyšuje dobu sesílání o {pct} %",
       "combustionCrit": "Tvoje ohnivá kouzla vždy kriticky zasáhnou",

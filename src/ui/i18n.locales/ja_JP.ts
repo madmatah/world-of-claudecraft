@@ -15539,6 +15539,10 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.pickupSlick': 'オイル準備完了',
   'hudChrome.rally.wardHeld': '守護',
   'hudChrome.rally.wardBroken': '守護が砕けた',
+  'hudChrome.auraEffect.rallyWard':
+    '次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。',
+  'hudChrome.auraEffect.rallyGhost':
+    'コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。',
   'entities.abilities.rally_nitro.name': 'ニトロ',
   'entities.abilities.rally_nitro.description':
     'ニトロを焚き、機体の速度上限を超える短い加速を得る。',

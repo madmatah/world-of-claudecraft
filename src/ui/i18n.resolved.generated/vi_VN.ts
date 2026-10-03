@@ -4089,6 +4089,8 @@ export const vi_VN: EnTranslations = {
       "temporalEcho": "Sát thương Bí Thuật của người thi triển hồi máu cho bạn bằng {singlePct}% sát thương đơn mục tiêu hoặc {areaPct}% sát thương diện rộng. Aether Surge và Phi Tiêu Aether được nhân 4 lần trên một Vọng Âm Thời Gian cá nhân. Vọng Âm nhóm tạo một lượng hồi máu dự trữ bằng nhau, chia cho các đồng minh được đánh dấu còn dưới 60% máu theo lượng máu đã mất",
       "arcaneCharge": "{stacks} Điện Tích Bí Thuật: Sức Mạnh Bí Thuật gây thêm {damagePct}% sát thương, thi triển nhanh hơn {castPct}%, và tốn gấp {costMult} lần mana",
       "physicalReduction": "Giảm sát thương Vật Lý phải chịu đi {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Miễn nhiễm và không thể hành động; hồi phục máu và tăng tốc phục hồi thời gian hồi chiêu. Nhấp chuột phải để hủy bỏ.",
       "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
       "combustionCrit": "Các phép Lửa của bạn luôn chí mạng",

@@ -4089,6 +4089,8 @@ export const tr_TR: EnTranslations = {
       "temporalEcho": "Büyücünün Gizemli hasarı seni tek hedef hasarının {singlePct}%'i ya da alan hasarının {areaPct}%'i kadar iyileştirir. Aether Dalgası ve Aether Okları, tek bir Zamansal Yankı üzerinde 4 kat bonus kullanır. Grup Yankıları, canı %60'ın altında olan işaretli müttefikler arasında eksik cana göre paylaşılan eşit bir iyileştirme rezervi oluşturur",
       "arcaneCharge": "{stacks} Gizemli Yük: Aether Dalgası {damagePct}% daha fazla hasar verir, {castPct}% daha hızlı okunur ve {costMult}x mana harcar",
       "physicalReduction": "Alınan Fiziksel hasarı {pct}% azaltır",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Bağışık ve eylem yapamaz; canı yeniler ve bekleme süresi iyileşmesini hızlandırır. İptal etmek için sağ tıkla.",
       "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
       "combustionCrit": "Ateş büyülerin her zaman kritik vurur",

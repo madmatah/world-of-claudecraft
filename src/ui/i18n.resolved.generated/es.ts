@@ -4089,6 +4089,8 @@ export const es: EnTranslations = {
       "temporalEcho": "El daño Arcano del taumaturgo te sana un {singlePct}% del daño a un objetivo o un {areaPct}% del daño de área. Impulso de Éter y Dardos de éter obtienen una bonificación de x4 con un Eco Temporal individual. Los Ecos grupales generan una reserva de sanación equivalente que se reparte entre los aliados marcados con menos del 60% de salud según la salud que les falte",
       "arcaneCharge": "{stacks} cargas Arcanas: Oleada de éter inflige un {damagePct}% más, se lanza un {castPct}% más rápido y cuesta {costMult} veces más maná",
       "physicalReduction": "Reduce el daño Físico recibido un {pct}%",
+      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Inmune e incapaz de actuar; recupera salud y acelera los tiempos de reutilización. Haz clic derecho para cancelar.",
       "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
       "combustionCrit": "Tus hechizos de Fuego siempre golpean de crítico",

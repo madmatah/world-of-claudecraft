@@ -4089,6 +4089,8 @@ export const zh_TW: EnTranslations = {
       "temporalEcho": "施法者的秘法傷害會治療你，單體傷害轉化 {singlePct}%，範圍傷害轉化 {areaPct}%。以太湧動和乙太飛鏢在單獨的時光迴響上按4倍加成計算。群體迴響會產生等量的治療儲備，按照缺失生命值在生命低於60%的被標記盟友之間分配",
       "arcaneCharge": "{stacks} 層秘法充能：乙太湧動傷害提高 {damagePct}%，施法加快 {castPct}%，法力消耗變為 {costMult} 倍",
       "physicalReduction": "受到的物理傷害降低 {pct}%",
+      "rallyWard": "吸收下一次命中你的震地爆破或油漬，隨後破碎。持續 {seconds} 秒。無法阻擋其他機車的碰撞。",
+      "rallyGhost": "比賽把你送回賽道後，對手的機車會從你身上穿過。至少持續 {minSeconds} 秒，並持續到你能再次駕駛為止；之後一旦與所有對手分開便立即結束，最多再延續 {marginSeconds} 秒。震地爆破和油漬仍會命中你。",
       "temporalHourglass": "免疫傷害且無法行動；恢復生命並加速冷卻。按右鍵可取消。",
       "tongues": "施法時間增加 {pct}%",
       "combustionCrit": "你的火焰法術必定造成致命一擊",

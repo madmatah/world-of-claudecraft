@@ -43,6 +43,10 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
+import { auraEffectDescriptor } from '../src/ui/aura_effect';
+import { formatNumber } from '../src/ui/i18n';
+import { hudChromeStrings } from '../src/ui/i18n.catalog/hud_chrome';
+import { renderAuraEffectLine } from './helpers/aura_effect_line';
 import {
   autoGhostClearTick,
   expectGhostEndsWhenClear,
@@ -262,6 +266,33 @@ describe('the ghost starts on every recovery', () => {
     // Silent, like the recovery itself: the entity aura list is the whole wire,
     // and no gain line lands in anybody's event frame.
     expect(auras().filter((event) => event.name === 'Ghosted')).toEqual([]);
+  });
+
+  it('explains itself in its tooltip with the window the recovery really opened', () => {
+    const { sim, a, racer, progress } = racing();
+    const resetTick = sim.tickCount;
+    sim.realmRacersResetPosition(a);
+    const aura = required(
+      racer.auras.find((entry) => entry.id === REALM_RACERS_GHOST_AURA),
+      'ghost aura',
+    );
+    const effect = required(auraEffectDescriptor(aura), 'ghost effect line');
+    const nums = required(effect.nums, 'ghost effect numbers');
+    expect(effect.key).toBe('hudChrome.auraEffect.rallyGhost');
+    // The printed minimum and margin are the window the sim keyed to this
+    // recovery, in seconds.
+    expect(progress.ghostClearTick - resetTick).toBeGreaterThan(nums.minSeconds * TICK_RATE);
+    expect(progress.ghostCapTick - progress.ghostClearTick).toBe(nums.marginSeconds * TICK_RATE);
+    expect(nums).toEqual({
+      minSeconds: REALM_RACERS_GHOST_MIN_TICKS / TICK_RATE,
+      marginSeconds: REALM_RACERS_GHOST_MARGIN_TICKS / TICK_RATE,
+    });
+    const min = formatNumber(nums.minSeconds, { maximumFractionDigits: 1 });
+    const margin = formatNumber(nums.marginSeconds, { maximumFractionDigits: 0 });
+    expect(renderAuraEffectLine(aura)).toBe(
+      `Rival machines pass through you after the race puts you back on the track. Lasts at least ${min} sec and until you can drive again, then ends as soon as you are clear of every rival, ${margin} sec later at most. Ground Blasts and oil slicks still hit you.`,
+    );
+    expect(hudChromeStrings.auraEffect.rallyGhost).not.toMatch(/\d/);
   });
 
   it('holds a manual recovery for its minimum, then to the cap with a rival on it', () => {

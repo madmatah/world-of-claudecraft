@@ -4089,6 +4089,8 @@ export const zh_CN: EnTranslations = {
       "temporalEcho": "施法者的奥术伤害会治疗你，单体伤害转化 {singlePct}%，范围伤害转化 {areaPct}%。以太涌动和以太飞镖在单独的时光回响上按4倍加成计算。群体回响会产生等量的治疗储备，按照缺失生命值在生命低于60%的被标记盟友之间分配",
       "arcaneCharge": "{stacks} 层奥术充能：以太涌动伤害提高 {damagePct}%，施法加快 {castPct}%，法力消耗变为 {costMult} 倍",
       "physicalReduction": "受到的物理伤害降低 {pct}%",
+      "rallyWard": "吸收下一次命中你的震地爆破或油渍，随后破碎。持续 {seconds} 秒。无法阻挡其他机车的碰撞。",
+      "rallyGhost": "比赛把你送回赛道后，对手的机车会从你身上穿过。至少持续 {minSeconds} 秒，并持续到你能再次驾驶为止；之后一旦与所有对手分开便立即结束，最多再延续 {marginSeconds} 秒。震地爆破和油渍仍会命中你。",
       "temporalHourglass": "免疫伤害且无法行动；恢复生命并加速冷却。右键点击可取消。",
       "tongues": "施法时间延长 {pct}%",
       "combustionCrit": "你的火焰法术必定造成致命一击",
