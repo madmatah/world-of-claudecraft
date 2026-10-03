@@ -27368,17 +27368,19 @@
 @layer components {
   /* ---------- realm racers podium ---------- */
 
-  /* The end-of-race ceremony, centred over the viewport. A race used to end on
-     one line of text and a standings panel that quietly stopped moving; this is
-     the moment a four-pilot grid is actually raced for. It keys on the RACE
-     being decided, never on the viewer's own phase, so a pilot who merely quit
-     keeps their forfeit tableau instead of a classification that does not
-     exist yet. */
+  /* The end-of-race ceremony, over the middle of the viewport. A race used to
+     end on one line of text and a standings panel that quietly stopped moving;
+     this is the moment a four-pilot grid is actually raced for. It keys on the
+     RACE being decided, never on the viewer's own phase, so a pilot who merely
+     quit keeps their forfeit tableau instead of a classification that does not
+     exist yet. It hangs just under the result banner the same race end raises
+     (#banner: top 28%, one 38px line): centred, it covered the middle of
+     "X wins the race." on any viewport under 1080px tall. */
   #realm-racers-podium {
     position: absolute;
     z-index: 60;
     left: 50%;
-    top: 46%;
+    top: calc(28% + 52px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -27396,7 +27398,7 @@
       inset 0 1px 0 var(--rally-white-a14);
     opacity: 0;
     visibility: hidden;
-    transform: translate(-50%, calc(-50% + 10px));
+    transform: translate(-50%, 10px);
     transition:
       opacity 200ms ease-out,
       transform 200ms ease-out,
@@ -27405,7 +27407,7 @@
   #realm-racers-podium.shown {
     opacity: 1;
     visibility: visible;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, 0);
     transition:
       opacity 240ms ease-out,
       transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1),
@@ -27547,7 +27549,7 @@
   @media (prefers-reduced-motion: reduce) {
     #realm-racers-podium,
     #realm-racers-podium.shown {
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, 0);
       transition:
         opacity 120ms linear,
         visibility 0s linear 120ms;

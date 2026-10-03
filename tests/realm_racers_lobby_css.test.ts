@@ -137,3 +137,102 @@ describe('Realm Racers race strip stacking', () => {
     }
   });
 });
+
+/** Every body of a rule whose selector is exactly `selector`. */
+function rulesOf(css: string, selector: string): string[] {
+  const bodies: string[] = [];
+  let at = css.indexOf(`${selector} {`);
+  while (at >= 0) {
+    const open = at + selector.length + 2;
+    bodies.push(css.slice(open, css.indexOf('}', open)).replace(/\s+/g, ' '));
+    at = css.indexOf(`${selector} {`, open);
+  }
+  return bodies;
+}
+
+function declOf(body: string, property: string): string {
+  const match = new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(body);
+  if (!match) throw new Error(`no ${property} in ${body}`);
+  return match[1].trim();
+}
+
+// The race's own overlays share the screen with HUD chrome they do not own: the
+// result banner, the touch target frame, the touch player frame. Captured
+// overlaps (docs/screenshots/realm-racers-mobile/) are pinned here where the
+// placement is decided, since jsdom does no layout.
+describe('Realm Racers race overlays clear their neighbours', () => {
+  const components = read('src/styles/components.css');
+  const hudCss = read('src/styles/hud.css');
+  const mobile = read('src/styles/hud.mobile.css');
+  const tokens = read('src/styles/tokens.css');
+
+  it('hangs the desktop podium under the result banner the same race end raises', () => {
+    const banner = rulesOf(hudCss, '#banner')[0];
+    const bannerTop = /^(\d+)%$/.exec(declOf(banner, 'top'));
+    expect(bannerTop).not.toBeNull();
+    const bannerLine =
+      Number.parseFloat(declOf(banner, 'font-size')) *
+      Number.parseFloat(declOf(banner, 'line-height'));
+    const [podium, shown] = [
+      rulesOf(components, '#realm-racers-podium')[0],
+      rulesOf(components, '#realm-racers-podium.shown')[0],
+    ];
+    const podiumTop = /^calc\((\d+)% \+ (\d+)px\)$/.exec(declOf(podium, 'top'));
+    expect(podiumTop).not.toBeNull();
+    const [, percent, offset] = podiumTop as RegExpExecArray;
+    expect(percent).toBe((bannerTop as RegExpExecArray)[1]);
+    expect(Number(offset)).toBeGreaterThan(bannerLine);
+    // Top-anchored: a -50% centring shift would pull it back over the banner.
+    expect(declOf(podium, 'transform')).not.toContain('-50%)');
+    expect(declOf(shown, 'transform')).toBe('translate(-50%, 0)');
+  });
+
+  it('keeps the touch standings under the touch target seat at every tier', () => {
+    const seats = rulesOf(mobile, 'body.mobile-touch #target-frame').filter((body) =>
+      /transform: scale\(/.test(body),
+    );
+    const standings = rulesOf(mobile, 'body.mobile-touch #realm-racers-standings');
+    expect(seats.length).toBeGreaterThanOrEqual(2);
+    for (const seat of seats) {
+      const seatTop = declOf(seat, 'top');
+      const scale = /var\((--mobile-unit-frame-scale[\w-]*)\)/.exec(seat)?.[1];
+      expect(scale, seat).toBeDefined();
+      const match = standings.find((body) => {
+        const top = declOf(body, 'top');
+        return (
+          top.includes(seatTop) &&
+          top.includes(`var(${scale})`) &&
+          top.includes('var(--mobile-chrome-scale, 1)')
+        );
+      });
+      expect(match, `standings under the seat at ${seatTop} scaled by ${scale}`).toBeDefined();
+    }
+  });
+
+  it('lays the touch podium on a solid ground over the strip and the banner', () => {
+    const podium = rulesOf(mobile, 'body.mobile-touch #realm-racers-podium')[0];
+    const ground = /^var\((--[\w-]+)\)$/.exec(declOf(podium, 'background'))?.[1];
+    expect(ground).toBeDefined();
+    const value = new RegExp(`${ground}:\\s*(#[0-9a-f]+);`).exec(tokens)?.[1];
+    expect(value).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it('shrinks the touch pickup splash into the band above the landscape player frame', () => {
+    const splash = rulesOf(mobile, 'body.mobile-touch #realm-racers-splash')[0];
+    const icon = rulesOf(mobile, 'body.mobile-touch .rally-splash-icon')[0];
+    const label = rulesOf(mobile, 'body.mobile-touch .rally-splash-label')[0];
+    const px = (body: string, property: string): number =>
+      Number.parseFloat(declOf(body, property));
+    const [padTop, , padBottom] = declOf(label, 'padding')
+      .split(' ')
+      .map((part) => Number.parseFloat(part));
+    const labelHeight = px(label, 'font-size') * 1.25 + padTop + (padBottom ?? padTop) + 2;
+    const bottom = px(splash, 'top') + px(icon, 'height') + px(splash, 'gap') + labelHeight;
+    // The landscape player frame starts at 321px on a 390px-tall phone; the
+    // splash keeps a margin above it.
+    expect(bottom).toBeLessThan(310);
+    expect(px(icon, 'height')).toBeLessThan(
+      px(rulesOf(components, '.rally-splash-icon')[0], 'height'),
+    );
+  });
+});
