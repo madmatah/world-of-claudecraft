@@ -26465,44 +26465,17 @@
   /* -------------------------------------------------------------------------
    The Realm Racers
    ------------------------------------------------------------------------- */
-  /* The window keeps the shared .window / .panel frame (and therefore the shared
-   resize grip, which is drawn as a background layer on the window itself: an id
-   selector setting the `background` SHORTHAND here would silently wipe it). The
-   rally identity lives on the header and the accent border, not on a bespoke
-   body background. */
+  /* The window rides the window family (.ui-window frame, .ui-win-head head,
+   DESIGN.md 8.1), so this section sets geometry only: the frame, the head and
+   the close control take the family's look, and the rally identity lives in
+   the body (the hero card, the controls). No `background` here: the shared
+   resize grip is drawn as a background layer on the window itself, and an id
+   selector setting the shorthand would silently wipe it. The family frame
+   clips its overflow, so the window scrolls its own body, as the legacy frame
+   did. */
   #realm-racers-window {
     width: min(560px, calc(var(--app-vw, 100vw) - 32px));
-    border-color: var(--rally-frame-gold);
-    box-shadow:
-      0 20px 60px var(--rally-shadow-aaa),
-      inset 0 0 0 1px var(--rally-glint-a24);
-  }
-  #realm-racers-window > .panel-title {
-    border-bottom: 1px solid var(--rally-frame-gold-a55);
-    background: linear-gradient(
-      90deg,
-      var(--rally-title-bg-start) 0%,
-      var(--rally-title-bg-mid) 65%,
-      var(--rally-title-bg-end) 100%
-    );
-  }
-  .rally-heading {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .rally-kicker {
-    color: var(--rally-kicker-gold);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  #realm-racers-title {
-    color: var(--rally-title-text);
-    font-family: var(--font-display, serif);
-    font-size: 25px;
-    letter-spacing: 0.025em;
+    overflow-y: auto;
   }
   .rally-body {
     padding: 4px 4px 2px;

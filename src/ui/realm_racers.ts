@@ -443,16 +443,18 @@ export class RealmRacersUi {
     );
   }
 
-  /** The house window grammar (.panel-title + .x-btn, see src/styles/layout.css):
-   *  it is what carries the sticky header, the titlebar drag, and the pinned
-   *  close control every other window has. Shared by both screens, so stepping
-   *  into the setup never loses the frame's chrome. */
+  /** The house window grammar (.panel-title + .x-btn, see src/styles/layout.css)
+   *  on the window family's head (DESIGN.md 8.1): it is what carries the sticky
+   *  header, the titlebar drag, and the pinned close control every other window
+   *  has. The society line is the subtitle, outside the span the dialog is named
+   *  by. Shared by both screens, so stepping into the setup never loses the
+   *  frame's chrome. */
   private headerHtml(): string {
     return (
-      `<div class="panel-title">` +
-      `<span class="rally-heading"><span class="rally-kicker">${esc(t('hudChrome.rally.kicker'))}</span>` +
-      `<span id="realm-racers-title">${esc(t('hudChrome.rally.title'))}</span></span>` +
-      `<button type="button" class="x-btn" data-close aria-label="${esc(t('hudChrome.rally.close'))}">${svgIcon('close')}</button>` +
+      `<div class="panel-title ui-win-head"><span class="ui-win-title">` +
+      `<span id="realm-racers-title">${esc(t('hudChrome.rally.title'))}</span>` +
+      `<span class="ui-win-sub">${esc(t('hudChrome.rally.kicker'))}</span></span>` +
+      `<button type="button" class="x-btn ui-x-btn" data-close aria-label="${esc(t('hudChrome.rally.close'))}">${svgIcon('close')}</button>` +
       `</div>`
     );
   }

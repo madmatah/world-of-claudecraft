@@ -906,6 +906,55 @@ describe('Realm Racers podium', () => {
   });
 });
 
+// DESIGN.md section 8.1: the window rides the shared window family (the frame,
+// the 44px head, the gold title, the subtitle and the shared close control), so
+// its own section keeps geometry and the body, never the frame's look.
+describe('Realm Racers window on the window family', () => {
+  it('ships the root on the family in both game entries', () => {
+    for (const entry of ['index.html', 'play.html']) {
+      const html = readFileSync(entry, 'utf8');
+      expect(html, entry).toContain(
+        '<div id="realm-racers-window" class="window panel ui-window"></div>',
+      );
+    }
+  });
+
+  it('builds the head from the family on both screens, named by the title alone', () => {
+    const h = harness();
+    h.ui.toggle();
+    const head = (): HTMLElement => h.root.querySelector('.panel-title') as HTMLElement;
+    for (const screen of ['front', 'setup'] as const) {
+      if (screen === 'setup') {
+        (h.root.querySelector('[data-rally-practice-open]') as HTMLButtonElement).click();
+        expect(h.root.querySelector('[data-rally-practice-back]'), screen).not.toBeNull();
+      }
+      expect(head().classList.contains('ui-win-head'), screen).toBe(true);
+      const title = head().querySelector('.ui-win-title') as HTMLElement;
+      expect(title.querySelector('#realm-racers-title')?.textContent, screen).toBe(
+        t('hudChrome.rally.title'),
+      );
+      // The society line is the subtitle, outside the element the dialog is
+      // named by, so the window's accessible name stays the game's name.
+      const sub = title.querySelector('.ui-win-sub') as HTMLElement;
+      expect(sub.textContent, screen).toBe(t('hudChrome.rally.kicker'));
+      expect(sub.closest('#realm-racers-title'), screen).toBeNull();
+      expect(head().querySelector('[data-close]')?.className, screen).toBe('x-btn ui-x-btn');
+    }
+  });
+
+  it('keeps the frame look off its own section and scrolls the body itself', () => {
+    const css = readFileSync('src/styles/components.css', 'utf8');
+    const at = css.indexOf('  #realm-racers-window {');
+    const rule = css.slice(at, css.indexOf('}', at));
+    expect(rule).not.toMatch(/border-color|box-shadow|background|border-radius|outline/);
+    // The family frame clips its overflow; a tall setup screen on a short
+    // window must still scroll, as it did on the legacy frame.
+    expect(rule).toMatch(/overflow-y:\s*auto;/);
+    expect(css).not.toContain('#realm-racers-window > .panel-title {');
+    expect(css).not.toMatch(/\.rally-kicker \{/);
+  });
+});
+
 describe('Realm Racers window lifecycle', () => {
   it('leaves the queue window open while no match exists', () => {
     const h = harness();
