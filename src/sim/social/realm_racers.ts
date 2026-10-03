@@ -132,6 +132,7 @@ import {
 } from '../realm_racers_track_limits';
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
+import { settleTeleportArrival } from '../teleport_arrival';
 import { CAST_COMPLETE_EPS, type Entity, TICK_RATE, type VehicleDrive } from '../types';
 import {
   type ContactBody,
@@ -874,6 +875,8 @@ function placeRacer(ctx: SimContext, match: RealmRacersMatch, e: Entity, slot: n
   const grid = realmRacersToWorld(match, start.x, start.z);
   e.pos = ctx.groundPos(grid.x, grid.z);
   e.prevPos = { ...e.pos };
+  // A pilot seated mid-jump or mid-glide must not carry that fall onto the grid.
+  settleTeleportArrival(e);
   e.facing = start.facing;
   e.mountKey = REALM_RACERS_MOUNT_KEY;
   e.mountCastKey = '';
@@ -1020,6 +1023,7 @@ function restoreRacer(ctx: SimContext, match: RealmRacersMatch, meta: PlayerMeta
   if (ret) {
     e.pos = ctx.groundPos(ret.x, ret.z);
     e.prevPos = { ...e.pos };
+    settleTeleportArrival(e);
     e.facing = ret.facing;
     ctx.rebucket(e);
     ctx.emit({ type: 'respawn', pid: meta.entityId });

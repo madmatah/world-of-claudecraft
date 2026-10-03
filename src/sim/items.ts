@@ -845,8 +845,11 @@ export function useItem(
   if (!r) return;
   const { meta, e: p } = r;
   const def = ITEMS[itemId];
+  // A Realm Racers seat is a vehicle seat too: from the bags a pilot could cast
+  // a teleport off the circuit, plant a standard on the lane or turn invisible.
   if (
     meta.vehicle ||
+    meta.realmRacersMatchId !== null ||
     wispMazeActionsLocked(meta.worldQuestLog) ||
     shadowActionsLocked(meta.worldQuestLog) ||
     gliderActionsLocked(meta.worldQuestLog)
