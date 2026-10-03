@@ -2450,7 +2450,11 @@ describe('the whole-character gear-heavy maximal blob (Phase 18 U-MEASURE)', () 
         // Plus 220 for the seven Realm Racers pvp_rr_* deed ids in the deeds row
         // (108 characters of ids plus 7 x 16 bytes of quoting, colon, date and
         // comma). MEASURED at the release/v0.44.0 sync into feature/realm-racers.
-        220,
+        220 +
+        // Plus 67 for the Drakelands Rampart Run and Palmreach Lagoon Run flying
+        // lap deeds (pvp_rr_rampart_lap, pvp_rr_lagoon_lap) in the deeds row (35
+        // characters of ids plus 2 x 16 bytes), which landed without a re-measure.
+        67,
     );
     const forgeBaseline = {
       questsDone: 4606,
@@ -2495,8 +2499,9 @@ describe('the whole-character gear-heavy maximal blob (Phase 18 U-MEASURE)', () 
       // (the +154 above). deeds 708 -> 743 at the Buried Hoards merge (the
       // Coinsack deed, inside the +4,711 above). deeds 743 -> 963 at the
       // release/v0.45.0 merge into feature/realm-racers: the seven pvp_rr_*
-      // deeds (the +220 above).
-      deeds: 963,
+      // deeds (the +220 above). deeds 963 -> 1030: the two flying lap deeds
+      // (the +67 above).
+      deeds: 1030,
       // deedStats +4,648 and reliquary +8,848 at the second release/v0.44.0 base
       // merge: Warfare Season 2's 139 item ids (the 13,496 attributed above).
       deedStats: 9427,
@@ -2539,8 +2544,9 @@ describe('the whole-character gear-heavy maximal blob (Phase 18 U-MEASURE)', () 
       // +247 knownRecipes, +533 and +4,711 attributed above, all kept here).
       // 231,729 -> 231,949 at the release/v0.45.0 merge into
       // feature/realm-racers (+220, the seven pvp_rr_* deeds, which this
-      // counterfactual keeps).
-    ).toBe(231949);
+      // counterfactual keeps). 231,949 -> 232,016 (+67, the two flying lap
+      // deeds, likewise kept).
+    ).toBe(232016);
     // Removing ONLY field_kit (the Bramblehide release content and the two
     // dev-mount reins items still present, current staged tree) reproduces
     // 209,524 plus the 1,548-byte Bramblehide delta plus the 71-byte
@@ -2569,8 +2575,9 @@ describe('the whole-character gear-heavy maximal blob (Phase 18 U-MEASURE)', () 
       // 227,703 -> 227,857 at the fourth release/v0.44.0 base merge (+154).
       // 227,857 -> 233,348 at the 2026-09-28 Buried Hoards merge (+5,491, kept).
       // 233,348 -> 233,568 at the release/v0.45.0 merge into
-      // feature/realm-racers (+220, the seven pvp_rr_* deeds).
-    ).toBe(233568);
+      // feature/realm-racers (+220, the seven pvp_rr_* deeds). 233,568 ->
+      // 233,635 (+67, the two flying lap deeds).
+    ).toBe(233635);
     const priorContent = withoutCrucibleContent(s2);
     const contentDelta = Object.fromEntries(
       (['knownRecipes', 'deedStats', 'reliquary'] as const).map((key) => [
@@ -2665,8 +2672,12 @@ describe('the whole-character gear-heavy maximal blob (Phase 18 U-MEASURE)', () 
     // bytes, up 220 from 233,360: the seven Realm Racers pvp_rr_* deeds in the
     // deeds row; no container or ceiling changed shape. Floor at measurement
     // minus 380, edge at measurement plus one: 233200..233581.
-    expect(bytes, reMint).toBeGreaterThan(233200);
-    expect(bytes, reMint).toBeLessThan(233581);
+    // RE-BASED for the two flying lap deeds (pvp_rr_rampart_lap and
+    // pvp_rr_lagoon_lap): 233,647 bytes, up 67; no container or ceiling changed
+    // shape. Floor at measurement minus 380, edge at measurement plus one:
+    // 233267..233648.
+    expect(bytes, reMint).toBeGreaterThan(233267);
+    expect(bytes, reMint).toBeLessThan(233648);
 
     // The Crucible database review approved 229,376 bytes (224 KiB), the first
     // 32-KiB step above the corrected 209,261-byte pre-field-kit fixture it was
