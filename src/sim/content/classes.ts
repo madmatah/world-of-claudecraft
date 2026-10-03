@@ -8714,6 +8714,8 @@ export const ABILITIES: Record<string, AbilityDef> = {
   // them outside a race.
   ...REALM_RACERS_ABILITIES,
 
+  // The Buried Hoards Clockwork Shock Bomb: an item use that aims like a ground
+  // spell, resolved for the reticle by resolveGroundAimAbility.
   clockwork_shock_bomb: {
     id: 'clockwork_shock_bomb',
     name: 'Clockwork Shock Bomb',

@@ -2867,6 +2867,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the racer veil review fixes.
       // Re-minted for the Realm Racers kart presentation move.
       // Re-minted for the Realm Racers rally scene move.
+      // release/v0.44.0 base merge into PR 4193: recomputed LAST again over the
+      // re-swept evidence. No capture was retaken.
       // Release/v0.45.0 merge into feature/realm-racers: recomputed LAST over the
       // re-swept evidence. No capture was retaken.
     ).toBe('7d4b7d4a9ba20710402872a476e0565de6c00b63d557534bdfc7de1c30e471c9');

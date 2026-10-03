@@ -93,7 +93,7 @@ const PREFIX_CATEGORY: Record<string, DeedCategory> = {
 };
 
 describe('audited launch totals (literals: update deliberately with the catalog)', () => {
-  it('ships exactly 325 deeds worth 3535 total Renown', () => {
+  it('ships exactly 328 deeds worth 3545 total Renown', () => {
     // Release base (262 / 3145 after the WARFARE lifetime-honor ladder) plus
     // four Reliquary Curator rank bridges and the five Phase 18 completion
     // ladder deeds (all nine renown 0: catalog prestige never scores the
