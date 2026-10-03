@@ -3472,6 +3472,9 @@ const ABILITY_RECIPES: Record<string, IconRecipe> = {
   frenzied_regeneration: r('nature', 'blood', ['heart', { p: 'paw', ...BR }], ['glow']),
   berserk: r('fury', 'blood', ['paw', { p: 'fist', ...BR }], ['glow']),
   tranquility: r('nature', 'silverWhite', ['heart', { p: 'leaf', ...BR }], ['sparkle']),
+  // Buried Hoards: the Clockwork Shock Bomb's thrown cast (the Automatons
+  // quartermaster's engineering item): a clockwork gear crackling with shock.
+  clockwork_shock_bomb: r('storm', 'sky', ['gear', { p: 'lightning', ...BR }], ['arcs', 'glow']),
 };
 
 const ITEM_RECIPES: Record<string, IconRecipe> = {
@@ -4986,6 +4989,9 @@ export const ABILITY_ART_PENDING = new Set<string>([
   // Wildfang kit pass 2: the VFX and art retune owns the final paintings.
   'lunge',
   'hamstring_bite',
+  // Buried Hoards: the Clockwork Shock Bomb's thrown cast draws its glyph until
+  // its skill painting ships (the item itself already ships painted art).
+  'clockwork_shock_bomb',
   // Realm Racers: the three pickup-driven rally abilities. Each ships with an authored
   // procedural recipe (rally_ground_blast / rally_nitro / rally_oil_slick in ABILITY_RECIPES);
   // commissioned in docs/achievements/icon-brief.md.
@@ -5618,6 +5624,8 @@ export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
   // Clue Scroll casket deeds use the exploration category crest pending art.
   'exp_clue_first_casket',
   'exp_clue_ten_caskets',
+  // The Buried Hoard goblin catch uses the combat category crest pending art.
+  'cmb_coinsack_caught',
   // The ferry round trip (exp_harbor_to_harbor): procedural exploration crest until commissioned.
   'exp_harbor_to_harbor',
   // Realm Racers: the seven placing-based deeds are 'pvp', so they fall back to the

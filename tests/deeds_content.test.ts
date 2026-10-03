@@ -146,14 +146,16 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // 10 and the tenth at 25: +35).
     // 318 / 3535 with the release's Eastbrook ferry round trip
     // (exp_harbor_to_harbor at renown 5) at the fourth release/v0.44.0 base merge.
-    // 325 / 3630 with the seven Realm Racers placing deeds (95 Renown),
+    // 319 / 3545 with the release's Buried Hoards Coinsack catch
+    // (cmb_coinsack_caught at renown 10).
+    // 326 / 3640 with the seven Realm Racers placing deeds (95 Renown),
     // appended after exp_harbor_to_harbor at the release/v0.44.0 merge into
-    // feature/realm-racers. Then 325 / 3535 once those seven drop to zero
+    // feature/realm-racers. Then 326 / 3545 once those seven drop to zero
     // Renown (casual unranked heats never score the board).
-    // 326 / 3535 with the Drakelands Rampart Run's flying lap, at zero Renown
-    // like the seven. 327 / 3535 with the Palmreach Lagoon Run's, likewise.
-    expect(DEED_ORDER.length).toBe(327);
-    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3535);
+    // 327 / 3545 with the Drakelands Rampart Run's flying lap, at zero Renown
+    // like the seven. 328 / 3545 with the Palmreach Lagoon Run's, likewise.
+    expect(DEED_ORDER.length).toBe(328);
+    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3545);
   });
 
   it('ships the audited per-category counts', () => {
@@ -173,7 +175,8 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // +7 the faction standing ladder (a Trusted and a Champion deed per
       // allied faction plus the all-factions meta).
       progression: 75,
-      combat: 10,
+      // +1 the Buried Hoard goblin catch (cmb_coinsack_caught).
+      combat: 11,
       // +2 Rift coverage deeds (dgn_rift, dgn_rift_s_rank), +5 Crucible raid
       // deeds (per-boss clear pairs plus the Varkhul flawless task).
       dungeon: 36,
@@ -411,6 +414,8 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // (the first casket and the tenth, which grants Treasure Hunter).
       'exp_clue_first_casket',
       'exp_clue_ten_caskets',
+      // The Buried Hoard's Coinsack Scurrier, caught once (hoardGoblinKills).
+      'cmb_coinsack_caught',
       // The release's Eastbrook ferry round trip, appended last at the fourth
       // release/v0.44.0 base merge.
       'exp_harbor_to_harbor',
@@ -1080,6 +1085,8 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // re-minted THE AUDITABLE WAY: the 0d91bc68... literal rotated down into
   // PRE_APPEND_CATALOG_SHA256 and the proof below reproduces it exactly. No
   // shipped trigger or renown value was touched.
+  // Re-baselined at the 2026-09-28 release merge into feature/buried-hoards: one NEW
+  // deed (cmb_coinsack_caught) joins; no existing trigger or renown changed.
   // Re-baselined for the seven appended Realm Racers placing deeds
   // (pvp_rr_first_race, pvp_rr_first_win, pvp_rr_wins_10, pvp_rr_wins_25,
   // pvp_rr_fast_lap, pvp_rr_clean_race, pvp_rr_comeback) at the release/v0.44.0
@@ -1098,7 +1105,14 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // the 5379b414... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
   // proof below reproduces it exactly. No shipped trigger or renown value was
   // touched.
-  const FROZEN_CATALOG_SHA256 = '29b974cd9f8a4dac99982f5313c51b6b19d648285fda4d0600624b4f7f227509';
+  // Re-baselined at the release/v0.45.0 merge into feature/realm-racers: the
+  // release's catalog (with cmb_coinsack_caught seated before
+  // exp_harbor_to_harbor) comes first and the nine branch-only pvp_rr_* deeds
+  // append after it, re-minted THE AUDITABLE WAY: the release's 765c2ea1...
+  // literal rotated down into PRE_APPEND_CATALOG_SHA256 and the proof below
+  // reproduces it exactly by stripping the nine. No shipped trigger or renown
+  // value was touched.
+  const FROZEN_CATALOG_SHA256 = 'f28c4dc01dfbc8dfa9dd39ff8f94adafd3c46ce5e746ae5f80a7fddf105204aa';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(
@@ -1176,24 +1190,40 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // the one id reproduced it exactly.
   //
   // The Palmreach Lagoon Run's flying lap appends pvp_rr_lagoon_lap after the
-  // Rampart Run's; the previous mint is its 5379b414... literal (rotated down
-  // here), and stripping the one id must reproduce it exactly.
+  // Rampart Run's; the previous mint is its 5379b414... literal, and stripping
+  // the one id reproduced it exactly.
+  //
+  // At the release/v0.45.0 merge the release's own mint (its 765c2ea1...
+  // literal: the clue pair's catalog plus cmb_coinsack_caught and
+  // exp_harbor_to_harbor) is the previous mint, rotated down here, and
+  // stripping the nine pvp_rr_* ids from the merged catalog must reproduce it
+  // exactly.
   const PRE_APPEND_CATALOG_SHA256 =
-    '5379b4148a3a6f962fa2d2c96fae76ccfc4fba73254e1f3eebf2d04325be5ba2';
-  const APPENDED_SINCE: readonly string[] = ['pvp_rr_lagoon_lap'];
+    '765c2ea13a8a87d5b43a3f725ab56e1c58464f850dc2ec0e10048adc12f67829';
+  const APPENDED_SINCE: readonly string[] = [
+    'pvp_rr_first_race',
+    'pvp_rr_first_win',
+    'pvp_rr_wins_10',
+    'pvp_rr_wins_25',
+    'pvp_rr_fast_lap',
+    'pvp_rr_clean_race',
+    'pvp_rr_comeback',
+    'pvp_rr_rampart_lap',
+    'pvp_rr_lagoon_lap',
+  ];
 
   it('the catalog minus the ids appended since the previous mint reproduces the previous digest', () => {
     const appended = new Set(APPENDED_SINCE);
     for (const id of APPENDED_SINCE) {
       expect(DEED_ORDER.includes(id), `${id} is in the live catalog`).toBe(true);
     }
-    // The Lagoon Run's flying lap sits at the true tail after the Rampart Run's,
-    // which follows the seven Realm Racers placing deeds. Pin its two
-    // predecessors too: this is an append into a known seat, never a scattered
-    // insert or a retro-edit (the digest below proves it).
+    // The nine Realm Racers deeds sit at the true tail after the release's
+    // Coinsack catch and ferry round trip. Pin those two predecessors too: this
+    // is an append into a known seat, never a scattered insert or a retro-edit
+    // (the digest below proves it).
     expect(DEED_ORDER.slice(-2 - APPENDED_SINCE.length)).toEqual([
-      'pvp_rr_comeback',
-      'pvp_rr_rampart_lap',
+      'cmb_coinsack_caught',
+      'exp_harbor_to_harbor',
       ...APPENDED_SINCE,
     ]);
     const priorRows = DEED_ORDER.filter((id) => !appended.has(id)).map((id) => {

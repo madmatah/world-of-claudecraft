@@ -246,6 +246,8 @@ describe('v0.36 release-audit Reliquary deed art', () => {
       // category crest the same way.
       'exp_clue_first_casket',
       'exp_clue_ten_caskets',
+      // The Buried Hoards Coinsack catch rides the deed_cat_combat crest the same way.
+      'cmb_coinsack_caught',
       // The release's Eastbrook ferry round trip rides the deed_cat_exploration crest
       // until its commissioned art lands (docs/design/deeds.md, Icons).
       'exp_harbor_to_harbor',
@@ -272,12 +274,13 @@ describe('v0.36 release-audit Reliquary deed art', () => {
     // deeds and the two Clue Scroll casket deeds, all nine on the pending
     // ledger above, so the painted count holds at 289.
     // 318 with the release's ferry round trip, the pending ledger's last row,
-    // so the painted count still holds at 289.
-    // 325 with the seven Realm Racers placing deeds, all seven on the pending
+    // so the painted count still holds at 289. 319 with the Buried Hoards Coinsack
+    // catch (2026-09-28 merge), also pending: still 289 painted.
+    // 326 with the seven Realm Racers placing deeds, all seven on the pending
     // ledger above, so the painted count still holds at 289.
-    // 326 with the Drakelands Rampart Run's flying lap, then 327 with the
+    // 327 with the Drakelands Rampart Run's flying lap, then 328 with the
     // Palmreach Lagoon Run's, the ledger's last row.
-    expect(DEED_ORDER).toHaveLength(327);
+    expect(DEED_ORDER).toHaveLength(328);
     expect(DEED_IMAGE_IDS.size).toBe(289);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     expect(sorted(DEED_IMAGE_IDS)).toEqual(

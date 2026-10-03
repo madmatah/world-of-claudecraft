@@ -96,20 +96,23 @@ describe('deed_i18n English resolution', () => {
     // the tenth carries the Treasure Hunter title.
     // 318 with the release's Eastbrook ferry round trip (exp_harbor_to_harbor: a
     // name and a desc, no title) at the fourth release/v0.44.0 base merge.
-    // 325 with the seven Realm Racers placing deeds, each with a name and a
+    // 319 with the Buried Hoards Coinsack catch (cmb_coinsack_caught: a name and a
+    // desc, no title) at the 2026-09-28 merge into feature/buried-hoards.
+    // 326 with the seven Realm Racers placing deeds, each with a name and a
     // desc; only pvp_rr_wins_25 carries a title (Circuit Legend).
-    // 326 with the Drakelands Rampart Run's flying lap (a name and a desc, no
-    // title). 327 with the Palmreach Lagoon Run's, likewise.
-    expect(manifest.filter((row) => row.field === 'name').length).toBe(327);
+    // 327 with the Drakelands Rampart Run's flying lap (a name and a desc, no
+    // title). 328 with the Palmreach Lagoon Run's, likewise.
+    expect(manifest.filter((row) => row.field === 'name').length).toBe(328);
     // 289 descs at the release/v0.43.0 merge: plus the eight world-quest deeds.
     // 296 with the seven faction standing deeds. 298 with the two Clue Scroll
-    // casket deeds. 306 with the seven Realm Racers deeds. 307 with the
-    // Rampart Run's flying lap. 308 with the Lagoon Run's.
-    expect(manifest.filter((row) => row.field === 'desc').length).toBe(308);
-    // 687 rows: 327 names + 308 descs + 52 titles (the three faction Champion
+    // casket deeds. 300 with the ferry round trip and the Coinsack catch. 307
+    // with the seven Realm Racers deeds. 308 with the Rampart Run's flying lap.
+    // 309 with the Lagoon Run's.
+    expect(manifest.filter((row) => row.field === 'desc').length).toBe(309);
+    // 689 rows: 328 names + 309 descs + 52 titles (the three faction Champion
     // titles Riftwarden, Dawnkeeper and Forgemaster join the 47, then the
     // Clue Scroll Treasure Hunter title, then Realm Racers' Circuit Legend).
-    expect(manifest.length).toBe(687);
+    expect(manifest.length).toBe(689);
     expect(manifest.filter((row) => row.field === 'title').length).toBe(52);
     expect(manifest.filter((row) => row.id === 'hid_forgebreaker')).toEqual([
       { id: 'hid_forgebreaker', field: 'name', source: 'A Spring Unchained' },

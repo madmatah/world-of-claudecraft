@@ -141,7 +141,7 @@ describe('the renderer delegates, welded', () => {
       'vfx: Vfx;',
       'private audioSink: SpatialAudioSink | null = null;',
       'private selfRender = createSelfRenderPositionState(this.selfRenderPosition);',
-      'private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);',
+      'private groundSample = createRiftAwareGroundSampler(',
       'private tmpV = new THREE.Vector3();',
       'private reducedMotion(): boolean {',
       'addShake(amount: number, x?: number, y?: number, z?: number, crunch = false): void {',

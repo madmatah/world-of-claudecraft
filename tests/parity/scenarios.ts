@@ -7883,11 +7883,8 @@ function worldQuestLifecycle(): Scenario {
         }
         if (quest.objective.type === 'delivery') {
           const objective = quest.objective;
-          const pickup = requireValue(
-            [...sim.entities.values()].find(
-              (entity) => entity.objectItemId === objective.pickupObjectItemId,
-            ),
-            `${quest.id} pickup`,
+          const pickups = [...sim.entities.values()].filter(
+            (entity) => entity.objectItemId === objective.pickupObjectItemId,
           );
           const destination = requireValue(
             [...sim.entities.values()].find(
@@ -7896,6 +7893,7 @@ function worldQuestLifecycle(): Scenario {
             `${quest.id} destination`,
           );
           for (let count = 0; count < quest.count; count++) {
+            const pickup = requireValue(pickups[count], `${quest.id} pickup ${count}`);
             teleport(sim, sim.player as AnyEntity, pickup.pos.x, pickup.pos.z);
             sim.pickUpObject(pickup.id);
             if (checkpoints && count === 0) rec.snapshot(`${quest.id}-carrying`);

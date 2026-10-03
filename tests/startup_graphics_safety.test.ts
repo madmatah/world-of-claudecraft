@@ -131,11 +131,15 @@ describe('constrained renderer integration', () => {
     // The sky push is ONE body called from both sync paths. It used to be two
     // identical blocks, each carrying its own tier gate, which is a fix applied
     // to one code path waiting to happen; what has to hold is that the gate is
-    // still there and that both paths still go through it.
+    // still there and that both paths still go through it. The dome's camera
+    // anchor goes through the Buried Hoard seam (hoard_valley_frame.ts
+    // setSkyCamera: the camera outside a valley, the dig zone's sky point inside
+    // one), still on every tier ahead of the LOW gate.
     expect(
-      source,
-    ).toContain(`    this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
-    if (!this.lowGfx) {`);
+      source.match(
+        /hoardValley\.setSkyCamera\(this\.skyView, this\.sim\.riftFloor, this\.camera\.position, dt\);\n\s+if \(!this\.lowGfx\) \{/g,
+      ),
+    ).toHaveLength(1);
     expect(source.match(/this\.pushSkyGrade\(dt\);/g)).toHaveLength(2);
   });
 });

@@ -378,13 +378,15 @@ describe('Book of Deeds webp icons', () => {
     // exploration crest: 317 live, still 289 painted.
     // The release's Eastbrook ferry round trip (exp_harbor_to_harbor) joins the
     // pending set on the exploration crest: 318 live, still 289 painted.
+    // The Buried Hoards Coinsack catch (cmb_coinsack_caught) joins on the combat
+    // crest beside the ferry round trip: 319 live, still 289 painted.
     // The seven Realm Racers placing deeds join the pending set on the pvp crest,
-    // appended after the ferry round trip: 325 live, still 289 painted.
+    // appended after the ferry round trip: 326 live, still 289 painted.
     // The Drakelands Rampart Run's flying lap joins them on the same crest:
-    // 326 live, still 289 painted. The Palmreach Lagoon Run's follows it: 327.
-    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(327);
+    // 327 live, still 289 painted. The Palmreach Lagoon Run's follows it: 328.
+    expect(DEED_ORDER, 'the merged live deed catalog').toHaveLength(328);
     expect(DEED_IMAGE_IDS.size, 'every live deed but the pending set is painted').toBe(289);
-    expect(DEED_ART_PENDING_IDS).toHaveLength(38);
+    expect(DEED_ART_PENDING_IDS).toHaveLength(39);
     expect(DEED_ART_PENDING_IDS.at(-1)).toBe('pvp_rr_lagoon_lap');
     expect(DEED_ORDER.length - DEED_IMAGE_IDS.size).toBe(DEED_ART_PENDING_IDS.length);
     for (const id of artless) {

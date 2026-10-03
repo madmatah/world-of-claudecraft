@@ -542,7 +542,15 @@ const MONOLITHS: MonolithRow[] = [
     // construction moved to src/ui/hud/realm_racers/.
     // LOWERED 18130 -> 18127: the map zone focus lookup bag moved to
     // src/ui/hud/map/map_zone_focus_lookup.ts.
-    ceiling: 18127,
+    // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
+    // (Reuben's call): both parent pins for the record, the release 18081 and the
+    // branch 18235; the two sides' additions compose to 18093 by wc -l on the merged
+    // tree (after biome). Exact count, zero slack.
+    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // parent pins for the record, the release 18093 and the branch 18127; the
+    // two sides compose to 18137 by wc -l on the merged tree (after biome), +44
+    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
+    ceiling: 18137,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
   },
   {
@@ -1038,7 +1046,19 @@ const MONOLITHS: MonolithRow[] = [
     // rival projection and bump bang, the rally events, the circuit ambience
     // and haze, the co-pilot views) moved to realm_racers_scene.ts behind the
     // renderer host, reached as renderer.realmRacers. Exact count.
-    ceiling: 12673,
+    // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
+    // (Reuben's call): both parent pins for the record, the release 12684 and the
+    // branch 12782; the two sides' additions compose to 12687 by wc -l on the merged
+    // tree (after biome). Exact count, zero slack.
+    // RE-PINNED 12687 -> 12688 at the second release merge into the same branch,
+    // after PR 3847 landed on the release (its renderer.ts wiring adds one line;
+    // the release pin stays 12684): wc -l on the merged tree. Exact count, zero slack.
+    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // parent pins for the record, the release 12688 and the branch 12673; the
+    // two sides compose to 12686 by wc -l on the merged tree (after biome), 2
+    // under the release (the branch's extractions outweigh its Realm Racers
+    // hooks). Exact count, zero slack.
+    ceiling: 12686,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {
@@ -1744,7 +1764,15 @@ const MONOLITHS: MonolithRow[] = [
     // server/realm_racers_commands.ts behind one case group.
     // LOWERED 9910 -> 9832: the drive record, the rr/rrt keys and the rrkit key moved to
     // server/realm_racers_drive_wire.ts and server/realm_racers_self_wire.ts.
-    ceiling: 9832,
+    // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
+    // (Reuben's call): both parent pins for the record, the release 9827 and the
+    // branch 9965; the two sides' additions compose to 9840 by wc -l on the merged
+    // tree (after biome). Exact count, zero slack.
+    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // parent pins for the record, the release 9840 and the branch 9832; the
+    // two sides compose to 9845 by wc -l on the merged tree (after biome), +5
+    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
+    ceiling: 9845,
     seam: 'a sibling server module; see the hot-path seams in server/CLAUDE.md',
   },
   {
@@ -1926,7 +1954,15 @@ const MONOLITHS: MonolithRow[] = [
     // idleRealmRacersInfo() from src/net/realm_racers_self_wire.ts.
     // LOWERED 5487 -> 5405: the drive decode, the Rally kit mirror and the
     // recovery-snap latch moved to src/net sibling modules.
-    ceiling: 5405,
+    // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
+    // (Reuben's call): both parent pins for the record, the release 5354 and the
+    // branch 5426; the two sides' additions compose to 5356 by wc -l on the merged
+    // tree (after biome). Exact count, zero slack.
+    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // parent pins for the record, the release 5356 and the branch 5405; the
+    // two sides compose to 5407 by wc -l on the merged tree (after biome), +51
+    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
+    ceiling: 5407,
     seam: 'a src/net sibling module (the refactor/net-online split is the template)',
   },
   {

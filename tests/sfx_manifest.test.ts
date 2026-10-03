@@ -164,7 +164,7 @@ describe('buildManifest', () => {
     expect(manifest).toContain('cast_lightning_bolt');
   });
 
-  it('keeps release mount/UI cues and Warrior recordings in one 390-key inventory', () => {
+  it('keeps release mount/UI cues, Warrior recordings, hoard and race cues in one 396-key inventory', () => {
     // Combine the release farming/crafting cues with the candidate mount cues.
     // Release inventory: 319 total, 92 UI, 34 mount. A mount may share
     // player footfalls or have several cues, so this is not a mount count.
@@ -176,10 +176,21 @@ describe('buildManifest', () => {
     // 387 adds the Viridian Valestrider's six mount cues on top of that 381:
     // its gait pool, summon call, takeoff, touchdown, and the squawk/flap pair
     // it calls at the apex of a jump. Mount cues 34 -> 40; UI is unchanged.
-    // 390 adds the three Realm Racers race cues (move_groundshaker_engine,
+    // The six Buried Hoard cues (the entrance open/hum pair and the four
+    // tide-wave boss cues) bring that total to 393 (release/v0.44.0 merge
+    // into feature/buried-hoards).
+    // 396 adds the three Realm Racers race cues (move_groundshaker_engine,
     // proj_groundshaker, impact_groundshaker).
     const keys = new Set(SFX.map((entry) => entry.key));
-    expect(keys.size).toBe(390);
+    expect(keys.size).toBe(396);
+    expect([...keys].filter((key) => key.startsWith('hoard_')).sort()).toEqual([
+      'hoard_entrance_hum',
+      'hoard_entrance_open',
+      'hoard_tide_build',
+      'hoard_tide_crash',
+      'hoard_tide_hit',
+      'hoard_tide_rush',
+    ]);
     expect([...keys].filter((key) => key.includes('_warrior_'))).toHaveLength(60);
     expect([...keys].filter((key) => key.includes('_masterwork_'))).toEqual([
       'impact_masterwork_execution',
@@ -283,7 +294,7 @@ describe('buildManifest', () => {
     // purely filesystem-discovered.
     const mobFamilyKeys = [...keys].filter((key) => key.startsWith('mob_'));
     expect(mobFamilyKeys).toHaveLength(65); // 13 families x 5 actions
-    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(390);
+    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(396);
     expect([...SFX_FIXED_CATALOG_KEYS].sort()).toEqual([...keys].sort());
   });
 

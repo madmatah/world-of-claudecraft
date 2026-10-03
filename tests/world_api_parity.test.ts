@@ -146,9 +146,11 @@ export const IWORLD_MEMBERS = [
   { name: 'worldQuestTime', kind: 'data' },
   { name: 'nearbyWorldQuestTraces', kind: 'data' },
   { name: 'factions', kind: 'data' },
+  { name: 'factionCurrencies', kind: 'data' },
   { name: 'worldQuestReplacements', kind: 'data' },
   { name: 'worldQuestRerollCycle', kind: 'data' },
   { name: 'clueHunt', kind: 'data' },
+  { name: 'treasureMap', kind: 'data' },
   // --- commands + read-returning methods ---
   { name: 'canRerollWorldQuest', kind: 'method' },
   { name: 'rerollWorldQuest', kind: 'method' },
@@ -484,6 +486,7 @@ export const IWORLD_MEMBERS = [
   { name: 'riftFloor', kind: 'data' }, // active procedural rift floor (null outside)
   { name: 'riftCollisionToken', kind: 'data' }, // per-Sim rift collision registry key
   { name: 'riftBossDeathZones', kind: 'method' }, // live lethal zones on the boss floor
+  { name: 'hoardBossCues', kind: 'method' }, // live Buried Hoard boss telegraphs
   { name: 'riftEventMsRemaining', kind: 'method' }, // ms until the rift event stops admitting parties
   { name: 'dungeonDifficulty', kind: 'method' }, // read-returning
   { name: 'setDungeonDifficulty', kind: 'method' },
@@ -944,12 +947,15 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
     // merge: 420/124/296.
     // Plus the release's transport facet (the Eastbrook ferry's ferryView
     // method) at the fourth release/v0.44.0 base merge: 421/124/297.
+    // Plus the release's Buried Hoards and faction reads (factionCurrencies and
+    // treasureMap data, the hoardBossCues method): 424/126/298.
     // Plus the Realm Racers facet (two data reads, five methods) at the
     // release/v0.44.0 sync into feature/realm-racers, set from a suite run.
     // Plus the Realm Racers loading lobby's readyRealmRacers (+1 method).
-    expect(IWORLD_MEMBERS.length).toBe(429);
-    expect(DATA_MEMBERS.length).toBe(126);
-    expect(METHOD_MEMBERS.length).toBe(303);
+    // Both composed at the release/v0.45.0 merge: 432/128/304.
+    expect(IWORLD_MEMBERS.length).toBe(432);
+    expect(DATA_MEMBERS.length).toBe(128);
+    expect(METHOD_MEMBERS.length).toBe(304);
   });
   it('has no duplicate member names', () => {
     const names = IWORLD_MEMBERS.map((m) => m.name);
@@ -1107,6 +1113,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'equipment',
       'equipmentInstances',
       'extractEssence',
+      'factionCurrencies',
       'factions',
       'farmNowMs',
       'farmPatches',
@@ -1154,6 +1161,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'harvestPreference',
       'healPet',
       'hillInfo',
+      'hoardBossCues',
       'hobbyCraft',
       'honor',
       'ignoreAdd',
@@ -1357,6 +1365,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'tradeRequest',
       'tradeSetOffer',
       'trainRecipe',
+      'treasureMap',
       'turnInQuest',
       'unbindItem',
       'unequipBag',
@@ -1445,6 +1454,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'entityRosterVersion',
       'equipment',
       'equipmentInstances',
+      'factionCurrencies',
       'factions',
       'farmPatches',
       'gatheringGoal',
@@ -1504,6 +1514,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'townFocus',
       'townFocusPending',
       'tradeInfo',
+      'treasureMap',
       'unlockedMilestones',
       'vaultInfo',
       'vehicleSession',
@@ -1661,6 +1672,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'harvestCrop',
       'harvestNode',
       'healPet',
+      'hoardBossCues',
       'ignoreAdd',
       'ignoreRemove',
       'interact',
@@ -2067,10 +2079,12 @@ const FACET_QUESTS = [
   'startWorldQuestActivity',
   'acceptLinkedQuest',
   'factions',
+  'factionCurrencies',
   'worldQuestReplacements',
   'worldQuestRerollCycle',
   'canRerollWorldQuest',
   'rerollWorldQuest',
+  'treasureMap',
   'clueHunt',
   'abandonClueHunt',
 ] as const satisfies readonly (keyof IWorldQuests)[];
@@ -2310,6 +2324,7 @@ const FACET_DUNGEONS = [
   'riftFloor',
   'riftCollisionToken',
   'riftBossDeathZones',
+  'hoardBossCues',
   'riftEventMsRemaining',
   'dungeonDifficulty',
   'setDungeonDifficulty',
@@ -2654,8 +2669,8 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
     const union = Object.values(FACET_MEMBER_ARRAYS).flatMap((arr) => [...arr]);
     // Mirrors the IWORLD_MEMBERS.length pin above (411); this pin and the one above
     // must always agree.
-    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(429);
-    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(429);
+    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(432);
+    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(432);
     const sortedUnion = [...union].sort();
     const pinned = IWORLD_MEMBERS.map((m) => m.name).sort();
     expect(sortedUnion).toEqual(pinned);

@@ -492,6 +492,7 @@ describe('missing painted ability integration', () => {
     // set honest against the registry, but on its own it lets the debt GROW
     // silently (a new unpainted ability plus a new pending row still agree).
     expect([...ABILITY_ART_PENDING].sort()).toEqual([
+      'clockwork_shock_bomb',
       'hamstring_bite',
       'lunge',
       'rally_ground_blast',
@@ -696,11 +697,13 @@ describe('missing painted deed and Heroic weapon integration', () => {
     // casket deeds; all nine sit on the pending side on category crests.
     // 318 with the release's ferry round trip (exp_harbor_to_harbor), also on
     // the pending side on the exploration crest.
-    // 325 with the seven Realm Racers placing deeds, appended after the ferry
-    // round trip and pending on the deed_cat_pvp crest.
-    // 326 with the Drakelands Rampart Run's flying lap, on the same crest, and
-    // 327 with the Palmreach Lagoon Run's.
-    expect(DEED_ORDER).toHaveLength(327);
+    // 319 at the 2026-09-28 release/v0.44.0 merge into Buried Hoards: the
+    // Coinsack Scurrier catch (cmb_coinsack_caught) joins the pending side.
+    // 326 with the seven Realm Racers placing deeds, appended after the
+    // release's deeds and pending on the deed_cat_pvp crest.
+    // 327 with the Drakelands Rampart Run's flying lap, on the same crest, and
+    // 328 with the Palmreach Lagoon Run's.
+    expect(DEED_ORDER).toHaveLength(328);
     expect(DEED_ART_PENDING.has('hid_forgebreaker')).toBe(true);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');

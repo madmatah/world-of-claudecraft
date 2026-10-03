@@ -127,15 +127,18 @@ describe('ability icons', () => {
     expect(ids).toEqual([...new Set(ids)].sort((left, right) => left.localeCompare(right)));
     // 464: 450 plus the fourteen Nythraxis Raid Boss Guide mechanic recipes;
     // 469: plus the Wildfang kit pass 2 glyphs (lunge, hamstring_bite).
-    // 475: plus the Realm Racers pickup abilities (rally_ground_blast,
+    // 473: plus the Buried Hoards Clockwork Shock Bomb glyph (the 2026-09-28
+    // release/v0.44.0 merge into feature/buried-hoards).
+    // 476: plus the Realm Racers pickup abilities (rally_ground_blast,
     // rally_nitro, rally_oil_slick), each an authored procedural recipe.
-    expect(ids).toHaveLength(475);
+    expect(ids).toHaveLength(476);
     for (const id of ids) expect(hasExplicitAbilityIcon(id), id).toBe(true);
 
     const identity = ids.map((id) => ({ id, recipe: abilityIconRecipe(id) }));
     const hash = createHash('sha256').update(stableSerialize(identity)).digest('hex');
-    // Re-baselined on the merged tree for the three appended Realm Racers recipes;
-    // no shipped recipe's payload changed on either side of the merge.
-    expect(hash).toBe('fd7b54fd7bfdfd6cf1b7d75322b5792e71e1414d0b2a1835e93aee6456f272b9');
+    // Re-baselined on the release/v0.45.0 merged tree: the release's Clockwork
+    // Shock Bomb glyph plus the three appended Realm Racers recipes; no shipped
+    // recipe's payload changed on either side of the merge.
+    expect(hash).toBe('3db9ff53868309b33b508a35e4f7876d956dc9ed30253b7c6224523196c95353');
   });
 });

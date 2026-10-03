@@ -8713,6 +8713,30 @@ export const ABILITIES: Record<string, AbilityDef> = {
   // resolves race ids; no class lists them, so abilitiesKnownAt never grants
   // them outside a race.
   ...REALM_RACERS_ABILITIES,
+
+  clockwork_shock_bomb: {
+    id: 'clockwork_shock_bomb',
+    name: 'Clockwork Shock Bomb',
+    class: 'warrior',
+    learnLevel: 1,
+    cost: 0,
+    castTime: 0,
+    cooldown: 60,
+    range: 30,
+    school: 'nature',
+    requiresTarget: false,
+    targetMode: 'position',
+    effects: [
+      {
+        type: 'aoeDamage',
+        min: 120,
+        max: 160,
+        radius: 5,
+      },
+    ],
+    description:
+      'Throws a Clockwork Shock Bomb at the target location, dealing 120 to 160 Nature damage to enemies within 5 yards.',
+  },
 };
 
 const PALADIN_LEGACY_ABILITY_IDS = [

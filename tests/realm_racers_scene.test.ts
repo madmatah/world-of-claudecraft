@@ -245,7 +245,7 @@ describe('the renderer delegates, welded', () => {
       'private audioSink: SpatialAudioSink | null = null;',
       'private selfRender = createSelfRenderPositionState(this.selfRenderPosition);',
       'private time = 0;',
-      'private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);',
+      'private groundSample = createRiftAwareGroundSampler(',
       'private skyView!: SkyView;',
       'readonly backgroundGpuWork = createBackgroundGpuQueue({',
       'private readonly buildLedger = createBuildLedger();',
@@ -269,7 +269,9 @@ describe('the renderer delegates, welded', () => {
     const scene = renderer.indexOf('readonly realmRacers = new RealmRacersScene(this);');
     expect(count('readonly realmRacers = new RealmRacersScene(this);')).toBe(1);
     expect(renderer.indexOf('views = new Map<number, EntityView>();')).toBeLessThan(scene);
-    expect(renderer.indexOf('private groundSample = (x: number, z: number)')).toBeLessThan(scene);
+    expect(renderer.indexOf('private groundSample = createRiftAwareGroundSampler(')).toBeLessThan(
+      scene,
+    );
   });
 
   it('runs each delegate once, where the frame ran the moved code', () => {

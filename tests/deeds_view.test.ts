@@ -874,15 +874,17 @@ describe('real catalog integration', () => {
     // standing deeds, 285 with the two Clue Scroll casket deeds (all visible,
     // none feat or hidden).
     // 286 with the release's ferry round trip (exp_harbor_to_harbor).
-    // 293 with the seven Realm Racers placing deeds (none feat or hidden).
-    // 294 with the Rampart Run's flying lap (neither feat nor hidden), 295
+    // 287 with the Buried Hoards Coinsack catch (cmb_coinsack_caught, visible).
+    // 294 with the seven Realm Racers placing deeds (none feat or hidden).
+    // 295 with the Rampart Run's flying lap (neither feat nor hidden), 296
     // with the Lagoon Run's.
-    expect(view.summary.visibleTotal).toBe(295);
+    expect(view.summary.visibleTotal).toBe(296);
     // The bucket sum adds the feat-flagged rows back on top (hidden-unearned
     // deeds never enter a bucket at all, so only the 22 feats separate this
     // from visibleTotal): 268 + 22 = 290, then 298, 305, 307 and 308 by the same
-    // four appends, then 315 with the seven Realm Racers deeds, then 316 and 317.
-    expect(view.categories.reduce((n, c) => n + c.visible, 0)).toBe(317);
+    // four appends, then 309 with the Buried Hoards Coinsack catch, then 316
+    // with the seven Realm Racers deeds, then 317 and 318.
+    expect(view.categories.reduce((n, c) => n + c.visible, 0)).toBe(318);
   });
 
   it('offers exactly the live catalog border deeds once they are earned', () => {

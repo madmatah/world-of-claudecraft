@@ -195,9 +195,11 @@ describe('profile page Reliquary pair + Curator rank lines', () => {
     // 416 at the Clue Scroll casket deeds: the Treasure Hunter title's slot.
     // 417 with the Viridian Valestrider's reins (PR 4175, release/v0.44.0 base merge) on the Horizons mounts page.
     // 434 with the trinket slot's seventeen character-scoped relics (PR 4173).
-    // 435 at the release/v0.44.0 merge into feature/realm-racers: Realm Racers'
+    // 466 at the release/v0.44.0 merge into feature/buried-hoards (2026-09-28): the 32 Buried Hoard pieces
+    // (character-scoped items), the same +32 as reliquary_content.test.ts's pair.
+    // 467 at the release/v0.45.0 merge into feature/realm-racers: Realm Racers'
     // Circuit Legend title (pvp_rr_wins_25) on the Horizons titles page.
-    expect(catalogTotal).toBe(435);
+    expect(catalogTotal).toBe(467);
     // The Warfare Season 2 Vanguard Gallery is class-personal and sits outside
     // completion, so it moves nothing here.
   });

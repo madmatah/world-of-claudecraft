@@ -1373,6 +1373,7 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(REPO_ROOT, POLISH_SEAL_PATH);
 // CPU-hygiene renderer leaf and the druid Cat Form renderer leaf compose in
 // one tree. No capture was retaken.
 const ACCEPTED_POLISH_V2_METADATA_SHA256 =
+  // Re-minted for the release/v0.44.0 base merges into PR 4193 (Buried Hoards), the second after PR 3847 landed. No capture was retaken.
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
   // the Eastbrook handoff): the merged renderer leaf, the moved NPC layout and
@@ -1415,8 +1416,11 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
   // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
   // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
-  '4838dae9314717cd0f54c1484d35e046a700da0c2c4d78c1712aefdbe7925ad5';
+  // Re-minted at the release/v0.45.0 merge into feature/realm-racers
+  // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
+  '2e92fc18b90e6cec1eea0a8c22a5bcaabeb7d714b814e236732a3ddd27dfe634';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
+  // Re-minted for the release/v0.44.0 base merges into PR 4193 (Buried Hoards), the second after PR 3847 landed. No capture was retaken.
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
   // the Eastbrook handoff): the merged renderer leaf, the moved NPC layout and
@@ -1459,7 +1463,9 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
   // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
   // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
-  '7a392cab24a4177bc6bf9461e05f0909f8e165f925254cb765ac11edfeecc158';
+  // Re-minted at the release/v0.45.0 merge into feature/realm-racers
+  // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
+  'e721c18a183a17ffaac4780c14663b00f25cf41ec5003fa12042e2186f95c934';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2861,7 +2867,9 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the racer veil review fixes.
       // Re-minted for the Realm Racers kart presentation move.
       // Re-minted for the Realm Racers rally scene move.
-    ).toBe('3a21dad668f3bad1174d5a4d5475455a86fc7efa0533b1be9191695089fcd24d');
+      // Release/v0.45.0 merge into feature/realm-racers: recomputed LAST over the
+      // re-swept evidence. No capture was retaken.
+    ).toBe('7d4b7d4a9ba20710402872a476e0565de6c00b63d557534bdfc7de1c30e471c9');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

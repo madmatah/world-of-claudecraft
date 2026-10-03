@@ -34,6 +34,7 @@ import { BENISON_WHISPER_AURA_ID } from './priest/benison_dawnweave';
 import { areAbilityControlsLocked, isAbilityBudgetSpent } from '../ability_budget';
 import { isDispellableAura } from '../aura_classify';
 import { nearestAttackerId } from '../auto_acquire_target';
+import { completeAlliedHearthstoneCast } from '../content/faction_rewards';
 import { ITEMS, isDelvePos, MOBS, zoneAt } from '../data';
 import { recalcPlayerStats } from '../entity';
 import { instanceInfoAt } from '../instances/dungeons';
@@ -57,6 +58,7 @@ import { resolveTalentHitMult } from '../talent_hit_mult';
 import { hasEscapeStealth } from '../threat';
 import type { AbilityDef, AbilityEffect, Aura, Entity, Vec3 } from '../types';
 import {
+  ALLIED_HEARTHSTONE_CAST_ID,
   angleTo,
   armorReduction,
   CAST_COMPLETE_EPS,
@@ -713,6 +715,10 @@ export function updateCasting(ctx: SimContext, p: Entity, meta: PlayerMeta): voi
     }
     if (castId === TOOL_RECHARGE_CAST_ID) {
       ctx.completeRechargeCast(p, meta);
+      return;
+    }
+    if (castId === ALLIED_HEARTHSTONE_CAST_ID) {
+      completeAlliedHearthstoneCast(ctx, p, meta);
       return;
     }
     // Ice Floes (mage choice row): a COMPLETED hard cast spends one protected

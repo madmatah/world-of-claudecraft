@@ -11,7 +11,18 @@ import {
 } from '../src/game/music';
 import { areaTrackLayerFor } from '../src/game/music_area_tracks';
 import { AREA_TRACK_URLS, COMBAT_STREAM_URLS, ZONE_STREAM_URLS } from '../src/game/music_tracks';
+import { CAVE_THEMES } from '../src/sim/content/rift/cave_themes';
 import { RIFT_THEMES } from '../src/sim/content/rift/themes';
+
+/** The cave theme names the crawl table maps on purpose (a name missing from
+ *  it would fall back to rift_void without a word). */
+const RIFT_MUSIC_FALLBACK_CHECK = new Set([
+  'Spore Hollow',
+  'Deep Burrow',
+  'Bat Roost',
+  'False Vault',
+]);
+
 import type { BiomeId } from '../src/sim/types';
 
 class FakeParam {
@@ -832,6 +843,17 @@ describe('rift crawl selection', () => {
       seen.add(zone);
     }
     expect(seen.size).toBe(RIFT_THEMES.length);
+  });
+
+  it('gives every cave boss theme a composed crawl, never the silent fallback', () => {
+    const themes = buildMusicThemes();
+    for (const theme of CAVE_THEMES) {
+      const zone = riftMusicZoneForTheme(theme.name);
+      expect(RIFT_MUSIC_FALLBACK_CHECK.has(theme.name), `cave theme '${theme.name}' unmapped`).toBe(
+        true,
+      );
+      expect(themes[zone], `no composed theme for rift zone '${zone}'`).toBeDefined();
+    }
   });
 
   it('pins the archetype names so a rename cannot silently fall back', () => {
