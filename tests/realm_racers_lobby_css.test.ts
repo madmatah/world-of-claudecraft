@@ -271,6 +271,26 @@ describe('Realm Racers race overlays clear their neighbours', () => {
     }
   });
 
+  it('widens the touch standings toward a full house-pilot name, never into the strip', () => {
+    const body = rulesOf(flat(mobile), 'body.mobile-touch #realm-racers-standings')[0];
+    const left = declOf(body, 'left');
+    const width = /^clamp\((\d+)px, calc\(50vw - (\d+)px - (.+)\), (\d+)px\)$/.exec(
+      declOf(body, 'width'),
+    );
+    expect(width, declOf(body, 'width')).not.toBeNull();
+    const [, floor, halfStrip, inset, cap] = width as RegExpExecArray;
+    // The floor is the width every phone had before, so the narrowest keeps it.
+    expect(Number(floor)).toBe(168);
+    // The width gives back exactly the left offset, notch included.
+    expect(inset).toBe(left);
+    // The strip's readout and action rows are about 272px wide, centred: the
+    // reserved half keeps a margin past their edge for longer locales.
+    expect(Number(halfStrip)).toBeGreaterThanOrEqual(136 + 16);
+    // At the cap the longest house pilot fits at the touch size: placing,
+    // name (16 characters at about 6px), Bot tag and lap, with the row padding.
+    expect(Number(cap)).toBeGreaterThanOrEqual(8 + 13 + 6 + 16 * 6 + 4 + 29 + 6 + 28 + 8);
+  });
+
   it('lays the touch podium on a solid ground over the strip and the banner', () => {
     const podium = rulesOf(mobile, 'body.mobile-touch #realm-racers-podium')[0];
     const ground = /^var\((--[\w-]+)\)$/.exec(declOf(podium, 'background'))?.[1];

@@ -10344,7 +10344,11 @@
        frame), and a pilot aims Ground Blast by targeting a rival, so the panel
        holds the slot under the target seat and its aura strip (120px at the
        seat's own scale, the strip carrying a rival's ward), as the party frames
-       do, and clears the notch on both edges. */
+       do, and clears the notch on both edges. Its rows sit level with the
+       strip's readout and action rows (about 272px wide, centred), so it widens
+       only into the room left of them, minus a margin for longer locales: up to
+       a full house-pilot name beside the Bot tag on a wide phone, and the old
+       168px on the narrowest. */
     body.mobile-touch #realm-racers-standings {
       top: calc(
         max(8px, env(safe-area-inset-top)) +
@@ -10354,7 +10358,11 @@
         6px
       );
       left: max(12px, calc(env(safe-area-inset-left) + 6px));
-      width: 168px;
+      width: clamp(
+        168px,
+        calc(50vw - 160px - max(12px, calc(env(safe-area-inset-left) + 6px))),
+        208px
+      );
     }
     @media (orientation: landscape) {
       body.mobile-touch #realm-racers-standings {
