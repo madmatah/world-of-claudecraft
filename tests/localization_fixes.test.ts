@@ -1543,6 +1543,7 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
   const serverSrc = [
     'server/game.ts',
     'server/who_roster.ts',
+    'server/player_location.ts',
     'server/social.ts',
     'server/activity_detect.ts',
     'server/farming_commands.ts',

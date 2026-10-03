@@ -21,11 +21,8 @@ import {
   DELVES,
   DUNGEON_X_THRESHOLD,
   DUNGEONS,
-  delveAt,
-  dungeonAt,
   ITEMS,
   isBgPos,
-  isDelvePos,
   MOBS,
   zoneAt,
 } from '../src/sim/data';
@@ -403,6 +400,12 @@ import { dispatchPerfectItemCommand } from './perfect_item_command';
 import { parsePerfectingSwapCommand } from './perfecting_swap_command';
 import { runPeriodicSaveFlush } from './periodic_save_flush';
 import { writePlayerIdentityWire } from './player_identity_wire';
+import {
+  type AdminLiveLocation,
+  liveLocationFor,
+  presenceOf,
+  presenceZoneAt,
+} from './player_location';
 import { VaultGameServices, type VaultMailSaveCapture } from './vault_game_services';
 import { dispatchVehicleCommand } from './vehicle_command_wire';
 import { dispatchWeeklyRewardCommand } from './weekly_reward_open';
@@ -887,7 +890,6 @@ const PLAYTIME_GRANT_MS = 5 * 60_000;
 const PLAYTIME_POINTS = 10;
 const DAILY_REWARD_ACTIVITY_MS = 60_000;
 const RELAY_COOLDOWN_MS = 8_000; // min gap between a player's "!" community posts
-const ADMIN_LOCATION_POI_RADIUS = 32;
 
 export interface ClientSession
   extends MovementInputSessionState,
@@ -1191,18 +1193,6 @@ export interface AdminLiveAura {
   remaining: number;
   duration: number;
   permanent?: boolean;
-}
-
-export interface AdminLiveLocation {
-  kind: 'overworld' | 'dungeon' | 'delve';
-  zoneId: string | null;
-  zone: string;
-  instanceId: string | null;
-  instance: string | null;
-  instanceSlot: number | null;
-  poiIndex: number | null;
-  poi: string | null;
-  poiDistance: number | null;
 }
 
 export interface AdminLivePlayer {
@@ -2246,39 +2236,9 @@ export class GameServer {
     if (announce) this.sendSystemNotice(moderator, 'Returned from jail visitor area.');
   }
 
-  // The instance (dungeon OR delve) an entity is inside, named as its own zone,
-  // or null when the entity is in the overworld (or an arena, which is not a
-  // dungeon). Resolved in order: an explicit dungeonId portal field, then a
-  // delve position, then any other far-off instance-space x as a dungeon. A
-  // failed lookup returns null so callers fall back to the overworld zone
-  // rather than ever surfacing a raw id. `pos` defaults to the entity's live
-  // position but callers pass a spectator's saved position so a spectating
-  // moderator reports where they really are, not the limbo they were parked in.
-  private instanceZoneName(e: Entity, pos: { x: number; z: number } = e.pos): string | null {
-    if (e.dungeonId) return DUNGEONS[e.dungeonId]?.name ?? e.dungeonId;
-    if (isDelvePos(pos.x)) return delveAt(pos.x)?.name ?? null;
-    if (pos.x > DUNGEON_X_THRESHOLD) return dungeonAt(pos.x)?.name ?? null;
-    return null;
-  }
-
-  // Live location + activity of an online character, for friend/guild rosters
-  // and /who. A player inside any instance (dungeon or delve) reports the
-  // instance name and the 'dungeon' status, not the overworld zone the instance
-  // coordinates happen to fall under.
   private presenceOf(session: ClientSession): Presence {
-    const e = this.sim.entities.get(session.pid);
-    if (!e) return { zone: 'Unknown', status: 'online' };
-    const pos = session.spectating?.savedPos ?? e.pos;
-    const instanceZone = this.instanceZoneName(e, pos);
-    let status: PresenceStatus = 'online';
-    if (e.dead) status = 'dead';
-    else if (instanceZone != null) status = 'dungeon';
-    else if (e.inCombat) status = 'combat';
-    // AFK is the lowest-priority active state: a dead/instanced/in-combat player
-    // reports that first, but an idle /afk player shows 'afk' over plain 'online'.
-    else if (this.sim.meta(session.pid)?.away?.mode === 'afk') status = 'afk';
-    const zone = instanceZone ?? zoneAt(pos.x, pos.z).name;
-    return { zone, status, x: pos.x, z: pos.z };
+    const { pid, spectating } = session;
+    return presenceOf(this.sim.entities.get(pid), this.sim.meta(pid)?.away, spectating?.savedPos);
   }
 
   private socialTransport(): SocialTransport {
@@ -2994,7 +2954,7 @@ export class GameServer {
     const zone = e
       ? e.dungeonId
         ? (DUNGEONS[e.dungeonId]?.name ?? e.dungeonId)
-        : zoneAt(e.pos.x, e.pos.z).name
+        : presenceZoneAt(e.pos.x, e.pos.z).name
       : REALM;
     // In-game: a system broadcast everyone sees (variable-routed; S3 guard skips it).
     this.broadcastSystem(`[${command.tag}] ${session.name}: ${message || command.label}`);
@@ -5440,69 +5400,6 @@ export class GameServer {
     );
   }
 
-  private liveLocationFor(e: Entity): AdminLiveLocation {
-    const instance = this.sim.instanceInfoAt(e.pos);
-    const dungeonId = e.dungeonId ?? instance?.dungeonId ?? null;
-    if (dungeonId) {
-      const dungeon = DUNGEONS[dungeonId];
-      const zone = dungeon
-        ? zoneAt(dungeon.doorPos.x, dungeon.doorPos.z)
-        : zoneAt(e.pos.x, e.pos.z);
-      return {
-        kind: 'dungeon',
-        zoneId: zone.id,
-        zone: zone.name,
-        instanceId: dungeonId,
-        instance: dungeon?.name ?? dungeonId,
-        instanceSlot: instance?.slot ?? null,
-        poiIndex: null,
-        poi: null,
-        poiDistance: null,
-      };
-    }
-
-    const delveRun = this.sim.delveRunForPlayer(e.id);
-    if (delveRun) {
-      const delve = DELVES[delveRun.delveId];
-      const zone = delve ? zoneAt(delve.doorPos.x, delve.doorPos.z) : zoneAt(e.pos.x, e.pos.z);
-      return {
-        kind: 'delve',
-        zoneId: zone.id,
-        zone: zone.name,
-        instanceId: delveRun.delveId,
-        instance: delve?.name ?? delveRun.delveId,
-        instanceSlot: delveRun.slot,
-        poiIndex: null,
-        poi: null,
-        poiDistance: null,
-      };
-    }
-
-    const zone = zoneAt(e.pos.x, e.pos.z);
-    let bestIndex: number | null = null;
-    let bestDistance = ADMIN_LOCATION_POI_RADIUS;
-    for (let i = 0; i < zone.pois.length; i++) {
-      const poi = zone.pois[i];
-      const distance = Math.hypot(e.pos.x - poi.x, e.pos.z - poi.z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    const poi = bestIndex === null ? null : zone.pois[bestIndex];
-    return {
-      kind: 'overworld',
-      zoneId: zone.id,
-      zone: zone.name,
-      instanceId: null,
-      instance: null,
-      instanceSlot: null,
-      poiIndex: bestIndex,
-      poi: poi?.label ?? null,
-      poiDistance: poi ? round2(bestDistance) : null,
-    };
-  }
-
   liveSessions(): AdminLivePlayer[] {
     const now = Date.now();
     const players: AdminLivePlayer[] = [];
@@ -5510,7 +5407,7 @@ export class GameServer {
       const e = this.sim.entities.get(session.pid);
       const meta = this.sim.meta(session.pid);
       if (!e || !meta) continue;
-      const location = this.liveLocationFor(e);
+      const location = liveLocationFor(this.sim, e);
       const zone = location.instance ?? location.zone;
       const moveSpeedMultiplier = round2(this.sim.moveSpeedMult(e));
       players.push({

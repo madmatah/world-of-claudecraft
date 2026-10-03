@@ -1772,7 +1772,11 @@ const MONOLITHS: MonolithRow[] = [
     // parent pins for the record, the release 9840 and the branch 9832; the
     // two sides compose to 9845 by wc -l on the merged tree (after biome), +5
     // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    ceiling: 9845,
+    // LOWERED 9845 -> 9742 at the Realm Racers lane zone fix (2026-10-03): the
+    // presence extraction moved presenceOf, instanceZoneName and the admin
+    // live location to server/player_location.ts, where a racer on a circuit
+    // lane reads the circuit's zone. wc -l after biome. Exact count, zero slack.
+    ceiling: 9742,
     seam: 'a sibling server module; see the hot-path seams in server/CLAUDE.md',
   },
   {
