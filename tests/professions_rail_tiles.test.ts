@@ -44,7 +44,7 @@ describe('the Perfecting rail tile and keybind (the seven-piece exemplar)', () =
       );
       expect(col, name).toMatch(/id="mm-perfecting"[^>]*data-icon="perfecting"/);
       // Crafting's own tile first, then Perfecting (the crafting family's
-      // endgame surface sits under its parent), then the column ends.
+      // endgame surface sits under its parent).
       expect(col.indexOf('id="mm-perfecting"'), name).toBeGreaterThan(
         col.indexOf('id="mm-crafting"'),
       );
@@ -216,6 +216,9 @@ describe('both tiles hydrate and stay under the rail height budget', () => {
       'mm-bag',
       'mm-crafting',
       'mm-perfecting',
+      // Realm Racers closes the column: in col-b it left that column three
+      // rows taller (tests/browser/mount_release_polish.browser.test.ts).
+      'mm-rally',
     ];
     for (const [name, html] of entries) {
       // The class ATTRIBUTE is a list on this branch (the rail tiles adopted the
