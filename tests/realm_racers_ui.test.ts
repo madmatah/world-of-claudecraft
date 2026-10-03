@@ -48,6 +48,7 @@ import {
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
 import { realmRacersCircuitName } from '../src/ui/realm_racers_circuit_i18n';
+import { RALLY_RACE_ON_CLASS } from '../src/ui/root_state_classes';
 import type { IWorld, RealmRacersInfo } from '../src/world_api';
 import { stripComments } from './helpers/strip_comments';
 
@@ -412,6 +413,27 @@ describe('Realm Racers practice setup screen', () => {
     h.info.queueViable = true;
     h.ui.update();
     expect(h.root.querySelector<HTMLButtonElement>('[data-rally-join]')?.disabled).toBe(false);
+  });
+
+  it('marks body while a race is on, from the grid to the result, and clears it after', () => {
+    document.body.classList.remove(RALLY_RACE_ON_CLASS);
+    const h = harness();
+    const on = (): boolean => document.body.classList.contains(RALLY_RACE_ON_CLASS);
+    h.ui.update();
+    expect(on()).toBe(false);
+    for (const phase of ['countdown', 'racing', 'finished'] as const) {
+      h.info.match = match({ phase });
+      h.ui.update();
+      expect(on(), phase).toBe(true);
+    }
+    h.info.match = null;
+    h.ui.update();
+    expect(on()).toBe(false);
+    // A HUD torn down mid-race must not strand the class on the page.
+    h.info.match = match({ phase: 'racing' });
+    h.ui.update();
+    h.ui.dispose();
+    expect(on()).toBe(false);
   });
 
   it('leaves the setup screen behind once the race starts', () => {

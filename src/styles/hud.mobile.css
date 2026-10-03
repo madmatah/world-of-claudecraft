@@ -10308,6 +10308,17 @@
       top: max(48px, calc(env(safe-area-inset-top) + 34px));
       width: min(470px, calc(100vw - 108px));
     }
+    /* The plain race banners ride the band above the strip here too (the
+       touch line at 18% sat under the readout row): the strip keeps that band
+       at least 34px tall below any inset, and the touch banner size fits it. */
+    body.mobile-touch.rally-race-on #banner:not(
+        .banner-with-art,
+        .has-subtext,
+        .banner-world-quest,
+        .banner-loot
+      ) {
+      top: max(8px, env(safe-area-inset-top));
+    }
     body.mobile-touch .rallyhud-stats > span {
       min-width: 66px;
       padding-inline: 6px;
@@ -10398,11 +10409,11 @@
       padding: 3px 12px;
       font-size: 16px;
     }
-    /* The touch result banner (top 18%) lands under the strip's readout row,
-       so there is no free band to hang the podium from as on desktop. It
-       covers the strip and the banner instead, on a solid ground so neither
-       glows through it (the steps carry the winner's name), and tightens until
-       it ends above the player frame and the handbrake. */
+    /* A phone has no free band under the strip to hang the podium from as on
+       desktop. It covers the strip instead (the result banner rides above
+       it), on a solid ground so the strip does not glow through it (the steps
+       carry the winner's name), and tightens until it ends above the player
+       frame and the handbrake. */
     body.mobile-touch #realm-racers-podium {
       top: 44%;
       gap: 6px;

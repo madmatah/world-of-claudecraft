@@ -26860,6 +26860,21 @@
     color: var(--rally-hud-text);
     filter: drop-shadow(0 3px 6px var(--rally-shadow-acc));
   }
+  /* While a race is on the strip owns the top centre. A plain banner (GO, the
+   lap, the result, the circuit) rides the band above it instead of landing on
+   its phase line at the default 28% line, a touch smaller on a narrow window
+   so a long result stays one line between the standings and the minimap;
+   celebration plates keep their own slot. The new-adventurer card and its
+   arrow share the strip's slot and stand down until the race ends. */
+  body.rally-race-on
+  #banner:not(.banner-with-art, .has-subtext, .banner-world-quest, .banner-loot) {
+    top: 16px;
+    font-size: clamp(24px, 2.6vw, 38px);
+  }
+  body.rally-race-on .tut-card,
+  body.rally-race-on .tut-arrow {
+    visibility: hidden;
+  }
   .rallyhud-top,
   .rallyhud-stats,
   .rallyhud-actions {
@@ -27372,9 +27387,10 @@
      this is the moment a four-pilot grid is actually raced for. It keys on the
      RACE being decided, never on the viewer's own phase, so a pilot who merely
      quit keeps their forfeit tableau instead of a classification that does not
-     exist yet. It hangs just under the result banner the same race end raises
-     (#banner: top 28%, one 38px line): centred, it covered the middle of
-     "X wins the race." on any viewport under 1080px tall. */
+     exist yet. It hangs just under the default banner line (#banner: top 28%,
+     one 38px line), where a deed plate earned at the finish lands (the plain
+     result banner rides above the strip): centred, it covered the middle of
+     that line on any viewport under 1080px tall. */
   #realm-racers-podium {
     position: absolute;
     z-index: 60;

@@ -37,6 +37,7 @@ import {
   type RealmRacersWindowView,
 } from './realm_racers_view';
 import { connectionDropActive } from './reconnect_overlay';
+import { RALLY_RACE_ON_CLASS } from './root_state_classes';
 import { svgIcon } from './ui_icons';
 
 const num = (value: number): string => formatNumber(value, { maximumFractionDigits: 0 });
@@ -122,6 +123,8 @@ export interface RealmRacersDeps {
   /** Where the race warm sends the first-use sounds and icons it prepares on
    *  the commitment trigger; without it nothing is warmed. */
   raceWarm?: RealmRacersRaceWarmSinks;
+  /** Where RALLY_RACE_ON_CLASS is marked; document.body by default. */
+  stateRoot?(): HTMLElement | null;
 }
 
 const NOT_PREPARED: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
@@ -248,6 +251,12 @@ export class RealmRacersUi {
   /** Drop the lobby curtain's cover depth and key hold, and unmount it. */
   dispose(): void {
     this.lobby.dispose();
+    this.markRaceOn(false);
+  }
+
+  private markRaceOn(on: boolean): void {
+    const stateRoot = this.deps.stateRoot ? this.deps.stateRoot() : document.body;
+    if (stateRoot) this.deps.writers.toggleClass(stateRoot, RALLY_RACE_ON_CLASS, on);
   }
 
   private preparedFor(match: RealmRacersInfo['match']): RealmRacersPrepareProgress {
@@ -528,6 +537,7 @@ export class RealmRacersUi {
 
   private renderHud(view: RealmRacersHudView, standings: RealmRacersStandingsView): void {
     const w = this.deps.writers;
+    this.markRaceOn(view.active);
     if (!view.active) {
       if (this.hudRoot) w.setDisplay(this.hudRoot, 'none');
       this.standings.update(standings);

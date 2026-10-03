@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { RALLY_LOBBY_SHOWN_CLASS } from '../src/ui/root_state_classes';
+import { RALLY_LOBBY_SHOWN_CLASS, RALLY_RACE_ON_CLASS } from '../src/ui/root_state_classes';
 
 const root = new URL('../', import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, root), 'utf8');
@@ -150,6 +150,13 @@ function rulesOf(css: string, selector: string): string[] {
   return bodies;
 }
 
+/** The sheet with every whitespace run collapsed (and none just inside a
+ *  parenthesis), so a selector the formatter wrapped over several lines still
+ *  matches its one-line spelling. */
+function flat(css: string): string {
+  return css.replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')');
+}
+
 function declOf(body: string, property: string): string {
   const match = new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(body);
   if (!match) throw new Error(`no ${property} in ${body}`);
@@ -166,7 +173,62 @@ describe('Realm Racers race overlays clear their neighbours', () => {
   const mobile = read('src/styles/hud.mobile.css');
   const tokens = read('src/styles/tokens.css');
 
-  it('hangs the desktop podium under the result banner the same race end raises', () => {
+  // The race's plain banners (GO, the lap, the result, the circuit) ride the
+  // band ABOVE the strip while a race is on: at the default line they landed on
+  // the strip's phase line (desktop) and under its readout row (touch).
+  // Celebration plates keep their own slot.
+  const RACE_BANNER =
+    '#banner:not(.banner-with-art, .has-subtext, .banner-world-quest, .banner-loot)';
+
+  it('rides the plain race banners in the band above the desktop strip', () => {
+    const banner = rulesOf(flat(components), `body.${RALLY_RACE_ON_CLASS} ${RACE_BANNER}`)[0];
+    expect(banner).toBeDefined();
+    const top = Number.parseFloat(declOf(banner, 'top'));
+    const size = /^clamp\((\d+)px, [\d.]+vw, (\d+)px\)$/.exec(declOf(banner, 'font-size'));
+    expect(size).not.toBeNull();
+    const line =
+      Number(size?.[2]) * Number.parseFloat(declOf(rulesOf(hudCss, '#banner')[0], 'line-height'));
+    const strip = Number.parseFloat(declOf(rulesOf(components, '#realm-racers-hud')[0], 'top'));
+    expect(top + line).toBeLessThan(strip);
+  });
+
+  it('rides the plain race banners in the band above the touch strip, at every inset', () => {
+    const banner = rulesOf(
+      flat(mobile),
+      `body.mobile-touch.${RALLY_RACE_ON_CLASS} ${RACE_BANNER}`,
+    )[0];
+    expect(banner).toBeDefined();
+    const top = /^max\((\d+)px, env\(safe-area-inset-top\)\)$/.exec(declOf(banner, 'top'));
+    expect(top).not.toBeNull();
+    const touchBanner = rulesOf(mobile, 'body.mobile-touch #banner')[0];
+    const size = /^calc\((\d+)px \* var\(--mobile-chrome-scale, 1\)\)$/.exec(
+      declOf(touchBanner, 'font-size'),
+    );
+    expect(size).not.toBeNull();
+    // Scale 1 is the largest the touch chrome runs at (landscape phones use 0.85).
+    const line = Number(size?.[1]) * Number.parseFloat(declOf(touchBanner, 'line-height'));
+    const strip = /^max\((\d+)px, calc\(env\(safe-area-inset-top\) \+ (\d+)px\)\)$/.exec(
+      declOf(rulesOf(mobile, 'body.mobile-touch #realm-racers-hud')[0], 'top'),
+    );
+    expect(strip).not.toBeNull();
+    // No inset: the fixed floors. A notch: the banner starts at the inset and
+    // the strip sits a fixed step below it.
+    expect(Number(top?.[1]) + line).toBeLessThan(Number(strip?.[1]));
+    expect(line).toBeLessThan(Number(strip?.[2]));
+  });
+
+  it('stands the new-adventurer card and its arrow down for the race', () => {
+    const rule = rulesOf(
+      flat(components),
+      `body.${RALLY_RACE_ON_CLASS} .tut-card, body.${RALLY_RACE_ON_CLASS} .tut-arrow`,
+    )[0];
+    expect(rule).toBeDefined();
+    // visibility, not display: the tutorial writes the arrow's display inline,
+    // and the card comes back as it was the moment the class drops.
+    expect(declOf(rule, 'visibility')).toBe('hidden');
+  });
+
+  it('hangs the desktop podium under the default banner line a finish deed plate takes', () => {
     const banner = rulesOf(hudCss, '#banner')[0];
     const bannerTop = /^(\d+)%$/.exec(declOf(banner, 'top'));
     expect(bannerTop).not.toBeNull();
