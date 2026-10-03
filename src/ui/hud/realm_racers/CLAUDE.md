@@ -23,6 +23,11 @@ The curtain a race opens under while every pilot's machine prepares the circuit
 (the sim's `loading` phase, `src/sim/social/realm_racers_loading.ts`, read through
 `IWorld.realmRacersInfo`), behind the `index.ts` barrel. `src/ui/realm_racers.ts`
 (`RealmRacersUi`) composes it; the rest of the rally HUD still lives flat in `src/ui/`.
+`RealmRacersUi` also marks body with `RALLY_RACE_ON_CLASS` while the viewer's own match
+exists (the race strip is up, lobby included), through the elided writer: the plain
+banners ride the band above the strip and the new-adventurer card and its arrow stand
+down (the race strip rules in `src/styles/components.css`, the touch twin in
+`src/styles/hud.mobile.css`, pinned by `tests/realm_racers_lobby_css.test.ts`).
 
 - `realm_racers_lobby_view.ts`: the pure, DOM-free core (registered in `UI_PURE_CORES`).
   - `buildRealmRacersLobbyView(match, progress)` shows only while the viewer's own match

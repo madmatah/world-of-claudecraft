@@ -10268,6 +10268,23 @@
 }
 
 @layer hud-mobile {
+  /* The plain race banners ride the band above the strip on touch too (the
+     touch line at 18% sat under the readout row). Outside the coarse-pointer
+     block below, like the 18% rule it overrides: a touch interface chosen on a
+     fine pointer keeps the desktop strip at 74px, which the band clears as well.
+     With the touch strip, the band stays at least 34px tall below any inset,
+     and the touch banner size fits it. */
+  body.mobile-touch.rally-race-on
+  #banner:not(
+    .banner-with-art,
+    .has-subtext,
+    .banner-world-quest,
+    .banner-loot,
+    .banner-deed,
+    .banner-skill
+  ) {
+    top: max(8px, env(safe-area-inset-top));
+  }
   @media (pointer: coarse) {
     body.mobile-touch #realm-racers-window {
       inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
@@ -10307,17 +10324,6 @@
     body.mobile-touch #realm-racers-hud {
       top: max(48px, calc(env(safe-area-inset-top) + 34px));
       width: min(470px, calc(100vw - 108px));
-    }
-    /* The plain race banners ride the band above the strip here too (the
-       touch line at 18% sat under the readout row): the strip keeps that band
-       at least 34px tall below any inset, and the touch banner size fits it. */
-    body.mobile-touch.rally-race-on #banner:not(
-        .banner-with-art,
-        .has-subtext,
-        .banner-world-quest,
-        .banner-loot
-      ) {
-      top: max(8px, env(safe-area-inset-top));
     }
     body.mobile-touch .rallyhud-stats > span {
       min-width: 66px;

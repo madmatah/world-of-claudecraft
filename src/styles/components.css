@@ -26838,13 +26838,22 @@
    its phase line at the default 28% line, a touch smaller on a narrow window
    so a long result stays one line between the standings and the minimap;
    celebration plates keep their own slot. The new-adventurer card and its
-   arrow share the strip's slot and stand down until the race ends. */
+   arrow share the strip's slot and stand down until the race ends (the
+   signpost and Realm Builder popups that reuse the card are player-opened, so
+   they stay); the card's live region is silent while it is hidden. */
   body.rally-race-on
-  #banner:not(.banner-with-art, .has-subtext, .banner-world-quest, .banner-loot) {
+  #banner:not(
+    .banner-with-art,
+    .has-subtext,
+    .banner-world-quest,
+    .banner-loot,
+    .banner-deed,
+    .banner-skill
+  ) {
     top: 16px;
     font-size: clamp(24px, 2.6vw, 38px);
   }
-  body.rally-race-on .tut-card,
+  body.rally-race-on .tut-card:not(.nb-popup, .rb-popup),
   body.rally-race-on .tut-arrow {
     visibility: hidden;
   }

@@ -178,7 +178,7 @@ describe('Realm Racers race overlays clear their neighbours', () => {
   // the strip's phase line (desktop) and under its readout row (touch).
   // Celebration plates keep their own slot.
   const RACE_BANNER =
-    '#banner:not(.banner-with-art, .has-subtext, .banner-world-quest, .banner-loot)';
+    '#banner:not(.banner-with-art, .has-subtext, .banner-world-quest, .banner-loot, .banner-deed, .banner-skill)';
 
   it('rides the plain race banners in the band above the desktop strip', () => {
     const banner = rulesOf(flat(components), `body.${RALLY_RACE_ON_CLASS} ${RACE_BANNER}`)[0];
@@ -215,12 +215,22 @@ describe('Realm Racers race overlays clear their neighbours', () => {
     // the strip sits a fixed step below it.
     expect(Number(top?.[1]) + line).toBeLessThan(Number(strip?.[1]));
     expect(line).toBeLessThan(Number(strip?.[2]));
+    // Ungated like the 18% rule it overrides: inside the coarse-pointer block,
+    // a touch interface on a fine pointer would keep the banner under the strip.
+    const lift = flat(mobile).indexOf(`body.mobile-touch.${RALLY_RACE_ON_CLASS} ${RACE_BANNER}`);
+    const coarse = flat(mobile).indexOf(
+      '@media (pointer: coarse) { body.mobile-touch #realm-racers-window {',
+    );
+    expect(coarse).toBeGreaterThan(-1);
+    expect(lift).toBeLessThan(coarse);
+    const layer = flat(mobile).lastIndexOf('@layer hud-mobile {', lift);
+    expect(flat(mobile).slice(layer, lift)).not.toContain('@media');
   });
 
   it('stands the new-adventurer card and its arrow down for the race', () => {
     const rule = rulesOf(
       flat(components),
-      `body.${RALLY_RACE_ON_CLASS} .tut-card, body.${RALLY_RACE_ON_CLASS} .tut-arrow`,
+      `body.${RALLY_RACE_ON_CLASS} .tut-card:not(.nb-popup, .rb-popup), body.${RALLY_RACE_ON_CLASS} .tut-arrow`,
     )[0];
     expect(rule).toBeDefined();
     // visibility, not display: the tutorial writes the arrow's display inline,

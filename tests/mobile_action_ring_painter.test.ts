@@ -572,6 +572,11 @@ describe('MobileActionRingPainter: a kit ability in the primary seat', () => {
     expect(calls).toContainEqual({ m: 'setDisplay', args: [els[0].btn, ''] });
     // The .ability class is what hides the hydrated Attack sword under the icon.
     expect(calls).toContainEqual({ m: 'toggleClass', args: [els[0].btn, 'ability', true] });
+    // Named as the weapon, and no longer announced as the attack toggle.
+    const aria = (name: string) =>
+      calls.filter((c) => c.m === 'setAttr' && c.args[0] === els[0].btn && c.args[1] === name);
+    expect(String(aria('aria-label').at(-1)?.args[2])).toContain('rally_ground_blast');
+    expect(aria('aria-pressed').at(-1)?.args[2]).toBeNull();
     expect(MOBILE_HUD_CSS).toMatch(
       /body\.mobile-touch #mobile-action-attack\.ability \.ui-icon,\s*body\.mobile-touch #mobile-action-attack\.empty \.ui-icon\s*\{\s*display:\s*none;/,
     );

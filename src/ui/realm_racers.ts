@@ -123,8 +123,6 @@ export interface RealmRacersDeps {
   /** Where the race warm sends the first-use sounds and icons it prepares on
    *  the commitment trigger; without it nothing is warmed. */
   raceWarm?: RealmRacersRaceWarmSinks;
-  /** Where RALLY_RACE_ON_CLASS is marked; document.body by default. */
-  stateRoot?(): HTMLElement | null;
 }
 
 const NOT_PREPARED: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
@@ -255,8 +253,7 @@ export class RealmRacersUi {
   }
 
   private markRaceOn(on: boolean): void {
-    const stateRoot = this.deps.stateRoot ? this.deps.stateRoot() : document.body;
-    if (stateRoot) this.deps.writers.toggleClass(stateRoot, RALLY_RACE_ON_CLASS, on);
+    this.deps.writers.toggleClass(document.body, RALLY_RACE_ON_CLASS, on);
   }
 
   private preparedFor(match: RealmRacersInfo['match']): RealmRacersPrepareProgress {
