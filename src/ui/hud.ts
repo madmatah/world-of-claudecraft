@@ -7377,9 +7377,8 @@ export class Hud {
   }
 
   private activateFixedAttackSlot(): void {
-    // The circuit needs no arm here: an activity kit RESERVES slot 0 outright
-    // (ActionBarController.isActivityKitSlot), so the fixed attack slot does
-    // not exist during a race and this method is never reached from one.
+    // No circuit arm: an activity kit reserves slot 0 outright, so the fixed
+    // attack slot does not exist in a race (touch casts slot 0 instead).
     if (this.sim.player.autoAttack) this.sim.stopAutoAttack();
     else this.sim.startAutoAttack();
     this.flashActionSlot(0);
@@ -8080,6 +8079,7 @@ export class Hud {
       cancelAim: () => this.cancelGroundAim(),
       castSlot: (slot) => this.castSlot(slot),
       cyclePage: () => this.cycleMobileActionPage(),
+      primary: () => this.actionBarController.touchPrimary(),
       activateFixedAttackSlot: () => this.activateFixedAttackSlot(),
       attackNearest: this.onMobileAttackNearest,
       attackTapState: () => {
@@ -9367,7 +9367,7 @@ export class Hud {
         mobileActionPage,
         mobilePageCount(mobileActionSourceSlotCount),
         mobileActionSourceSlotCount,
-        this.attackSlotIsAttack(),
+        this.actionBarController.touchPrimary() !== null,
       );
     }
 

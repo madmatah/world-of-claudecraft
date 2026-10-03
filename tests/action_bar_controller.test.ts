@@ -421,6 +421,28 @@ describe('ActionBarController form persistence', () => {
     expect(harness.controller.actionForSlot(0)).toBeNull();
   });
 
+  it('hands the touch primary to the race weapon on the circuit and back to the attack toggle', () => {
+    // Touch has no row of slot keys: the ring's primary button is the only way
+    // to reach slot 0, so a race weapon pinned there needs that button.
+    const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
+    harness.state.known.push('rally_ground_blast');
+    harness.controller.syncKnownAbilities();
+    expect(harness.controller.touchPrimary()).toBe('attack');
+    harness.state.showAttackButton = false;
+    expect(harness.controller.touchPrimary()).toBeNull();
+
+    harness.state.inRally = true;
+    harness.controller.syncActiveForm();
+    // The Interface setting hides the attack toggle only, never the weapon.
+    expect(harness.controller.touchPrimary()).toBe('kit');
+    harness.state.showAttackButton = true;
+    expect(harness.controller.touchPrimary()).toBe('kit');
+
+    harness.state.inRally = false;
+    harness.controller.syncActiveForm();
+    expect(harness.controller.touchPrimary()).toBe('attack');
+  });
+
   it('migrates a Rally page seeded by an earlier build off the duplicate row slot', () => {
     // Bars persisted before the weapon owned slot 0 carry it in row slot 1, so
     // without the strip a returning pilot sees the same shell twice. A pickup

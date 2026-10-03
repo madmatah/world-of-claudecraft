@@ -41,6 +41,7 @@ import {
   syncHotbarActions,
   saveAttackSlotAction as writeAttackSlotAction,
 } from './hotbar';
+import type { MobilePrimarySlot } from './mobile_action_page_view';
 import {
   ownedClassSpecDefaultAbilityIds,
   ownedDruidFormDefaultAbilityIds,
@@ -642,6 +643,11 @@ export class ActionBarController {
   isAttackSlotFixed(): boolean {
     if (this.isActivityKitSlot(0)) return false;
     return this.deps.showAttackButton();
+  }
+
+  touchPrimary(): MobilePrimarySlot {
+    if (this.isActivityKitSlot(0)) return 'kit';
+    return this.deps.showAttackButton() ? 'attack' : null;
   }
 
   actionForSlot(barSlot: number): HotbarAction {

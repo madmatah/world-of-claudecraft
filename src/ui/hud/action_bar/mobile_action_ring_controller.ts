@@ -8,8 +8,9 @@
 //
 // What it composes:
 //   - a SECOND createActionBarView instance over a 5-slot descriptor (slot 0 the
-//     fixed attack toggle, slots 1-4 the radial action buttons, each resolving
-//     its CENTRE action for the current page),
+//     primary button: the fixed attack toggle, or the race weapon an activity
+//     kit pins there; slots 1-4 the radial action buttons, each resolving its
+//     CENTRE action for the current page),
 //   - a THIRD one over the 4 direction petals, resolving against whichever ring
 //     button the gesture currently holds,
 //   - the gesture layer (radial_gesture_controller.ts) and the petal painter, and
@@ -39,7 +40,7 @@ import {
   createActionBarView,
 } from './action_bar_view';
 import { handleMobileAttackTap } from './hotbar';
-import { MOBILE_ACTION_BUTTONS } from './mobile_action_page_view';
+import { MOBILE_ACTION_BUTTONS, type MobilePrimarySlot } from './mobile_action_page_view';
 import { MobileActionRingPainter } from './mobile_action_ring_painter';
 import type { RadialDirection, RadialPlacement } from './radial_action_core';
 import { RadialGesture } from './radial_gesture_controller';
@@ -55,6 +56,7 @@ const RADIAL_CANCEL_ID = 'mobile-action-radial-cancel';
 const PETAL_SELECTOR = '.mobile-action-petal';
 const PETAL_DIRECTION_DATASET = 'radialDir';
 const MOBILE_INDEX_DATASET = 'mobileIndex';
+const PRIMARY_BAR_SLOT = 0;
 
 /** The per-direction accessible name a petal's slot aria is built from ("Action
  *  slot Up: Fireball"), so a screen reader names the direction rather than an
@@ -94,6 +96,10 @@ export interface MobileActionRingDeps {
   takeSuppressedClick(): boolean;
   castSlot(slot: number): void;
   cyclePage(): void;
+  /** What the primary button is right now. A kit there casts bar slot 0
+   *  through castSlot, so a ground-aimed weapon arms and commits on the same
+   *  button the way every ring slot does. */
+  primary(): MobilePrimarySlot;
   activateFixedAttackSlot(): void;
   attackNearest: (() => void) | null;
   attackTapState(): { autoAttack: boolean; hasLiveHostileTarget: boolean };
@@ -224,12 +230,14 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
     {
       slots: [
         {
-          slotIndex: 0,
-          isAttack: () => true,
-          hasAction: () => false,
-          ability: () => null,
+          slotIndex: PRIMARY_BAR_SLOT,
+          isAttack: () => deps.primary() !== 'kit',
+          hasAction: () =>
+            deps.primary() === 'kit' && deps.actionForSlot(PRIMARY_BAR_SLOT) !== null,
+          ability: () => (deps.primary() === 'kit' ? deps.abilityForSlot(PRIMARY_BAR_SLOT) : null),
           item: () => null,
           keybindLabel: () => '',
+          ownsAimSlot: (aimSlot) => aimSlot === PRIMARY_BAR_SLOT && deps.primary() === 'kit',
         },
         ...Array.from({ length: MOBILE_ACTION_BUTTONS }, (_, i) => ({
           slotIndex: i + 1,
@@ -286,7 +294,9 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
 /** The classic fixed attack control while the player is auto-attacking or holds
  *  a live hostile target, and the acquire-nearest fallback otherwise, so a bare
  *  tap with nothing targeted picks the closest enemy and starts swinging instead
- *  of erroring. bindTouchTap, not 'click': the browser only synthesizes click
+ *  of erroring. While a kit owns slot 0 the tap is that slot's cast instead:
+ *  touch has no slot keys, so this button is the weapon's only way in.
+ *  bindTouchTap, not 'click': the browser only synthesizes click
  *  for the PRIMARY pointer, so a click-bound ring button goes dead the moment
  *  the other thumb holds the joystick, which is how combat is actually played.
  *  The peek guard is CLEARED, never gated on: a set flag here is always stale
@@ -297,10 +307,12 @@ function wireAttackButton(attackBtn: HTMLButtonElement, deps: MobileActionRingDe
     deps.consumePeekGuard();
     deps.hideTooltip();
     audio.click();
-    handleMobileAttackTap(deps.attackTapState(), {
-      activateAttack: () => deps.activateFixedAttackSlot(),
-      attackNearest: deps.attackNearest,
-    });
+    if (deps.primary() === 'kit') deps.castSlot(PRIMARY_BAR_SLOT);
+    else
+      handleMobileAttackTap(deps.attackTapState(), {
+        activateAttack: () => deps.activateFixedAttackSlot(),
+        attackNearest: deps.attackNearest,
+      });
     attackBtn.blur();
   });
 }

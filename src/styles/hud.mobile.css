@@ -1159,10 +1159,12 @@
     height: 44%;
     color: var(--color-mobile-btn-warm);
   }
-  /* Vale Cup remaps the fixed primary seat to the first sport move. The shared
-     action-bar painter marks that state as an ability, so the painted move can
-     replace the hydrated Attack sword instead of stacking underneath it. */
-  body.mobile-touch #mobile-action-attack.ability .ui-icon {
+  /* A race weapon pinned to slot 0 takes the primary seat. The shared
+     action-bar painter marks it as an ability (or empty while the kit slot
+     holds nothing), so the painted weapon replaces the hydrated Attack sword
+     instead of stacking underneath it. */
+  body.mobile-touch #mobile-action-attack.ability .ui-icon,
+  body.mobile-touch #mobile-action-attack.empty .ui-icon {
     display: none;
   }
   body.mobile-touch #mobile-action-ring button .cd-overlay {

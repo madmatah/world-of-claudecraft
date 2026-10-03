@@ -544,6 +544,40 @@ describe('MobileActionRingPainter: page indicator + toggle aria', () => {
   });
 });
 
+describe('MobileActionRingPainter: a kit ability in the primary seat', () => {
+  it('shows the primary button painted as the ability, hiding the attack glyph', () => {
+    const { calls, writers } = recordingFacet();
+    const els = [0, 1, 2, 3, 4].map((i) => slotElements(`ring${i}`));
+    const painter = new MobileActionRingPainter(
+      writers,
+      {
+        bar: { container: { tag: 'ring-container' } as unknown as HTMLElement, slots: els },
+        pageToggle: { tag: 'toggle' } as unknown as HTMLElement,
+        pageIndicator: { tag: 'indicator' } as unknown as HTMLElement,
+      },
+      (key) => `URL(${key})`,
+      (key, values) => (values ? `${key}|${JSON.stringify(values)}` : key),
+    );
+    const slots = ringDescriptor({ page: 0 }, new Map());
+    const blast = ability('rally_ground_blast', { targetMode: 'position' });
+    slots[0] = {
+      ...slots[0],
+      isAttack: () => false,
+      hasAction: () => true,
+      ability: () => blast,
+    };
+    const view = createActionBarView({ slots }, fakeDeps());
+
+    painter.paint(view.tick(idleWorld()), 0, 2, true);
+    expect(calls).toContainEqual({ m: 'setDisplay', args: [els[0].btn, ''] });
+    // The .ability class is what hides the hydrated Attack sword under the icon.
+    expect(calls).toContainEqual({ m: 'toggleClass', args: [els[0].btn, 'ability', true] });
+    expect(MOBILE_HUD_CSS).toMatch(
+      /body\.mobile-touch #mobile-action-attack\.ability \.ui-icon,\s*body\.mobile-touch #mobile-action-attack\.empty \.ui-icon\s*\{\s*display:\s*none;/,
+    );
+  });
+});
+
 describe('MobileActionRingPainter: removable attack control', () => {
   it('hides and restores the fixed attack button from the Interface setting', () => {
     const { calls, writers } = recordingFacet();
@@ -826,8 +860,12 @@ describe('Hud.buildMobileActionRing wiring (source scan)', () => {
   });
 
   it('keeps the mobile attack button independent from the assignable desktop slot 0', () => {
+    // The attack arm never casts slot 0: only a kit-owned slot 0 does, behind
+    // the primary gate (behaviour pinned in mobile_action_ring_controller.test.ts).
     expect(ring).toContain('handleMobileAttackTap(');
-    expect(ring).not.toMatch(/bindTouchTap\(attackBtn,[\s\S]*?castSlot\(0\);/);
+    expect(ring).toContain("if (deps.primary() === 'kit') deps.castSlot(PRIMARY_BAR_SLOT);");
+    expect(ring.match(/castSlot\(PRIMARY_BAR_SLOT\)/g)).toHaveLength(1);
+    expect(hud).toContain('primary: () => this.actionBarController.touchPrimary(),');
   });
 
   it('resolves the source slot for a mobile button INSIDE the cast handler, not captured at bind time', () => {
@@ -933,9 +971,11 @@ describe('Hud.buildMobileActionRing wiring (source scan)', () => {
     );
   });
 
-  it('passes the live Show Attack Button setting into the mobile ring painter', () => {
+  it('passes the live primary-button visibility into the mobile ring painter', () => {
+    // Shown for the attack toggle under the Show Attack Button setting AND for
+    // a race weapon pinned to slot 0, which the setting never hides.
     expect(hud).toMatch(
-      /this\.mobileActionRingPainter\.paint\([\s\S]*?this\.attackSlotIsAttack\(\),[\s\S]*?\);/,
+      /this\.mobileActionRingPainter\.paint\([\s\S]*?this\.actionBarController\.touchPrimary\(\) !== null,[\s\S]*?\);/,
     );
   });
 

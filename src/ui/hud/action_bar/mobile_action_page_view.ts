@@ -32,8 +32,12 @@ export const MOBILE_ACTION_BUTTONS = 4;
 /** Actions one page reaches: every button's centre plus its 4 directions. */
 export const MOBILE_ACTIONS_PER_PAGE = MOBILE_ACTION_BUTTONS * RADIAL_SLOTS_PER_BUTTON;
 /** The first hotbar source slot the ring can reach (barSlot numbering; slot 0 is
- *  the fixed Attack toggle and is never produced by this module). */
+ *  the primary button's and is never produced by this module). */
 export const MOBILE_ACTION_SOURCE_SLOT_START = 1;
+/** What the ring's primary button is: an activity kit's slot-0 ability while a
+ *  kit reserves that slot (the race weapon), else the fixed Attack toggle when
+ *  the Interface setting shows it, else nothing. */
+export type MobilePrimarySlot = 'kit' | 'attack' | null;
 /** Total hotbar source slots the ring can reach across all desktop rows. */
 export const MOBILE_ACTION_SOURCE_SLOT_COUNT = ACTION_BAR_ABILITY_SLOTS;
 /** Direction-major keeps the resting row (every button's centre tap) equal to
