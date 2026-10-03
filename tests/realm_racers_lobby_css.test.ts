@@ -164,9 +164,9 @@ function declOf(body: string, property: string): string {
 }
 
 // The race's own overlays share the screen with HUD chrome they do not own: the
-// result banner, the touch target frame, the touch player frame. Captured
-// overlaps (docs/screenshots/realm-racers-mobile/) are pinned here where the
-// placement is decided, since jsdom does no layout.
+// result banner, the touch target frame, the touch player frame. The overlaps
+// the race captures showed are pinned here where the placement is decided,
+// since jsdom does no layout.
 describe('Realm Racers race overlays clear their neighbours', () => {
   const components = read('src/styles/components.css');
   const hudCss = read('src/styles/hud.css');
