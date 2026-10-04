@@ -1362,6 +1362,7 @@ describe('Realm Racers loading lobby curtain', () => {
     toggleHarvestJournal: vi.fn(),
     togglePerfecting: vi.fn(),
     toggleLootExplorer: vi.fn(),
+    toggleRealmRacers: vi.fn(),
   };
 
   afterEach(async () => {

@@ -36,7 +36,6 @@ import {
 import { hideBrowserSupportNotice, initBrowserSupportNotice } from './game/browser_support_notice';
 import { isCameraDrivenFacingActive } from './game/camera_driven_facing';
 import {
-  cameraFollowFacing,
   cameraFollowShouldSettle,
   isRespawnFacingResyncEdge,
   updateFollowCameraYaw,
@@ -1860,9 +1859,6 @@ async function startGame(
           case 'dungeonFinder':
             hud.toggleDungeonFinder();
             break;
-          case 'rally':
-            hud.toggleRealmRacers();
-            break;
           case 'bgFlag':
             bgFlagKey();
             break;
@@ -2183,9 +2179,6 @@ async function startGame(
         break;
       case 'arena':
         hud.toggleArena();
-        break;
-      case 'rally':
-        hud.toggleRealmRacers();
         break;
       case 'bgFlag':
         bgFlagKey();
@@ -4569,9 +4562,6 @@ async function startGame(
     for (const sample of echoSamples) perf.markInputEcho(sample);
     net.pendingFacingDelta = 0; // superseded by the interpolated follow below
     const drainedEvents = net.drainEvents();
-    // The event frame precedes its authoritative snapshot. ClientWorld holds
-    // this edge across any intervening rAF and exposes it only after that
-    // snapshot has updated the self mirror.
     const selfAuthoritativeDiscontinuity = net.consumeSelfPositionDiscontinuity();
     const drainedEventsLength = drainedEvents.length;
     // A spectating session remaps net.playerId to the watched player's pid, so
@@ -4654,12 +4644,7 @@ async function startGame(
                 frameDelveMotionState,
               ),
             );
-    const onlineCameraFacing = cameraFollowFacing(
-      driving,
-      renderer.realmRacers.selfMotionFacing,
-      kbFacing,
-      interpServerFacing,
-    );
+    const onlineCameraFacing = realmRacers.cameraFacing(pe, renderer, kbFacing, interpServerFacing);
     traceStart = perf.startTrace();
     try {
       updateCamera(frameDt, onlineCameraFacing);

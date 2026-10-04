@@ -35,7 +35,12 @@ export abstract class RealmRacersWireState extends ReconWireState {
     return this.selfDiscontinuityLatch;
   }
 
-  /** Consume one recovery snap only after its following authoritative snapshot. */
+  /**
+   * Consume one recovery snap only after its following authoritative snapshot.
+   * The event frame precedes its authoritative snapshot: ClientWorld holds this
+   * edge across any intervening rAF and exposes it only after that snapshot has
+   * updated the self mirror, so main.ts reads it once per frame here.
+   */
   consumeSelfPositionDiscontinuity(): boolean {
     return this.selfDiscontinuity.consume();
   }

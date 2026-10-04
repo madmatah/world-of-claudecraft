@@ -1509,7 +1509,10 @@ const MONOLITHS: MonolithRow[] = [
     // the drive-impulse and blast-pop plumbing into the v1 extrapolator frame
     // left main.ts. wc -l on the tree. Exact count, zero slack.
     // LOWERED 11033 -> 10993: Realm Racers wiring moved to src/game/realm_racers_client_wiring.ts.
-    ceiling: 10993,
+    // LOWERED 10993 -> 10978: the Rally window key joined the shared keyboard/pad table
+    // (collection_actions_core.ts), the online camera heading moved to the client
+    // wiring, and the recovery-snap note moved to consumeSelfPositionDiscontinuity.
+    ceiling: 10978,
     seam: 'a src/game/ or src/ui/ sibling module; main.ts is a firewall, not a home',
   },
   {

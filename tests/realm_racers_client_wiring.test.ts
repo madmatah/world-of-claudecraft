@@ -7,6 +7,7 @@ import {
 } from '../src/game/keyboard_turn_facing';
 import {
   applyDriveFacingLane,
+  cameraFacing,
   createStartCameraTick,
   draftChatHook,
 } from '../src/game/realm_racers_client_wiring';
@@ -24,6 +25,18 @@ const footArgs = (): KeyboardTurnArgs => ({
   snapshotIntervalMs: 50,
   movementWireVersion: 2,
   frameDt: 1 / 60,
+});
+
+describe('Realm Racers online camera heading', () => {
+  it('follows the predicted heading behind the wheel and the keyboard facing on foot', () => {
+    const renderer = { realmRacers: { selfMotionFacing: 1.1 as number | null } };
+    const pilot = { drive: {} as never };
+    expect(cameraFacing(pilot, renderer, 0.4, -2)).toBe(1.1);
+    expect(cameraFacing({ drive: null }, renderer, 0.4, -2)).toBe(0.4);
+    renderer.realmRacers.selfMotionFacing = null;
+    expect(cameraFacing(pilot, renderer, 0.4, -2)).toBe(-2);
+    expect(cameraFacing({ drive: null }, renderer, null, -2)).toBe(-2);
+  });
 });
 
 describe('Realm Racers drive facing lane', () => {
