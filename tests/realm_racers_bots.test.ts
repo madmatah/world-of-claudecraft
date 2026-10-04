@@ -133,6 +133,55 @@ describe('Realm Racers practice: one press, one race', () => {
     expect(botPidsOf(sim)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
   });
 
+  it('refuses a player in combat, says why, and spawns no pilot doing it', () => {
+    // An instant seat would drop combat and strip every debuff: Practice must
+    // never be the escape button from a fight.
+    const sim = makeWorld();
+    const fighter = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const e = sim.entities.get(fighter);
+    if (!e) throw new Error('missing fighter');
+    e.inCombat = true;
+    e.combatTimer = 0;
+    const before = sim.players.size;
+    sim.drainEvents();
+    sim.realmRacersPracticeStart('driver', fighter);
+    expect(realmRacersMatchOf(sim.ctx, fighter)).toBeNull();
+    expect(botPidsOf(sim)).toEqual([]);
+    expect(sim.players.size).toBe(before);
+    expect(e.inCombat).toBe(true);
+    expect(sim.drainEvents()).toContainEqual({
+      type: 'error',
+      text: "You can't do that while in combat.",
+      pid: fighter,
+    });
+  });
+
+  it('holds the online backfill for a waiter in combat, spawning nobody meanwhile', () => {
+    const sim = makeWorld({ realmRacersBackfill: true });
+    const waiter = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.realmRacersQueueJoin(waiter);
+    for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS - 5; i++) sim.tick();
+    const e = sim.entities.get(waiter);
+    if (!e) throw new Error('missing waiter');
+    let spawned = 0;
+    const addPlayer = sim.addPlayer.bind(sim);
+    sim.addPlayer = ((...args: Parameters<Sim['addPlayer']>) => {
+      spawned++;
+      return addPlayer(...args);
+    }) as Sim['addPlayer'];
+    for (let i = 0; i < 40; i++) {
+      e.inCombat = true;
+      e.combatTimer = 0;
+      sim.tick();
+    }
+    expect(spawned).toBe(0);
+    expect(sim.realmRacers.match).toBeNull();
+    expect(sim.realmRacers.queue).toEqual([waiter]);
+    for (let i = 0; i < 6 * 20 && !sim.realmRacers.match; i++) sim.tick();
+    expect(sim.realmRacers.match?.pids).toContain(waiter);
+    expect(spawned).toBe(REALM_RACERS_GRID_SIZE - 1);
+  });
+
   it('refuses a player who cannot race, and leaks no pilot doing it', () => {
     const sim = makeWorld();
     const dead = addAt(sim, 'warrior', 'Aster', -5, -40);

@@ -783,6 +783,16 @@ function eligible(ctx: SimContext, pid: number): boolean {
   return realmRacersMatchOf(ctx, pid) === null;
 }
 
+/**
+ * A pilot still in combat is never SEATED: the seat drops combat and strips
+ * every debuff, so a grid that took a fighter would be an escape from any
+ * fight. Kept apart from `eligible` on purpose: a queued pilot who is pulled
+ * into a fight keeps their place, and the grid waits for it to end.
+ */
+export function realmRacersInCombat(ctx: SimContext, pid: number): boolean {
+  return ctx.entities.get(pid)?.inCombat === true;
+}
+
 export function realmRacersSeatedOrQueued(ctx: SimContext, pid: number): boolean {
   return ctx.realmRacers.queue.includes(pid) || realmRacersMatchOf(ctx, pid) !== null;
 }
@@ -792,6 +802,10 @@ export function realmRacersQueueJoin(ctx: SimContext, pid?: number): void {
   if (!r) return;
   const id = r.meta.entityId;
   if (realmRacersSeatedOrQueued(ctx, id)) return;
+  if (realmRacersInCombat(ctx, id)) {
+    ctx.error(id, "You can't do that while in combat.");
+    return;
+  }
   if (!eligible(ctx, id)) return;
   ctx.realmRacers.queue.push(id);
   ctx.realmRacers.queuedAtTick.set(id, ctx.tickCount);
@@ -1105,7 +1119,7 @@ function startMatch(
   if (!practice && ctx.realmRacers.match) return false;
   if (pids.length !== REALM_RACERS_GRID_SIZE) return false;
   if (new Set(pids).size !== pids.length) return false;
-  if (!pids.every((pid) => eligible(ctx, pid))) return false;
+  if (!pids.every((pid) => eligible(ctx, pid) && !realmRacersInCombat(ctx, pid))) return false;
   const grid = pids.map((pid) => ({
     pid,
     e: ctx.entities.get(pid) as Entity,
@@ -2766,6 +2780,11 @@ function pruneQueue(ctx: SimContext): void {
 function tryMatch(ctx: SimContext): void {
   const rally = ctx.realmRacers;
   if (rally.match || rally.queue.length < REALM_RACERS_GRID_SIZE) return;
+  // A head of the queue still in a fight holds the grid until it ends, in
+  // place: nobody is spliced out, and the start draws nothing.
+  for (let i = 0; i < REALM_RACERS_GRID_SIZE; i++) {
+    if (realmRacersInCombat(ctx, rally.queue[i])) return;
+  }
   const grid = rally.queue.splice(0, REALM_RACERS_GRID_SIZE);
   if (startMatch(ctx, grid)) return;
   // Put the eligible ones back at the FRONT in their original order. The old

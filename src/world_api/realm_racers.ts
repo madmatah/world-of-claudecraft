@@ -230,7 +230,8 @@ export interface IWorldRealmRacers {
   resetRealmRacersPosition(): void;
   /** Race a full grid of house pilots at `tier` immediately, with no queue and
    *  no wait. Refuses silently (like the queue join) when no practice copy of
-   *  the circuit is free or the player is not in a state to race. */
+   *  the circuit is free or the player is not in a state to race; a player in
+   *  combat is refused with the in-combat error, again like the queue join. */
   startRealmRacersPractice(tier: RallyDriverTier): void;
   /** Tell the loading lobby this client has prepared the circuit. Ignored
    *  outside the lobby and for anyone not seated in it. */

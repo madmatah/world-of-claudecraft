@@ -769,6 +769,40 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacers.queue.includes(b)).toBe(true);
   });
 
+  it('refuses a queue join while in combat, and says why', () => {
+    const sim = makeWorld();
+    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const body = entity(sim, a);
+    body.inCombat = true;
+    body.combatTimer = 0;
+    sim.drainEvents();
+    sim.realmRacersQueueJoin(a);
+    expect(sim.realmRacers.queue).toEqual([]);
+    expect(sim.drainEvents()).toContainEqual({
+      type: 'error',
+      text: "You can't do that while in combat.",
+      pid: a,
+    });
+  });
+
+  it('never seats a queued pilot still in combat, and keeps their place', () => {
+    // The seat drops combat and strips every debuff, so a pop that seated a
+    // fighter would be an escape. The queue holds them instead of evicting:
+    // the grid waits for the fight to end, in the original order.
+    const { sim, pids } = makeGrid();
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
+    const fighter = entity(sim, pids[2]);
+    fighter.inCombat = true;
+    fighter.combatTimer = 0;
+    sim.tick();
+    expect(sim.realmRacers.match).toBeNull();
+    expect(sim.realmRacers.queue).toEqual(pids);
+    expect(fighter.inCombat).toBe(true);
+    for (let i = 0; i < 6 * TICK_RATE && !sim.realmRacers.match; i++) sim.tick();
+    expect(fighter.inCombat).toBe(false);
+    expect(sim.realmRacers.match?.pids).toEqual(pids);
+  });
+
   it('shares the viewer-independent half of the readout across one tick', () => {
     // The 20 Hz broadcast builds `rr` for every seated pilot: the standings
     // walk, the box list and the oil list are identical for all of them, so

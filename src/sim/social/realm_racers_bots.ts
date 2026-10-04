@@ -50,6 +50,7 @@ import {
   type RealmRacersMatch,
   realmRacersCircuitOf,
   realmRacersFreePracticeSlot,
+  realmRacersInCombat,
   realmRacersMatches,
   realmRacersMatchOf,
   realmRacersQueueRemove,
@@ -155,8 +156,9 @@ function seatWithBots(
  *
  * Refuses silently when it cannot, exactly as the queue join does: the window
  * already shows the player why (they are racing, or the realm has handed out
- * every copy it has), so there is nothing for the sim to say. Runs identically
- * offline and on the server (via realm_racers_practice).
+ * every copy it has), so there is nothing for the sim to say. Combat is the
+ * one refusal it voices, as the queue join does, because the window cannot
+ * show it. Runs identically offline and on the server (via realm_racers_practice).
  */
 export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: number): boolean {
   const resolved = sim.ctx.resolve(pid);
@@ -168,6 +170,12 @@ export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: 
   // racer can be doing (dead, in a duel, inside an instance) is re-checked by
   // the match module's own eligibility test, the one every entry point shares.
   if (realmRacersMatchOf(sim.ctx, id)) return false;
+  // Before any house pilot is spawned: the seat would refuse it anyway, but only
+  // after spawning and despawning three of them.
+  if (realmRacersInCombat(sim.ctx, id)) {
+    sim.ctx.error(id, "You can't do that while in combat.");
+    return false;
+  }
   const slot = realmRacersFreePracticeSlot(sim.ctx);
   if (slot < 0) return false;
   return seatWithBots(sim, [id], tier, slot);
@@ -216,6 +224,9 @@ function maybeBackfill(sim: Sim): void {
     if (joinedAt !== undefined && joinedAt < oldest) oldest = joinedAt;
   }
   if (sim.tickCount - oldest < REALM_RACERS_BACKFILL_TICKS) return;
+  // A waiter still in a fight holds the backfill until it ends: the seat would
+  // refuse them, after spawning and despawning a pilot per empty seat per tick.
+  for (const pid of waiting) if (realmRacersInCombat(sim.ctx, pid)) return;
   // The PUBLIC circuit: these players queued for a real race and are getting
   // one, just with house pilots in the seats nobody claimed.
   seatWithBots(sim, waiting, REALM_RACERS_BACKFILL_TIER, -1);
