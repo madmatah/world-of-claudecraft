@@ -155,7 +155,8 @@ function seatWithBots(
  *
  * Refuses silently when it cannot, exactly as the queue join does: the window
  * already shows the player why (they are racing, or the realm has handed out
- * every copy it has), so there is nothing for the sim to say.
+ * every copy it has), so there is nothing for the sim to say. Runs identically
+ * offline and on the server (via realm_racers_practice).
  */
 export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: number): boolean {
   const resolved = sim.ctx.resolve(pid);

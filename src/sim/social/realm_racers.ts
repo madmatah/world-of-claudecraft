@@ -1651,12 +1651,19 @@ export function realmRacersResetPosition(ctx: SimContext, pid?: number): void {
   if (match) resetRacerToRecoveryAnchor(ctx, match, id, true);
 }
 
+/**
+ * The pose serializeCharacter saves for a pilot seated in a Realm Racers heat:
+ * the pre-race RETURN spot, never a mid-track position (a mid-race save or
+ * forfeit must not strand the character on the circuit). Null when not seated.
+ * The stowed pet persists via serializePet's delvePetStash fallback; the kit is
+ * session-derived, not saved.
+ */
 export function realmRacersReturnFor(
   ctx: SimContext,
   pid: number,
-): { x: number; z: number; facing: number } | null {
+): { pos: { x: number; z: number }; facing: number } | null {
   const ret = realmRacersMatchOf(ctx, pid)?.returns.get(pid);
-  return ret ? { x: ret.x, z: ret.z, facing: ret.facing } : null;
+  return ret ? { pos: { x: ret.x, z: ret.z }, facing: ret.facing } : null;
 }
 
 /**

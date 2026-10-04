@@ -1,11 +1,36 @@
 // The Realm Racers' SimContext bindings and tick phase, beside the coordinator
 // (the world_quest_context.ts pattern): the host constructs ctx before assigning
-// it, so every callback reads `sim.ctx` when called, never during binding.
+// it, so every callback reads `sim.ctx` when called, never during binding. It is
+// also the coordinator's ONE Realm Racers import: every name sim.ts reaches for
+// rides the re-exports below, so the monolith carries a single import line.
+import type { CharacterState } from '../character_state';
 import { isRallyDriverTier } from '../realm_racers_driver';
 import type { Sim } from '../sim';
 import type { SimContext } from '../sim_context';
 import * as realmRacersMod from './realm_racers';
 import * as realmRacersBotsMod from './realm_racers_bots';
+
+export type { RealmRacersInfo, RealmRacersLaneView } from '../../world_api/realm_racers';
+export type { RealmRacersCircuit } from '../content/realm_racers_circuits';
+export {
+  type RealmRacersDraftRegistration,
+  realmRacersRegisterDraftCircuit,
+} from '../realm_racers_drafts';
+export type { RallyDriverTier } from '../realm_racers_driver';
+export {
+  createRealmRacersState,
+  type RealmRacersPlayerMeta,
+  type RealmRacersState,
+  realmRacersForfeit,
+  realmRacersInfoFor,
+  realmRacersQueueJoin,
+  realmRacersQueueLeave,
+  realmRacersReady,
+  realmRacersResetPosition,
+  realmRacersReturnFor,
+  realmRacersTracksideFor,
+} from './realm_racers';
+export { startRealmRacersPractice } from './realm_racers_bots';
 
 type RealmRacersBindings = Pick<
   SimContext,
@@ -31,10 +56,23 @@ export function realmRacersContextBindings(sim: Sim): RealmRacersBindings {
   };
 }
 
+/** The Realm Racers fields of a freshly built PlayerMeta: only the win count persists. */
+export function freshRealmRacersMeta(
+  savedState: Pick<CharacterState, 'rrWins'> | undefined,
+): realmRacersMod.RealmRacersPlayerMeta {
+  return { realmRacersMatchId: null, rrWins: savedState?.rrWins ?? 0 };
+}
+
 /**
  * The Realm Racers tick phase: the match lifecycle, then the house pilots.
  * House pilots drive in the same tick phase, so offline Practice and the
  * server's queue backfill run identical code.
+ *
+ * The coordinator runs it after all movement has completed, so same-tick
+ * finishes are independent of player insertion order. It draws EXACTLY ONE
+ * value per pickup box that changes hands (the weighted effect draw, 22b),
+ * plus the one circuit draw a queued race takes when it seats a grid; a tick
+ * where nobody takes a box and nobody is seated draws nothing at all.
  */
 export function updateRealmRacersPhase(sim: Sim): void {
   realmRacersMod.updateRealmRacers(sim.ctx);

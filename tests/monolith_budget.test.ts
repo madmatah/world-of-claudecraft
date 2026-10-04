@@ -1275,7 +1275,10 @@ const MONOLITHS: MonolithRow[] = [
     // wc -l on the merged tree (release 11642). Exact count, zero slack.
     // LOWERED 11785 -> 11762: the Realm Racers PlayerMeta fields, SimContext arms and tick
     // phase moved to social/realm_racers.ts and social/realm_racers_context.ts.
-    ceiling: 11762,
+    // LOWERED 11762 -> 11727: the Realm Racers imports became one barrel import
+    // (realm_racers_context.ts, which also builds the fresh meta fields), and the
+    // saved-pose, tick-phase and delegate notes moved to the functions they describe.
+    ceiling: 11727,
     seam: 'a sim system module behind SimContext (src/sim/CLAUDE.md)',
   },
   {

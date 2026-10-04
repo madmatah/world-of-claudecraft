@@ -172,7 +172,6 @@ import { GATHERING_PROFESSION_IDS, type GatheringProfessionId } from './content/
 import { PROVING_SHORE_ARRIVAL } from './content/proving_shore';
 import { PTR_DEV_VENDOR_DEF } from './content/ptr_dev_vendor';
 import { FURY_ENTITY_ID, FURY_NPC_ID } from './content/pvp_honor';
-import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   classHasSkin,
   EVENT_SKIN_TOKEN_ID,
@@ -644,8 +643,6 @@ import * as worldPvpMod from './pvp/world_pvp';
 import { savedWorldPvpFields } from './pvp/world_pvp';
 import { sanitizeCreditedObjects } from './quests/interact_object_credit';
 import { spawnRealmBuilderMonument } from './realm_builder_monument_spawn';
-import * as realmRacersDraftsMod from './realm_racers_drafts';
-import type { RallyDriverTier } from './realm_racers_driver';
 import {
   accountReliquaryOwnershipOpts,
   catalogRankOwned,
@@ -831,9 +828,7 @@ import * as fiestaBotsMod from './social/fiesta_bots';
 import { PartyMachine } from './social/party';
 import * as pullTimerMod from './social/pull_timer';
 import * as readyCheckMod from './social/ready_check';
-import * as realmRacersMod from './social/realm_racers';
-import * as realmRacersBotsMod from './social/realm_racers_bots';
-import { realmRacersContextBindings, updateRealmRacersPhase } from './social/realm_racers_context';
+import * as realmRacersMod from './social/realm_racers_context';
 import { SpatialGrid } from './spatial';
 import { diminishedCrowdControlDuration as diminishedCrowdControlDurationImpl } from './stun_dr';
 import { Targeting } from './targeting';
@@ -2021,7 +2016,6 @@ export class Sim {
   readonly bgProposals: bgProposalMod.BgProposal[] = [];
   readonly bgProposalLockouts = new Map<number, number>();
   nextBgProposalId = 1;
-  // The Realm Racers FIFO and single instanced match.
   realmRacers: realmRacersMod.RealmRacersState = realmRacersMod.createRealmRacersState();
   // per-player chat token bucket (anti-spam); refilled lazily by sim time
   private chatTokens = new Map<number, { tokens: number; at: number }>();
@@ -2866,7 +2860,7 @@ export class Sim {
       bgCaptures: Number.isFinite(savedState?.bgCaptures)
         ? Math.max(0, savedState?.bgCaptures as number)
         : 0,
-      realmRacersMatchId: null,
+      ...realmRacersMod.freshRealmRacersMeta(savedState),
       vcupWins: savedState?.vcupWins ?? 0,
       vcupLosses: savedState?.vcupLosses ?? 0,
       vcupDraws: savedState?.vcupDraws ?? 0,
@@ -2875,7 +2869,6 @@ export class Sim {
       vcupBetWins: savedState?.vcupBetWins ?? 0,
       vcupBetLosses: savedState?.vcupBetLosses ?? 0,
       vcupBetNet: savedState?.vcupBetNet ?? 0,
-      rrWins: savedState?.rrWins ?? 0,
       talents: emptyAllocation(),
       talentMods: emptyModifiers(),
       abilityRhythm: 0,
@@ -3859,10 +3852,6 @@ export class Sim {
     // forces a fresh re-summon instead of laundering the summon cooldown for free.
     // Hunter pets (non-demon) persist. See pet_commands.isDemonPetState.
     const petSnapshot = this.serializePet(pid);
-    // Seated in a Realm Racers heat: persist the pre-race RETURN spot, never a
-    // mid-track position (a mid-race save or forfeit must not strand the
-    // character on the circuit). The stowed pet persists via serializePet's
-    // delvePetStash fallback; the kit is session-derived, not saved.
     const activityReturn = realmRacersMod.realmRacersReturnFor(this.ctx, pid);
     // One fold serves both persisted proficiency keys below: the live counters
     // plus any still-queued grants (foldPendingGatherGrants), so a leave-time
@@ -3906,10 +3895,8 @@ export class Sim {
         e.resource,
         e.savedMana,
       ),
-      pos: activityReturn
-        ? { x: activityReturn.x, z: activityReturn.z }
-        : ferryMod.ferrySavePosition(e), // never the sea: a ride saves the destination pier
-      facing: activityReturn ? activityReturn.facing : e.facing,
+      pos: activityReturn?.pos ?? ferryMod.ferrySavePosition(e), // never the sea: a ride saves the destination pier
+      facing: activityReturn?.facing ?? e.facing,
       // Death state: a released spirit resumes its corpse run on relog, and a
       // dead-but-unreleased corpse auto-releases on load (see addPlayer).
       dead: e.dead,
@@ -5704,7 +5691,7 @@ export class Sim {
       bgOnPlayerDamaged: (victim, source) => bgMod.bgOnPlayerDamaged(sim.ctx, victim, source),
       bgOnPlayerHealed: (target, source) => bgMod.bgOnPlayerHealed(sim.ctx, target, source),
       bgCancelFlagAura: (e, auraId) => bgMod.bgCancelCarriedFlagAura(sim.ctx, e, auraId),
-      ...realmRacersContextBindings(sim),
+      ...realmRacersMod.realmRacersContextBindings(sim),
     };
     return createSimContext(host);
   }
@@ -6172,12 +6159,7 @@ export class Sim {
     // at match START), so its tick position cannot fork the draw order mid-match.
     bgMod.updateBattleground(this.ctx);
     lap?.('battleground');
-    // Rally checks every racer after all movement has completed, so same-tick
-    // finishes are independent of player insertion order. It draws EXACTLY ONE
-    // value per pickup box that changes hands (the weighted effect draw, 22b),
-    // plus the one circuit draw a queued race takes when it seats a grid; a tick
-    // where nobody takes a box and nobody is seated draws nothing at all.
-    updateRealmRacersPhase(this);
+    realmRacersMod.updateRealmRacersPhase(this); // after all movement; rng: see its doc
     lap?.('realmRacers');
     worldPvpMod.updateWorldPvp(this.ctx); // the /pvp clock, zone pass + books sweep; zero rng
     lap?.('worldPvp');
@@ -9921,7 +9903,7 @@ export class Sim {
     fiestaBotsMod.updateFiestaBots(this);
   }
 
-  // --- The Realm Racers (social/realm_racers.ts + social/realm_racers_bots.ts):
+  // --- The Realm Racers (social/realm_racers*.ts, reached through realm_racers_context.ts):
   // state stays on Sim (`this.realmRacers`), thin delegates serve the IWorld
   // facet, the server, and tests. ---
 
@@ -9941,21 +9923,19 @@ export class Sim {
     realmRacersMod.realmRacersResetPosition(this.ctx, pid);
   }
 
-  realmRacersInfoFor(pid: number): import('../world_api/realm_racers').RealmRacersInfo {
+  realmRacersInfoFor(pid: number): realmRacersMod.RealmRacersInfo {
     return realmRacersMod.realmRacersInfoFor(this.ctx, pid);
   }
 
-  get realmRacersInfo(): import('../world_api/realm_racers').RealmRacersInfo {
+  get realmRacersInfo(): realmRacersMod.RealmRacersInfo {
     return this.realmRacersInfoFor(this.primaryId);
   }
 
-  realmRacersTracksideFor(
-    pid: number,
-  ): import('../world_api/realm_racers').RealmRacersLaneView | null {
+  realmRacersTracksideFor(pid: number): realmRacersMod.RealmRacersLaneView | null {
     return realmRacersMod.realmRacersTracksideFor(this.ctx, pid);
   }
 
-  get realmRacersTrackside(): import('../world_api/realm_racers').RealmRacersLaneView | null {
+  get realmRacersTrackside(): realmRacersMod.RealmRacersLaneView | null {
     return this.realmRacersTracksideFor(this.primaryId);
   }
 
@@ -9979,27 +9959,18 @@ export class Sim {
     realmRacersMod.realmRacersReady(this.ctx, this.primaryId);
   }
 
-  /** Race a house pilot immediately, with no queue and no wait. Runs
-   *  identically offline and on the server (via realm_racers_practice). */
-  realmRacersPracticeStart(tier: RallyDriverTier, pid?: number): void {
-    realmRacersBotsMod.startRealmRacersPractice(this, tier, pid);
+  realmRacersPracticeStart(tier: realmRacersMod.RallyDriverTier, pid?: number): void {
+    realmRacersMod.startRealmRacersPractice(this, tier, pid);
   }
 
-  startRealmRacersPractice(tier: RallyDriverTier): void {
+  startRealmRacersPractice(tier: realmRacersMod.RallyDriverTier): void {
     this.realmRacersPracticeStart(tier, this.primaryId);
   }
 
-  /**
-   * Dev only: make a circuit drawn in the editor raceable for this session.
-   *
-   * A thin delegate because the caller is FOREIGN (the client's dev command
-   * glue holds a `Sim`, not a `SimContext`); the rules, the dev gate and the
-   * "is this drivable geometry" check all live in the owning module.
-   */
   realmRacersRegisterDraftCircuit(
-    circuit: RealmRacersCircuit,
-  ): realmRacersDraftsMod.RealmRacersDraftRegistration {
-    return realmRacersDraftsMod.realmRacersRegisterDraftCircuit(this.ctx, circuit);
+    circuit: realmRacersMod.RealmRacersCircuit,
+  ): realmRacersMod.RealmRacersDraftRegistration {
+    return realmRacersMod.realmRacersRegisterDraftCircuit(this.ctx, circuit);
   }
 
   private fiestaMatchInfo(

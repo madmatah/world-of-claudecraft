@@ -89,6 +89,11 @@ function raceLiveOn(ctx: SimContext, id: string): boolean {
 
 /**
  * Register a drawn circuit for this session and report the lane it stands on.
+ * Dev only: it makes a circuit drawn in the editor raceable for this session.
+ *
+ * `Sim` keeps a thin delegate because the caller is FOREIGN (the client's dev
+ * command glue holds a `Sim`, not a `SimContext`); the rules, the dev gate and
+ * the "is this drivable geometry" check all live here.
  *
  * Registering the same id again REPLACES the record and keeps the lane, which
  * is the redraw-and-race-again loop: the geometry derivations behind it are

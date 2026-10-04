@@ -655,6 +655,27 @@ describe('The Realm Racers lifecycle', () => {
     expect(meta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
   });
 
+  it('saves a seated pilot at the pre-race return spot and anyone else at the live pose', () => {
+    // A mid-race save must not strand the character on the circuit: while
+    // seated, serializeCharacter persists the RETURN spot and facing. Off the
+    // grid it persists the live pose exactly as before (ferrySavePosition).
+    const { sim, a } = startMatch();
+    const original = required(match(sim).returns.get(a), `return ${a}`);
+    const seatedBody = entity(sim, a);
+    expect(
+      Math.hypot(seatedBody.pos.x - original.x, seatedBody.pos.z - original.z),
+    ).toBeGreaterThan(10);
+    const seated = required(sim.serializeCharacter(a), `save ${a}`);
+    expect(seated.pos).toEqual({ x: original.x, z: original.z });
+    expect(seated.facing).toBe(original.facing);
+    const walker = addAt(sim, 'warrior', 'Walker', 7, -44);
+    const walkerBody = entity(sim, walker);
+    walkerBody.facing = 1.25;
+    const free = required(sim.serializeCharacter(walker), `save ${walker}`);
+    expect(free.pos).toEqual({ x: walkerBody.pos.x, z: walkerBody.pos.z });
+    expect(free.facing).toBe(1.25);
+  });
+
   it('leaves a returned quitter alone in the open world while the race runs on', () => {
     // A pilot who forfeits and is returned stays on the frozen grid for the
     // classification, but the referee must stop reprojecting their Evergarden
