@@ -2219,7 +2219,6 @@ export const ru_RU: EnTranslations = {
       "voidReturn": "Гонка аннулирована. Возвращение через {seconds}",
       "logQueued": "Позиция в очереди Гонок Королевства: {position}.",
       "logUnqueued": "Вы покинули очередь Гонок Королевства.",
-      "bannerGo": "Старт!",
       "bannerLap": "Круг {lap} из {total}",
       "bannerWin": "Вы победили в гонке!",
       "bannerLoss": "{name} побеждает в гонке.",

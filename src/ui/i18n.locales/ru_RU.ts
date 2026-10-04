@@ -15824,7 +15824,6 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.voidReturn': 'Гонка аннулирована. Возвращение через {seconds}',
   'hudChrome.rally.logQueued': 'Позиция в очереди Гонок Королевства: {position}.',
   'hudChrome.rally.logUnqueued': 'Вы покинули очередь Гонок Королевства.',
-  'hudChrome.rally.bannerGo': 'Старт!',
   'hudChrome.rally.bannerLap': 'Круг {lap} из {total}',
   'hudChrome.rally.bannerWin': 'Вы победили в гонке!',
   'hudChrome.rally.bannerLoss': '{name} побеждает в гонке.',

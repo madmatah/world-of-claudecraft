@@ -15559,7 +15559,6 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.voidReturn': 'レース無効。{seconds}秒後に戻ります',
   'hudChrome.rally.logQueued': 'レルムレーサーズの待機位置：{position}。',
   'hudChrome.rally.logUnqueued': 'レルムレーサーズの待機列から離れました。',
-  'hudChrome.rally.bannerGo': 'スタート！',
   'hudChrome.rally.bannerLap': '{total}周中{lap}周目',
   'hudChrome.rally.bannerWin': 'レースに勝利しました！',
   'hudChrome.rally.bannerLoss': '{name}がレースに勝利しました。',

@@ -2591,7 +2591,6 @@ export const hudChromeStrings = {
     voidReturn: 'RACE VOID. Returning in {seconds}',
     logQueued: 'Realm Racers queue position: {position}.',
     logUnqueued: 'You left the Realm Racers queue.',
-    bannerGo: 'GO!',
     bannerLap: 'Lap {lap} of {total}',
     bannerWin: 'You win the race!',
     bannerLoss: '{name} wins the race.',

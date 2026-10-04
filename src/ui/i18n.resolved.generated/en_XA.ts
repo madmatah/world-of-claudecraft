@@ -2219,7 +2219,6 @@ export const en_XA: EnTranslations = {
       "voidReturn": "[ŔÁÇÉ ƲÓÍÐ. Ŕéţúŕñíñĝ íñ {seconds}]",
       "logQueued": "[Ŕéáļɱ Ŕáçéŕš ɋúéúé þóšíţíóñ: {position}.]",
       "logUnqueued": "[Ýóú ļéƒţ ţĥé Ŕéáļɱ Ŕáçéŕš ɋúéúé.]",
-      "bannerGo": "[ĜÓ!]",
       "bannerLap": "[Ļáþ {lap} óƒ {total}]",
       "bannerWin": "[Ýóú ŵíñ ţĥé ŕáçé!]",
       "bannerLoss": "[{name} ŵíñš ţĥé ŕáçé.]",

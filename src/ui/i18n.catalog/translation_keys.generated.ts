@@ -13109,7 +13109,6 @@ export type TranslationKeyFlat =
   | 'hudChrome.raidLockout.title'
   | 'hudChrome.rally.bannerDraw'
   | 'hudChrome.rally.bannerForfeit'
-  | 'hudChrome.rally.bannerGo'
   | 'hudChrome.rally.bannerLap'
   | 'hudChrome.rally.bannerLoss'
   | 'hudChrome.rally.bannerWin'

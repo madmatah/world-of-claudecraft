@@ -2219,7 +2219,6 @@ export const ja_JP: EnTranslations = {
       "voidReturn": "レース無効。{seconds}秒後に戻ります",
       "logQueued": "レルムレーサーズの待機位置：{position}。",
       "logUnqueued": "レルムレーサーズの待機列から離れました。",
-      "bannerGo": "スタート！",
       "bannerLap": "{total}周中{lap}周目",
       "bannerWin": "レースに勝利しました！",
       "bannerLoss": "{name}がレースに勝利しました。",

@@ -2219,7 +2219,6 @@ export const zh_CN: EnTranslations = {
       "voidReturn": "比赛作废。{seconds} 秒后返回",
       "logQueued": "王国竞速赛队列位置：{position}。",
       "logUnqueued": "你已离开王国竞速赛队列。",
-      "bannerGo": "出发！",
       "bannerLap": "第 {lap}/{total} 圈",
       "bannerWin": "你赢得了比赛！",
       "bannerLoss": "{name} 赢得了比赛。",

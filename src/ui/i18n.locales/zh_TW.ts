@@ -14821,7 +14821,6 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.voidReturn': '比賽作廢。{seconds} 秒後返回',
   'hudChrome.rally.logQueued': '王國競速賽佇列位置：{position}。',
   'hudChrome.rally.logUnqueued': '你已離開王國競速賽佇列。',
-  'hudChrome.rally.bannerGo': '出發！',
   'hudChrome.rally.bannerLap': '第 {lap}/{total} 圈',
   'hudChrome.rally.bannerWin': '你贏得了比賽！',
   'hudChrome.rally.bannerLoss': '{name} 贏得了比賽。',

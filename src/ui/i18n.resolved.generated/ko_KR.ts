@@ -2219,7 +2219,6 @@ export const ko_KR: EnTranslations = {
       "voidReturn": "경기 무효. {seconds}초 뒤 돌아갑니다",
       "logQueued": "렐름 레이서즈 대기 순번: {position}.",
       "logUnqueued": "렐름 레이서즈 대기열에서 나왔습니다.",
-      "bannerGo": "출발!",
       "bannerLap": "{total}바퀴 중 {lap}바퀴",
       "bannerWin": "경기에서 승리했습니다!",
       "bannerLoss": "{name}님이 경기에서 승리했습니다.",

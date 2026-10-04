@@ -15516,7 +15516,6 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.voidReturn': '경기 무효. {seconds}초 뒤 돌아갑니다',
   'hudChrome.rally.logQueued': '렐름 레이서즈 대기 순번: {position}.',
   'hudChrome.rally.logUnqueued': '렐름 레이서즈 대기열에서 나왔습니다.',
-  'hudChrome.rally.bannerGo': '출발!',
   'hudChrome.rally.bannerLap': '{total}바퀴 중 {lap}바퀴',
   'hudChrome.rally.bannerWin': '경기에서 승리했습니다!',
   'hudChrome.rally.bannerLoss': '{name}님이 경기에서 승리했습니다.',
