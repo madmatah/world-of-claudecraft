@@ -631,7 +631,7 @@ export const SFX = [
     custom: true,
     duration: 3,
     prompt:
-      'A large explosion used when the Terrorspark Groundshaker shell lands. Single blast, no music, no voice.',
+      'A large explosion used when the Dreadspark Groundshaker shell lands. Single blast, no music, no voice.',
   },
   {
     key: 'spell_nova',

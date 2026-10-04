@@ -268,7 +268,7 @@ that is not buffered yet falls back to the base key rather than to silence.
 | `proj_shadow` | 0.6 | a shadow bolt flying, dark whooshing void streak |
 | `proj_holy` | 0.5 | a bolt of holy light streaking, bright shimmering zip |
 | `proj_nature` | 0.5 | a glob of nature energy flying, organic whoosh |
-| `proj_groundshaker` | 2.7 | a real tank cannon firing for the Terrorspark Groundshaker, three ordered takes |
+| `proj_groundshaker` | 2.7 | a real tank cannon firing for the Dreadspark Groundshaker, three ordered takes |
 
 ### Spell and Realm Racers impacts (spatial one-shots)
 | key | dur | prompt summary |
@@ -279,7 +279,7 @@ that is not buffered yet falls back to the base key rather than to silence.
 | `impact_shadow` | 0.7 | a shadow spell imploding darkly, ominous magical burst |
 | `impact_holy` | 0.7 | a radiant burst of holy light, shimmering divine impact |
 | `impact_nature` | 0.7 | an earthy nature impact, wet splat of poison and vines |
-| `impact_groundshaker` | 3.0 | a large explosion when the Terrorspark Groundshaker shell lands |
+| `impact_groundshaker` | 3.0 | a large explosion when the Dreadspark Groundshaker shell lands |
 | `spell_nova` | 0.9 | an expanding magical nova shockwave bursting outward in all directions |
 
 ### Heals & auras (spatial / proximal)
