@@ -15520,7 +15520,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
     '全パイロットの準備が整うとレースが始まります（遅くとも{time}後）。',
   'hudChrome.rally.circuitName_evergarden_practice': 'エバーガーデン練習場',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'エバーガーデン・エクスプレスツアー',
-  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・ムーンウェルラン',
+  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・月の泉ラン',
   'hudChrome.rally.circuitName_drakelands_rampart_run': 'ドレイクランド・ランパートラン',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': 'パームリーチ・ラグーンラン',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',

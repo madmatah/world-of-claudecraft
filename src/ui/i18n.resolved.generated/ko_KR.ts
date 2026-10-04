@@ -2189,7 +2189,7 @@ export const ko_KR: EnTranslations = {
       "lobbyStartsBy": "모든 조종사가 준비되면 레이스가 시작됩니다. 늦어도 {time} 후에 시작합니다.",
       "circuitName_evergarden_practice": "에버가든 훈련장",
       "circuitName_evergarden_express_tour": "에버가든 익스프레스 투어",
-      "circuitName_nightbloom_moonwell_run": "밤꽃 평원 문웰 런",
+      "circuitName_nightbloom_moonwell_run": "밤꽃 평원 달샘 런",
       "circuitName_drakelands_rampart_run": "드레이크랜드 성벽 런",
       "circuitName_palmreach_lagoon_run": "야자 해안 석호 런",
       "podiumTime": "{minutes}:{seconds}.{tenths}",

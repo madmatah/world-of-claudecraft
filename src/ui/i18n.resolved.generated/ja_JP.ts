@@ -2189,7 +2189,7 @@ export const ja_JP: EnTranslations = {
       "lobbyStartsBy": "全パイロットの準備が整うとレースが始まります（遅くとも{time}後）。",
       "circuitName_evergarden_practice": "エバーガーデン練習場",
       "circuitName_evergarden_express_tour": "エバーガーデン・エクスプレスツアー",
-      "circuitName_nightbloom_moonwell_run": "ナイトブルーム・ムーンウェルラン",
+      "circuitName_nightbloom_moonwell_run": "ナイトブルーム・月の泉ラン",
       "circuitName_drakelands_rampart_run": "ドレイクランド・ランパートラン",
       "circuitName_palmreach_lagoon_run": "パームリーチ・ラグーンラン",
       "podiumTime": "{minutes}:{seconds}.{tenths}",

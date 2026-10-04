@@ -2189,7 +2189,7 @@ export const ru_RU: EnTranslations = {
       "lobbyStartsBy": "Гонка начнётся, когда все пилоты будут готовы, но не позже чем через {time}.",
       "circuitName_evergarden_practice": "Тренировочный полигон Эвергардена",
       "circuitName_evergarden_express_tour": "Экспресс-тур Эвергардена",
-      "circuitName_nightbloom_moonwell_run": "Гонка у Лунного колодца Ночецветья",
+      "circuitName_nightbloom_moonwell_run": "Гонка у Лунного Родника Ночецветья",
       "circuitName_drakelands_rampart_run": "Гонка вдоль крепостного вала Земель Драконов",
       "circuitName_palmreach_lagoon_run": "Гонка по лагуне Пальмового Берега",
       "podiumTime": "{minutes}:{seconds}.{tenths}",

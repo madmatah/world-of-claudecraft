@@ -15784,7 +15784,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
     'Гонка начнётся, когда все пилоты будут готовы, но не позже чем через {time}.',
   'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Эвергардена',
   'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Эвергардена',
-  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного колодца Ночецветья',
+  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного Родника Ночецветья',
   'hudChrome.rally.circuitName_drakelands_rampart_run':
     'Гонка вдоль крепостного вала Земель Драконов',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': 'Гонка по лагуне Пальмового Берега',
