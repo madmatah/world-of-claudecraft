@@ -5395,7 +5395,13 @@ export const hudChromeStrings = {
     arcaneCharge:
       '{stacks} Arcane Charges: Aether Surge deals {damagePct}% more damage, casts {castPct}% faster, and costs {costMult}x mana',
     physicalReduction: 'Reduces Physical damage taken by {pct}%',
-    // The two Realm Racers marker auras (realm_racers.ts, realm_racers_ghost.ts).
+    // The Realm Racers auras (realm_racers.ts, realm_racers_ghost.ts). The
+    // off-track line serves both bands (Soft Verge, Garden Lawn); the aura's
+    // name above it says which one the racer is on.
+    rallyGroundBlast:
+      'Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.',
+    rallyOffTrack:
+      'Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.',
     rallyWard:
       'Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.',
     rallyGhost:

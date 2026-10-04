@@ -4088,6 +4088,8 @@ export const id_ID: EnTranslations = {
       "temporalEcho": "Kerusakan Arkana dari perapal menyembuhkanmu sebesar {singlePct}% dari kerusakan bertarget tunggal atau {areaPct}% dari kerusakan area. Gelombang Aether dan Panah Aether mendapat bonus x4 pada Gema Temporal individual. Gema grup membuat cadangan penyembuhan yang sama, dibagikan menurut kesehatan yang hilang di antara sekutu bertanda dengan kesehatan di bawah 60%",
       "arcaneCharge": "{stacks} Muatan Arkana: Kekuatan Arkan memberikan {damagePct}% kerusakan lebih besar, dirapal {castPct}% lebih cepat, dan menghabiskan {costMult}x mana",
       "physicalReduction": "Mengurangi kerusakan Fisik yang diterima sebesar {pct}%",
+      "rallyGroundBlast": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.",
+      "rallyOffTrack": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.",
       "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
       "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Kebal dan tidak dapat bertindak; memulihkan kesehatan dan mempercepat pemulihan jeda. Klik kanan untuk membatalkan.",
@@ -13234,15 +13236,15 @@ export const id_ID: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "Ground Blast",
-        "description": "Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals."
+        "description": "Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
       },
       "rally_nitro": {
         "name": "Nitro",
-        "description": "Burns a nitro charge for a short burst of speed above your machine cap."
+        "description": "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
       },
       "rally_oil_slick": {
         "name": "Oil Slick",
-        "description": "Dumps a slick of oil under your machine. Rivals who drive through it lose grip."
+        "description": "Drop a patch of oil under your machine. It stays on the track for {seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses {gripPct}% of their grip for {gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it."
       },
       "flamestrike": {
         "name": "Hantaman Api",

@@ -4088,6 +4088,8 @@ export const ko_KR: EnTranslations = {
       "temporalEcho": "시전자의 비전 피해가 단일 대상 피해의 {singlePct}%, 광역 피해의 {areaPct}%만큼 당신을 치유합니다. 에테르 쇄도와 에테르 화살은 개별 시간의 메아리에 4배 보너스를 적용합니다. 집단 메아리는 같은 양의 치유 예비량을 만들고, 체력이 60% 미만인 표식이 있는 아군에게 잃은 생명력에 따라 나눠 줍니다",
       "arcaneCharge": "비전 충전 {stacks}중첩: 에테르 쇄도의 피해가 {damagePct}% 증가하고 시전이 {castPct}% 빨라지며 마나가 {costMult}배 듭니다",
       "physicalReduction": "받는 물리 피해가 {pct}% 감소합니다",
+      "rallyGroundBlast": "이동 속도를 {pct}% 감소시킵니다. 피격 후 {gripSeconds}초 동안 기체의 접지력이 {gripPct}% 감소합니다.",
+      "rallyOffTrack": "이동 속도를 {pct}% 감소시킵니다. 기체의 접지력이 {gripPct}% 감소하고 저항이 도로 위의 {drag}배가 됩니다. 도로로 돌아올 때까지 지속됩니다.",
       "rallyWard": "다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.",
       "rallyGhost": "트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.",
       "temporalHourglass": "피해에 면역이고 행동할 수 없습니다. 생명력을 회복하고 재사용 대기시간을 가속합니다. 우클릭으로 취소할 수 있습니다.",
@@ -13234,15 +13236,15 @@ export const ko_KR: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "그라운드 블래스트",
-        "description": "무거운 폭발 포탄을 발사하여 착탄 시 폭발해 지면을 뒤흔들고 주변 경쟁자를 날려버립니다."
+        "description": "전방 최소 {minRange}미터, 기체 정면 기준 {coneDegrees}도 이내의 지면 지점에 포탄을 발사합니다. 포탄은 {minFlight}~{maxFlight}초 뒤에 착탄합니다. 착탄 지점에서 {radius}미터 내의 모든 경쟁자가 공중으로 띄워지며 밀려나는데, {coreRadius}미터 이내에서는 최대 위력이고 가장자리로 갈수록 약해집니다. 또한 {gripSeconds}초 동안 접지력을 {gripPct}% 잃고 {slowSeconds}초 동안 {slowPct}% 느려집니다. 레이스 보호막이 이 공격을 흡수합니다."
       },
       "rally_nitro": {
         "name": "니트로",
-        "description": "니트로를 태워 기체 속도 상한을 잠시 넘어서는 가속을 얻습니다."
+        "description": "니트로를 태워 즉시 앞으로 {kick}미터/초만큼 가속합니다. {seconds}초 동안 최고 속도가 기체의 기본 상한보다 {speedPct}% 높아집니다."
       },
       "rally_oil_slick": {
         "name": "기름막",
-        "description": "기체 아래에 기름을 쏟습니다. 밟고 지나가는 경쟁자는 접지력을 잃습니다."
+        "description": "기체 아래에 기름을 쏟습니다. 기름은 {seconds}초 동안 트랙에 남습니다. 그 위로 달려든 경쟁자는 옆으로 밀려나며(빠를수록 더 세게), {gripSeconds}초 동안 접지력을 {gripPct}% 잃습니다. 자신의 기름은 한 번 빠져나오기 전까지는 자신에게 효과가 없습니다. 레이스 보호막이 이를 흡수합니다."
       },
       "flamestrike": {
         "name": "화염 폭발",

@@ -4088,6 +4088,8 @@ export const ja_JP: EnTranslations = {
       "temporalEcho": "術者の秘術ダメージのうち、単体なら{singlePct}%、範囲なら{areaPct}%があなたへの回復になる。エーテルサージとエーテルダートは個別の時の残響に4倍のボーナスを使う。グループの残響は同量の回復予備を作り、体力が60%未満の標識付き味方へ失った体力に応じて分配する",
       "arcaneCharge": "秘術チャージ{stacks}：エーテル・サージのダメージが{damagePct}%増加、詠唱が{castPct}%短縮、マナ消費が{costMult}倍になる",
       "physicalReduction": "受ける物理ダメージが{pct}%減少する",
+      "rallyGroundBlast": "移動速度を{pct}%低下させる。被弾後{gripSeconds}秒間、機体のグリップが{gripPct}%低下する。",
+      "rallyOffTrack": "移動速度を{pct}%低下させる。機体のグリップが{gripPct}%低下し、抵抗が路面上の{drag}倍になる。路面に戻るまで続く。",
       "rallyWard": "次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。",
       "rallyGhost": "コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。",
       "temporalHourglass": "ダメージを受けず行動不能になります。体力を回復し、クールダウンを加速します。右クリックで解除できます。",
@@ -13234,15 +13236,15 @@ export const ja_JP: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "グラウンドブラスト",
-        "description": "重爆発弾を発射し、着弾と同時に爆発して地面を揺らし、周囲のライバルを吹き飛ばします。"
+        "description": "前方{minRange}ヤード以上先、車体の正面から{coneDegrees}度以内の地面の一点に砲弾を撃つ。砲弾は{minFlight}～{maxFlight}秒後に着弾する。着弾点から{radius}ヤード以内のライバルは全員打ち上げられて吹き飛ばされ、{coreRadius}ヤード以内では最大の威力、外側ほど弱くなる。さらに{gripSeconds}秒間グリップを{gripPct}%失い、{slowSeconds}秒間{slowPct}%減速する。レースの守護はこの命中を吸収する。"
       },
       "rally_nitro": {
         "name": "ニトロ",
-        "description": "ニトロを焚き、機体の速度上限を超える短い加速を得る。"
+        "description": "ニトロを焚き、瞬時に前方へ{kick}ヤード/秒の加速を得る。{seconds}秒間、最高速度が機体の通常の上限より{speedPct}%上がる。"
       },
       "rally_oil_slick": {
         "name": "オイルスリック",
-        "description": "車体の下にオイルをまく。踏んだ相手はグリップを失う。"
+        "description": "機体の下にオイルをまく。オイルは{seconds}秒間コースに残る。踏み込んだライバルは横へ押し出され（速いほど強く）、{gripSeconds}秒間グリップを{gripPct}%失う。自分のオイルは、一度そこから抜け出すまで自分には効かない。レースの守護はこれを吸収する。"
       },
       "flamestrike": {
         "name": "フレイムストライク",

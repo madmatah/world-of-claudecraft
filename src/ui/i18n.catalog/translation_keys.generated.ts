@@ -9252,6 +9252,8 @@ export type TranslationKeyFlat =
   | 'hudChrome.auraEffect.radiantResonance'
   | 'hudChrome.auraEffect.rageGen'
   | 'hudChrome.auraEffect.rallyGhost'
+  | 'hudChrome.auraEffect.rallyGroundBlast'
+  | 'hudChrome.auraEffect.rallyOffTrack'
   | 'hudChrome.auraEffect.rallyWard'
   | 'hudChrome.auraEffect.reckless'
   | 'hudChrome.auraEffect.redline'

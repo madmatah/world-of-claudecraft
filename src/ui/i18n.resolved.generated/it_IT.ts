@@ -4088,6 +4088,8 @@ export const it_IT: EnTranslations = {
       "temporalEcho": "I danni Arcani del lanciatore ti curano per il {singlePct}% dei danni a bersaglio singolo o il {areaPct}% dei danni ad area. Potere d'Etere e Dardi d’Etere ottengono un bonus di 4 volte con un Eco Temporale individuale. Gli Echi di gruppo creano una riserva di cure equivalente, condivisa tra gli alleati segnati sotto il 60% di salute in base alla salute mancante",
       "arcaneCharge": "{stacks} Cariche Arcane: Potere d'Etere infligge il {damagePct}% di danni in più, si lancia il {castPct}% più veloce e costa {costMult}x mana",
       "physicalReduction": "Riduce i danni Fisici subiti del {pct}%",
+      "rallyGroundBlast": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.",
+      "rallyOffTrack": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.",
       "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
       "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immune e impossibilitato ad agire; ripristina la salute e accelera il recupero dei tempi di recupero. Clic destro per annullare.",
@@ -13234,15 +13236,15 @@ export const it_IT: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "Ground Blast",
-        "description": "Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals."
+        "description": "Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
       },
       "rally_nitro": {
         "name": "Nitro",
-        "description": "Burns a nitro charge for a short burst of speed above your machine cap."
+        "description": "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
       },
       "rally_oil_slick": {
         "name": "Oil Slick",
-        "description": "Dumps a slick of oil under your machine. Rivals who drive through it lose grip."
+        "description": "Drop a patch of oil under your machine. It stays on the track for {seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses {gripPct}% of their grip for {gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it."
       },
       "flamestrike": {
         "name": "Ondata di Fiamme",

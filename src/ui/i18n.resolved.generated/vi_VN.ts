@@ -4088,6 +4088,8 @@ export const vi_VN: EnTranslations = {
       "temporalEcho": "Sát thương Bí Thuật của người thi triển hồi máu cho bạn bằng {singlePct}% sát thương đơn mục tiêu hoặc {areaPct}% sát thương diện rộng. Aether Surge và Phi Tiêu Aether được nhân 4 lần trên một Vọng Âm Thời Gian cá nhân. Vọng Âm nhóm tạo một lượng hồi máu dự trữ bằng nhau, chia cho các đồng minh được đánh dấu còn dưới 60% máu theo lượng máu đã mất",
       "arcaneCharge": "{stacks} Điện Tích Bí Thuật: Sức Mạnh Bí Thuật gây thêm {damagePct}% sát thương, thi triển nhanh hơn {castPct}%, và tốn gấp {costMult} lần mana",
       "physicalReduction": "Giảm sát thương Vật Lý phải chịu đi {pct}%",
+      "rallyGroundBlast": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.",
+      "rallyOffTrack": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.",
       "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
       "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Miễn nhiễm và không thể hành động; hồi phục máu và tăng tốc phục hồi thời gian hồi chiêu. Nhấp chuột phải để hủy bỏ.",
@@ -13234,15 +13236,15 @@ export const vi_VN: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "Ground Blast",
-        "description": "Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals."
+        "description": "Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
       },
       "rally_nitro": {
         "name": "Nitro",
-        "description": "Burns a nitro charge for a short burst of speed above your machine cap."
+        "description": "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
       },
       "rally_oil_slick": {
         "name": "Oil Slick",
-        "description": "Dumps a slick of oil under your machine. Rivals who drive through it lose grip."
+        "description": "Drop a patch of oil under your machine. It stays on the track for {seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses {gripPct}% of their grip for {gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it."
       },
       "flamestrike": {
         "name": "Cú Đánh Lửa",

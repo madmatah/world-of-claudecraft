@@ -157,22 +157,24 @@ const classAbilityNamesEn = {
         'Clockwork Shock Bomb',
         'Throws a Clockwork Shock Bomb at the target location, dealing 120 to 160 Nature damage to enemies within 5 yards.',
       ],
+      // The three Realm Racers abilities: every figure is a placeholder filled
+      // from REALM_RACERS_ABILITY_TEXT_VALUES (src/sim/content/realm_racers.ts).
       [
         'rally_ground_blast',
         'Ground Blast',
-        'Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals.',
+        'Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit.',
       ],
       // The two held pickup effects (22b): a box puts one of these on the bar
       // with a single charge, and the pilot spends it when it suits them.
       [
         'rally_nitro',
         'Nitro',
-        'Burns a nitro charge for a short burst of speed above your machine cap.',
+        "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap.",
       ],
       [
         'rally_oil_slick',
         'Oil Slick',
-        'Dumps a slick of oil under your machine. Rivals who drive through it lose grip.',
+        'Drop a patch of oil under your machine. It stays on the track for {seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses {gripPct}% of their grip for {gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it.',
       ],
       [
         'flamestrike',

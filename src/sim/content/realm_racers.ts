@@ -6,9 +6,30 @@
 // brain is `src/sim/realm_racers_driver.ts` and the lifecycle around it is
 // `src/sim/social/realm_racers_bots.ts`.
 
-import { GROUND_BLAST_MAX_RANGE, GROUND_BLAST_RADIUS } from '../realm_racers_ground_blast';
-import type { RallyHeldEffect } from '../realm_racers_pickup_effects';
-import type { AbilityDef, PlayerClass } from '../types';
+import {
+  GROUND_BLAST_AIM_CONE_RAD,
+  GROUND_BLAST_CONTROL_SECONDS,
+  GROUND_BLAST_CONTROL_SPEED_MULT,
+  GROUND_BLAST_CORE_RADIUS,
+  GROUND_BLAST_MAX_RANGE,
+  GROUND_BLAST_MIN_RANGE,
+  GROUND_BLAST_RADIUS,
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+  groundBlastFlightSeconds,
+} from '../realm_racers_ground_blast';
+import {
+  type RallyHeldEffect,
+  REALM_RACERS_NITRO_KICK,
+  REALM_RACERS_NITRO_SPEED_MULT,
+  REALM_RACERS_NITRO_TICKS,
+} from '../realm_racers_pickup_effects';
+import {
+  REALM_RACERS_SLICK_GRIP,
+  REALM_RACERS_SLICK_GRIP_TICKS,
+  REALM_RACERS_SLICK_LIFETIME_TICKS,
+} from '../realm_racers_slicks';
+import { type AbilityDef, type PlayerClass, TICK_RATE } from '../types';
 import type { KnownAbility } from './classes';
 
 export const REALM_RACERS_ABILITY_ID = 'rally_ground_blast';
@@ -25,6 +46,60 @@ export const REALM_RACERS_ABILITY_ID = 'rally_ground_blast';
  */
 export const REALM_RACERS_NITRO_ABILITY_ID = 'rally_nitro';
 export const REALM_RACERS_SLICK_ABILITY_ID = 'rally_oil_slick';
+
+const percentLost = (kept: number): number => Math.round((1 - kept) * 100);
+const percentGained = (mult: number): number => Math.round((mult - 1) * 100);
+const tickSeconds = (ticks: number): number => ticks / TICK_RATE;
+
+/**
+ * The figures each rally ability's tooltip cites, derived from the live tuning.
+ *
+ * One table for both readers: the catalog row splices these as `{name}`
+ * placeholders (formatted per locale on the client) and the sim-source
+ * description below is built from the same numbers, so retuning a constant
+ * moves every copy of the prose at once. The flight times go through the very
+ * function the shell's flight does, because the clamp means the longest
+ * reachable flight is shorter than `GROUND_BLAST_MAX_FLIGHT`.
+ */
+export const REALM_RACERS_ABILITY_TEXT_VALUES: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+  [REALM_RACERS_ABILITY_ID]: {
+    minRange: GROUND_BLAST_MIN_RANGE,
+    coneDegrees: Math.round((GROUND_BLAST_AIM_CONE_RAD * 180) / Math.PI),
+    minFlight: groundBlastFlightSeconds(GROUND_BLAST_MIN_RANGE),
+    maxFlight: groundBlastFlightSeconds(GROUND_BLAST_MAX_RANGE),
+    radius: GROUND_BLAST_RADIUS,
+    coreRadius: GROUND_BLAST_CORE_RADIUS,
+    gripPct: percentLost(GROUND_BLAST_SHOCK_GRIP),
+    gripSeconds: tickSeconds(GROUND_BLAST_SHOCK_TICKS),
+    slowPct: percentLost(GROUND_BLAST_CONTROL_SPEED_MULT),
+    slowSeconds: GROUND_BLAST_CONTROL_SECONDS,
+  },
+  [REALM_RACERS_NITRO_ABILITY_ID]: {
+    kick: REALM_RACERS_NITRO_KICK,
+    speedPct: percentGained(REALM_RACERS_NITRO_SPEED_MULT),
+    seconds: tickSeconds(REALM_RACERS_NITRO_TICKS),
+  },
+  [REALM_RACERS_SLICK_ABILITY_ID]: {
+    seconds: tickSeconds(REALM_RACERS_SLICK_LIFETIME_TICKS),
+    gripPct: percentLost(REALM_RACERS_SLICK_GRIP),
+    gripSeconds: tickSeconds(REALM_RACERS_SLICK_GRIP_TICKS),
+  },
+};
+
+/** The tooltip figures for a rally ability id, or null for any other id. */
+export function realmRacersAbilityTextValues(
+  abilityId: string,
+): Readonly<Record<string, number>> | null {
+  return Object.hasOwn(REALM_RACERS_ABILITY_TEXT_VALUES, abilityId)
+    ? REALM_RACERS_ABILITY_TEXT_VALUES[abilityId]
+    : null;
+}
+
+const BLAST_TEXT = REALM_RACERS_ABILITY_TEXT_VALUES[REALM_RACERS_ABILITY_ID];
+const NITRO_TEXT = REALM_RACERS_ABILITY_TEXT_VALUES[REALM_RACERS_NITRO_ABILITY_ID];
+const SLICK_TEXT = REALM_RACERS_ABILITY_TEXT_VALUES[REALM_RACERS_SLICK_ABILITY_ID];
 
 export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
   [REALM_RACERS_ABILITY_ID]: {
@@ -49,8 +124,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     // The radius is on the effect so the aiming circle, the marker during the
     // flight and the blast are all one number a player can trust.
     effects: [{ type: 'realmRacersGroundBlast', radius: GROUND_BLAST_RADIUS }],
-    description:
-      'Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals.',
+    description: `Fire a shell at a spot on the ground at least ${BLAST_TEXT.minRange} yd ahead and within ${BLAST_TEXT.coneDegrees} degrees of your nose. It lands ${BLAST_TEXT.minFlight} to ${BLAST_TEXT.maxFlight} sec later. Every rival within ${BLAST_TEXT.radius} yd of the landing is thrown up and away, at full force within ${BLAST_TEXT.coreRadius} yd and weaker toward the edge. They also lose ${BLAST_TEXT.gripPct}% of their grip for ${BLAST_TEXT.gripSeconds} sec and are slowed by ${BLAST_TEXT.slowPct}% for ${BLAST_TEXT.slowSeconds} sec. A Racing Ward absorbs the hit.`,
   },
   // Both held effects are SELF casts with no cooldown and no cost: the whole
   // limit is the single charge the pickup granted, so the decision a pilot makes
@@ -71,7 +145,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     offGcd: true,
     usableWhileMounted: true,
     effects: [{ type: 'realmRacersPickupEffect', effect: 'nitro' }],
-    description: 'Burns a nitro charge for a short burst of speed above your machine cap.',
+    description: `Burn your nitro for an instant ${NITRO_TEXT.kick} yd/s push forward. For ${NITRO_TEXT.seconds} sec, your top speed is raised ${NITRO_TEXT.speedPct}% above your machine's normal cap.`,
   },
   [REALM_RACERS_SLICK_ABILITY_ID]: {
     id: REALM_RACERS_SLICK_ABILITY_ID,
@@ -87,7 +161,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     offGcd: true,
     usableWhileMounted: true,
     effects: [{ type: 'realmRacersPickupEffect', effect: 'slick' }],
-    description: 'Dumps a slick of oil under your machine. Rivals who drive through it lose grip.',
+    description: `Drop a patch of oil under your machine. It stays on the track for ${SLICK_TEXT.seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses ${SLICK_TEXT.gripPct}% of their grip for ${SLICK_TEXT.gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it.`,
   },
 };
 

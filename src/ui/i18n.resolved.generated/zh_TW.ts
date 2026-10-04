@@ -4088,6 +4088,8 @@ export const zh_TW: EnTranslations = {
       "temporalEcho": "施法者的秘法傷害會治療你，單體傷害轉化 {singlePct}%，範圍傷害轉化 {areaPct}%。以太湧動和乙太飛鏢在單獨的時光迴響上按4倍加成計算。群體迴響會產生等量的治療儲備，按照缺失生命值在生命低於60%的被標記盟友之間分配",
       "arcaneCharge": "{stacks} 層秘法充能：乙太湧動傷害提高 {damagePct}%，施法加快 {castPct}%，法力消耗變為 {costMult} 倍",
       "physicalReduction": "受到的物理傷害降低 {pct}%",
+      "rallyGroundBlast": "移動速度降低 {pct}%。命中後 {gripSeconds} 秒內，你的機車抓地力降低 {gripPct}%。",
+      "rallyOffTrack": "移動速度降低 {pct}%。你的機車抓地力降低 {gripPct}%，阻力是在路面上的 {drag} 倍。回到路面後消失。",
       "rallyWard": "吸收下一次命中你的震地爆破或油漬，隨後破碎。持續 {seconds} 秒。無法阻擋其他機車的碰撞。",
       "rallyGhost": "比賽把你送回賽道後，對手的機車會從你身上穿過。至少持續 {minSeconds} 秒，並持續到你能再次駕駛為止；之後一旦與所有對手分開便立即結束，最多再延續 {marginSeconds} 秒。震地爆破和油漬仍會命中你。",
       "temporalHourglass": "免疫傷害且無法行動；恢復生命並加速冷卻。按右鍵可取消。",
@@ -13234,15 +13236,15 @@ export const zh_TW: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "震地爆破",
-        "description": "發射一枚重型爆破砲彈，落地即爆，震動地面並將附近的對手炸飛。"
+        "description": "向前方至少 {minRange} 碼、偏離車頭不超過 {coneDegrees} 度的地面位置發射一枚砲彈。砲彈在 {minFlight} 至 {maxFlight} 秒後落地。落點 {radius} 碼內的每個對手都會被掀起並拋開，{coreRadius} 碼內為全力，越靠近邊緣越弱。他們還會在 {gripSeconds} 秒內失去 {gripPct}% 的抓地力，並在 {slowSeconds} 秒內被減速 {slowPct}%。賽道護盾可吸收這次命中。"
       },
       "rally_nitro": {
         "name": "氮氣加速",
-        "description": "點燃一管氮氣，讓機車短暫突破速度上限。"
+        "description": "點燃氮氣，瞬間向前提速 {kick} 碼/秒。{seconds} 秒內，你的最高速度比機車的正常上限高出 {speedPct}%。"
       },
       "rally_oil_slick": {
         "name": "油漬",
-        "description": "在車下潑灑一灘機油。駛過的對手會失去抓地力。"
+        "description": "在車下灑出一灘機油，它會在賽道上留存 {seconds} 秒。駛入其中的對手會被橫向推開，速度越快推得越猛，並在 {gripSeconds} 秒內失去 {gripPct}% 的抓地力。在你駛離之前，你自己的機油不會影響你。賽道護盾可吸收它。"
       },
       "flamestrike": {
         "name": "烈焰風暴",

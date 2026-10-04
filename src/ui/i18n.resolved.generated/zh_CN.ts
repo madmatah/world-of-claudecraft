@@ -4088,6 +4088,8 @@ export const zh_CN: EnTranslations = {
       "temporalEcho": "施法者的奥术伤害会治疗你，单体伤害转化 {singlePct}%，范围伤害转化 {areaPct}%。以太涌动和以太飞镖在单独的时光回响上按4倍加成计算。群体回响会产生等量的治疗储备，按照缺失生命值在生命低于60%的被标记盟友之间分配",
       "arcaneCharge": "{stacks} 层奥术充能：以太涌动伤害提高 {damagePct}%，施法加快 {castPct}%，法力消耗变为 {costMult} 倍",
       "physicalReduction": "受到的物理伤害降低 {pct}%",
+      "rallyGroundBlast": "移动速度降低 {pct}%。命中后 {gripSeconds} 秒内，你的机车抓地力降低 {gripPct}%。",
+      "rallyOffTrack": "移动速度降低 {pct}%。你的机车抓地力降低 {gripPct}%，阻力是在路面上的 {drag} 倍。回到路面后消失。",
       "rallyWard": "吸收下一次命中你的震地爆破或油渍，随后破碎。持续 {seconds} 秒。无法阻挡其他机车的碰撞。",
       "rallyGhost": "比赛把你送回赛道后，对手的机车会从你身上穿过。至少持续 {minSeconds} 秒，并持续到你能再次驾驶为止；之后一旦与所有对手分开便立即结束，最多再延续 {marginSeconds} 秒。震地爆破和油渍仍会命中你。",
       "temporalHourglass": "免疫伤害且无法行动；恢复生命并加速冷却。右键点击可取消。",
@@ -13234,15 +13236,15 @@ export const zh_CN: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "震地爆破",
-        "description": "发射一枚重型爆破炮弹，落地即爆，震动地面并将附近的对手炸飞。"
+        "description": "向前方至少 {minRange} 码、偏离车头不超过 {coneDegrees} 度的地面位置发射一枚炮弹。炮弹在 {minFlight} 至 {maxFlight} 秒后落地。落点 {radius} 码内的每个对手都会被掀起并抛开，{coreRadius} 码内为全力，越靠近边缘越弱。他们还会在 {gripSeconds} 秒内失去 {gripPct}% 的抓地力，并在 {slowSeconds} 秒内被减速 {slowPct}%。赛道护盾可吸收这次命中。"
       },
       "rally_nitro": {
         "name": "氮气加速",
-        "description": "点燃一管氮气，让机车短暂突破速度上限。"
+        "description": "点燃氮气，瞬间向前提速 {kick} 码/秒。{seconds} 秒内，你的最高速度比机车的正常上限高出 {speedPct}%。"
       },
       "rally_oil_slick": {
         "name": "油渍",
-        "description": "在车下泼洒一滩机油。驶过的对手会失去抓地力。"
+        "description": "在车下洒出一滩机油，它会在赛道上留存 {seconds} 秒。驶入其中的对手会被横向推开，速度越快推得越猛，并在 {gripSeconds} 秒内失去 {gripPct}% 的抓地力。在你驶离之前，你自己的机油不会影响你。赛道护盾可吸收它。"
       },
       "flamestrike": {
         "name": "烈焰风暴",

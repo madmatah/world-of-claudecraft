@@ -15500,12 +15500,16 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
     '다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.',
   'hudChrome.auraEffect.rallyGhost':
     '트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.',
+  'hudChrome.auraEffect.rallyGroundBlast':
+    '이동 속도를 {pct}% 감소시킵니다. 피격 후 {gripSeconds}초 동안 기체의 접지력이 {gripPct}% 감소합니다.',
+  'hudChrome.auraEffect.rallyOffTrack':
+    '이동 속도를 {pct}% 감소시킵니다. 기체의 접지력이 {gripPct}% 감소하고 저항이 도로 위의 {drag}배가 됩니다. 도로로 돌아올 때까지 지속됩니다.',
   'entities.abilities.rally_nitro.name': '니트로',
   'entities.abilities.rally_nitro.description':
-    '니트로를 태워 기체 속도 상한을 잠시 넘어서는 가속을 얻습니다.',
+    '니트로를 태워 즉시 앞으로 {kick}미터/초만큼 가속합니다. {seconds}초 동안 최고 속도가 기체의 기본 상한보다 {speedPct}% 높아집니다.',
   'entities.abilities.rally_oil_slick.name': '기름막',
   'entities.abilities.rally_oil_slick.description':
-    '기체 아래에 기름을 쏟습니다. 밟고 지나가는 경쟁자는 접지력을 잃습니다.',
+    '기체 아래에 기름을 쏟습니다. 기름은 {seconds}초 동안 트랙에 남습니다. 그 위로 달려든 경쟁자는 옆으로 밀려나며(빠를수록 더 세게), {gripSeconds}초 동안 접지력을 {gripPct}% 잃습니다. 자신의 기름은 한 번 빠져나오기 전까지는 자신에게 효과가 없습니다. 레이스 보호막이 이를 흡수합니다.',
   'hudChrome.rally.countdown': '엔진 잠금 중. {seconds}초 뒤 출발',
   'hudChrome.rally.go': '출발!',
   'hudChrome.rally.finalLap': '마지막 바퀴',
@@ -15528,7 +15532,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.mobileLabel': '레이서즈',
   'entities.abilities.rally_ground_blast.name': '그라운드 블래스트',
   'entities.abilities.rally_ground_blast.description':
-    '무거운 폭발 포탄을 발사하여 착탄 시 폭발해 지면을 뒤흔들고 주변 경쟁자를 날려버립니다.',
+    '전방 최소 {minRange}미터, 기체 정면 기준 {coneDegrees}도 이내의 지면 지점에 포탄을 발사합니다. 포탄은 {minFlight}~{maxFlight}초 뒤에 착탄합니다. 착탄 지점에서 {radius}미터 내의 모든 경쟁자가 공중으로 띄워지며 밀려나는데, {coreRadius}미터 이내에서는 최대 위력이고 가장자리로 갈수록 약해집니다. 또한 {gripSeconds}초 동안 접지력을 {gripPct}% 잃고 {slowSeconds}초 동안 {slowPct}% 느려집니다. 레이스 보호막이 이 공격을 흡수합니다.',
   // Craft Cast System Phase 6 M16 non-Latin fills
   'abilityUi.cast.crafting': '제작',
   'abilityUi.cast.disenchanting': '마력 추출',

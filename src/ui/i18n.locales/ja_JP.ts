@@ -15543,12 +15543,16 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
     '次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。',
   'hudChrome.auraEffect.rallyGhost':
     'コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。',
+  'hudChrome.auraEffect.rallyGroundBlast':
+    '移動速度を{pct}%低下させる。被弾後{gripSeconds}秒間、機体のグリップが{gripPct}%低下する。',
+  'hudChrome.auraEffect.rallyOffTrack':
+    '移動速度を{pct}%低下させる。機体のグリップが{gripPct}%低下し、抵抗が路面上の{drag}倍になる。路面に戻るまで続く。',
   'entities.abilities.rally_nitro.name': 'ニトロ',
   'entities.abilities.rally_nitro.description':
-    'ニトロを焚き、機体の速度上限を超える短い加速を得る。',
+    'ニトロを焚き、瞬時に前方へ{kick}ヤード/秒の加速を得る。{seconds}秒間、最高速度が機体の通常の上限より{speedPct}%上がる。',
   'entities.abilities.rally_oil_slick.name': 'オイルスリック',
   'entities.abilities.rally_oil_slick.description':
-    '車体の下にオイルをまく。踏んだ相手はグリップを失う。',
+    '機体の下にオイルをまく。オイルは{seconds}秒間コースに残る。踏み込んだライバルは横へ押し出され（速いほど強く）、{gripSeconds}秒間グリップを{gripPct}%失う。自分のオイルは、一度そこから抜け出すまで自分には効かない。レースの守護はこれを吸収する。',
   'hudChrome.rally.countdown': 'エンジン固定中。開始まで{seconds}秒',
   'hudChrome.rally.go': 'スタート！',
   'hudChrome.rally.finalLap': 'ファイナルラップ',
@@ -15571,7 +15575,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.mobileLabel': 'レーサーズ',
   'entities.abilities.rally_ground_blast.name': 'グラウンドブラスト',
   'entities.abilities.rally_ground_blast.description':
-    '重爆発弾を発射し、着弾と同時に爆発して地面を揺らし、周囲のライバルを吹き飛ばします。',
+    '前方{minRange}ヤード以上先、車体の正面から{coneDegrees}度以内の地面の一点に砲弾を撃つ。砲弾は{minFlight}～{maxFlight}秒後に着弾する。着弾点から{radius}ヤード以内のライバルは全員打ち上げられて吹き飛ばされ、{coreRadius}ヤード以内では最大の威力、外側ほど弱くなる。さらに{gripSeconds}秒間グリップを{gripPct}%失い、{slowSeconds}秒間{slowPct}%減速する。レースの守護はこの命中を吸収する。',
   // Craft Cast System Phase 6 M16 non-Latin fills
   'abilityUi.cast.crafting': '製作',
   'abilityUi.cast.disenchanting': '分解',

@@ -103,7 +103,17 @@ import {
   REALM_RACERS_GHOST_MARGIN_TICKS,
   REALM_RACERS_GHOST_MIN_TICKS,
 } from '../sim/realm_racers_ghost';
-import { REALM_RACERS_WARD_AURA_SECONDS } from '../sim/social/realm_racers';
+import {
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+} from '../sim/realm_racers_ground_blast';
+import {
+  REALM_RACERS_GARDEN_BAND,
+  REALM_RACERS_GROUND_BLAST_AURA,
+  REALM_RACERS_OFF_TRACK_AURA,
+  REALM_RACERS_VERGE_BAND,
+  REALM_RACERS_WARD_AURA_SECONDS,
+} from '../sim/social/realm_racers';
 import type { AuraKind } from '../sim/types';
 import {
   CAT_FORM_MOVE_MULT,
@@ -342,6 +352,33 @@ export function auraEffectDescriptor(
         interval: NYTHRAXIS_IMPALED_TICK_SECONDS,
       },
     };
+  }
+  if (a.id === REALM_RACERS_GROUND_BLAST_AURA) {
+    return {
+      key: `${KEY}.rallyGroundBlast`,
+      nums: {
+        pct: pctFromMult(a.value),
+        gripPct: pctFromFrac(1 - GROUND_BLAST_SHOCK_GRIP),
+        gripSeconds: GROUND_BLAST_SHOCK_TICKS / TICK_RATE,
+      },
+    };
+  }
+  if (a.id === REALM_RACERS_OFF_TRACK_AURA) {
+    // One aura id serves both bands and only its value tells them apart; a
+    // value matching neither (an older server's tuning) keeps the plain slow line.
+    const band = [REALM_RACERS_VERGE_BAND, REALM_RACERS_GARDEN_BAND].find(
+      (candidate) => candidate.speedMult === a.value,
+    );
+    if (band) {
+      return {
+        key: `${KEY}.rallyOffTrack`,
+        nums: {
+          pct: pctFromMult(a.value),
+          gripPct: pctFromFrac(1 - band.gripMult),
+          drag: band.dragMult,
+        },
+      };
+    }
   }
   if (a.id === 'temporal_hourglass' && a.kind === 'stasis') {
     return { key: `${KEY}.temporalHourglass`, nums: {} };
