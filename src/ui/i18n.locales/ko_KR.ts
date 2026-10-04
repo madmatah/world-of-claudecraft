@@ -12361,10 +12361,10 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'guide.nav.realmRacers': '렐름 레이서즈',
   'guide.realmRacersPage.heading': '렐름 레이서즈',
   'guide.realmRacersPage.intro':
-    '에버가든 레이싱 협회는 운전할 배짱만 있다면 누구나 참가할 수 있는 정원 서킷을 운영합니다: 그리드에는 네 명의 파일럿, 하나의 시그니처 무기, 그리고 대담한 라인만큼이나 깔끔한 라인에도 보상을 주는 생울타리로 둘러싸인 트랙이 있습니다.',
-  'guide.realmRacersPage.loreHeading': '에버가든 레이싱 협회',
+    '상록 정원 레이싱 협회는 운전할 배짱만 있다면 누구나 참가할 수 있는 정원 서킷을 운영합니다: 그리드에는 네 명의 파일럿, 하나의 시그니처 무기, 그리고 대담한 라인만큼이나 깔끔한 라인에도 보상을 주는 생울타리로 둘러싸인 트랙이 있습니다.',
+  'guide.realmRacersPage.loreHeading': '상록 정원 레이싱 협회',
   'guide.realmRacersPage.loreBody':
-    '에버가든의 정원장들은 생울타리 사이의 관리용 통로가 손수레보다 빠른 무언가를 위한 것이라고는 생각한 적이 없었지만, 시간이 남아돌고 빌린 탈것을 가진 한 관리인의 생각은 달랐습니다. 그 첫 무모한 도전에서 자라난 협회는 이제 제대로 된 서킷을 그리고, 그리드를 가득 채우며, 네 명의 파일럿이 준비될 때마다 깃발을 내립니다.',
+    '상록 정원의 정원장들은 생울타리 사이의 관리용 통로가 손수레보다 빠른 무언가를 위한 것이라고는 생각한 적이 없었지만, 시간이 남아돌고 빌린 탈것을 가진 한 관리인의 생각은 달랐습니다. 그 첫 무모한 도전에서 자라난 협회는 이제 제대로 된 서킷을 그리고, 그리드를 가득 채우며, 네 명의 파일럿이 준비될 때마다 깃발을 내립니다.',
   'guide.realmRacersPage.howHeading': '플레이 방법',
   'guide.realmRacersPage.howQueueBody':
     '세계 어디서든 렐름 레이서즈 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.',
@@ -12378,7 +12378,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'guide.realmRacersPage.machineBody':
     '모든 파일럿은 그날 협회의 대여 머신을 몰게 됩니다: 아무도 자신의 탈것을 그리드에 가져오지 않으며, 탈것을 얻지 못해 피트에서 구경만 하는 사람도 없습니다. 이 머신은 익히기 쉽고, 코너의 한계를 찾아내면 실제 무게감이 느껴집니다.',
   'guide.realmRacersPage.circuitsHeading': '서킷',
-  'guide.realmRacersPage.circuitsPracticeTitle': '에버가든 훈련장',
+  'guide.realmRacersPage.circuitsPracticeTitle': '상록 정원 훈련장',
   'guide.realmRacersPage.circuitsPracticeBody':
     '모든 파일럿이 머신을 익히는 서킷: 연습 중인 사람에게만 해당하며 다른 누구에게도 영향을 주지 않는, 더 짧은 정원 순환로입니다.',
   'guide.realmRacersPage.circuitsCompetitionTitle': '대회 서킷',
@@ -15408,7 +15408,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'itemUi.vendor.buyStack': '{count}개 구매',
   'itemUi.vendor.buyStackAria': '{price}에 {item} {count}개 구매',
   'hudChrome.keybinds.rally': '렐름 레이서즈',
-  'hudChrome.rally.kicker': '에버가든 레이싱 협회',
+  'hudChrome.rally.kicker': '상록 정원 레이싱 협회',
   'hudChrome.rally.title': '렐름 레이서즈',
   'hudChrome.rally.close': '렐름 레이서즈 창 닫기',
   'hudChrome.rally.pitch':
@@ -15462,7 +15462,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.controlHandbrakeHint': '일부러 접지력을 끊어 좁은 코너를 미끄러져 통과합니다.',
   'hudChrome.rally.racingAgainstBot':
     '연습 경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
-  'hudChrome.rally.won': '승리. 에버가든에 새로운 챔피언이 탄생했습니다.',
+  'hudChrome.rally.won': '승리. 상록 정원에 새로운 챔피언이 탄생했습니다.',
   'hudChrome.rally.lost':
     '{total}명 중 {position}위로 완주했습니다. 다음 출발선이 기다리고 있습니다.',
   'hudChrome.rally.standingsYou': '나',
@@ -15475,8 +15475,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.lobbyPrepared': '서킷 준비 완료',
   'hudChrome.rally.lobbyStartsBy':
     '모든 조종사가 준비되면 레이스가 시작됩니다. 늦어도 {time} 후에 시작합니다.',
-  'hudChrome.rally.circuitName_evergarden_practice': '에버가든 훈련장',
-  'hudChrome.rally.circuitName_evergarden_express_tour': '에버가든 익스프레스 투어',
+  'hudChrome.rally.circuitName_evergarden_practice': '상록 정원 훈련장',
+  'hudChrome.rally.circuitName_evergarden_express_tour': '상록 정원 익스프레스 투어',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '밤꽃 평원 달샘 런',
   'hudChrome.rally.circuitName_drakelands_rampart_run': '드레이크랜드 성벽 런',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': '야자 해안 석호 런',

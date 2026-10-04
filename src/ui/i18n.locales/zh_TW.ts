@@ -11806,10 +11806,10 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'guide.nav.realmRacers': '王國競速賽',
   'guide.realmRacersPage.heading': '王國競速賽',
   'guide.realmRacersPage.intro':
-    '永恆花園賽車協會開闢了一條花園賽道，向任何有膽量駕駛的人開放：四名車手同場競速，一件招牌武器，還有一條兩側夾道、既獎勵大膽超車也獎勵乾淨路線的賽道。',
-  'guide.realmRacersPage.loreHeading': '永恆花園賽車協會',
+    '常青園賽車協會開闢了一條花園賽道，向任何有膽量駕駛的人開放：四名車手同場競速，一件招牌武器，還有一條兩側夾道、既獎勵大膽超車也獎勵乾淨路線的賽道。',
+  'guide.realmRacersPage.loreHeading': '常青園賽車協會',
   'guide.realmRacersPage.loreBody':
-    '永恆花園的總園丁們從未打算讓樹籬之間的巡視小徑跑得比獨輪車更快，但一位閒得發慌、又借來坐騎的場地管理員卻另有想法。由那第一次膽大妄為發展而來的協會，如今劃出了一條正式賽道，湊滿整場比賽，只要四名車手準備就緒，便會落下發車旗。',
+    '常青園的總園丁們從未打算讓樹籬之間的巡視小徑跑得比獨輪車更快，但一位閒得發慌、又借來坐騎的場地管理員卻另有想法。由那第一次膽大妄為發展而來的協會，如今劃出了一條正式賽道，湊滿整場比賽，只要四名車手準備就緒，便會落下發車旗。',
   'guide.realmRacersPage.howHeading': '怎麼玩',
   'guide.realmRacersPage.howQueueBody':
     '在世界任何地方，都可以從王國競速賽視窗排隊參賽。湊滿四人的整場比賽後，所有人會一同就位在發車線上，倒數計時隨即開始。',
@@ -11823,7 +11823,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'guide.realmRacersPage.machineBody':
     '每位車手當天駕駛的都是協會自備的借用車：沒有人自帶坐騎上場，也沒有人因為沒搶到坐騎而只能在維修區乾看著。這台車上手很快，一旦你摸到彎道的極限，也能感受到它實實在在的分量。',
   'guide.realmRacersPage.circuitsHeading': '賽道',
-  'guide.realmRacersPage.circuitsPracticeTitle': '永恆花園訓練場',
+  'guide.realmRacersPage.circuitsPracticeTitle': '常青園訓練場',
   'guide.realmRacersPage.circuitsPracticeBody':
     '每位車手都在這條賽道上學車：一條較短的花園環道，專屬於正在練習的那名車手，與其他任何人無關。',
   'guide.realmRacersPage.circuitsCompetitionTitle': '正賽賽道',
@@ -14725,7 +14725,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'itemUi.vendor.buyStack': '購買 {count} 個',
   'itemUi.vendor.buyStackAria': '以 {price} 購買 {count} 個 {item}',
   'hudChrome.keybinds.rally': '王國競速賽',
-  'hudChrome.rally.kicker': '永恆花園賽車協會',
+  'hudChrome.rally.kicker': '常青園賽車協會',
   'hudChrome.rally.title': '王國競速賽',
   'hudChrome.rally.close': '關閉王國競速賽視窗',
   'hudChrome.rally.pitch': '鋼鐵穿林而過。找到理想路線，相信甩尾，讓每個對手都吞你的尾塵。',
@@ -14771,7 +14771,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.controlHandbrake': '手煞車',
   'hudChrome.rally.controlHandbrakeHint': '主動打破抓地力，讓車身滑過狹窄的彎道。',
   'hudChrome.rally.racingAgainstBot': '你的練習賽已經開始。你目前名次 {position}/{total}。',
-  'hudChrome.rally.won': '勝利。永恆花園迎來了新的冠軍。',
+  'hudChrome.rally.won': '勝利。常青園迎來了新的冠軍。',
   'hudChrome.rally.lost': '你以 {total} 名車手中的第 {position} 名完賽。下一次發車格仍在等你。',
   'hudChrome.rally.standingsYou': '你',
   'hudChrome.rally.standingsFinished': '已完賽',
@@ -14782,8 +14782,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.lobbyPreparing': '正在準備賽道',
   'hudChrome.rally.lobbyPrepared': '賽道已準備好',
   'hudChrome.rally.lobbyStartsBy': '所有車手就緒後比賽開始，最遲 {time} 後開始。',
-  'hudChrome.rally.circuitName_evergarden_practice': '永恆花園訓練場',
-  'hudChrome.rally.circuitName_evergarden_express_tour': '永恆花園特快巡迴賽',
+  'hudChrome.rally.circuitName_evergarden_practice': '常青園訓練場',
+  'hudChrome.rally.circuitName_evergarden_express_tour': '常青園特快巡迴賽',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '夜綻花野月泉競速賽',
   'hudChrome.rally.circuitName_drakelands_rampart_run': '龍裔荒原城壘競速賽',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': '棕櫚灣潟湖競速賽',

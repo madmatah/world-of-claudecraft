@@ -11805,10 +11805,10 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'guide.nav.realmRacers': '王国竞速赛',
   'guide.realmRacersPage.heading': '王国竞速赛',
   'guide.realmRacersPage.intro':
-    '永恒花园赛车协会开辟了一条花园赛道，向任何有胆量驾驶的人开放：四名车手同场竞速，一件招牌武器，还有一条两侧夹道、既奖励大胆超车也奖励干净路线的赛道。',
-  'guide.realmRacersPage.loreHeading': '永恒花园赛车协会',
+    '常青园赛车协会开辟了一条花园赛道，向任何有胆量驾驶的人开放：四名车手同场竞速，一件招牌武器，还有一条两侧夹道、既奖励大胆超车也奖励干净路线的赛道。',
+  'guide.realmRacersPage.loreHeading': '常青园赛车协会',
   'guide.realmRacersPage.loreBody':
-    '永恒花园的总园丁们从未打算让树篱之间的巡视小径跑得比独轮车更快，但一位闲得发慌、又借来坐骑的场地管理员却另有想法。由那第一次胆大妄为发展而来的协会，如今划出了一条正式赛道，凑满整场比赛，只要四名车手准备就绪，便会落下发车旗。',
+    '常青园的总园丁们从未打算让树篱之间的巡视小径跑得比独轮车更快，但一位闲得发慌、又借来坐骑的场地管理员却另有想法。由那第一次胆大妄为发展而来的协会，如今划出了一条正式赛道，凑满整场比赛，只要四名车手准备就绪，便会落下发车旗。',
   'guide.realmRacersPage.howHeading': '怎么玩',
   'guide.realmRacersPage.howQueueBody':
     '在世界任何地方，都可以从王国竞速赛窗口排队参赛。凑满四人的整场比赛后，所有人会一同就位在发车线上，倒计时随即开始。',
@@ -11822,7 +11822,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'guide.realmRacersPage.machineBody':
     '每位车手当天驾驶的都是协会自备的借用车：没有人自带坐骑上场，也没有人因为没抢到坐骑而只能在维修区干看着。这台车上手很快，一旦你摸到弯道的极限，也能感受到它实实在在的分量。',
   'guide.realmRacersPage.circuitsHeading': '赛道',
-  'guide.realmRacersPage.circuitsPracticeTitle': '永恒花园训练场',
+  'guide.realmRacersPage.circuitsPracticeTitle': '常青园训练场',
   'guide.realmRacersPage.circuitsPracticeBody':
     '每位车手都在这条赛道上学车：一条较短的花园环道，专属于正在练习的那名车手，与其他任何人无关。',
   'guide.realmRacersPage.circuitsCompetitionTitle': '正赛赛道',
@@ -14721,7 +14721,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'itemUi.vendor.buyStack': '购买 {count} 个',
   'itemUi.vendor.buyStackAria': '以 {price} 购买 {count} 个 {item}',
   'hudChrome.keybinds.rally': '王国竞速赛',
-  'hudChrome.rally.kicker': '永恒花园赛车协会',
+  'hudChrome.rally.kicker': '常青园赛车协会',
   'hudChrome.rally.title': '王国竞速赛',
   'hudChrome.rally.close': '关闭王国竞速赛窗口',
   'hudChrome.rally.pitch': '钢铁穿林而过。找到理想路线，相信甩尾，让每个对手都吞你的尾尘。',
@@ -14767,7 +14767,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.controlHandbrake': '手刹',
   'hudChrome.rally.controlHandbrakeHint': '主动打破抓地力，让车身滑过狭窄的弯道。',
   'hudChrome.rally.racingAgainstBot': '你的练习赛已经开始。你目前排名 {position}/{total}。',
-  'hudChrome.rally.won': '胜利。永恒花园迎来了新的冠军。',
+  'hudChrome.rally.won': '胜利。常青园迎来了新的冠军。',
   'hudChrome.rally.lost': '你以 {total} 名车手中的第 {position} 名完赛。下一次发车格仍在等你。',
   'hudChrome.rally.standingsYou': '你',
   'hudChrome.rally.standingsFinished': '已完赛',
@@ -14778,8 +14778,8 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.lobbyPreparing': '正在准备赛道',
   'hudChrome.rally.lobbyPrepared': '赛道已准备好',
   'hudChrome.rally.lobbyStartsBy': '所有车手就绪后比赛开始，最迟 {time} 后开始。',
-  'hudChrome.rally.circuitName_evergarden_practice': '永恒花园训练场',
-  'hudChrome.rally.circuitName_evergarden_express_tour': '永恒花园特快巡回赛',
+  'hudChrome.rally.circuitName_evergarden_practice': '常青园训练场',
+  'hudChrome.rally.circuitName_evergarden_express_tour': '常青园特快巡回赛',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': '夜绽花野月泉竞速赛',
   'hudChrome.rally.circuitName_drakelands_rampart_run': '龙裔荒原城垒竞速赛',
   'hudChrome.rally.circuitName_palmreach_lagoon_run': '棕榈湾潟湖竞速赛',

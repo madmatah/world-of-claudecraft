@@ -12577,10 +12577,10 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'guide.nav.realmRacers': 'Гонки Королевства',
   'guide.realmRacersPage.heading': 'Гонки Королевства',
   'guide.realmRacersPage.intro':
-    'Гоночное общество Эвергардена устраивает садовую трассу для всех, у кого хватит смелости сесть за руль: четыре пилота на старте, одно фирменное оружие и трасса вдоль живых изгородей, которая вознаграждает и чистую линию, и смелый манёвр.',
-  'guide.realmRacersPage.loreHeading': 'Гоночное общество Эвергардена',
+    'Гоночное общество Вечного Сада устраивает садовую трассу для всех, у кого хватит смелости сесть за руль: четыре пилота на старте, одно фирменное оружие и трасса вдоль живых изгородей, которая вознаграждает и чистую линию, и смелый манёвр.',
+  'guide.realmRacersPage.loreHeading': 'Гоночное общество Вечного Сада',
   'guide.realmRacersPage.loreBody':
-    'Главные садовники Эвергардена никогда не задумывали служебные дорожки между изгородями для чего-то быстрее тачки, но у смотрителя с избытком свободного времени и одолженным ездовым животным нашлось другое мнение. Общество, выросшее из того первого безрассудного пари, теперь размечает настоящую трассу, собирает полный старт и опускает флаг всякий раз, когда четыре пилота готовы ехать.',
+    'Главные садовники Вечного Сада никогда не задумывали служебные дорожки между изгородями для чего-то быстрее тачки, но у смотрителя с избытком свободного времени и одолженным ездовым животным нашлось другое мнение. Общество, выросшее из того первого безрассудного пари, теперь размечает настоящую трассу, собирает полный старт и опускает флаг всякий раз, когда четыре пилота готовы ехать.',
   'guide.realmRacersPage.howHeading': 'Как играть',
   'guide.realmRacersPage.howQueueBody':
     'Встаньте в очередь на заезд из окна Гонок Королевства откуда угодно в мире. Как только полный старт из четырёх пилотов готов, все занимают места на стартовой линии вместе, и начинается отсчёт.',
@@ -12594,7 +12594,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'guide.realmRacersPage.machineBody':
     'Каждый пилот в этот день едет на собственной одолженной машине Общества: никто не приводит на старт своё ездовое животное, и никто не остаётся смотреть из боксов только потому, что оно ему не досталось. Машина быстро осваивается и обретает настоящий вес, стоит только нащупать предел поворота.',
   'guide.realmRacersPage.circuitsHeading': 'Трассы',
-  'guide.realmRacersPage.circuitsPracticeTitle': 'Тренировочный полигон Эвергардена',
+  'guide.realmRacersPage.circuitsPracticeTitle': 'Тренировочный полигон Вечного Сада',
   'guide.realmRacersPage.circuitsPracticeBody':
     'Трасса, на которой каждый пилот осваивает машину: более короткий садовый круг, приватный для того, кто на нём тренируется, и никак не влияющий на остальных.',
   'guide.realmRacersPage.circuitsCompetitionTitle': 'Трассы соревнований',
@@ -15714,7 +15714,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'itemUi.vendor.buyStack': 'Купить {count}',
   'itemUi.vendor.buyStackAria': 'Купить {count} {item} за {price}',
   'hudChrome.keybinds.rally': 'Гонки Королевства',
-  'hudChrome.rally.kicker': 'Гоночное общество Эвергардена',
+  'hudChrome.rally.kicker': 'Гоночное общество Вечного Сада',
   'hudChrome.rally.title': 'Гонки Королевства',
   'hudChrome.rally.close': 'Закрыть окно Гонок Королевства',
   'hudChrome.rally.pitch':
@@ -15769,7 +15769,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
     'Намеренно срывает сцепление, чтобы пройти узкий поворот в скольжении.',
   'hudChrome.rally.racingAgainstBot':
     'Тренировочная гонка началась. Вы идёте {position} из {total}.',
-  'hudChrome.rally.won': 'Победа. У Эвергардена новый чемпион.',
+  'hudChrome.rally.won': 'Победа. У Вечного Сада новый чемпион.',
   'hudChrome.rally.lost':
     'Вы финишируете {position} из {total}. Следующая стартовая решётка уже ждёт.',
   'hudChrome.rally.standingsYou': 'ВЫ',
@@ -15782,8 +15782,8 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.lobbyPrepared': 'Трасса готова',
   'hudChrome.rally.lobbyStartsBy':
     'Гонка начнётся, когда все пилоты будут готовы, но не позже чем через {time}.',
-  'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Эвергардена',
-  'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Эвергардена',
+  'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Вечного Сада',
+  'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Вечного Сада',
   'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного Родника Ночецветья',
   'hudChrome.rally.circuitName_drakelands_rampart_run':
     'Гонка вдоль крепостного вала Земель Драконов',
