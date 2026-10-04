@@ -2026,7 +2026,9 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 5194 -> 5188 at the merge of release/v0.44.0 into the
     // Eastbrook ferry branch (PR 4225): the release's own extractions plus the
     // ferry's wiring, measured with wc -l on the merged tree. Exact count, zero slack.
-    ceiling: 5188,
+    // LOWERED 5188 -> 5184 to the exact count on feature/realm-racers: the release's
+    // 5182 plus the Realm Racers band arm in groundHeight and its import.
+    ceiling: 5184,
     seam: 'zone/terrain data as content records; logic as sim sibling modules',
   },
   {
