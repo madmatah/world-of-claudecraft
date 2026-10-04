@@ -126,7 +126,7 @@ describe('websocket authentication', () => {
     // folds into this combined epoch, so it must also stay unrecognizable.
     // `auth-world-29` predates the scheduled Eastbrook ferry (a deck that
     // exists only where the ship lies docked) and must stay unrecognizable.
-    // `auth-world-45` (the release/v0.44.0 tip) predates the Realm Racers race
+    // `auth-world-45` (the release/v0.45.0 tip) predates the Realm Racers race
     // surface this branch merges on top of it, so it must stay unrecognizable.
     expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-45');
     expect(ONLINE_WORLD_AUTH_TYPE).not.toBe('auth-world-29');

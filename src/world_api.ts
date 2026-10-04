@@ -268,7 +268,7 @@ export type { VehicleSession } from './world_api/vehicles';
 // a deck the server has sailed away; an epoch-30 client lacks the world-quest
 // wire. Both must fail closed.
 // 46 = The Realm Racers instance band and its race snapshot surface, carried
-// by the feature branch onto the release/v0.44.0 sync. It sits above the
+// by the feature branch onto the release/v0.45.0 sync. It sits above the
 // release's own 45 rather than on either side of the merge: the branch grew
 // its own layout off an older epoch while the release grew the ledger above,
 // so a binary at 45 and a binary at this one disagree about the instance bands
