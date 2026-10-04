@@ -1988,7 +1988,8 @@ const MONOLITHS: MonolithRow[] = [
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 4720). Exact count, zero slack.
     // LOWERED 4849 -> 4728: the Realm Racers area-track layer moved to music_area_tracks.ts.
-    ceiling: 4728,
+    // LOWERED 4728 -> 4724: the boss loop plus area tracks pair became the layer's applyFileTracks.
+    ceiling: 4724,
     seam: 'a src/game sibling module (the refactor/game-music split is the template)',
   },
   {

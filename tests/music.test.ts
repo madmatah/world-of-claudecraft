@@ -579,13 +579,14 @@ describe('the area-track layer host seam', () => {
       'private _menuPaused = false;',
       'private masterTarget(): number {',
       'private streamKeeper(): void {',
+      'private applyBossPlayback(): void {',
       'bossActive: this.bossActive || areaTrackLayerFor(this).areaTrack !== null,',
       'areaTrackLayerFor(this).setAreaTrack(track, restart);',
       'areaTrackLayerFor(this).wireGains(ctx, compressor);',
     ]) {
       expect(source, anchor).toContain(anchor);
     }
-    expect(source.split('areaTrackLayerFor(this).applyAreaTracks();')).toHaveLength(5);
+    expect(source.split('areaTrackLayerFor(this).applyFileTracks();')).toHaveLength(5);
   });
 });
 

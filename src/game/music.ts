@@ -4468,8 +4468,7 @@ export class MusicDirector {
     if (this.ctx && this.master) {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.2);
     }
-    this.applyBossPlayback();
-    areaTrackLayerFor(this).applyAreaTracks();
+    areaTrackLayerFor(this).applyFileTracks();
     // leaving volume 0 must revive paused streams now, not a tick later
     if (this.streamsAudible()) this.streamKeeper();
   }
@@ -4643,8 +4642,7 @@ export class MusicDirector {
     if (this.ctx && this.master) {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.3);
     }
-    this.applyBossPlayback();
-    areaTrackLayerFor(this).applyAreaTracks();
+    areaTrackLayerFor(this).applyFileTracks();
     // re-enabling must revive paused streams now, not a keeper tick later
     if (on) this.streamKeeper();
   }
@@ -4658,8 +4656,7 @@ export class MusicDirector {
     if (this.master) {
       this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
     }
-    this.applyBossPlayback();
-    areaTrackLayerFor(this).applyAreaTracks();
+    areaTrackLayerFor(this).applyFileTracks();
   }
 
   /** Restore playback after closing the game menu. */
@@ -4671,8 +4668,7 @@ export class MusicDirector {
     if (this.master) {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.35);
     }
-    this.applyBossPlayback();
-    areaTrackLayerFor(this).applyAreaTracks();
+    areaTrackLayerFor(this).applyFileTracks();
     // closing the menu must revive paused streams now, not a keeper tick later
     this.streamKeeper();
   }

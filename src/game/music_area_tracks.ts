@@ -29,6 +29,7 @@ interface MusicDirectorHost {
   _vol: number;
   masterTarget(): number;
   streamKeeper(): void;
+  applyBossPlayback(): void;
 }
 
 export class AreaTrackLayer {
@@ -119,6 +120,14 @@ export class AreaTrackLayer {
   private audibleAreaTrack(): AreaTrackId | null {
     const h = this.host;
     return h._enabled && !h._menuPaused && h._vol > 0 ? this.areaTrack : null;
+  }
+
+  /** The director's two dedicated file tracks, in this order: its boss loop,
+   *  then the area tracks. The director's mix hooks (volume, toggle, menu fade
+   *  and restore) make this one call in place of that pair. */
+  applyFileTracks(): void {
+    this.host.applyBossPlayback();
+    this.applyAreaTracks();
   }
 
   applyAreaTracks(): void {
