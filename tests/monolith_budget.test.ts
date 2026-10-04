@@ -2290,7 +2290,8 @@ const MONOLITHS: MonolithRow[] = [
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 2513). Exact count, zero slack.
     // LOWERED 2560 -> 2524: the Realm Racers resolve and sight arms moved to realm_racers_collide.ts.
-    ceiling: 2524,
+    // LOWERED 2524 -> 2523: the Realm Racers collider arms come in through one namespace import.
+    ceiling: 2523,
     seam: 'per-zone collider data beside the zone content; shared logic stays here',
   },
   {

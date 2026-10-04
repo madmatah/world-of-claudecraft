@@ -112,8 +112,7 @@ import {
   TOWN_WALL_SHORT_PILLAR_TOP_FRAC,
   TOWN_WALL_TALL_PILLAR_ALONG,
 } from './prop_layout';
-import { realmRacersSightBlocked, resolveRealmRacersPosition } from './realm_racers_collide';
-import { isAtRealmRacersXZ } from './realm_racers_layout';
+import * as realmRacersCollide from './realm_racers_collide';
 import { riftRegionAt } from './rift_regions';
 import { type PlacedStreetlamp, planStreetlamps, styleStreetlampSites } from './streetlamp_layout';
 import { STREETLAMP_COLLIDER_RADIUS, STREETLAMP_FIXTURE_HEIGHT } from './streetlamp_style';
@@ -1862,7 +1861,7 @@ export function resolvePosition(
   // in the spatial grid at absolute coordinates and its ground is real terrain
   // (groundHeight's band arm), so the grid fall-through below serves it with
   // the full mover contract (pass-over, standable decks) like the open world.
-  const rally = resolveRealmRacersPosition(x, z, r, resolveAgainst);
+  const rally = realmRacersCollide.resolveRealmRacersPosition(x, z, r, resolveAgainst);
   if (rally !== null) return rally;
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);
@@ -2011,7 +2010,7 @@ export function supportHeightAt(
   // routing resolvePosition uses).
   // The rally's garden wall blocks movement but is deliberately not standable:
   // a racer cannot mantle the perimeter out of the circuit.
-  if (isAtRealmRacersXZ(x, z)) return -Infinity;
+  if (realmRacersCollide.isAtRealmRacersXZ(x, z)) return -Infinity;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return -Infinity;
   if (x > DUNGEON_X_THRESHOLD && !isBgPos(x)) {
     // Dungeon interiors: the furniture tops (coffin lids, cargo stacks) are
@@ -2077,7 +2076,7 @@ export function slopeGlueHeight(
   let list: Collider[] | undefined;
   let ox = 0;
   let oz = 0;
-  if (isAtRealmRacersXZ(x, z)) return -Infinity;
+  if (realmRacersCollide.isAtRealmRacersXZ(x, z)) return -Infinity;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return -Infinity;
   if (x > DUNGEON_X_THRESHOLD && !isBgPos(x)) {
     const inst = instanceLocal(x, z);
@@ -2138,7 +2137,7 @@ export function interiorColliderFrame(
   z: number,
 ): { list: Collider[]; ox: number; oz: number } | null {
   if (x <= DUNGEON_X_THRESHOLD) return null;
-  if (isAtRealmRacersXZ(x, z)) return null;
+  if (realmRacersCollide.isAtRealmRacersXZ(x, z)) return null;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x) || isBgPos(x)) return null;
   const { ox, oz, interior, dungeonId } = instanceLocal(x, z);
   return { list: interiorCollidersFor(dungeonId, interior), ox, oz };
@@ -2422,7 +2421,7 @@ function sightBlockedAt(
     const list = grid.cells.get(cellKeyAt(x, z));
     return list ? overlapsAny(list, x, z, r, sightY, true) : false;
   }
-  const rallySight = realmRacersSightBlocked(x, z, r, sightY, overlapsAny);
+  const rallySight = realmRacersCollide.realmRacersSightBlocked(x, z, r, sightY, overlapsAny);
   if (rallySight !== null) return rallySight;
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);

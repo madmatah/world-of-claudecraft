@@ -6,6 +6,9 @@ import {
   realmRacersLaneOffset,
 } from './realm_racers_layout';
 
+/** The band test colliders.ts routes its support, slope-glue and interior arms on. */
+export { isAtRealmRacersXZ } from './realm_racers_layout';
+
 type ResolveAgainst = (
   list: Collider[],
   x: number,
