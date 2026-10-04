@@ -11830,7 +11830,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
     '排队比赛从不会跑训练赛道，而是从另一个赛道池中抽取更长的正赛赛道，每一条都披上其所借用场地所在游戏区域的主题，因此即便车辆不变，场地也会随之改变。',
   'guide.realmRacersPage.rewardsHeading': '你为何而战',
   'guide.realmRacersPage.rewardsBody':
-    '王国竞速赛不发放经验值，也没有战利品：这纯粹是一项运动，为了比赛本身，也为了它带来的名次而战。不过，在正式比赛中取得的名次，仍会计入功绩之书：首场比赛、胜利，以及一批更难达成的驾驶壮举，都等着愿意去追逐它们的车手，随之而来的还有名望与专属头衔。',
+    '王国竞速赛不发放经验值，也没有战利品：这纯粹是一项运动，为了比赛本身，也为了它带来的名次而战。不过，在正式比赛中取得的名次，仍会计入功绩之书：首场比赛、胜利，以及一批更难达成的驾驶壮举，都等着愿意去追逐它们的车手。这些功绩不提供名望，但只要赢下足够多的比赛，就能获得一个可佩戴的装饰性头衔。',
   'entities.npcs.chronicler_saul.name': '编年史者绍尔',
   'entities.npcs.chronicler_saul.title': '东溪谷编年史',
   'entities.npcs.chronicler_saul.greeting':
