@@ -853,7 +853,7 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   practiceCopies: 0,
 };
 
-const NIGHTBLOOM_MOONWELL_RUN: RealmRacersCircuit = {
+const NIGHTBLOOM_MOONSPRING_RUN: RealmRacersCircuit = {
   id: 'nightbloom_moonwell_run',
   controlPoints: [
     { x: -55, z: -97 },
@@ -1770,7 +1770,7 @@ const PALMREACH_LAGOON_RUN: RealmRacersCircuit = {
 export const REALM_RACERS_CIRCUITS: Record<string, RealmRacersCircuit> = {
   [EVERGARDEN_PRACTICE.id]: EVERGARDEN_PRACTICE,
   [EVERGARDEN_EXPRESS_TOUR.id]: EVERGARDEN_EXPRESS_TOUR,
-  [NIGHTBLOOM_MOONWELL_RUN.id]: NIGHTBLOOM_MOONWELL_RUN,
+  [NIGHTBLOOM_MOONSPRING_RUN.id]: NIGHTBLOOM_MOONSPRING_RUN,
   [DRAKELANDS_RAMPART_RUN.id]: DRAKELANDS_RAMPART_RUN,
   [PALMREACH_LAGOON_RUN.id]: PALMREACH_LAGOON_RUN,
 };

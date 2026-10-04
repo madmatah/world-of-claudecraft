@@ -1555,7 +1555,7 @@ function authoredTrackView(
  * Where a build's time goes, so the next circuit can be judged before it is
  * drawn: the flower FIELD (one spline projection per candidate, about half of
  * a build, walked in bands), the resolver's placements (a sim memo, the one
- * piece that cannot be cut: about 67 ms on the Moonwell Run on a fast desktop),
+ * piece that cannot be cut: about 67 ms on the Moonspring Run on a fast desktop),
  * the grass on a grassy zone (a stamped mask, then the instancing in bands),
  * the dressing. The cheapest levers are the record's scatter `spacing`,
  * `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` and the flower patch pitch;

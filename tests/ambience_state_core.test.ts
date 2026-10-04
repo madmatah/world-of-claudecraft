@@ -122,7 +122,7 @@ describe('ambience on a Realm Racers circuit', () => {
   ];
 
   it('samples every authored lane as nowhere a bed plays', () => {
-    // Every lane, practice copies included: the Express Tour, the Moonwell
+    // Every lane, practice copies included: the Express Tour, the Moonspring
     // Run and each Evergarden practice copy.
     const ids = new Set(REALM_RACERS_LANES.map((lane) => lane.circuit.id));
     for (const id of [
