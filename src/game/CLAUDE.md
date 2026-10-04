@@ -160,10 +160,10 @@ pattern), plus a thin DOM/side-effect consumer if it needs one (`gamepad.ts` ove
   music editor itself (`npm run dev`, open `/music_editor.html`, edit, Save),
   never hand-edited; the shipped game still streams the remastered renders.
 - **A new AREA track** (a place with its own supplied soundtrack rather than a
-  render of a composed theme, like the Sowfield stadium or the Realm Racers
-  circuit): add an `AreaTrackId` with its url and group in `AREA_TRACK_URLS` /
-  `AREA_TRACK_GROUP` (music_tracks.ts), drop the mp3 at the top level of
-  `public/audio/`, and decide it in `instanceMusicDecision` (instance_music.ts),
+  render of a composed theme, like a Realm Racers circuit): add an `AreaTrackId`
+  with its url and group in `AREA_TRACK_URLS` / `AREA_TRACK_GROUP`
+  (music_tracks.ts), drop the mp3 at the top level of `public/audio/`, and
+  decide it in `instanceMusicDecision` (instance_music.ts),
   which drives `music.setAreaTrack(id)`. An area track OWNS the mix: it ducks
   the procedural score and the zone streams for as long as it is active, and at
   most one is ever active. Do not add a `MusicZone` for it.

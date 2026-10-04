@@ -433,8 +433,8 @@ export interface RealmRacersCircuit {
   /**
    * How many PRIVATE copies of this circuit the band holds, beside the public
    * one. A practice lap must never wait on, or be waited on by, someone else's
-   * race, so each one runs on its own copy of the whole circuit (the Vale Cup's
-   * practice-pitch model): the same geometry at its own lane origin.
+   * race, so each one runs on its own copy of the whole circuit: the same
+   * geometry at its own lane origin.
    */
   practiceCopies: number;
 }

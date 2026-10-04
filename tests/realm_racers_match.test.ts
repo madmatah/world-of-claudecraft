@@ -1817,7 +1817,7 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
   });
 });
 
-describe('Realm Racers rrWins persistence (mirrors tests/vale_cup_meta.test.ts)', () => {
+describe('Realm Racers rrWins persistence', () => {
   it('is absent before any win, present after one, and survives a reload into fresh meta', () => {
     const { sim, pids } = startMatch();
     const [a, b, c, d] = pids;

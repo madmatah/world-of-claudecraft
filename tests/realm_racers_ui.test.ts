@@ -647,7 +647,7 @@ describe('Realm Racers practice setup screen', () => {
     expect(iconDataUrlSpy).not.toHaveBeenCalled();
   });
 
-  it('tags a house pilot with the Vale Cup Bot badge, and no human row', () => {
+  it('tags a house pilot with the Bot badge, and no human row', () => {
     const h = harness();
     const me = racer({ position: 1 });
     h.info.match = match({

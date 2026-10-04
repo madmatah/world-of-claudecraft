@@ -1,6 +1,6 @@
 // The Realm Racers house pilots: lore-named player bots that make the
-// minigame playable alone. Two entry points, ONE body of code (the
-// vale_cup_bots.ts model, whose contract this follows literally):
+// minigame playable alone. Two entry points, ONE body of code (the retired
+// Vale Cup bots' model, whose contract this follows literally):
 //
 //   - Practice: the player presses Play and races a full grid of house pilots
 //     immediately, with no queue and no wait. Works offline AND online, because

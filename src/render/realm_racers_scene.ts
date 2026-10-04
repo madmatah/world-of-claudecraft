@@ -208,7 +208,7 @@ export class RealmRacersScene {
     this.prepareSeam.frame(h, info, px, pz);
     // A seated pilot reads their own match; a bystander at the fence reads the
     // lane's trackside view, so the lights, the boxes and the oil stay honest
-    // for anyone looking at the circuit (same shape as the Vale Cup spectate).
+    // for anyone looking at the circuit.
     this.track.update(px, pz, h.time, info.match ?? h.sim.realmRacersTrackside ?? null);
     this.groundBlasts.update(dt);
     this.fieldCues.update(dt);

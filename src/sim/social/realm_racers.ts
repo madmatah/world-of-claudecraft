@@ -666,8 +666,8 @@ export interface RealmRacersState {
   nextMatchId: number;
   /**
    * The house pilots currently in the world, and the tier each drives at. ONE
-   * marker for "this player is a bot" (the Vale Cup's `botPids` with the tier
-   * carried alongside, so no second structure has to be kept in step), read by
+   * marker for "this player is a bot" (a bot set with the tier carried
+   * alongside, so no second structure has to be kept in step), read by
    * the bot module to steer and reap them, by `racerInfo` to label the
    * opponent, and by every social surface that must exclude them.
    */
@@ -1392,14 +1392,14 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // counts (see onRallyRaceEndForDeeds). The practice gate matters here too,
   // independently of that call: without it a private practice win would
   // permanently inflate the persisted meter and unlock the win deeds at the
-  // next full deeds pass, the same bug class the Vale Cup's `rated` gate on
-  // `applyStanding` exists to prevent.
+  // next full deeds pass, the same bug class the retired Vale Cup's `rated`
+  // gate on `applyStanding` existed to prevent.
   //
   // Deliberately NOT excluded: a QUEUED heat backfilled with house pilots. A
   // human who wins a bot-backfilled public race still banks the win and the
-  // deed credit, unlike the Vale Cup's bot-backfilled-bout exclusion, because
-  // house pilots ARE the ordinary field here (every queued heat seats three
-  // of them until the grid fills with humans), not a friendly-only mode.
+  // deed credit, unlike the retired Vale Cup's bot-backfilled-bout exclusion,
+  // because house pilots ARE the ordinary field here (every queued heat seats
+  // three of them until the grid fills with humans), not a friendly-only mode.
   if (match.voided) return;
   if (
     match.practice === null &&

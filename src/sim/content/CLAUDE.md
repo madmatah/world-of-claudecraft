@@ -99,7 +99,7 @@ you cannot infer from the file alone.
   `kind:'weapon'` item in the merged `ITEMS` table must classify, guarded by
   `tests/weapon_skins.test.ts`; heroic variants reuse their base row).
 - **Events + world systems:** `augments.ts` (2v2 Fiesta) and `skins.ts` (cosmetic
-  skin events), `vale_cup.ts`, `yumi.ts`, `vehicles.ts` (`VEHICLE_PROFILES`: every
+  skin events), `yumi.ts`, `vehicles.ts` (`VEHICLE_PROFILES`: every
   handling number the driving model reads, one record per drivable machine; the
   model itself is `src/sim/vehicle_motion.ts` and must never hold a number of its
   own), `item_sets.ts` (set bonuses),

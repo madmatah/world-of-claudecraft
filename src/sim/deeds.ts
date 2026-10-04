@@ -2082,8 +2082,7 @@ const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: numbe
  *  racing surface and never traded paint with a rival), took the overall
  *  win, and, if they won, whether that win followed being dead last and
  *  caught by a Ground Blast. Structural rather than the real
- *  `RealmRacersProgress`, so this module never imports `social/realm_racers.ts`
- *  (the Vale Cup sites above use the same shape trick with `CupMatchForDeeds`). */
+ *  `RealmRacersProgress`, so this module never imports `social/realm_racers.ts`. */
 export interface RallyRaceDeedEntry {
   pid: number;
   bot: boolean;

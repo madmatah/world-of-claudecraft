@@ -207,8 +207,8 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
   `readyArenaFighter(..., { clearPrep: true })` site and every call of its
   `resetForArena` wrapper, so every instanced match's seat and end wipes: arena,
   Fiesta, Protect Yumi, Thornhollow Fields, Realm Racers (the Vale Cup's seat and
-  teardown were the fifth until it retired with release/v0.41.0); the three caller
-  sets are pinned in `tests/resurrection.test.ts`).
+  teardown were on this list too until it retired with release/v0.41.0); the three
+  caller sets are pinned in `tests/resurrection.test.ts`).
 - `ride_height.ts`: the waterline ride height slope gating reads for wading and
   swimming bodies (gating on the RAW lakebed height reads an uneven bed as a wall of
   cliffs and sticks waders in shore pockets).

@@ -27044,10 +27044,10 @@
   .rally-standing-you:empty {
     display: none;
   }
-  /* The house-pilot tag: the Vale Cup team sheet's Bot badge (.vcupb-tag.bot,
-   same chip shape and colors) in the rally row's flex cell, so the game keeps
-   ONE AI marker. Collapses when empty, the same contract as the YOU marker;
-   the cell's own gap spaces it, so the vcup margin is dropped. */
+  /* The house-pilot tag: the retired Vale Cup team sheet's Bot badge (same
+   chip shape and colors) in the rally row's flex cell. Collapses when empty,
+   the same contract as the YOU marker; the cell's own gap spaces it, so it
+   carries no margin of its own. */
   .rally-standing-bot {
     flex: 0 0 auto;
     padding: 0 5px;
