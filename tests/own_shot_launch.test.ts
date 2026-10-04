@@ -281,7 +281,10 @@ describe('the own-shot launch is wired behind the local gate', () => {
     const hudTs = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
     const castAt = hudTs.indexOf('castAt: (id, point, barSlot) => {');
     const cast = hudTs.indexOf('this.sim.castAbilityAt(id, point);', castAt);
-    const predict = hudTs.indexOf('predictRallyGroundBlastFire(this, id, point);', castAt);
+    const predict = hudTs.indexOf(
+      'realmRacersHud.predictRallyGroundBlastFire(this, id, point);',
+      castAt,
+    );
     expect(castAt).toBeGreaterThan(0);
     expect(cast).toBeGreaterThan(castAt);
     expect(predict).toBeGreaterThan(cast);

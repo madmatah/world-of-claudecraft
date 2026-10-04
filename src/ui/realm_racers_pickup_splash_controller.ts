@@ -79,7 +79,9 @@ export class RealmRacersPickupSplash {
     }, RALLY_SPLASH_LIFE_MS);
   }
 
-  /** Take it down at once (a race ending under a splash, a locale flip). */
+  /** Take it down at once (a race ending under a splash, a locale flip). The
+   *  splash is a moment of about a second whose label was resolved at show(),
+   *  so rather than re-resolve it mid-flight, Hud's locale fan-out takes it down. */
   clear(): void {
     if (this.timer) {
       this.deps.cancel(this.timer);

@@ -582,15 +582,7 @@ import { parseChatSegments } from './hud/quest/quest_link';
 import { QuestProgressBanner } from './hud/quest/quest_progress_banner';
 import { QuestTrackerController } from './hud/quest/quest_tracker_controller';
 import { QuestLogWindow } from './hud/quest/questlog_window';
-import {
-  applyRealmRacersEventPresentation,
-  predictRallyGroundBlastFire,
-  predictRallySlickDrop,
-  rallyAimCaster,
-  realmRacersSplashDeps,
-  realmRacersUiDeps,
-  refuseLockedAbility,
-} from './hud/realm_racers';
+import * as realmRacersHud from './hud/realm_racers';
 import { paintFactionTierCelebrations } from './hud/reputation/faction_tier_celebration_painter';
 import { advanceFactionTierObservation } from './hud/reputation/faction_tier_celebration_view';
 import { RiftMapPainter } from './hud/rift';
@@ -819,7 +811,6 @@ import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view'
 import { RAID_MARKER_LABEL_KEYS, raidMarkerDisplayName } from './raid_marker_labels_view';
 import { presentRealmBuilder, RealmBuilderPopup } from './realm_builder_popup';
 import { RealmRacersUi } from './realm_racers';
-import { RealmRacersPickupSplash } from './realm_racers_pickup_splash_controller';
 import { RecipePinStore } from './recipe_pins_store';
 import { RecipeTrackerPainter } from './recipe_tracker_painter';
 import {
@@ -1385,7 +1376,7 @@ export class Hud {
     return this.sim.vehicleSession ? this.vehicleControls.aim : this.playerGroundAim;
   }
   private readonly playerGroundAim = new GroundAimController({
-    player: () => rallyAimCaster(this),
+    player: () => realmRacersHud.rallyAimCaster(this),
     resolveAbility: (id) => resolveGroundAimAbility(this.sim.known, id),
     seedTargetPoint: () =>
       selectedGroundAimPoint(
@@ -1401,7 +1392,7 @@ export class Hud {
       // mouse click, mobile tap), so the button flash lives here, once, instead
       // of only on the keyboard path.
       if (barSlot !== null) this.flashActionSlot(barSlot);
-      predictRallyGroundBlastFire(this, id, point);
+      realmRacersHud.predictRallyGroundBlastFire(this, id, point);
     },
     clearReticle: () => this.renderer.setGroundAimReticle(null),
     projectPlacement: (id, point) => this.sim.groundAimPlacementPreview(id, point),
@@ -5611,8 +5602,8 @@ export class Hud {
     root: () => $('#bg-proposal-popup'),
     world: () => this.sim,
   });
-  private readonly realmRacersSplash = new RealmRacersPickupSplash(realmRacersSplashDeps(this));
-  private readonly realmRacersUi = new RealmRacersUi(realmRacersUiDeps(this));
+  private readonly realmRacersSplash = realmRacersHud.createRealmRacersSplash(this);
+  private readonly realmRacersUi = new RealmRacersUi(realmRacersHud.realmRacersUiDeps(this));
   readonly lobbyHold = this.realmRacersUi.lobbyHold;
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
@@ -7011,9 +7002,6 @@ export class Hud {
     // Same text-independent-sig contract for the Vale Cup surfaces: clear the
     // sigs so the next render/update rebuilds with fresh t().
     this.realmRacersUi.relocalize();
-    // The pickup splash is a moment of about a second whose label was resolved
-    // at show(); rather than re-resolve it mid-flight, a locale flip takes it
-    // down (its clear() documents exactly this caller).
     this.realmRacersSplash.clear();
     this.questDialog.relocalize();
     // Same text-independent-sig contract, one surface at a time (#2529). Every
@@ -7457,9 +7445,7 @@ export class Hud {
     resolved: ResolvedAbility,
     slotForAim: number,
   ): void {
-    // An activity kit's own refusal comes first: a spent race weapon must say so
-    // rather than opening an aiming mode the cast will refuse.
-    if (refuseLockedAbility(this, abilityId, slotForAim)) return;
+    if (realmRacersHud.refuseLockedAbility(this, abilityId, slotForAim)) return;
     const cdReady =
       abilityId === 'clockwork_shock_bomb'
         ? (this.sim.player.cooldowns.get(abilityId) ?? 0) <= 0
@@ -7518,7 +7504,7 @@ export class Hud {
             this.sim.castAbilityOn(action.id, mouseoverPid);
           } else {
             this.sim.castAbility(action.id);
-            predictRallySlickDrop(this, action.id);
+            realmRacersHud.predictRallySlickDrop(this, action.id);
           }
           // Optional QoL: also engage auto-attack when the ability is an offensive
           // attack, so white swings start without a separate Attack press. Gated on
@@ -8815,7 +8801,6 @@ export class Hud {
     this.mountRaceStrip.repaintIfChanged();
     this.mountRaceControls.update();
     this.vehicleControls.update();
-    // The race strip, lobby curtain and countdown audio, every frame (elided writers).
     this.realmRacersUi.update();
     this.lockpickController.repaintIfChanged();
     this.tutorial.update(sim, this.renderer, this.keybinds);
@@ -11177,7 +11162,7 @@ export class Hud {
       this.meters.onEvent(ev);
       if (this.isNythraxisEvent(ev)) this.lastNythraxisCombatEventAt = performance.now();
       if (applyQuestEventPresentation(this, ev)) continue;
-      if (applyRealmRacersEventPresentation(this, ev)) continue;
+      if (realmRacersHud.applyRealmRacersEventPresentation(this, ev)) continue;
       if (ev.type === 'worldQuestInvestigationDialogue') this.questDialog.open(ev.targetId);
       if (ev.type === 'worldQuestWeeklyOpen') this.weeklyQuestsWindow.open();
       switch (ev.type) {

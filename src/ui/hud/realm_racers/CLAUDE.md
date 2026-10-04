@@ -5,8 +5,8 @@ Also here, extracted from `hud.ts` and taking the Hud untyped (the
 `tests/realm_racers_ui.test.ts`): `realm_racers_event_router.ts` (the rally
 sim events' log lines, banners, pickup note and cues), `realm_racers_cast_feedback.ts`
 (the aim caster pose, the instant local cues of a shot or oil drop, the refusal of a
-held kit ability) and `realm_racers_hud_parts.ts` (the deps Hud builds the pickup splash
-and `RealmRacersUi` from).
+held kit ability) and `realm_racers_hud_parts.ts` (the pickup splash Hud owns, built by
+`createRealmRacersSplash`, and the deps Hud builds `RealmRacersUi` from).
 
 `realm_racers_race_warm.ts` (`RealmRacersRaceWarm`) warms what a race first reaches for
 at speed, on the race GPU preparation's own commitment trigger

@@ -270,6 +270,8 @@ export class RealmRacersUi {
     return !(this.deps.connectionDropped ?? connectionDropActive)();
   }
 
+  /** The race strip, lobby curtain and countdown audio; Hud calls it every
+   *  painted frame, and every write rides the elided writers. */
   update(): void {
     const world = this.deps.world();
     const info = world.realmRacersInfo;

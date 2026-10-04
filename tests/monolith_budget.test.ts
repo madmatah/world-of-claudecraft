@@ -550,7 +550,10 @@ const MONOLITHS: MonolithRow[] = [
     // parent pins for the record, the release 18093 and the branch 18127; the
     // two sides compose to 18137 by wc -l on the merged tree (after biome), +44
     // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    ceiling: 18137,
+    // LOWERED 18137 -> 18122: the Realm Racers helpers come in through one namespace
+    // import, the splash through a factory, and the notes on the rally helper calls
+    // moved into those helpers' docs. Exact count, zero slack.
+    ceiling: 18122,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
   },
   {

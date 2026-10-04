@@ -91,6 +91,8 @@ export function predictRallySlickDrop(hud: object, id: string): void {
 /**
  * An activity that lent this kit is refusing the ability: never open an aiming
  * mode the cast would then reject. Returns true when the press is spent here.
+ * Hud asks it first on a ground-aim press, so a spent race weapon says so
+ * rather than opening an aiming mode the cast will refuse.
  *
  * The two reasons come from the SAME predicate the sim refuses on, so the
  * affordance and the authority cannot disagree. Running out of ammunition

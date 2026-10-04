@@ -10,8 +10,8 @@ import { prewarmIconCache } from '../../icon_prewarm';
 import { iconDataUrl } from '../../icons';
 import type { PainterHostWriters } from '../../painter_host';
 import type { RealmRacersDeps } from '../../realm_racers';
-import type {
-  RallyPickupSplashDeps,
+import {
+  type RallyPickupSplashDeps,
   RealmRacersPickupSplash,
 } from '../../realm_racers_pickup_splash_controller';
 import { RALLY_SPLASH_ICON_SIZE } from '../../realm_racers_pickup_splash_view';
@@ -56,6 +56,11 @@ export function realmRacersSplashDeps(hud: object): RallyPickupSplashDeps {
     schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
     cancel: (handle) => window.clearTimeout(handle),
   };
+}
+
+/** The pickup splash Hud owns, built from its own deps (one field initializer). */
+export function createRealmRacersSplash(hud: object): RealmRacersPickupSplash {
+  return new RealmRacersPickupSplash(realmRacersSplashDeps(hud));
 }
 
 export function realmRacersUiDeps(hud: object): RealmRacersDeps {

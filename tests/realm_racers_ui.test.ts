@@ -1675,24 +1675,24 @@ describe('the Realm Racers HUD host seams', () => {
       'private combatLog(text: string, color: string = HUD_LOG.PLAIN): void {',
       'showSelfNote(text: string): void {',
       'showError(text: string, logChannel = ERROR_LOG_CHAN, announceWhenFiltered = false): void {',
-      'private readonly realmRacersSplash = new RealmRacersPickupSplash(realmRacersSplashDeps(this));',
-      'private readonly realmRacersUi = new RealmRacersUi(realmRacersUiDeps(this));',
-      'player: () => rallyAimCaster(this),',
-      'predictRallyGroundBlastFire(this, id, point);',
-      'predictRallySlickDrop(this, action.id);',
-      'if (refuseLockedAbility(this, abilityId, slotForAim)) return;',
-      'if (applyRealmRacersEventPresentation(this, ev)) continue;',
+      'private readonly realmRacersSplash = realmRacersHud.createRealmRacersSplash(this);',
+      'private readonly realmRacersUi = new RealmRacersUi(realmRacersHud.realmRacersUiDeps(this));',
+      'player: () => realmRacersHud.rallyAimCaster(this),',
+      'realmRacersHud.predictRallyGroundBlastFire(this, id, point);',
+      'realmRacersHud.predictRallySlickDrop(this, action.id);',
+      'if (realmRacersHud.refuseLockedAbility(this, abilityId, slotForAim)) return;',
+      'if (realmRacersHud.applyRealmRacersEventPresentation(this, ev)) continue;',
     ]) {
       expect(hud, anchor).toContain(anchor);
     }
     expect(hud).toMatch(/\n {2}log\(\n/);
     expect(hud).toMatch(/\n {2}showBanner\(\n/);
     expect(hud.indexOf('private readonly writerFacet = makeWriterFacet(')).toBeLessThan(
-      hud.indexOf('private readonly realmRacersSplash = new RealmRacersPickupSplash('),
+      hud.indexOf('private readonly realmRacersSplash = realmRacersHud.createRealmRacersSplash('),
     );
     expect(hud).not.toContain("case 'realmRacersResult':");
     // The oil cue reads its gate AFTER the cast commits (see the helper's comment).
-    const slick = hud.indexOf('predictRallySlickDrop(this, action.id);');
+    const slick = hud.indexOf('realmRacersHud.predictRallySlickDrop(this, action.id);');
     const cast = hud.lastIndexOf('this.sim.castAbility(action.id);', slick);
     expect(cast).toBeGreaterThan(0);
     expect(hud.slice(cast, slick)).not.toContain('}');
