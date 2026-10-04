@@ -1969,7 +1969,10 @@ const MONOLITHS: MonolithRow[] = [
     // parent pins for the record, the release 5356 and the branch 5405; the
     // two sides compose to 5407 by wc -l on the merged tree (after biome), +51
     // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    ceiling: 5407,
+    // LOWERED 5407 -> 5360: the Realm Racers mirrors, command sends, kit decode and
+    // discontinuity latch moved to src/net/realm_racers_wire_state.ts, a link in
+    // ClientWorld's class chain (the QuestWorldWireState pattern). Exact count.
+    ceiling: 5360,
     seam: 'a src/net sibling module (the refactor/net-online split is the template)',
   },
   {

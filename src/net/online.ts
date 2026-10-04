@@ -162,8 +162,6 @@ import {
   type PlayerProfessionsView,
   type PresenceStatus,
   type RaidLockout,
-  type RallyDriverTier,
-  type RealmRacersInfo,
   type RecipeDef,
   type ReliquaryCatalogCompletion,
   type ReliquaryFirstFindView,
@@ -240,7 +238,7 @@ import {
   trackPendingInputSequence,
   trackPendingInputSequenceRange,
 } from './movement_frame_v2_wire';
-import { applyReconSelfWire, ReconWireState } from './movement_reconciliation_wire';
+import { applyReconSelfWire } from './movement_reconciliation_wire';
 import { createNativeAttestationProof } from './native_attestation';
 import { createNetPipelineStats, type NetPipelineStats } from './net_pipeline_stats';
 import { perfectingCommand } from './perfecting_command';
@@ -252,16 +250,8 @@ import {
 import { decodePlayerIdentityWire } from './player_identity_wire';
 import { applyProfessionsSelfMirror } from './professions_self_mirror';
 import { optimisticQuestState } from './quest_state_optimistic';
-import { decodeDriveWire } from './realm_racers_drive_wire';
-import {
-  applyRealmRacersSelfWire,
-  decodeRealmRacersKit,
-  idleRealmRacersInfo,
-  type RealmRacersKitMirror,
-  realmRacersKnownOr,
-} from './realm_racers_self_wire';
+import { decodeDriveWire, RealmRacersWireState } from './realm_racers_wire_state';
 import { isTransientReconnectRejection, isTransientTimeoutRejection } from './reconnect_policy';
-import { SelfPositionDiscontinuityLatch } from './self_position_discontinuity';
 import { isInputSendBackpressured } from './send_backpressure';
 import { snapshotAlpha } from './snapshot_alpha';
 import {
@@ -1187,7 +1177,7 @@ const INCOMPATIBLE_WORLD_VERSION_ERROR = ONLINE_WORLD_INCOMPATIBLE_MESSAGE;
 // stealthed unit at that range when far out-leveling it.
 const DESPAWN_GRACE_MIN_DIST_SQ = 70 * 70;
 
-export class ClientWorld extends ReconWireState implements IWorld {
+export class ClientWorld extends RealmRacersWireState implements IWorld {
   // --- IWorldEntityRoster: roster + player reads, mirrored from snapshots. The
   // `player` getter lives below the ctor (it reads `entities`/`playerId`). `known`
   // is IWorldCombat-owned but rides here as a self-wire mirror field with the rest
@@ -1276,9 +1266,6 @@ export class ClientWorld extends ReconWireState implements IWorld {
   // --- IWorldCardMinigame: Card Duel queue/match state, mirrored from the
   // snapshot self (`s.cardDuel`, delta-omitted). ---
   cardMinigameInfo: CardMinigameInfo = { queued: false, available: true, match: null };
-  realmRacersInfo: RealmRacersInfo = idleRealmRacersInfo();
-  realmRacersTrackside: import('../world_api/realm_racers').RealmRacersLaneView | null = null;
-  private realmRacersKit: RealmRacersKitMirror | null = null;
   // --- IWorldSocialGraph: persistent friends/blocks/guild, set ONLY by the
   // `social`/`socialpos` frames (there is no `s.social` snapshot field). ---
   socialInfo: SocialInfo | null = null;
@@ -1675,12 +1662,6 @@ export class ClientWorld extends ReconWireState implements IWorld {
   private readonly base: string;
   private readonly clientSeed: string;
   private eventQueue: SimEvent[] = [];
-  // Created on first use, so a prototype-built test instance latches too.
-  private selfDiscontinuityLatch?: SelfPositionDiscontinuityLatch;
-  private get selfDiscontinuity(): SelfPositionDiscontinuityLatch {
-    this.selfDiscontinuityLatch ??= new SelfPositionDiscontinuityLatch();
-    return this.selfDiscontinuityLatch;
-  }
   activeFrostRings: ActiveFrostRing[] = [];
   activeIgnivarMeteors: ActiveIgnivarMeteorWarning[] = [];
   activeNythraxisGraveEruptions: ActiveNythraxisGraveEruption[] = [];
@@ -2008,11 +1989,6 @@ export class ClientWorld extends ReconWireState implements IWorld {
     return out;
   }
 
-  /** Consume one recovery snap only after its following authoritative snapshot. */
-  consumeSelfPositionDiscontinuity(): boolean {
-    return this.selfDiscontinuity.consume();
-  }
-
   setMoveInput(input: unknown, facing?: unknown): void {
     Object.assign(this.moveInput, sanitizeMoveInput(input));
     if (facing !== undefined) this.setMouselookFacing(facing);
@@ -2225,7 +2201,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
   // makes "every ClientWorld send is in the server's dispatch-set" a compile-time
   // guarantee rather than a runtime hope: a send of an unknown or dispatch-only
   // token fails `tsc`. The raw escape hatch (devCmd) stays untyped on purpose.
-  private cmd(payload: { cmd: ClientCommand } & Record<string, unknown>): void {
+  protected cmd(payload: { cmd: ClientCommand } & Record<string, unknown>): void {
     if (typeof this.spectating === 'string' && payload.cmd !== 'chat') return;
     this.rawCmd(payload);
   }
@@ -3260,8 +3236,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
       this.talentMods = presentation.mods;
       this.talentSpec = presentation.mods.spec;
       this.talentRole = presentation.mods.role;
-      this.realmRacersKit = decodeRealmRacersKit(this.realmRacersKit, s.rrkit);
-      this.known = realmRacersKnownOr(this.realmRacersKit, e, presentation.known);
+      this.known = this.applyRealmRacersSelf(s, e, presentation.known);
       if (this.spectateExitPending) {
         this.spectateExitPending = false;
         this.spectating = null; // own presentation rebuilt: the view is ours again
@@ -3277,7 +3252,6 @@ export class ClientWorld extends ReconWireState implements IWorld {
       // market / mail / world PvP self-decode (W0a-covered, delta-omitted): the
       // sibling module owns the cohort and its adopt-by-reference contract. ---
       applySocialSelfWire(this, s);
-      applyRealmRacersSelfWire(this, s);
       // The four owner-only bank/vault self keys (`bank`, `vault`, `cvault`,
       // `bpsl`): all delta-omitted, strictly decoded and applied by the sibling
       // module, where the delta contract, the by-reference adoption rationale,
@@ -4384,27 +4358,6 @@ export class ClientWorld extends ReconWireState implements IWorld {
   }
   forfeitCardDuel(): void {
     this.cmd({ cmd: 'card_forfeit' });
-  }
-  joinRealmRacersQueue(): void {
-    this.cmd({ cmd: 'realm_racers_join' });
-  }
-  leaveRealmRacersQueue(): void {
-    this.cmd({ cmd: 'realm_racers_leave' });
-  }
-  forfeitRealmRacers(): void {
-    this.cmd({ cmd: 'realm_racers_forfeit' });
-  }
-  resetRealmRacersPosition(): void {
-    this.cmd({ cmd: 'realm_racers_reset' });
-  }
-  // Practice: the server seats the sender against a house pilot on the ONE
-  // circuit immediately. Same command online and off, and the server re-checks
-  // the tier and the circuit before seating anyone.
-  startRealmRacersPractice(tier: RallyDriverTier): void {
-    this.cmd({ cmd: 'realm_racers_practice', tier });
-  }
-  readyRealmRacers(): void {
-    this.cmd({ cmd: 'realm_racers_ready' });
   }
   // --- IWorldSocialGraph: persistent social command sends (resolved server-side by
   // character name) + the REST character typeahead. socialInfo arrives via the

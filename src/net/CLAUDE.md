@@ -115,7 +115,8 @@ See `server/CLAUDE.md` for server conventions; read `server/game.ts` directly fo
   `sendInput`: an unconditional interval timer plus a changed-only gated flush; the
   cadence constants and gate predicate live in `input_send_cadence.ts`, kept in
   lockstep with the server contract by `tests/input_cadence_model.test.ts`), `cmd`
-  (every IWorld action via the private `cmd()` helper).
+  (every IWorld action via the `cmd()` helper; protected only so the Realm Racers
+  link of ClientWorld's class chain, `realm_racers_wire_state.ts`, sends through it).
 - **Snapshot decode** (`applySnapshot`): `snap.ents` (others) + `snap.self`
   (extended state) go through `applyWire`; `snap.keep` = ids alive-but-unchanged,
   protected from the prune at the end. Encoder is server `wireEntity`; fields are
