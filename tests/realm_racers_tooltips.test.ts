@@ -145,13 +145,13 @@ describe('Realm Racers ability tooltips', () => {
     const longest = aimed({ x: 0, z: 1000 }).flightTicks / TICK_RATE;
     const text = rallyTooltip(REALM_RACERS_ABILITY_ID);
     expect(text).toBe(
-      `Fire a shell at a spot on the ground at least ${shown(GROUND_BLAST_MIN_RANGE)} yd ahead and within ${shown(
+      `Fire a shell at a spot on the ground at least ${shown(GROUND_BLAST_MIN_RANGE)} yards ahead and within ${shown(
         (GROUND_BLAST_AIM_CONE_RAD * 180) / Math.PI,
       )} degrees of your nose. It lands ${shown(shortest)} to ${shown(longest)} sec later. Every rival within ${shown(
         GROUND_BLAST_RADIUS,
-      )} yd of the landing is thrown up and away, at full force within ${shown(
+      )} yards of the landing is thrown up and away, at full force within ${shown(
         GROUND_BLAST_CORE_RADIUS,
-      )} yd and weaker toward the edge. They also lose ${shown(
+      )} yards and weaker toward the edge. They also lose ${shown(
         (1 - GROUND_BLAST_SHOCK_GRIP) * 100,
       )}% of their grip for ${shown(GROUND_BLAST_SHOCK_TICKS / TICK_RATE)} sec and are slowed by ${shown(
         (1 - GROUND_BLAST_CONTROL_SPEED_MULT) * 100,
@@ -194,7 +194,7 @@ describe('Realm Racers ability tooltips', () => {
 
     const text = rallyTooltip(REALM_RACERS_NITRO_ABILITY_ID);
     expect(text).toBe(
-      `Burn your nitro for an instant ${shown(kick)} yd/s push forward. For ${shown(
+      `Burn your nitro for an instant ${shown(kick)} yards per second push forward. For ${shown(
         burstSeconds,
       )} sec, your top speed is raised ${shown(raisedPct)}% above your machine's normal cap.`,
     );

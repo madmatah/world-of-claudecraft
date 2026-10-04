@@ -162,14 +162,14 @@ const classAbilityNamesEn = {
       [
         'rally_ground_blast',
         'Ground Blast',
-        'Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit.',
+        'Fire a shell at a spot on the ground at least {minRange} yards ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yards of the landing is thrown up and away, at full force within {coreRadius} yards and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit.',
       ],
       // The two held pickup effects (22b): a box puts one of these on the bar
       // with a single charge, and the pilot spends it when it suits them.
       [
         'rally_nitro',
         'Nitro',
-        "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap.",
+        "Burn your nitro for an instant {kick} yards per second push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap.",
       ],
       [
         'rally_oil_slick',

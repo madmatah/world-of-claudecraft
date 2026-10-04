@@ -13236,11 +13236,11 @@ export const id_ID: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "Ground Blast",
-        "description": "Fire a shell at a spot on the ground at least {minRange} yd ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yd of the landing is thrown up and away, at full force within {coreRadius} yd and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
+        "description": "Fire a shell at a spot on the ground at least {minRange} yards ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yards of the landing is thrown up and away, at full force within {coreRadius} yards and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
       },
       "rally_nitro": {
         "name": "Nitro",
-        "description": "Burn your nitro for an instant {kick} yd/s push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
+        "description": "Burn your nitro for an instant {kick} yards per second push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
       },
       "rally_oil_slick": {
         "name": "Oil Slick",

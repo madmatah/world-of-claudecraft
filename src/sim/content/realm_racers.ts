@@ -124,7 +124,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     // The radius is on the effect so the aiming circle, the marker during the
     // flight and the blast are all one number a player can trust.
     effects: [{ type: 'realmRacersGroundBlast', radius: GROUND_BLAST_RADIUS }],
-    description: `Fire a shell at a spot on the ground at least ${BLAST_TEXT.minRange} yd ahead and within ${BLAST_TEXT.coneDegrees} degrees of your nose. It lands ${BLAST_TEXT.minFlight} to ${BLAST_TEXT.maxFlight} sec later. Every rival within ${BLAST_TEXT.radius} yd of the landing is thrown up and away, at full force within ${BLAST_TEXT.coreRadius} yd and weaker toward the edge. They also lose ${BLAST_TEXT.gripPct}% of their grip for ${BLAST_TEXT.gripSeconds} sec and are slowed by ${BLAST_TEXT.slowPct}% for ${BLAST_TEXT.slowSeconds} sec. A Racing Ward absorbs the hit.`,
+    description: `Fire a shell at a spot on the ground at least ${BLAST_TEXT.minRange} yards ahead and within ${BLAST_TEXT.coneDegrees} degrees of your nose. It lands ${BLAST_TEXT.minFlight} to ${BLAST_TEXT.maxFlight} sec later. Every rival within ${BLAST_TEXT.radius} yards of the landing is thrown up and away, at full force within ${BLAST_TEXT.coreRadius} yards and weaker toward the edge. They also lose ${BLAST_TEXT.gripPct}% of their grip for ${BLAST_TEXT.gripSeconds} sec and are slowed by ${BLAST_TEXT.slowPct}% for ${BLAST_TEXT.slowSeconds} sec. A Racing Ward absorbs the hit.`,
   },
   // Both held effects are SELF casts with no cooldown and no cost: the whole
   // limit is the single charge the pickup granted, so the decision a pilot makes
@@ -145,7 +145,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     offGcd: true,
     usableWhileMounted: true,
     effects: [{ type: 'realmRacersPickupEffect', effect: 'nitro' }],
-    description: `Burn your nitro for an instant ${NITRO_TEXT.kick} yd/s push forward. For ${NITRO_TEXT.seconds} sec, your top speed is raised ${NITRO_TEXT.speedPct}% above your machine's normal cap.`,
+    description: `Burn your nitro for an instant ${NITRO_TEXT.kick} yards per second push forward. For ${NITRO_TEXT.seconds} sec, your top speed is raised ${NITRO_TEXT.speedPct}% above your machine's normal cap.`,
   },
   [REALM_RACERS_SLICK_ABILITY_ID]: {
     id: REALM_RACERS_SLICK_ABILITY_ID,
