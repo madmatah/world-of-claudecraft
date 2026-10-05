@@ -75,11 +75,12 @@ export interface RemoteVehiclePose {
 }
 
 /**
- * Projection horizon cap. The age of a freshly arrived pose is about half the
- * echo (~60 ms at 120 RTT) and grows by one snapshot interval until the next
- * arrival, so ordinary racing sits well under this. The cap only bites on a
- * broadcast stall, where projecting further would run the machine through a
- * corner it never took; past it the target holds and the glide settles.
+ * Projection horizon cap. The arrival age of a pose starts at zero when it
+ * lands (plus half the uplink echo on a v1 frame) and grows by one snapshot
+ * interval until the next arrival, so ordinary racing sits well under this.
+ * The cap only bites on a broadcast stall, where projecting further would run
+ * the machine through a corner it never took; past it the target holds and the
+ * glide settles.
  *
  * In the local kart's time frame (`remoteRacerHorizon`) this stays the budget
  * for the pose's OWN age, and the self frame's lead rides on top of it: the

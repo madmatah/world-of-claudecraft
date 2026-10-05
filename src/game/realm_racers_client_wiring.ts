@@ -6,10 +6,10 @@
 // Behind the wheel the heading belongs to the vehicle kernel on BOTH sides: the
 // server refuses a streamed facing from a driver (it would overwrite the
 // steering it just integrated), so the client stops claiming the channel, keeps
-// its turn keys on the wire as steering input, and lets the self extrapolator's
-// predicted heading pose the model. The offline host honors the same rule: a
-// pilot's heading is STEERED (the movement kernel integrates it from the
-// steering input), so the camera never claims it while driving.
+// its turn keys on the wire as steering input, and lets the predicted kart's
+// heading (the self drive view) pose the model. The offline host honors the
+// same rule: a pilot's heading is STEERED (the movement kernel integrates it
+// from the steering input), so the camera never claims it while driving.
 
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import type { Entity } from '../sim/types';
