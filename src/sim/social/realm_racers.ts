@@ -1043,6 +1043,10 @@ function standardizeRacer(
   e.drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
   // After the reset, never before: it clears the charge pools outright.
   ctx.resetForArena(e);
+  // The clean slate stripped every stealth aura, but the cached flag would
+  // only follow at the next tick's aura pass, and the server's interest pin
+  // streams a seated racer past the stealth check from this pass on.
+  e.stealthed = e.auras.some((aura) => aura.kind === 'stealth');
   publishWeaponCharges(e, held);
 }
 

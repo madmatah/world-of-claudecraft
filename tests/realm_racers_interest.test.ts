@@ -5,6 +5,7 @@ import {
 } from '../server/realm_racers_interest';
 import { Sim } from '../src/sim/sim';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
+import { xpForLevel } from '../src/sim/types';
 
 describe('Realm Racers match interest pins', () => {
   it('selects every other participant in frozen grid order', () => {
@@ -46,5 +47,35 @@ describe('Realm Racers match interest pins', () => {
     // (no longer seated) resolves no match at all.
     expect(realmRacersInterestParticipantIds(sim.ctx, a, a)).not.toContain(b);
     expect(realmRacersInterestParticipantIds(sim.ctx, b, b)).toEqual([]);
+  });
+
+  it('never pins a stealthed body: a seated racer cannot be stealthed', () => {
+    // The pin streams every seated rival to the viewer WITHOUT the server's
+    // canObserveEntity stealth check, which is sound only because no seated
+    // pilot can carry stealth: the seat strips it, and the race kit holds none.
+    const sim = new Sim({ seed: 42, playerClass: 'warrior', noPlayer: true });
+    const pids = [
+      sim.addPlayer('rogue', 'Cass'),
+      sim.addPlayer('warrior', 'Aster'),
+      sim.addPlayer('mage', 'Briar'),
+      sim.addPlayer('priest', 'Dell'),
+    ];
+    const rogue = pids[0];
+    const meta = sim.players.get(rogue);
+    const body = sim.entities.get(rogue);
+    if (!meta || !body) throw new Error('missing rogue');
+    sim.grantXp(xpForLevel(1) + xpForLevel(2) + 10, meta);
+    sim.castAbility('stealth', rogue);
+    expect(body.stealthed).toBe(true);
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
+    sim.tick();
+    expect(sim.realmRacers.match?.pids).toContain(rogue);
+    expect(realmRacersInterestParticipantIds(sim.ctx, pids[1], pids[1])).toContain(rogue);
+    expect(body.stealthed).toBe(false);
+    expect(meta.known.some((known) => known.def.id === 'stealth')).toBe(false);
+    sim.castAbility('stealth', rogue);
+    sim.tick();
+    expect(body.stealthed).toBe(false);
+    expect(body.auras.some((aura) => aura.kind === 'stealth')).toBe(false);
   });
 });

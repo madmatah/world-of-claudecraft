@@ -20,7 +20,9 @@ export function otherRealmRacersParticipantIds(
   return pins;
 }
 
-/** Match-scoped interest pins for a player or the player observed by a spectator. */
+/** Match-scoped interest pins for a player or the player observed by a spectator.
+ *  The snapshot loop streams a pin past canObserveEntity, which is sound only
+ *  because a seated racer can never be stealthed (pinned in the interest test). */
 export function realmRacersInterestParticipantIds(
   ctx: SimContext,
   anchorPid: number,
