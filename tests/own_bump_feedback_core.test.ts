@@ -20,6 +20,11 @@ const ghostAura = {
 } as Aura;
 const machine = (id: number, ghost = false): Entity =>
   ({ id, auras: ghost ? [ghostAura] : [] }) as unknown as Entity;
+const row = (pid: number, out: 'finished' | 'retired' | null = null) => ({
+  pid,
+  finished: out === 'finished',
+  retired: out === 'retired',
+});
 
 describe('own bump feedback', () => {
   it('measures closing speed along the separation, approach only', () => {
@@ -85,7 +90,7 @@ describe('own bump feedback', () => {
   });
 
   it('arms a local bang only for a predicted drive against a racing rival, never a ghost', () => {
-    const race = { phase: 'racing', participantIds: [1, 2] };
+    const race = { phase: 'racing', standings: [row(1), row(2)] };
     expect(localBumpArmed('predicted', race, machine(2), machine(1))).toBe(true);
     // The server skips every contact with a recovery ghost, on either side.
     expect(localBumpArmed('predicted', race, machine(2, true), machine(1))).toBe(false);
@@ -97,6 +102,22 @@ describe('own bump feedback', () => {
     ).toBe(false);
     expect(localBumpArmed('predicted', race, machine(3), machine(1))).toBe(false);
     expect(localBumpArmed('predicted', null, machine(2), machine(1))).toBe(false);
+  });
+
+  it('never arms against a machine out of the race, a finisher or a quitter, on either side', () => {
+    // The server pairs only machines still racing: a finisher drives on through
+    // the chase window and a quitter sits parked for its tableau, neither solid.
+    const race = (rival: 'finished' | 'retired' | null, self: 'finished' | 'retired' | null) => ({
+      phase: 'racing',
+      standings: [row(1, self), row(2, rival)],
+    });
+    expect(localBumpArmed('predicted', race(null, null), machine(2), machine(1))).toBe(true);
+    expect(localBumpArmed('predicted', race('finished', null), machine(2), machine(1))).toBe(false);
+    expect(localBumpArmed('predicted', race('retired', null), machine(2), machine(1))).toBe(false);
+    // The viewer's own phase stays racing after they cross the line while the
+    // field drives on, so only their standings row says they are out.
+    expect(localBumpArmed('predicted', race(null, 'finished'), machine(2), machine(1))).toBe(false);
+    expect(localBumpArmed('predicted', race(null, 'retired'), machine(2), machine(1))).toBe(false);
   });
 
   it('is the gate the renderer bangs through, with the rival first and the self second', () => {

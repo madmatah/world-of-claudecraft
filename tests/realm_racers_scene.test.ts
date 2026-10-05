@@ -126,7 +126,11 @@ describe('the rally scene', () => {
       netUpdatedAt: 1000,
       auras: [],
     };
-    const race = { phase: 'racing', participantIds: [SELF, RIVAL], circuitId: 'c' };
+    const race = {
+      phase: 'racing',
+      circuitId: 'c',
+      standings: [SELF, RIVAL].map((pid) => ({ pid, finished: false, retired: false })),
+    };
     const host = sceneHost({
       sim: {
         playerId: SELF,

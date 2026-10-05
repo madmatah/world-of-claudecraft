@@ -427,15 +427,16 @@ export class RealmRacersScene {
       // seen touch (throttled per rival) and let the event's duplicate be
       // suppressed in onEvent; the physics still arrives with the
       // snapshots, untouched. Gated by localBumpArmed: a predicted self
-      // drive, a rival of the LOCAL race in its racing phase (the sim only
-      // resolves contacts over the match's own grid, so a paddock or
-      // post-tableau touch must never bang), and neither machine a recovery
-      // ghost, which the server never collides. The overlap test is the
-      // plain instantaneous circle, not the sim's swept same-tick test, on
-      // purpose: a fast crossing the circle misses simply plays through
-      // the unsuppressed server event. The ghost read is the entity aura
-      // both worlds carry (realm_racers_ghost.ts), so a machine a rival
-      // passes through never bangs on either side of the wire.
+      // drive, the LOCAL race in its racing phase with both machines on its
+      // grid and still racing (the sim only resolves contacts over the
+      // match's own grid, and a finisher or a quitter is no longer solid),
+      // and neither machine a recovery ghost, which the server never
+      // collides. The overlap test is the plain instantaneous circle, not
+      // the sim's swept same-tick test, on purpose: a fast crossing the
+      // circle misses simply plays through the unsuppressed server event.
+      // The ghost read is the entity aura both worlds carry
+      // (realm_racers_ghost.ts), so a machine a rival passes through never
+      // bangs on either side of the wire.
       const race = h.sim.realmRacersInfo.match;
       if (p.drive && localBumpArmed(h.selfRender.drive.source, race, e, p)) {
         const reach =

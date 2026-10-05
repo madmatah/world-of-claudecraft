@@ -57,19 +57,37 @@ export function bumpClosingSpeed(dx: number, dz: number, relVx: number, relVz: n
   return Math.max(0, (relVx * dx + relVz * dz) / dist);
 }
 
+/** The slice of a standings row the bang gate reads. */
+export interface LocalBumpRacer {
+  pid: number;
+  finished: boolean;
+  retired: boolean;
+}
+
 /** The slice of the local race readout the bang gate reads. */
 export interface LocalBumpRace {
   phase: string;
-  participantIds: readonly number[];
+  standings: readonly LocalBumpRacer[];
+}
+
+/** Is this pilot on the local race's grid and still racing? A pilot with no
+ *  row is no machine of this race, like a pilot the sim has no progress for. */
+function stillRacing(race: LocalBumpRace, pid: number): boolean {
+  for (const racer of race.standings) {
+    if (racer.pid === pid) return !racer.finished && !racer.retired;
+  }
+  return false;
 }
 
 /**
  * Is a local bang armed between the self machine and this rival at all?
- * Only for a PREDICTED self drive, a rival of the local race in its racing
- * phase (the sim only resolves contacts over the match's own grid, so a paddock
- * or post-tableau touch must never bang), and never when either machine is a
- * recovery ghost: the server skips every contact with a ghost, so a bang there
- * would be a collision that never happens.
+ * Only for a PREDICTED self drive, in the local race's racing phase, between
+ * two machines of its grid that are both still racing (the sim only resolves
+ * contacts over the match's own grid, and a machine across the line or pulled
+ * off is no longer solid, so a paddock, chase-window or tableau touch must
+ * never bang), and never when either machine is a recovery ghost: the server
+ * skips every contact with a ghost, so a bang there would be a collision that
+ * never happens.
  */
 export function localBumpArmed(
   selfSource: string,
@@ -80,7 +98,8 @@ export function localBumpArmed(
   return (
     selfSource === 'predicted' &&
     race?.phase === 'racing' &&
-    race.participantIds.includes(rival.id) &&
+    stillRacing(race, rival.id) &&
+    stillRacing(race, self.id) &&
     !realmRacersGhosted(rival) &&
     !realmRacersGhosted(self)
   );
