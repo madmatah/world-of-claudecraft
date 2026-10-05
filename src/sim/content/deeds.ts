@@ -3597,7 +3597,7 @@ export const DEEDS: Record<string, DeedDef> = {
       ],
     },
   },
-  // Realm Racers (docs/design/deeds.md, docs/prd/... the rally minigame):
+  // Realm Racers (docs/design/deeds.md "Realm Racers deeds", docs/design/realm-racers.md):
   // placing-based, on the model the retired Vale Cup set (pvp_vcup_*, records
   // kept for their holders) rather than a
   // win/lose pair, since a four-pilot heat has a whole finishing order. Only

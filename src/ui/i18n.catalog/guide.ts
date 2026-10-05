@@ -2368,9 +2368,9 @@ export const guideStrings = {
     rewardsBody:
       "Every finished match pays Honor: more for a win, a consolation for a loss or a draw, plus a small amount for every killing blow you land and every one you help with, so fighting away from the flags is still worth doing. Your first win of each day pays a bonus on top, and the panel tells you while that bonus is still waiting for you. That day is Honor's own, and it rolls over on its own clock rather than with the realm's instance reset. Meeting the same team over and over pays less for the match itself after the first, quickly settling at a floor instead of falling away to nothing, and a forfeited match pays nothing at all. Spend what you earn at either Warfare quartermaster.",
   },
-  // Realm Racers, the vehicle-circuit minigame at the Evergarden (docs/design/deeds.md's
-  // Book of Deeds entry, and the rally minigame proper). Spoiler-safe: no lap times, damage
-  // numbers, or weapon cooldowns, only the shape of the sport.
+  // Realm Racers, the vehicle-circuit minigame at the Evergarden (docs/design/realm-racers.md,
+  // and its deeds in docs/design/deeds.md "Realm Racers deeds"). Spoiler-safe: no lap times,
+  // damage numbers, or weapon cooldowns, only the shape of the sport.
   realmRacersPage: {
     heading: 'Realm Racers',
     intro:
