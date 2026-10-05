@@ -718,7 +718,6 @@ describe('Realm Racers sites', () => {
   function rallyEntry(over: Partial<RallyRaceDeedEntry> & { pid: number }): RallyRaceDeedEntry {
     return {
       bot: false,
-      retired: false,
       finished: true,
       clean: false,
       won: false,
@@ -744,21 +743,12 @@ describe('Realm Racers sites', () => {
     onRallyRaceEndForDeeds(pracSim.ctx, true, [rallyEntry({ pid: practicer.entityId })]);
     expect(practicer.deedsEarned.has('pvp_rr_first_race')).toBe(false);
 
-    // "See out a full heat": a forfeiter (retired) never earns it, even
-    // rated and even finished-adjacent (still not the same as seeing it out).
-    const quitSim = makeSim();
-    const quitter = addMeta(quitSim, 'Quitter');
-    onRallyRaceEndForDeeds(quitSim.ctx, false, [
-      rallyEntry({ pid: quitter.entityId, retired: true, finished: false }),
-    ]);
-    expect(quitter.deedsEarned.has('pvp_rr_first_race')).toBe(false);
-
-    // Still on the grid when the clock closed the heat, never across the line:
-    // idling to the deadline is not a race.
+    // A non-finisher never earns it: a pilot still on the grid when the clock
+    // closed the heat, and a forfeiter, whom retireRacer hands over as one.
     const idleSim = makeSim();
     const idler = addMeta(idleSim, 'Idler');
     onRallyRaceEndForDeeds(idleSim.ctx, false, [
-      rallyEntry({ pid: idler.entityId, retired: false, finished: false }),
+      rallyEntry({ pid: idler.entityId, finished: false }),
     ]);
     expect(idler.deedsEarned.has('pvp_rr_first_race')).toBe(false);
 

@@ -1516,7 +1516,6 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     return {
       pid,
       bot: bots.has(pid),
-      retired: progress.retiredTick !== null,
       finished: progress.finishedTick !== null,
       clean: !progress.hadRivalContact && !progress.hadOffTrackContact,
       won: match.winnerPid === pid,

@@ -2076,17 +2076,16 @@ const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: numbe
 
 /** One pilot's race-end tableau, already resolved by the rally module (which
  *  owns the progress state this is read from): whether they are a house
- *  pilot, forfeited or disconnected under their own choice, crossed the
- *  finish line under their own power, kept the run clean (never left the
- *  racing surface and never traded paint with a rival), took the overall
- *  win, had another human on the grid at the GO (realm_racers_credit.ts),
+ *  pilot, crossed the finish line under their own power (a forfeit or a
+ *  disconnect never has: retireRacer clears the crossing), kept the run clean
+ *  (never left the racing surface and never traded paint with a rival), took
+ *  the overall win, had a human rival who raced (realm_racers_credit.ts),
  *  and, if they won, whether that win followed being dead last and caught by
  *  a Ground Blast. Structural rather than the real `RealmRacersProgress`, so
  *  this module never imports `social/realm_racers.ts`. */
 export interface RallyRaceDeedEntry {
   pid: number;
   bot: boolean;
-  retired: boolean;
   finished: boolean;
   clean: boolean;
   won: boolean;
