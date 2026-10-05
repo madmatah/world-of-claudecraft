@@ -1,8 +1,10 @@
 // The Realm Racers' SimContext bindings and tick phase, beside the coordinator
 // (the world_quest_context.ts pattern): the host constructs ctx before assigning
 // it, so every callback reads `sim.ctx` when called, never during binding. It is
-// also the coordinator's ONE Realm Racers import: every name sim.ts reaches for
-// rides the re-exports below, so the monolith carries a single import line.
+// also the coordinator's ONE Realm Racers module: every name sim.ts reaches for
+// rides the re-exports below through one namespace import, plus the save
+// fragment, imported by name because the save-key guard
+// (tests/professions_blob_growth.test.ts) resolves only named helper calls.
 import type { CharacterState } from '../character_state';
 import { isRallyDriverTier } from '../realm_racers_driver';
 import type { Sim } from '../sim';
@@ -27,7 +29,6 @@ export {
   realmRacersQueueLeave,
   realmRacersReady,
   realmRacersResetPosition,
-  realmRacersSaveOverlay,
   realmRacersTracksideFor,
 } from './realm_racers';
 export { startRealmRacersPractice } from './realm_racers_bots';
@@ -54,6 +55,27 @@ export function realmRacersContextBindings(sim: Sim): RealmRacersBindings {
     realmRacersDevGrantKit: (pid, charges) =>
       realmRacersMod.realmRacersDevGrantKit(sim.ctx, pid, charges),
   };
+}
+
+/**
+ * The Realm Racers save fragment: a seated pilot's pre-race state laid over the
+ * live fields serializeCharacter already wrote (`realmRacersSaveOverlay`), and
+ * nothing off the grid. Declared here, with its keys in the return type, so the
+ * save-key guard can read what it writes.
+ */
+export function realmRacersSaveFragment(
+  ctx: SimContext,
+  pid: number,
+): {
+  pos?: CharacterState['pos'];
+  facing?: number;
+  hp?: number;
+  resource?: number;
+  resSickness?: number | null;
+  unstuckSickness?: number | null;
+  cooldowns?: CharacterState['cooldowns'];
+} {
+  return realmRacersMod.realmRacersSaveOverlay(ctx, pid) ?? {};
 }
 
 /** The Realm Racers fields of a freshly built PlayerMeta: only the win count

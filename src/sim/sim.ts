@@ -829,6 +829,7 @@ import { PartyMachine } from './social/party';
 import * as pullTimerMod from './social/pull_timer';
 import * as readyCheckMod from './social/ready_check';
 import * as realmRacersMod from './social/realm_racers_context';
+import { realmRacersSaveFragment } from './social/realm_racers_context';
 import { SpatialGrid } from './spatial';
 import { diminishedCrowdControlDuration as diminishedCrowdControlDurationImpl } from './stun_dr';
 import { Targeting } from './targeting';
@@ -4096,7 +4097,7 @@ export class Sim {
       // must never carry an identity claim back in), so its blob and every
       // pre-feature save stay byte-equal.
       ...materialGathererIdentitySaveFragment(meta.gathererIdentity),
-      ...realmRacersMod.realmRacersSaveOverlay(this.ctx, pid), // seated: the pre-race state, never the race's
+      ...realmRacersSaveFragment(this.ctx, pid), // seated: the pre-race state, never the race's
     };
     // Expired party-trade markers retire at this persistence boundary, never by tick sweep.
     return sanitizeRemovedZone1Content(retirePartyTradeOnSave(state, this.lockoutNowMs())).state;
@@ -9903,9 +9904,8 @@ export class Sim {
     fiestaBotsMod.updateFiestaBots(this);
   }
 
-  // --- The Realm Racers (social/realm_racers*.ts, reached through realm_racers_context.ts):
-  // state stays on Sim (`this.realmRacers`), thin delegates serve the IWorld
-  // facet, the server, and tests. ---
+  // --- The Realm Racers (social/realm_racers*.ts via realm_racers_context.ts): state stays on
+  // Sim (`this.realmRacers`), thin delegates serve the IWorld facet, the server, and tests. ---
 
   realmRacersQueueJoin(pid?: number): void {
     realmRacersMod.realmRacersQueueJoin(this.ctx, pid);
