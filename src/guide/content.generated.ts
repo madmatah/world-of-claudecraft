@@ -6028,11 +6028,11 @@ export const GUIDE_DEEDS: GuideDeed[] = [
   },
   {
     "id": "pvp_rr_wins_25",
-    "name": "Circuit Legend",
+    "name": "Overdrive Ace",
     "category": "pvp",
     "renown": 0,
     "feat": false,
-    "rewardTitle": "Circuit Legend"
+    "rewardTitle": "Overdrive Ace"
   },
   {
     "id": "pvp_rr_fast_lap",
@@ -7432,7 +7432,7 @@ export const GUIDE_RELIQUARY: GuideReliquaryPage[] = [
       },
       {
         "kind": "title",
-        "name": "Circuit Legend"
+        "name": "Overdrive Ace"
       }
     ]
   },

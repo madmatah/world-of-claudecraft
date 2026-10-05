@@ -476,7 +476,7 @@ describe('Reliquary Conqueror catalog structure', () => {
     // the Viridian Valestrider's reins (PR 4175, release/v0.44.0 base merge) takes a horizons_mounts slot: 446.
     // the trinket slot's 18 trinkets (PR 4173): twelve item relics plus the five Crucible raid trinkets: 463.
     // the Buried Hoards page's 32 pieces (2026-09-28 merge into feature/buried-hoards): 495.
-    // Realm Racers' Circuit Legend title (pvp_rr_wins_25) joins the titles page
+    // Realm Racers' Overdrive Ace title (pvp_rr_wins_25) joins the titles page
     // at the release/v0.45.0 merge into feature/realm-racers: 496.
     expect(full).toEqual({ owned: 496, total: 496 });
     // The Warfare Season 2 Vanguard Gallery (135 set pieces and four weapons)
@@ -512,7 +512,7 @@ describe('Reliquary Conqueror catalog structure', () => {
     // 415 with the three faction standing Champion title slots. 416 with the
     // Clue Scroll Treasure Hunter title slot. 417 with the Viridian Valestrider's reins (PR 4175, release/v0.44.0 base merge). 434 with the trinket slot's 18 trinkets (PR 4173).
     // 466 with the Buried Hoards page's 32 pieces. 467 with Realm Racers'
-    // Circuit Legend title slot.
+    // Overdrive Ace title slot.
     expect(character).toEqual({ owned: 467, total: 467 });
     // The Warfare Season 2 page is class-personal, outside completion.
   });
@@ -3234,7 +3234,7 @@ const EXPECTED_DISTINCT_SOURCES: Record<string, number> = {
   // Jewelcrafting and Inscription titles + the farming Harvestmaster + the
   // Crucible raid's flawless title + the three faction standing Champion
   // titles + the Clue Scroll Treasure Hunter title + the Realm Racers
-  // Circuit Legend title.
+  // Overdrive Ace title.
   horizons_titles: 50,
   // 29 = 27 distinct rift mobs across the ten rare multi-hints (eight theme
   // bosses + both citadel bosses + 17 trash carriers), plus the B and S rank

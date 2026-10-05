@@ -239,7 +239,7 @@ export function realmRacersWeaponCharges(abilityId: string): number | null {
  */
 export const REALM_RACERS_BOT_NAMES: readonly string[] = [
   'Mat Driftwright',
-  'Nessa Thornwake',
+  'Nessa Brakewell',
   'Corin Ashvale',
   'Bryn Kettlespoke',
 ] as const;

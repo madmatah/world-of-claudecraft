@@ -198,7 +198,7 @@ describe('profile page Reliquary pair + Curator rank lines', () => {
     // 466 at the release/v0.44.0 merge into feature/buried-hoards (2026-09-28): the 32 Buried Hoard pieces
     // (character-scoped items), the same +32 as reliquary_content.test.ts's pair.
     // 467 at the release/v0.45.0 merge into feature/realm-racers: Realm Racers'
-    // Circuit Legend title (pvp_rr_wins_25) on the Horizons titles page.
+    // Overdrive Ace title (pvp_rr_wins_25) on the Horizons titles page.
     expect(catalogTotal).toBe(467);
     // The Warfare Season 2 Vanguard Gallery is class-personal and sits outside
     // completion, so it moves nothing here.

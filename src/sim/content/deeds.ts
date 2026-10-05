@@ -3636,12 +3636,12 @@ export const DEEDS: Record<string, DeedDef> = {
   },
   pvp_rr_wins_25: {
     id: 'pvp_rr_wins_25',
-    name: 'Circuit Legend',
+    name: 'Overdrive Ace',
     desc: 'Take first place in 25 rated Realm Racers heats with another player on the grid.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'meter', meter: 'rrWins', amount: 25 },
-    reward: { kind: 'title', text: 'Circuit Legend' },
+    reward: { kind: 'title', text: 'Overdrive Ace' },
   },
   pvp_rr_fast_lap: {
     id: 'pvp_rr_fast_lap',

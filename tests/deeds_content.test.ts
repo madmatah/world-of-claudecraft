@@ -520,7 +520,7 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     expect(DEEDS.pvp_rr_wins_10.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 10 });
     expect(DEEDS.pvp_rr_wins_25.renown).toBe(0);
     expect(DEEDS.pvp_rr_wins_25.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 25 });
-    expect(DEEDS.pvp_rr_wins_25.reward).toEqual({ kind: 'title', text: 'Circuit Legend' });
+    expect(DEEDS.pvp_rr_wins_25.reward).toEqual({ kind: 'title', text: 'Overdrive Ace' });
     expect(DEEDS.pvp_rr_fast_lap.renown).toBe(0);
     expect(DEEDS.pvp_rr_fast_lap.trigger).toEqual({ kind: 'manual' });
     expect(DEEDS.pvp_rr_clean_race.renown).toBe(0);
@@ -852,7 +852,7 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // the 2026-08-30 release/v0.41.0 sync merge) one more, and the three
     // faction standing Champion titles (Riftwarden, Dawnkeeper, Forgemaster)
     // three more, and the Clue Scroll tenth-casket title (Treasure Hunter)
-    // one more, and the Realm Racers pvp_rr_wins_25 title (Circuit Legend) one more.
+    // one more, and the Realm Racers pvp_rr_wins_25 title (Overdrive Ace) one more.
     expect(titles.length).toBe(52);
     expect(borders.length).toBe(4);
     // Titles and border slugs are unique (one deed per cosmetic).

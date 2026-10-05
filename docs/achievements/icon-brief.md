@@ -124,7 +124,7 @@ entry), so removing an id from its list is the single edit that lands with the
 ingested art.
 
 One of the seven carries a SECOND edit, and the tests will ask for it rather than
-relying on this note. `pvp_rr_wins_25` rewards the title Circuit Legend, and the
+relying on this note. `pvp_rr_wins_25` rewards the title Overdrive Ace, and the
 Reliquary's Horizons title shelf takes every non-hidden title deed, but
 `tests/reliquary_cell_art.test.ts` refuses a shelf row that falls back to the
 category crest. So the row waits on the art. `tests/reliquary_content.test.ts`
@@ -138,7 +138,7 @@ PvP (deed crests, `npm run assets:deeds <source-dir>`):
 - [v1] `pvp_rr_first_race`, Off the Line: a lowered starting flag over four tyre tracks cut into pale grit, dusk blue on warm sand.
 - [v1] `pvp_rr_first_win`, Chequered and Cheered: a chequered flag half-furled above a raised gauntlet, hot white on deep track grey.
 - [v1] `pvp_rr_wins_10`, Podium Regular: three stepped blocks seen head-on, the centre one worn smooth, brushed bronze on slate.
-- [v1] `pvp_rr_wins_25`, Circuit Legend: a full circuit ribbon coiled into a laurel, gold on night blue.
+- [v1] `pvp_rr_wins_25`, Overdrive Ace: a full circuit ribbon coiled into a laurel, gold on night blue.
 - [v1] `pvp_rr_fast_lap`, (fast lap): a single glowing lap line splitting a stopwatch face, violet on charcoal.
 - [v1] `pvp_rr_clean_race`, (clean race): an unscratched machine flank catching one clean highlight, cold steel on green.
 - [v1] `pvp_rr_comeback`, From the Back of the Pack: four staggered silhouettes with the rearmost breaking forward, ember trail behind it.
