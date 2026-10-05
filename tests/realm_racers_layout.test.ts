@@ -11,11 +11,14 @@ import {
   REALM_RACERS_BAND_X_MIN,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_LANES,
   REALM_RACERS_MIN_GATES,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
   rallyGateCrossingFraction,
+  realmRacersLaneAt,
+  realmRacersLaneOrigin,
 } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_NITRO_SPEED_MULT } from '../src/sim/realm_racers_pickup_effects';
 import { REALM_RACERS_SLICK_SLIP_CAP } from '../src/sim/realm_racers_slicks';
@@ -212,6 +215,20 @@ describe('Realm Racers band window', () => {
     // And the band the circuits are authored around really is inside it.
     expect(REALM_RACERS_ORIGIN.x).toBeGreaterThan(REALM_RACERS_BAND_X_MIN);
     expect(REALM_RACERS_ORIGIN.x).toBeLessThan(REALM_RACERS_BAND_X_MAX);
+  });
+
+  it('answers the open world before any lane lookup, without cutting into a lane', () => {
+    // The lane test short-circuits on the band's x window: off it there is no
+    // lane, and every lane's own x window still answers at both of its edges.
+    for (const lane of REALM_RACERS_LANES) {
+      const at = realmRacersLaneOrigin(lane.index);
+      expect(realmRacersLaneAt(at.x, at.z)).toBe(lane);
+      expect(realmRacersLaneAt(at.x - lane.circuit.regionHalfX, at.z)).toBe(lane);
+      expect(realmRacersLaneAt(at.x + lane.circuit.regionHalfX, at.z)).toBe(lane);
+      expect(realmRacersLaneAt(REALM_RACERS_BAND_X_MIN - 0.01, at.z)).toBeNull();
+      expect(realmRacersLaneAt(REALM_RACERS_BAND_X_MAX + 0.01, at.z)).toBeNull();
+      expect(realmRacersLaneAt(0, at.z)).toBeNull();
+    }
   });
 
   it('leaves every shipped circuit region inside it', () => {

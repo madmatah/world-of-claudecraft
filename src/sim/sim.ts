@@ -2016,7 +2016,7 @@ export class Sim {
   readonly bgProposals: bgProposalMod.BgProposal[] = [];
   readonly bgProposalLockouts = new Map<number, number>();
   nextBgProposalId = 1;
-  realmRacers: realmRacersMod.RealmRacersState = realmRacersMod.createRealmRacersState();
+  readonly realmRacers: realmRacersMod.RealmRacersState = realmRacersMod.createRealmRacersState();
   // per-player chat token bucket (anti-spam); refilled lazily by sim time
   private chatTokens = new Map<number, { tokens: number; at: number }>();
   // per-player set of opt-in global channels (world, lfg) joined via /join

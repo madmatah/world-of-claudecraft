@@ -22,6 +22,7 @@ import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_CHASE_TICKS,
   REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_RETURN_TICKS,
   type RealmRacersMatch,
   realmRacersFreePracticeSlot,
   realmRacersMatchOf,
@@ -351,6 +352,29 @@ describe('Realm Racers house pilots: no entity ever leaks', () => {
     for (let i = 0; i < 400 && realmRacersMatchOf(sim.ctx, a); i++) sim.tick();
     expect(botPidsOf(sim).sort()).toEqual([...survivors].sort());
     for (const survivor of survivors) expect(matchOf(sim, b).pids).toContain(survivor);
+  });
+
+  it('ticks every live race on the tick one of them is torn down', () => {
+    // The races are walked in place: a race torn down by its own tick is
+    // spliced out under the walk, and the one behind it must still get its tick.
+    const sim = makeWorld();
+    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const b = addAt(sim, 'mage', 'Briar', 9, -40);
+    sim.realmRacersPracticeStart('rookie', a);
+    sim.realmRacersPracticeStart('rookie', b);
+    const first = matchOf(sim, a);
+    const second = matchOf(sim, b);
+    expect(sim.realmRacers.practices).toEqual([first, second]);
+    sim.realmRacersForfeit(a);
+    expect(first.phase).toBe('finished');
+    const teardownTick = (first.finishTick ?? 0) + REALM_RACERS_RETURN_TICKS;
+    second.phase = 'countdown';
+    second.goTick = teardownTick;
+    while (sim.tickCount < teardownTick) sim.tick();
+    expect(sim.realmRacers.practices).toEqual([second]);
+    expect(second.phase).toBe('racing');
+    expect(botsIn(sim, b)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+    expect(botPidsOf(sim)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
   });
 });
 

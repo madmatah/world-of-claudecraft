@@ -745,11 +745,23 @@ function preRace(match: RealmRacersMatch): boolean {
   return match.phase === 'loading' || match.phase === 'countdown';
 }
 
-/** Every live race, public first. The order is the tick order and the search
- *  order; nothing else depends on it. */
+/** Every live race, public first, as a fresh list for a cold caller. The order
+ *  is the tick order and the search order; nothing else depends on it. The
+ *  per-tick paths walk `match` and `practices` in place instead. */
 export function realmRacersMatches(ctx: SimContext): RealmRacersMatch[] {
   const rally = ctx.realmRacers;
   return rally.match ? [rally.match, ...rally.practices] : [...rally.practices];
+}
+
+/** The live race standing on the lane at `origin`, public first, or null. */
+function realmRacersMatchAtOrigin(ctx: SimContext, origin: RallyPoint): RealmRacersMatch | null {
+  const rally = ctx.realmRacers;
+  const at = (m: RealmRacersMatch) => m.origin.x === origin.x && m.origin.z === origin.z;
+  if (rally.match && at(rally.match)) return rally.match;
+  for (let i = 0; i < rally.practices.length; i++) {
+    if (at(rally.practices[i])) return rally.practices[i];
+  }
+  return null;
 }
 
 /**
@@ -2819,6 +2831,8 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
 }
 
 function pruneQueue(ctx: SimContext): void {
+  // The steady state of a realm: nobody queued, nothing to prune, nothing built.
+  if (ctx.realmRacers.queue.length === 0 && ctx.realmRacers.queuedAtTick.size === 0) return;
   const seen = new Set<number>();
   ctx.realmRacers.queue = ctx.realmRacers.queue.filter((pid) => {
     if (seen.has(pid)) return false;
@@ -2860,8 +2874,16 @@ export function updateRealmRacers(ctx: SimContext): void {
   tryMatch(ctx);
   // The public race first, then each private practice copy. Every race runs the
   // SAME body: a practice lap is not a lesser mode with its own rules, it is the
-  // race on a different copy of the circuit.
-  for (const match of realmRacersMatches(ctx)) tickMatch(ctx, match);
+  // race on a different copy of the circuit. Walked in place rather than over a
+  // copied list: a practice race its own tick tears down is spliced out under
+  // the walk, so the index moves on only past a race that is still there.
+  const rally = ctx.realmRacers;
+  if (rally.match) tickMatch(ctx, rally.match);
+  for (let i = 0; i < rally.practices.length; ) {
+    const match = rally.practices[i];
+    tickMatch(ctx, match);
+    if (rally.practices[i] === match) i++;
+  }
 }
 
 function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
@@ -3191,9 +3213,7 @@ export function realmRacersTracksideFor(ctx: SimContext, pid: number): RealmRace
   const lane = realmRacersLaneAt(e.pos.x, e.pos.z);
   if (!lane) return null;
   const origin = realmRacersLaneOffset(lane.index);
-  const match = realmRacersMatches(ctx).find(
-    (m) => m.origin.x === origin.x && m.origin.z === origin.z,
-  );
+  const match = realmRacersMatchAtOrigin(ctx, origin);
   if (!match) return null;
   const shared = sharedMatchReadout(ctx, match);
   return {

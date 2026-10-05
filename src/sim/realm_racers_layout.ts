@@ -353,6 +353,10 @@ export function realmRacersLaneOrigin(lane: number): RallyPoint {
  * the answer can never depend on live match state.
  */
 export function realmRacersLaneAt(x: number, z: number): RealmRacersLane | null {
+  // The open world's answer, before any lane arithmetic: the collider and
+  // ground-height hooks ask this for every point anyone stands on. Every lane's
+  // x window sits inside the band (`region_outside_band` refuses any other).
+  if (x < REALM_RACERS_BAND_X_MIN || x > REALM_RACERS_BAND_X_MAX) return null;
   const alongBand = z - REALM_RACERS_ORIGIN.z;
   const index = Math.round(alongBand / REALM_RACERS_LANE_DZ);
   if (index < 0) return null;

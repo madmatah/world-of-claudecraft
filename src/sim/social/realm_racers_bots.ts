@@ -51,7 +51,6 @@ import {
   realmRacersCircuitOf,
   realmRacersFreePracticeSlot,
   realmRacersInCombat,
-  realmRacersMatches,
   realmRacersMatchOf,
   realmRacersQueueRemove,
   realmRacersStartMatch,
@@ -354,25 +353,39 @@ function driveRallyBot(
  */
 export function updateRealmRacersBots(sim: Sim): void {
   const rally = sim.realmRacers;
-  const live = realmRacersMatches(sim.ctx);
+  // The public race as it stood BEFORE the backfill below can seat one: a grid
+  // seated on this tick is steered from the next, as it always has been.
+  const publicRace = rally.match;
   // Reap first, and by one rule: a house pilot seated in NO live race (public or
   // practice) has had its race torn down, whatever ended it (the finish, a
   // forfeit, the time limit, the human disconnecting). One rule means no exit
-  // path can be the one that leaks a pilot into the world forever.
+  // path can be the one that leaks a pilot into the world forever. Deleting the
+  // entry being visited is safe in a Map walk, so no copy of the keys is made.
   if (rally.bots.size > 0) {
-    const seated = new Set<number>();
-    for (const match of live) for (const pid of match.pids) seated.add(pid);
-    for (const pid of [...rally.bots.keys()]) {
-      if (!seated.has(pid)) despawnRallyBot(sim, pid);
+    for (const pid of rally.bots.keys()) {
+      if (!onAnyLiveGrid(rally, pid)) despawnRallyBot(sim, pid);
     }
   }
   if (!rally.match) maybeBackfill(sim);
   // Steer every seated pilot in its OWN race: the public one and each private
   // practice copy run side by side and never see each other.
-  for (const match of live) {
-    for (const pid of match.pids) {
-      const tier = rally.bots.get(pid);
-      if (tier) driveRallyBot(sim, pid, tier, match);
-    }
+  if (publicRace) steerHousePilots(sim, publicRace);
+  for (let i = 0; i < rally.practices.length; i++) steerHousePilots(sim, rally.practices[i]);
+}
+
+/** Is this pid on the frozen grid of any live race, public or practice? */
+function onAnyLiveGrid(rally: Sim['realmRacers'], pid: number): boolean {
+  if (rally.match?.pids.includes(pid)) return true;
+  for (let i = 0; i < rally.practices.length; i++) {
+    if (rally.practices[i].pids.includes(pid)) return true;
+  }
+  return false;
+}
+
+/** One tick of every house pilot on one race's grid. */
+function steerHousePilots(sim: Sim, match: RealmRacersMatch): void {
+  for (const pid of match.pids) {
+    const tier = sim.realmRacers.bots.get(pid);
+    if (tier) driveRallyBot(sim, pid, tier, match);
   }
 }
