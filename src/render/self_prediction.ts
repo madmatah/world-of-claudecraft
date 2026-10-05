@@ -328,23 +328,29 @@ export class MovementPredictionPipeline {
 
   /**
    * Seed the prediction at the acknowledged pose. A seated driver also replays
-   * the frames sent after it, ahead of `beforeCt`: the server consumes every
-   * one of them whatever the client did meanwhile, so the head stands exactly
-   * as many ticks over the ack as the frames it stepped (the tick offset the
-   * rivals are projected by), and the next acknowledgement matches instead of
-   * replaying a head left those ticks short, 8 yd or more at race speed. A
-   * runner keeps the open-loop resume (docs/design/movement-reconciliation.md):
-   * its catch-up is a glide of a yard or two.
+   * the frames sent after it, ahead of `beforeCt`: the server goes on to
+   * consume them, so the head stands as many ticks over the ack as the frames
+   * it stepped (the tick offset the rivals are projected by), and the next
+   * acknowledgement matches instead of replaying a head left those ticks
+   * short, 8 yd or more at race speed. Where the server's timeline did not
+   * consume one as sent (a starved, dropped or late frame), the next
+   * acknowledgement corrects it, as it would the steady-state ring. Only an
+   * unbroken run from the tick after the ack is replayed. A runner keeps the
+   * open-loop resume (docs/design/movement-reconciliation.md): its catch-up is
+   * a glide of a yard or two.
    */
   private seedAtAcknowledgement(self: Entity, wire: SelfPredictionWire, beforeCt: number): void {
     let state = motionState(self, wire);
     const ack = wire.reconAckClientTick;
     if (ack >= 0 && state.drive) {
+      let next = ack + 1;
       for (const sent of this.sentFrames) {
-        if (sent.ct <= ack || sent.ct >= beforeCt) continue;
+        if (sent.ct < next) continue;
+        if (sent.ct !== next || sent.ct >= beforeCt) break;
         refreshMirroredMotionState(state, self);
         state = predictTick(this.ring, state, sent, this.stepFn);
         this.lastPredictedClientTick = sent.ct;
+        next++;
       }
     }
     this.predicted = state;

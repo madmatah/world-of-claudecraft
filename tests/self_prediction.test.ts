@@ -686,6 +686,21 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(shown?.residual).toBeNull();
   });
 
+  it('seeds open-loop when the history no longer holds the frame after the ack', () => {
+    // More frames in flight than the history keeps (a starved uplink): a
+    // replay starting past ack + 1 would land the head short while the tick
+    // offset still counted the missing ticks, so the seed stays at the ack.
+    const { pipeline, wire } = seatedDriver({ speed: 50 });
+    const first = SELF_PREDICTION_RING_CAPACITY + 10;
+    for (let ct = 0; ct < first; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    wire.reconAckClientTick = 2;
+    wire.reconOverrideEpoch = 1;
+    expect(pipeline.display()).toBeNull();
+    drivePredictionFrame(pipeline, first, THROTTLE);
+    expect(internals(pipeline).ring.size).toBe(1);
+    expect(internals(pipeline).ring.oldestClientTick).toBe(first);
+  });
+
   it('borrows the newest mirrored auras on every predicted frame', () => {
     const { pipeline, self } = seatedDriver({ speed: 12 });
     self.auras = [];
