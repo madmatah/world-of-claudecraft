@@ -1734,6 +1734,36 @@ describe('the pickup boxes, drawn', () => {
       expect(provisional.visible).toBe(false);
     });
 
+    it('shows the newest patch at once when it arrives at the cap and the oldest is soaking away', async () => {
+      const { view, slots } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      const patch = (id: number): RealmRacersSlickInfo => ({ id, x: id * 3, z: -7 });
+      const full = Array.from({ length: RALLY_SLICK_POOL }, (_, i) => patch(i + 1));
+      let time = 1;
+      view.update(here.x, here.z, time, matchWithSlicks(full));
+      const pool = slots.slice(0, RALLY_SLICK_POOL);
+      expect(pool.filter((slot) => slot.visible)).toHaveLength(RALLY_SLICK_POOL);
+      // One more drop at the cap: the race evicts the oldest patch in the same
+      // readout that adds the newest. The newest is a live hazard and has to be
+      // on screen within a frame or two, not once the evicted one has soaked.
+      const next = [...full.slice(1), patch(RALLY_SLICK_POOL + 1)];
+      for (let frame = 0; frame < 2; frame++) {
+        time += 0.05;
+        view.update(here.x, here.z, time, matchWithSlicks(next));
+      }
+      const newest = pool.find(
+        (slot) => slot.visible && Math.abs(slot.position.x - (RALLY_SLICK_POOL + 1) * 3) < 1e-6,
+      );
+      expect(newest).toBeDefined();
+      // ...and the readout never changing again does not leave it hidden later.
+      for (let frame = 0; frame < 40; frame++) {
+        time += 0.05;
+        view.update(here.x, here.z, time, matchWithSlicks(next));
+      }
+      expect(newest?.visible).toBe(true);
+      expect(pool.filter((slot) => slot.visible)).toHaveLength(RALLY_SLICK_POOL);
+    });
+
     it('draws nothing on a clean circuit and a patch where the race says one is', async () => {
       const { view, slots } = await slicksGroup();
       const here = REALM_RACERS_ORIGIN;

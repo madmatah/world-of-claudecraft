@@ -28,7 +28,8 @@
 //    spreads and soaks by SCALE rather than by opacity.
 //  - FAIRNESS: no tier, no governor, no distance cull. A slick is a thing a pilot
 //    steers around, so every preset draws every patch. The only cap is the pool,
-//    which sits far above what a race can produce.
+//    which is the race's own patch cap (`REALM_RACERS_SLICK_CAP`), so a patch
+//    the race still holds always has a slot.
 
 import * as THREE from 'three';
 import { REALM_RACERS_SLICK_RADIUS } from '../sim/realm_racers_slicks';
@@ -200,10 +201,17 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
         live.clear();
         for (const slick of list) live.set(slick.id, slick);
         // Adopt every patch nothing is showing yet, into whatever slots are
-        // free. A slot is free once its own patch has finished soaking away.
+        // free. A slot is free once its own patch has finished soaking away;
+        // with none free, a slot still soaking away a patch the race removed
+        // gives its soak up. At the cap the race evicts the oldest patch in
+        // the same readout that adds the newest, and the pool is the cap, so
+        // waiting for the soak would leave a live hazard undrawn until the
+        // readout next changed.
         for (const slick of list) {
           if (slots.some((slot) => slot.id === slick.id)) continue;
-          const free = slots.find((slot) => slot.id === null);
+          const free =
+            slots.find((slot) => slot.id === null) ??
+            slots.find((slot) => slot.id !== null && !live.has(slot.id));
           if (!free) break;
           free.id = slick.id;
           free.visual = rallySlickInitialVisual();
