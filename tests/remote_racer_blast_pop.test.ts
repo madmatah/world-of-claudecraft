@@ -345,6 +345,30 @@ describe('a rival popped by a Ground Blast, drawn from the Hit event', () => {
     expect(Math.abs(s.x - before.x)).toBeLessThan(Math.abs(target.x - before.x) / 2);
   });
 
+  it('still snaps a short free jump with no pop in the air, at a deep horizon', () => {
+    // A one-tick recovery lock can fall between two rendered frames, so a
+    // reset may arrive on a free snapshot: with no Hit event behind it, the
+    // jump is not a shove and keeps the plain rule.
+    const drive = createVehicleDrive('tank');
+    drive.speed = 30;
+    const s = createRemoteVehicleDisplay();
+    for (let i = 0; i < 4; i++) stepRemoteVehicleDisplay(s, 0, 0, 0, drive, 320, FRAME_S, 5000);
+    const reset = { ...drive, speed: 0 };
+    stepRemoteVehicleDisplay(s, 15, 0, 0, reset, 320, FRAME_S, 5000);
+    const target = stepRemoteVehicleDisplay(
+      createRemoteVehicleDisplay(),
+      15,
+      0,
+      0,
+      reset,
+      320,
+      0,
+      5000,
+    );
+    expect(s.x).toBe(target.x);
+    expect(s.z).toBe(target.z);
+  });
+
   it('still snaps a held machine past the plain rule, at any horizon', () => {
     // A reset arrives held: the race locks the machine it puts back.
     const drive = createVehicleDrive('tank');

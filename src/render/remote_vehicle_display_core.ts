@@ -115,12 +115,15 @@ export const REMOTE_VEHICLE_SMOOTH_RATE = 14;
  *  drawn pose adopts the target outright; racing corrections are far smaller. */
 export const REMOTE_VEHICLE_SNAP_DIST = 6;
 /**
- * The most a server outcome changes a free machine's velocity in one tick,
- * yd/s: a contact's capped impulse and a Ground Blast's shove, which can land
- * together. A target projected over a horizon moves by that times the horizon
- * when the outcome's snapshot arrives (6.6 yd for a core shell at 300 ms), so a
- * free machine's snap distance grows by it; a held one keeps the plain rule,
- * since every reset, the grid and the tableau arrive held.
+ * The most a server outcome changes a thrown machine's velocity in one tick,
+ * yd/s: a Ground Blast's shove plus a contact's capped impulse (a thrown machine
+ * can land on a third). A target projected over a horizon moves by that times
+ * the horizon when the shoved snapshot arrives (6.6 yd for a core shell alone
+ * at 300 ms), past the plain snap rule, so the snap distance grows by it while
+ * a drawn pop is in its arc: the Hit event that drew it is the proof the jump
+ * is the shove, and a snap there threw the hop away. Everywhere else, a short
+ * reset seen on a free snapshot (a one-tick recovery lock missed between two
+ * frames) still snaps.
  */
 export const REMOTE_VEHICLE_IMPULSE_YD_PER_S = MAX_BUMP_IMPULSE + GROUND_BLAST_PUSH;
 /** Facing gap that snaps rather than glides (a reset re-orients the machine). */
@@ -374,7 +377,8 @@ export function stepRemoteVehicleDisplay(
   const offX = carriedX - tx;
   const offZ = carriedZ - tz;
   const offF = wrapAngle(carriedF - tf);
-  const snapDist = REMOTE_VEHICLE_SNAP_DIST + REMOTE_VEHICLE_IMPULSE_YD_PER_S * span;
+  const snapDist =
+    REMOTE_VEHICLE_SNAP_DIST + (s.hop.phase === 'arc' ? REMOTE_VEHICLE_IMPULSE_YD_PER_S * span : 0);
   if (
     offX * offX + offZ * offZ > snapDist * snapDist ||
     Math.abs(offF) > REMOTE_VEHICLE_SNAP_FACING_RAD
