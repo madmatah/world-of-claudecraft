@@ -89,7 +89,7 @@ export class RealmRacersFieldCues {
         // the machine here and the seat verdict was that it felt like the wheel
         // being yanked, so restoring either one means reckoning with that.
         vfx.groundPuff(
-          new THREE.Vector3(ev.x, this.ground(ev.x, ev.z), ev.z),
+          this.at.set(ev.x, this.ground(ev.x, ev.z), ev.z),
           0.9 + ev.impact,
           REALM_RACERS_SLICK_SHEEN_COLOR,
         );

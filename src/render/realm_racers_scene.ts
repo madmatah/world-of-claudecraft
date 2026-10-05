@@ -157,6 +157,8 @@ export class RealmRacersScene {
   // Per-rival latch for the local bump bang (own_bump_feedback_core).
   private readonly ownBumpFeedback = createOwnBumpFeedback();
   private readonly selfAimPoseOut: RealmRacersAimPose = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
+  /** Where an event's burst or puff lands: the particle pools copy it. */
+  private readonly fxAt = new THREE.Vector3();
   private readonly ambience: RealmRacersAmbience = {
     inRally: false,
     theme: null,
@@ -329,7 +331,7 @@ export class RealmRacersScene {
     const { x, z } = ownShotMuzzle(px, pz, facing); // the server's muzzle, so no gap
     const lead = h.selfRender.reconciledLeadMs;
     this.groundBlasts.launchOwn(px, pz, facing, point, lead, h.groundSample, p.id);
-    h.vfx.burst(new THREE.Vector3(x, 1.1, z), 'arcane', 14, 0.65);
+    h.vfx.burst(this.fxAt.set(x, 1.1, z), 'arcane', 14, 0.65);
     playRealmRacersEventAudio(h.audioSink, h.groundSample, {
       type: 'realmRacersGroundBlastFired',
       sourceId: h.sim.playerId,
@@ -474,7 +476,7 @@ export class RealmRacersScene {
             performance.now(),
           )
         ) {
-          h.vfx.burst(new THREE.Vector3(shot.x, shot.y, shot.z), 'arcane', 14, 0.65);
+          h.vfx.burst(this.fxAt.set(shot.x, shot.y, shot.z), 'arcane', 14, 0.65);
           playRealmRacersEventAudio(h.audioSink, h.groundSample, shot);
         }
         return;
@@ -488,13 +490,13 @@ export class RealmRacersScene {
         startRemoteRacerHops(h.views, ev, h.sim.playerId);
         h.spawnAoeRing(ev.x, ev.z, GROUND_BLAST_RADIUS, 'physical');
         h.vfx.burst(
-          new THREE.Vector3(ev.x, 1.1, ev.z),
+          this.fxAt.set(ev.x, 1.1, ev.z),
           'arcane',
           20 + Math.round(24 * ev.impact),
           0.9 + 0.6 * ev.impact,
         );
         h.vfx.groundPuff(
-          new THREE.Vector3(ev.x, h.groundSample(ev.x, ev.z), ev.z),
+          this.fxAt.set(ev.x, h.groundSample(ev.x, ev.z), ev.z),
           1.1 + ev.impact,
           0xbfae92,
         );
@@ -534,7 +536,7 @@ export class RealmRacersScene {
   private playBumpFeedback(x: number, z: number, impact: number, aId: number, bId: number): void {
     const h = this.host as RealmRacersSceneHost;
     const force = Math.min(1, impact / 24);
-    h.vfx.burst(new THREE.Vector3(x, 0.9, z), 'physical', 10 + 18 * force, 0.5 + force);
+    h.vfx.burst(this.fxAt.set(x, 0.9, z), 'physical', 10 + 18 * force, 0.5 + force);
     h.spawnAoeRing(x, z, 1.6 + 1.4 * force, 'physical');
     playRealmRacersEventAudio(h.audioSink, h.groundSample, {
       type: 'realmRacersBump',
