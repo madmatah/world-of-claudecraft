@@ -267,10 +267,13 @@ export function noteSelfIdentity(state: SelfRenderPositionState, selfId: number)
   state.lastSelfId = selfId;
   state.ready = false;
   // A still-decaying predictor-handoff offset belongs to the previous
-  // character; leaking it would displace the new one for a few frames.
+  // character; leaking it would displace the new one for a few frames. So do
+  // its kart and lead: a held heading would glide the new one out of it.
   state.offset.x = 0;
   state.offset.y = 0;
   state.offset.z = 0;
+  Object.assign(state.drive, createSelfDriveView());
+  state.reconciledLeadMs = null;
   return true;
 }
 

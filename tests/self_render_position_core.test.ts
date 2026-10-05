@@ -131,6 +131,31 @@ describe('noteSelfIdentity', () => {
     expect(noteSelfIdentity(state, 8)).toBe(true);
     expect(state.lastSelfId).toBe(8);
   });
+
+  it("drops the previous character's kart, so the next one never glides out of its heading", () => {
+    const kart = (facing: number) =>
+      ({
+        prevPos: { x: 0, y: 0, z: 0 },
+        pos: { x: 0, y: 0, z: 0 },
+        prevFacing: facing,
+        facing,
+        auras: [],
+        ghost: false,
+        drive: createVehicleDrive('rally_loaner'),
+      }) as unknown as Entity;
+    const state = createSelfRenderPositionState();
+    noteSelfIdentity(state, 7);
+    state.drive.source = 'predicted';
+    state.drive.facing = 1.2;
+    state.drive.steersHeading = true;
+    state.reconciledLeadMs = 150;
+    expect(noteSelfIdentity(state, 8)).toBe(true);
+    expect(state.drive.source).toBe('none');
+    expect(state.reconciledLeadMs).toBeNull();
+    updateSelfRenderPosition(state, kart(0.3), SEED, 1, FRAME_DT, 0, null, false);
+    expect(state.drive.yawOffset).toBe(0);
+    expect(state.drive.facing).toBeCloseTo(0.3, 12);
+  });
 });
 
 describe('updateSelfRenderPosition fallback path', () => {
