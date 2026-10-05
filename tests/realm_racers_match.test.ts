@@ -46,6 +46,7 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
+import { freshRealmRacersMeta } from '../src/sim/social/realm_racers_context';
 import type { Entity, SimEvent } from '../src/sim/types';
 import { TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
@@ -1984,6 +1985,29 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
 });
 
 describe('Realm Racers rrWins persistence', () => {
+  it.each([
+    [Number.NaN, 0],
+    [Number.POSITIVE_INFINITY, 0],
+    [-3, 0],
+    [2.7, 2],
+    ['5', 0],
+    [null, 0],
+    [12, 12],
+  ])('loads a stored rrWins of %s as %s, like the other persisted meters', (stored, loaded) => {
+    // A JSONB row is untrusted: a negative, fractional or non-numeric count
+    // must never reach the meter the win deeds read.
+    const state = { rrWins: stored } as unknown as Pick<CharacterState, 'rrWins'>;
+    expect(freshRealmRacersMeta(state).rrWins).toBe(loaded);
+    const sim = makeWorld();
+    const pid = sim.addPlayer('warrior', 'Ledger', {
+      state: {
+        ...required(sim.serializeCharacter(addAt(sim, 'warrior', 'Seed')), 'seed'),
+        ...state,
+      },
+    });
+    expect(required(sim.players.get(pid), 'player').rrWins).toBe(loaded);
+  });
+
   it('is absent before any win, present after one, and survives a reload into fresh meta', () => {
     const { sim, pids } = startMatch();
     const [a, b, c, d] = pids;

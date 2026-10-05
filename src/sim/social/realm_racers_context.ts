@@ -56,11 +56,15 @@ export function realmRacersContextBindings(sim: Sim): RealmRacersBindings {
   };
 }
 
-/** The Realm Racers fields of a freshly built PlayerMeta: only the win count persists. */
+/** The Realm Racers fields of a freshly built PlayerMeta: only the win count
+ *  persists, validated like the other stored meters (bgCaptures): the row is
+ *  untrusted, and the win deeds read this count. */
 export function freshRealmRacersMeta(
   savedState: Pick<CharacterState, 'rrWins'> | undefined,
 ): realmRacersMod.RealmRacersPlayerMeta {
-  return { realmRacersMatchId: null, rrWins: savedState?.rrWins ?? 0 };
+  const stored = savedState?.rrWins;
+  const rrWins = Number.isFinite(stored) ? Math.max(0, Math.floor(stored as number)) : 0;
+  return { realmRacersMatchId: null, rrWins };
 }
 
 /**
