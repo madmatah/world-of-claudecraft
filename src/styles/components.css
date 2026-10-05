@@ -26827,7 +26827,7 @@
     z-index: 30;
     top: 74px;
     left: 50%;
-    width: min(420px, calc(100vw - 34px));
+    width: min(420px, calc(var(--app-vw, 100vw) - 34px));
     transform: translateX(-50%);
     pointer-events: none;
     color: var(--rally-hud-text);
@@ -26912,7 +26912,7 @@
      narrower panel truncates every rival row of every practice race, not an
      edge case. Dropping the class crest paid for most of the extra width. */
     width: 240px;
-    max-width: calc(100vw - 24px);
+    max-width: calc(var(--app-vw, 100vw) - 24px);
     border: 1px solid var(--rally-gold-a55);
     border-radius: 7px;
     background: var(--rally-hud-ink-ae8);

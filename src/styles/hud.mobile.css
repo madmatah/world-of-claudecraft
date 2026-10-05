@@ -10323,7 +10323,7 @@
        the strip must not clip it on a phone. */
     body.mobile-touch #realm-racers-hud {
       top: max(48px, calc(env(safe-area-inset-top) + 34px));
-      width: min(470px, calc(100vw - 108px));
+      width: min(470px, calc(var(--app-vw, 100vw) - 108px));
     }
     body.mobile-touch .rallyhud-stats > span {
       min-width: 66px;

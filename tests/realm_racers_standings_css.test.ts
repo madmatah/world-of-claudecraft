@@ -125,8 +125,11 @@ describe('Realm Racers standings panel CSS', () => {
     expect(panel).not.toBeNull();
     expect(/width:\s*240px;/.test((panel as RegExpExecArray)[1])).toBe(true);
     // And it still clamps symmetrically against its own 12px inset, so the
-    // wider panel cannot overflow a narrow viewport.
-    expect(/max-width:\s*calc\(100vw - 24px\);/.test((panel as RegExpExecArray)[1])).toBe(true);
+    // wider panel cannot overflow a narrow viewport (the app viewport, which
+    // the desktop shell and the native shells size, not the bare one).
+    expect(
+      /max-width:\s*calc\(var\(--app-vw, 100vw\) - 24px\);/.test((panel as RegExpExecArray)[1]),
+    ).toBe(true);
     expect(/left:\s*12px;/.test((panel as RegExpExecArray)[1])).toBe(true);
   });
 });

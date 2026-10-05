@@ -113,6 +113,26 @@ describe('Realm Racers race strip stacking', () => {
   const hud = read('src/ui/hud.ts');
   const PANELS = ['#realm-racers-hud', '#realm-racers-standings'];
 
+  it('sizes every rally rule from the app viewport, never the bare one', () => {
+    // `--app-vw` is the width the viewport resizer measures (tokens.css): the
+    // desktop and native shells can differ from the raw 100vw, and a panel
+    // clamped against the raw one overflows them.
+    let rallyRules = 0;
+    for (const [name, css] of [
+      ['components.css', components],
+      ['hud.mobile.css', mobile],
+    ] as const) {
+      for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = rule[1].replace(/\/\*[\s\S]*?\*\//g, '').trim();
+        if (!/realm-racers|\.rally/.test(selector)) continue;
+        rallyRules++;
+        const bare = rule[2].replace(/var\(--app-vw,\s*100vw\)/g, '');
+        expect(bare.includes('100vw'), `${name} ${selector}`).toBe(false);
+      }
+    }
+    expect(rallyRules).toBeGreaterThan(20);
+  });
+
   it('raises every shown window into a band that starts at 51', () => {
     expect(hud).toContain('private windowZ = 50;');
     expect(hud).toContain('this.windowZ = 50;');
