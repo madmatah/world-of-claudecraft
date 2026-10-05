@@ -3,9 +3,11 @@ import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
   REALM_RACERS_CIRCUIT_LIST,
 } from '../src/sim/content/realm_racers_circuits';
+import { REALM_RACERS_MAX_GATE_STEP } from '../src/sim/realm_racers_layout';
 import {
   forwardArcDelta,
   REALM_RACERS_MIN_LAP_FRACTION,
+  REALM_RACERS_WRAP_OVERSHOOT_YD,
   stepRealmRacersProgress,
   travelledFromArc,
 } from '../src/sim/realm_racers_progress';
@@ -140,6 +142,39 @@ describe('Realm Racers arc progress', () => {
     // yards past the line, so it trails the arc by that overshoot.
     expect(travelledFromArc(2, 70, L, 70)).toBe(170);
     expect(travelledFromArc(2, 51, L, 48)).toBe(151);
+  });
+
+  it('keeps a racer who drove on and then backed far over the line behind it', () => {
+    // Forty yards on from the line, then eighty back: the arc reads sixty with
+    // forty of forward odometer, which no forward driving can produce. Behind
+    // the line on lap one (still lap one's grid side) and on a later lap.
+    expect(travelledFromArc(1, 60, L, 40)).toBe(-40);
+    expect(travelledFromArc(2, 60, L, 40)).toBe(60);
+    // The odometer counts forward ground only, so a reverse never lowers it.
+    let step = stepRealmRacersProgress({
+      lap: 2,
+      lastS: 1,
+      s: 40,
+      distanceSinceWrap: 1,
+      lapLength: L,
+      totalLaps: 3,
+    });
+    for (const s of [20, 1, L - 20, 60]) {
+      step = stepRealmRacersProgress({
+        lap: step.lap,
+        lastS: step.lastS,
+        s,
+        distanceSinceWrap: step.distanceSinceWrap,
+        lapLength: L,
+        totalLaps: 3,
+      });
+    }
+    expect(step.lap).toBe(2);
+    expect(step.travelled).toBe(60);
+  });
+
+  it('allows the wrap overshoot a whole tick of travel can leave', () => {
+    expect(REALM_RACERS_WRAP_OVERSHOOT_YD).toBeGreaterThanOrEqual(REALM_RACERS_MAX_GATE_STEP);
   });
 
   it('keeps travelled monotone over several laps, through every wrap and halfway', () => {

@@ -1,5 +1,13 @@
 export const REALM_RACERS_MIN_LAP_FRACTION = 0.85;
 
+/**
+ * How far past the line a wrap tick may land, yards: a later lap's odometer
+ * starts at that tick, so it trails the arc by this much all lap long. Held
+ * above the fastest legal one-tick move (REALM_RACERS_MAX_GATE_STEP, pinned in
+ * tests/realm_racers_progress.test.ts) and far below any real reverse.
+ */
+export const REALM_RACERS_WRAP_OVERSHOOT_YD = 8;
+
 export interface RealmRacersProgressInput {
   lap: number;
   lastS: number;
@@ -42,13 +50,17 @@ export function travelledFromArc(
   // crossing is deliberately lap-neutral), and reading the latter as negative
   // inverted the live standings between the two halves of every first lap. The
   // odometer disambiguates: a machine in the second half of the arc that has
-  // covered less ground than its arc stands past halfway can only be behind the
-  // line. On EVERY lap, not just the first: a machine short of the line on a
-  // later lap (recovered onto gate 0, or backed over it) has covered one lap
-  // fewer, never one more. The bound is the arc past halfway rather than half a
-  // lap because a later lap's odometer starts at the wrap tick, already a few
-  // yards past the line, so it trails the arc by that overshoot all lap long.
-  const behindTheLine = distanceSinceWrap < wrapped - lapLength / 2;
+  // covered less than half a lap of ground can only be behind the line. On
+  // EVERY lap, not just the first: a machine short of the line on a later lap
+  // (recovered onto gate 0, or backed over it) has covered one lap fewer, never
+  // one more. A later lap's odometer starts at the wrap tick, already a little
+  // past the line, so an honest driver's trails the arc by that overshoot all
+  // lap long; the third test keeps one just past halfway on its own lap, while
+  // a reverse leaves the odometer far short of the arc.
+  const behindTheLine =
+    wrapped > lapLength / 2 &&
+    distanceSinceWrap < lapLength / 2 &&
+    distanceSinceWrap < wrapped - REALM_RACERS_WRAP_OVERSHOOT_YD;
   return (lap - 1) * lapLength + wrapped - (behindTheLine ? lapLength : 0);
 }
 
