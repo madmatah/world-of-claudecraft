@@ -430,9 +430,9 @@ export interface RealmRacersProgress {
   retiredTick: number | null;
   /**
    * True once the gameplay parenthesis has been closed for this racer and they
-   * stand back in the Evergarden. They stay on `match.pids`, because the grid a
-   * race started with is the grid it is classified on, but nothing per-racer
-   * resolves to this race for them any more.
+   * stand back where the seat found them. They stay on `match.pids`, because
+   * the grid a race started with is the grid it is classified on, but nothing
+   * per-racer resolves to this race for them any more.
    */
   returned: boolean;
   /** Last projected centerline sample: the search hint for the next tick. */
@@ -704,10 +704,10 @@ function matchHas(match: RealmRacersMatch | null, pid: number): boolean {
 
 /**
  * Roster membership AND still inside the gameplay parenthesis. A racer who has
- * been returned to the Evergarden (they quit, or the race ended and their six
- * seconds of tableau are up) is still on `pids` for classification but must not
- * resolve to this race for anything per-racer: not the HUD readout, not the
- * mount re-forcing, not their eligibility to queue again.
+ * been returned to where the seat found them (they quit, or the race ended and
+ * their six seconds of tableau are up) is still on `pids` for classification
+ * but must not resolve to this race for anything per-racer: not the HUD
+ * readout, not the mount re-forcing, not their eligibility to queue again.
  */
 function matchSeats(match: RealmRacersMatch | null, pid: number): boolean {
   return matchHas(match, pid) && match?.progress.get(pid)?.returned === false;
@@ -1141,10 +1141,10 @@ export function realmRacersStartMatch(
 /**
  * The circuit a queued race runs on: ONE draw from the competition pool.
  *
- * This is the only rng site in the rally's OWN modules (a race in progress
- * still reaches the shared stream indirectly, the way any combat does: a
- * Ground Blast goes through the ordinary `castAbility` path and whatever that
- * draws for the pilot's gear is the combat system's, not the rally's). Where it
+ * One of the rally's two rng sites, with the pickup take's one weighted draw in
+ * `tickPickups` (a race in progress also reaches the shared stream the way any
+ * combat does: a Ground Blast goes through the ordinary `castAbility` path, and
+ * whatever that draws for the pilot's gear is the combat system's). Where it
  * sits in the tick is load bearing (src/sim/CLAUDE.md). It happens at SEAT
  * time, inside the caller that has already committed to starting, so all four
  * pilots learn the circuit on the same tick, and it happens exactly once per
@@ -1395,9 +1395,9 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   match.slicks.length = 0;
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
-    // A returned pilot is back on their class kit in the Evergarden (possibly
-    // seated in a NEWER race): sweeping them here would republish the old
-    // race's kit over whatever they hold now.
+    // A returned pilot is back on their class kit where the seat found them
+    // (possibly seated in a NEWER race): sweeping them here would republish the
+    // old race's kit over whatever they hold now.
     if (!progress || progress.returned) continue;
     progress.nitroUntilTick = 0;
     progress.slickGripUntilTick = 0;
@@ -1448,8 +1448,8 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
       : (ranked[0]?.pid ?? null);
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
-    // A pilot already back in the Evergarden (they quit and their tableau ran
-    // out, or they disconnected) has had their result and is gone.
+    // A pilot already back where the seat found them (they quit and their
+    // tableau ran out, or they disconnected) has had their result and is gone.
     if (progress?.returned) continue;
     const drive = ctx.entities.get(pid)?.drive;
     if (drive) {
@@ -2220,9 +2220,9 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
     const racer = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
-    // A returned pilot's body is back in the Evergarden: reprojecting it onto
-    // the circuit copy reads as deep garden and would pin the off-track slow on
-    // a player who is not racing.
+    // A returned pilot's body is back where the seat found it: reprojecting it
+    // onto the circuit copy reads as deep garden and would pin the off-track
+    // slow on a player who is not racing.
     if (!racer || !progress || progress.returned) continue;
     const projection = reproject(match, pid, racer);
     const band = realmRacersOffTrackBand(circuit, projection);

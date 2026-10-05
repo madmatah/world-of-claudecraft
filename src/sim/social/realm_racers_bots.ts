@@ -245,7 +245,7 @@ function nearestRival(
   for (const other of match.pids) {
     if (other === pid) continue;
     // A rival whose own race is over is not a rival: they are parked waiting to
-    // be returned, or already back in the Evergarden with a stale position.
+    // be returned, or already back where the seat found them, off the circuit.
     if (!realmRacersStillRunning(match, other)) continue;
     const e = sim.entities.get(other);
     if (!e || e.dead) continue;

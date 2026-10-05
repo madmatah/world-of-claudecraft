@@ -98,10 +98,11 @@ export const REALM_RACERS_OFF_ROAD_EXCHANGE_RATE = 1.6;
  * of them by seconds. The bands are the anti-cheat here; the
  * referee is the backstop for a circuit shape nobody has drawn yet (a long
  * out-and-back, where a straight line really would pay). That is a property of
- * the CIRCUITS, not of the rule, so it is checked as one:
- * `tests/realm_racers_track_limits.test.ts` drives the cuts on every shipped
- * circuit and fails the day one of them starts paying, and
- * `scripts/realm_racers_limits_probe.ts` is the full sweep behind these numbers.
+ * the CIRCUITS, not of the rule, so it is checked as one, off the test suite
+ * (a circuit may legitimately offer a cut that trades time against the
+ * penalty): `scripts/realm_racers_limits_probe.ts` drives the cuts on every
+ * shipped circuit through `scripts/realm_racers_cut_lab.ts`, and the
+ * `qa-checklist` agent runs it when a circuit record is in the diff.
  */
 export const REALM_RACERS_CUT_TOLERANCE_YD = 25;
 
