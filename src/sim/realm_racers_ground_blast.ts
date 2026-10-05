@@ -79,8 +79,8 @@ export const GROUND_BLAST_MUZZLE_NOSE_YD = 2;
  * Upward velocity a hit in the core adds, yd/s. THE knob for how big a hit
  * feels, and the arithmetic is simple enough to tune against directly: at
  * GRAVITY = 16 the apex is `v^2 / 32` yards and the machine is airborne for
- * `v / 8` seconds. At 11 that is a 3.8 yd apex and 1.4 s off the ground, which
- * at racing speed is roughly seventy yards of flight with a quarter of the
+ * `v / 8` seconds. At 12 that is a 4.5 yd apex and 1.5 s off the ground, which
+ * at racing speed is roughly seventy-five yards of flight with a quarter of the
  * usual steering (`airSteerFraction`) to fight it with.
  *
  * The whole cost of a hit compounds from that number, because airborne the grip
@@ -284,9 +284,10 @@ export function resolveGroundBlastImpact(
   );
 
   // Which side of the machine the blast went off on, as a signed unit component
-  // along the body's right vector (-cos f, sin f). A hit taken square on the
-  // nose or the tail has no side and spins nobody; a glancing one slews the
-  // machine away from the blast, and the further off-centre the harder.
+  // along the body's LEFT vector (cos f, -sin f), the right vector negated. A
+  // hit taken square on the nose or the tail has no side and spins nobody; a
+  // glancing one slews the machine away from the blast, and the further
+  // off-centre the harder.
   const side = awayX * Math.cos(body.facing) - awayZ * Math.sin(body.facing);
   // The shared add carries the one ceiling on carried spin, wherever the shove
   // came from: a machine shelled while already spinning off a contact must not

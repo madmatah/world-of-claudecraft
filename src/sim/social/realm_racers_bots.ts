@@ -28,11 +28,7 @@
 // a single draw here would shift the shared stream's draw order for every other
 // system in the world.
 
-import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_BOT_CLASSES,
-  REALM_RACERS_BOT_NAMES,
-} from '../content/realm_racers';
+import { REALM_RACERS_BOT_CLASSES, REALM_RACERS_BOT_NAMES } from '../content/realm_racers';
 import { realmRacersCircuitById } from '../content/realm_racers_circuits';
 import { vehicleProfile } from '../content/vehicles';
 import { auraSpeedMult } from '../player_motion';

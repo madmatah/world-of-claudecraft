@@ -2,9 +2,9 @@ import type { VehicleDrive } from '../src/sim/types';
 import { round2 } from './tick_perf_log';
 
 /**
- * Live vehicle state, for the two seated racers of a running minigame and
- * nobody else. It is ACTIONABLE, not cosmetic: the v1 self-extrapolator and
- * the rival projection run the same movement kernel off it (a v2 self record
+ * Live vehicle state, for the seated racers of a live race and nobody else.
+ * It is ACTIONABLE, not cosmetic: the v1 self-extrapolator and the rival
+ * projection run the same movement kernel off it (a v2 self record
  * carries the full-precision `rdv` instead), so without it a race would
  * rubber-band. The renderer reads the same fields for engine pitch and drift
  * smoke. Omitted entirely (like mcr/mck) for everyone on foot.
@@ -15,12 +15,13 @@ export function driveWire(drive: VehicleDrive): Record<string, unknown> {
     sp: round2(drive.speed),
     sl: round2(drive.slip),
     yr: round2(drive.yawRate),
-    // Where the wheel is, not where the keys are. It rides because the
-    // self-extrapolator RAMPS it from the same flags: re-anchoring onto a
-    // record without it would centre the wheel of a pilot who is mid-corner,
-    // and the prediction would straighten for the length of the ramp every
-    // time a snapshot landed. Sparse like ci/lk: a machine running straight
-    // has a centred wheel and pays nothing.
+    // Where the wheel is, not where the keys are. It rides because the v1
+    // self-extrapolator RAMPS it from the same flags (and the rival projection
+    // holds it between records): re-anchoring onto a record without it would
+    // centre the wheel of a pilot who is mid-corner, and the prediction would
+    // straighten for the length of the ramp every time a snapshot landed.
+    // Sparse like ci/lk: a machine running straight has a centred wheel and
+    // pays nothing.
     ...(drive.steerAngle !== 0 ? { st: round2(drive.steerAngle) } : {}),
     sn: round2(drive.spin),
     hb: round2(drive.handbrake),

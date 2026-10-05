@@ -196,7 +196,7 @@ export function createRealmRacersPickupState(circuit: RealmRacersCircuit): Rally
  * Take every box off the circuit for good, for a caller that needs a race with
  * no pickups in it at all.
  *
- * It exists for the cut lab (`tests/helpers/realm_racers_cut_lab.ts`), which is a
+ * It exists for the cut lab (`scripts/realm_racers_cut_lab.ts`), which is a
  * STOPWATCH over geometry: a box hands out a weighted draw whose nitro, oil and
  * ward all move the clock it is reading, so leaving them in would time the dice.
  * The respawn is parked on a lap no race reaches rather than merely emptied, so

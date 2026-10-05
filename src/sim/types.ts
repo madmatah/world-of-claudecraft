@@ -6180,8 +6180,9 @@ export interface Entity extends ClientMirroredEntityFields {
   mountKey: string;
   // Live vehicle state (players only; null = on foot). Non-null selects the
   // vehicle branch of the one movement kernel, so it must reach the online
-  // self-extrapolator: it syncs on the wire (terse `drv`) like mountKey, and
-  // only the seated racers of a live minigame ever carry it.
+  // client: it syncs on the wire (terse `drv`, or the full-precision self `rdv`
+  // on a v2 movement wire) like mountKey, and only the seated racers of a live
+  // race ever carry it.
   drive: VehicleDrive | null;
   // Mount summon/dismount transition (players only; 0 = idle). Seconds left in the
   // call-the-mount summon or the dismount, driven per tick by updateMountTransition

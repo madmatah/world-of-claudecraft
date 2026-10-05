@@ -13,7 +13,7 @@
 // purpose. That verdict moved to `scripts/realm_racers_limits_probe.ts`, which
 // already owned the sweep, and the `qa-checklist` agent runs it when a circuit
 // record is in the diff (docs/qa-gate.md's judgment layer). The measurement
-// itself is unchanged: both still go through `tests/helpers/realm_racers_cut_lab.ts`.
+// itself is unchanged, and lives beside the probe in `scripts/realm_racers_cut_lab.ts`.
 import { describe, expect, it } from 'vitest';
 import {
   noRallyExcursion,

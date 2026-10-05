@@ -11,9 +11,9 @@
 // collision and vertical pass the character path uses, and re-derives the drive
 // velocity from the achieved displacement. Splitting it this way is what makes
 // the model Node-testable directly (tests/vehicle_motion.test.ts) while keeping
-// exactly one movement entry point for both hosts, so the online
-// self-extrapolator predicts vehicle motion in lockstep with the server
-// (tests/player_motion.test.ts).
+// exactly one movement entry point for both hosts, so the online self
+// prediction (and the v1 self-extrapolator) runs vehicle motion in lockstep
+// with the server (tests/player_motion.test.ts).
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM. Every handling number
 // comes from the VehicleProfile record, never from this module.

@@ -194,9 +194,9 @@ function measureHonestExcursions(
 
 // ---------------------------------------------------------------------------
 // Part B: what a CUT is actually worth. The measurement itself lives in
-// `tests/helpers/realm_racers_cut_lab.ts`, shared with the content test that
-// holds every shipped circuit to it: a probe with its own copy of the stopwatch
-// is a probe that can disagree with the gate.
+// `scripts/realm_racers_cut_lab.ts`, beside this probe, its one consumer: a
+// probe with its own copy of the stopwatch is a probe that can disagree with
+// the lab.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
