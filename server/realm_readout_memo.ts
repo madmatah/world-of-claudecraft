@@ -3,9 +3,10 @@
 // fields), keyed on sim.tickCount: the shared object and its JSON string are
 // built at most once per tick and reused by every session in that broadcast
 // pass, instead of once per online viewer. Server-host state only; draws no
-// rng, so it cannot perturb sim determinism. Payload-agnostic: the Vale Cup
-// readout (vcupb) and the dungeon-finder board (dfb) are the two tenants, each
-// on its own GameServer memo field.
+// rng, so it cannot perturb sim determinism. Payload-agnostic: the tenants
+// (the dungeon-finder board dfb, the bg ladder, the who roster) each sit on
+// their own GameServer memo field, except the idle Realm Racers `rr`, which
+// server/realm_racers_self_wire.ts keeps in a WeakMap keyed by the Sim.
 export interface RealmReadoutMemo<T> {
   tick: number; // the sim tick the cached object/string were built for (-1 = never)
   shared: T | null;

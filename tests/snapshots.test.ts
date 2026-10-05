@@ -7466,7 +7466,7 @@ describe('gather node cooldown wire round trip (ncd)', () => {
 });
 
 describe('delta-key contract pins (anti-drift)', () => {
-  it('ALL_DELTA_KEYS contains exactly 116 unique keys in sorted order', () => {
+  it('ALL_DELTA_KEYS contains exactly 117 unique keys in sorted order', () => {
     // 109 plus the release batch's pending Town Focus and Spell Crit core keys.
     // +1: guildBank (Guild Bank Phase 2), +1: the battleground bg key, +1: the
     // commission order board's corder key (issue #1298), +1: the character

@@ -47,7 +47,9 @@ export function realmRacersClockOf(
   return clock;
 }
 
-/** Split a readout into the two keys the wire ships. */
+/** Split a readout into the two keys the wire ships. The clock is null exactly
+ *  when the match is, which the client's fold relies on when one key arrives
+ *  without the other. */
 export function splitRealmRacersInfo(info: RealmRacersInfo): {
   still: RealmRacersStillInfo;
   clock: RealmRacersMatchClock | null;
