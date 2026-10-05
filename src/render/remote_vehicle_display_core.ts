@@ -51,9 +51,11 @@ import { auraSpeedMult, GRAVITY } from '../sim/player_motion';
 import {
   GROUND_BLAST_MUZZLE_NOSE_YD,
   GROUND_BLAST_POP_VELOCITY,
+  GROUND_BLAST_PUSH,
 } from '../sim/realm_racers_ground_blast';
 import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { type Aura, DT, type Entity, type VehicleDrive } from '../sim/types';
+import { MAX_BUMP_IMPULSE } from '../sim/vehicle_contact';
 import {
   advanceVehicleDrive,
   type VehicleStepInput,
@@ -111,6 +113,15 @@ export const REMOTE_VEHICLE_SMOOTH_RATE = 14;
 /** Beyond this displacement the move is a teleport or a track reset and the
  *  drawn pose adopts the target outright; racing corrections are far smaller. */
 export const REMOTE_VEHICLE_SNAP_DIST = 6;
+/**
+ * The most a server outcome changes a free machine's velocity in one tick,
+ * yd/s: a contact's capped impulse and a Ground Blast's shove, which can land
+ * together. A target projected over a horizon moves by that times the horizon
+ * when the outcome's snapshot arrives (6.6 yd for a core shell at 300 ms), so a
+ * free machine's snap distance grows by it; a held one keeps the plain rule,
+ * since every reset, the grid and the tableau arrive held.
+ */
+export const REMOTE_VEHICLE_IMPULSE_YD_PER_S = MAX_BUMP_IMPULSE + GROUND_BLAST_PUSH;
 /** Facing gap that snaps rather than glides (a reset re-orients the machine). */
 export const REMOTE_VEHICLE_SNAP_FACING_RAD = Math.PI / 2;
 
@@ -280,7 +291,8 @@ export function stepRemoteVehicleDisplay(
   // tableau) does not move on the server: its movement pass returns before the
   // kernel. It is drawn at its wire pose, with no horizon and no carry.
   const held = drive.controlsLocked;
-  let remaining = held ? 0 : Math.min(Math.max(ageMs, 0), capMs) / 1000;
+  const span = held ? 0 : Math.min(Math.max(ageMs, 0), capMs) / 1000;
+  let remaining = span;
   const d = s.scratch;
   d.profileKey = drive.profileKey;
   d.speed = drive.speed;
@@ -360,8 +372,9 @@ export function stepRemoteVehicleDisplay(
   const offX = carriedX - tx;
   const offZ = carriedZ - tz;
   const offF = wrapAngle(carriedF - tf);
+  const snapDist = REMOTE_VEHICLE_SNAP_DIST + REMOTE_VEHICLE_IMPULSE_YD_PER_S * span;
   if (
-    offX * offX + offZ * offZ > REMOTE_VEHICLE_SNAP_DIST * REMOTE_VEHICLE_SNAP_DIST ||
+    offX * offX + offZ * offZ > snapDist * snapDist ||
     Math.abs(offF) > REMOTE_VEHICLE_SNAP_FACING_RAD
   ) {
     s.x = tx;

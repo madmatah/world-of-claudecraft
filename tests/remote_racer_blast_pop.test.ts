@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createRemoteVehicleDisplay,
   REMOTE_RACER_HOP_SETTLE_CAP_S,
+  REMOTE_VEHICLE_SNAP_DIST,
   type RemoteVehicleDisplayState,
   remoteRacerDisplayY,
   remoteRacerDrawnY,
@@ -23,7 +24,10 @@ import {
 } from '../src/render/remote_vehicle_display_core';
 import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
 import { GRAVITY } from '../src/sim/player_motion';
-import { GROUND_BLAST_POP_VELOCITY } from '../src/sim/realm_racers_ground_blast';
+import {
+  GROUND_BLAST_POP_VELOCITY,
+  resolveGroundBlastImpact,
+} from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
@@ -304,6 +308,52 @@ describe('a rival popped by a Ground Blast, drawn from the Hit event', () => {
     expect(views.get(2)?.remoteVehicle.hop).toMatchObject({ phase: 'arc', vy0: 12 });
     for (const id of [3, 4, 5, 9]) expect(views.get(id)?.remoteVehicle.hop.phase).toBe('idle');
     expect(startRemoteRacerHops(views, {}, 9)).toBe(0);
+  });
+
+  it('keeps the hop and glides the shove it rides in on at a deep horizon', () => {
+    // The Hit event and the shoved pose ride one snapshot. Projected 320 ms
+    // (a 200 ms round trip's lead), the push moves the target past the 6 yd
+    // teleport rule; snapping there threw the drawn hop away on its first frame.
+    const flat = (): number => 0;
+    const drive = createVehicleDrive('tank');
+    drive.speed = 50;
+    const s = createRemoteVehicleDisplay();
+    for (let i = 0; i < 4; i++) {
+      stepRemoteVehicleDisplay(s, 0, 0, 0, drive, 320, FRAME_S, 5000);
+      remoteRacerDisplayY(s, 0, 0, 0, s.x, s.z, flat, FRAME_S);
+    }
+    const before = { x: s.x, z: s.z };
+    const shoved = { ...drive };
+    resolveGroundBlastImpact({ x: 0, z: 0, facing: 0, drive: shoved }, -1.2, 0);
+    const target = stepRemoteVehicleDisplay(
+      createRemoteVehicleDisplay(),
+      0,
+      0,
+      0,
+      shoved,
+      320,
+      0,
+      5000,
+    );
+    expect(Math.hypot(target.x - before.x, target.z - before.z)).toBeGreaterThan(
+      REMOTE_VEHICLE_SNAP_DIST,
+    );
+    expect(startRemoteRacerHop(s, GROUND_BLAST_POP_VELOCITY)).toBe(true);
+    stepRemoteVehicleDisplay(s, 0, 0, 0, shoved, 320, FRAME_S, 5000);
+    expect(s.hop.phase).toBe('arc');
+    expect(remoteRacerDisplayY(s, 0, 0, 0, s.x, s.z, flat, FRAME_S)).toBeGreaterThan(0);
+    // Glided, not adopted: the first frame still sits near the drawn pose.
+    expect(Math.abs(s.x - before.x)).toBeLessThan(Math.abs(target.x - before.x) / 2);
+  });
+
+  it('still snaps a held machine past the plain rule, at any horizon', () => {
+    // A reset arrives held: the race locks the machine it puts back.
+    const drive = createVehicleDrive('tank');
+    const s = createRemoteVehicleDisplay();
+    stepRemoteVehicleDisplay(s, 0, 0, 0, drive, 320, FRAME_S, 5000);
+    const held = { ...drive, controlsLocked: true };
+    stepRemoteVehicleDisplay(s, 7, 0, 0, held, 320, FRAME_S, 5000);
+    expect(s.x).toBe(7);
   });
 
   it('drops the hop on a teleport or a track reset', () => {
