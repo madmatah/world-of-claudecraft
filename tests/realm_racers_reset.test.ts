@@ -7,7 +7,10 @@ import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
 import { REALM_RACERS_GHOST_AURA, realmRacersGhosted } from '../src/sim/realm_racers_ghost';
-import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_GATE_RESYNC_WINDOW,
+  REALM_RACERS_GRID_SIZE,
+} from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   REALM_RACERS_CUT_LOCK_TICKS,
@@ -327,6 +330,32 @@ describe('Realm Racers recovery', () => {
     const anchor = onLane(match, anchorAfterGate2.resetS);
     expect(racer.pos.x).toBeCloseTo(anchor.x, 6);
     expect(racer.pos.z).toBeCloseTo(anchor.z, 6);
+  });
+
+  it('resyncs on a gate past one it was shoved wide of, never beyond the window', () => {
+    // A machine shoved past a gate's band (out on the garden, still drivable)
+    // used to keep that gate as its next for the rest of the lap, so every
+    // later recovery rewound to the anchor before it.
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const gates = realmRacersGates(RACE_CIRCUIT);
+    const cross = (gate: (typeof gates)[number]) => {
+      const before = realmRacersToWorld(match, gate.x - gate.dirX * 1.5, gate.z - gate.dirZ * 1.5);
+      const after = realmRacersToWorld(match, gate.x + gate.dirX * 1.5, gate.z + gate.dirZ * 1.5);
+      racer.prevPos.x = before.x;
+      racer.prevPos.z = before.z;
+      racer.pos.x = after.x;
+      racer.pos.z = after.z;
+      updateRealmRacers(sim.ctx);
+    };
+    progress.nextResetGate = gates[1].index;
+    cross(gates[2]);
+    expect(progress).toMatchObject({ nextResetGate: gates[3].index, resetS: gates[2].s });
+    // Past the window the ordered rule stands: a gate that far ahead is not
+    // where this machine came from, so it is no anchor.
+    const anchor = { nextResetGate: progress.nextResetGate, resetS: progress.resetS };
+    cross(gates[gates[3].index + REALM_RACERS_GATE_RESYNC_WINDOW]);
+    expect(progress).toMatchObject(anchor);
   });
 
   it('requires the full stuck window WITHOUT interruption, not an accumulated total', () => {

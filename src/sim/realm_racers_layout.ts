@@ -82,6 +82,18 @@ export const REALM_RACERS_GATE_SPACING = 57;
 export const REALM_RACERS_MIN_GATES = 4;
 
 /**
+ * How many gates, starting at the next one, a crossing may resync on. A
+ * machine shoved wide past a gate's band (out on the garden, still drivable)
+ * crosses that gate's plane outside it, and with only the next gate tested it
+ * kept that gate for the rest of the lap: every later recovery rewound to the
+ * anchor before it, up to a lap, and a missed gate 0 rewound the lap count.
+ * Three is two skipped gates, over a hundred yards of garden, which the loiter
+ * referee ends long before; a gate further ahead is not where a machine came
+ * from, so it is never an anchor.
+ */
+export const REALM_RACERS_GATE_RESYNC_WINDOW = 3;
+
+/**
  * How far an anchor may slide off its evenly spaced slot to find straighter
  * road, as a fraction of the spacing.
  *

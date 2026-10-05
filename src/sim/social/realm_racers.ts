@@ -65,7 +65,9 @@ import {
   resolveGroundBlastImpact,
 } from '../realm_racers_ground_blast';
 import {
+  type RallyGate,
   type RallyPoint,
+  REALM_RACERS_GATE_RESYNC_WINDOW,
   REALM_RACERS_GRID_SIZE,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
@@ -2304,8 +2306,19 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
     progress.travelled = step.travelled;
     const from = realmRacersToCanonical(match, e.prevPos.x, e.prevPos.z);
     const to = realmRacersToCanonical(match, e.pos.x, e.pos.z);
-    const gate = gates[progress.nextResetGate];
-    const crossing = gate ? rallyGateCrossingFraction(from, to, gate) : null;
+    // The next gate, or one of the few after it (REALM_RACERS_GATE_RESYNC_WINDOW),
+    // nearest first: a machine shoved wide of one gate's band resyncs on the
+    // next one it really crosses instead of losing every anchor for the lap.
+    let gate: RallyGate | undefined;
+    let crossing: number | null = null;
+    for (let k = 0; k < REALM_RACERS_GATE_RESYNC_WINDOW && k < gates.length; k++) {
+      const candidate = gates[(progress.nextResetGate + k) % gates.length];
+      crossing = rallyGateCrossingFraction(from, to, candidate);
+      if (crossing !== null) {
+        gate = candidate;
+        break;
+      }
+    }
     if (gate && crossing !== null) {
       // Snapshot progress AT the recovery plane, not at the end of this tick's
       // segment. Otherwise the piece after the gate is retained by a reset and
@@ -2321,7 +2334,7 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
         progress.resetLap = step.lap;
         progress.resetDistanceSinceWrap = 0;
       }
-      progress.nextResetGate = (progress.nextResetGate + 1) % gates.length;
+      progress.nextResetGate = (gate.index + 1) % gates.length;
     }
     if (!step.wrapped) continue;
     // Deed-tracking only (docs/design/deeds.md): the lap that just closed,
