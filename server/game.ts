@@ -650,7 +650,7 @@ export { SIM_MOB_ZONE_PHASES };
 export const SELF_WIRE_PHASES = [
   'base', // wireEntity + the always-on scalar block + its stringify
   'timers', // lockouts, corpse, auras, cooldowns, node cooldowns, charges, stats, weapon
-  'social', // party, marks, trade, duel, cardDuel, honor, arena
+  'social', // party, marks, trade, duel, cardDuel, rr, rrc, rrt, honor, wpvp, hill, arena
   'bg',
   'df',
   'market',
