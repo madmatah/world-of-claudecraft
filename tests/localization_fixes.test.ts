@@ -1766,6 +1766,7 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
       'pull_timer.ts',
       'ready_check.ts',
       'realm_racers.ts',
+      'realm_racers_auras.ts',
       'realm_racers_bots.ts',
       'realm_racers_busy.ts',
       'realm_racers_context.ts',

@@ -143,14 +143,23 @@ saved. The return
 - position and facing: the spot the pilot held when seated, not a fixed point;
 - mount: the mount they had when seated; the drive state is removed;
 - kit: the class abilities, recomputed;
-- the clean-slate wipe (`resetForArena`) runs at the seat and again at the return, so auras
-  carried in are shed and not restored;
+- auras: the clean-slate wipe (`resetForArena`) runs at the seat and again at the return, so
+  the race itself is buff-free, but every aura the seat stripped comes back
+  (`src/sim/social/realm_racers_auras.ts`, snapshot `RealmRacersMatch.strippedAuras`): a timed
+  aura with its remaining time minus the ticks between the seat and the return, dropped if
+  that runs out; an untimed one (permanent, or an engine aura the aura pass never ages) as it
+  was. The recovery sicknesses ride the pools below instead, the Cheater mark is never
+  stripped, and nothing the race applied (ward, ghost, surface slows) is ever in the snapshot.
+  A druid's parked mana and Cat energy deficit come back with the form;
 - pools: `restoreArenaReturnPools` hands back the HP, resource, cooldowns, ability charges,
   crowd-control diminishing returns and any recovery sickness owed on the way in;
 - the pet stowed at the seat comes back.
 
-A save taken while seated writes the pre-race return spot (`realmRacersReturnFor`), never a
-point on the circuit, and the race kit is never persisted.
+A save taken while seated writes the pre-race return spot (`realmRacersSaveOverlay`), never a
+point on the circuit, and the race kit is never persisted. It writes the pre-race pools too,
+including the mana a druid seated in a form had parked. Auras are session state that no save
+path writes, so a leave restores the stripped auras on the live body before the save, and a
+linkdead pilot keeps that body through the grace.
 
 ## Rated vs practice
 

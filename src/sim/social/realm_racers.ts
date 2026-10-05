@@ -154,6 +154,13 @@ import {
   vehicleMaxSlip,
 } from '../vehicle_motion';
 import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from './arena';
+import {
+  type RealmRacersStrippedAuras,
+  restoreRealmRacersParkedPools,
+  restoreRealmRacersStrippedAuras,
+  settleRealmRacersStrippedAuras,
+  snapshotRealmRacersStrippedAuras,
+} from './realm_racers_auras';
 import { realmRacersHeldElsewhere } from './realm_racers_busy';
 import {
   beginRealmRacersCountdown,
@@ -604,6 +611,9 @@ export interface RealmRacersMatch {
   finishOrder: number[];
   returns: Map<number, RealmRacersReturn>;
   preMatchPools: Map<number, ArenaReturnPools>;
+  /** What the seat's clean slate took off each pilot, handed back (aged) on
+   *  the return (social/realm_racers_auras.ts). */
+  strippedAuras: Map<number, RealmRacersStrippedAuras>;
   progress: Map<number, RealmRacersProgress>;
   groundBlasts: RealmRacersGroundBlast[];
   /**
@@ -1092,8 +1102,11 @@ function restoreRacer(ctx: SimContext, match: RealmRacersMatch, meta: PlayerMeta
   e.mountCastKey = '';
   e.mountCastRemaining = 0;
   ctx.resetForArena(e);
+  const stripped = match.strippedAuras.get(meta.entityId);
+  if (stripped) restoreRealmRacersStrippedAuras(ctx, e, stripped);
   const pools = match.preMatchPools.get(meta.entityId);
   if (pools) restoreArenaReturnPools(ctx, e, pools);
+  if (stripped) restoreRealmRacersParkedPools(e, stripped);
   restorePetFromDelveStash(ctx, meta.entityId);
   if (ret) {
     e.pos = ctx.groundPos(ret.x, ret.z);
@@ -1198,6 +1211,7 @@ function startMatch(
   const loadingUntilTick = ctx.tickCount + REALM_RACERS_LOADING_MAX_TICKS;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();
+  const strippedAuras = new Map<number, RealmRacersStrippedAuras>();
   for (const { pid, e } of grid) {
     returns.set(pid, {
       x: e.pos.x,
@@ -1206,6 +1220,7 @@ function startMatch(
       mountKey: e.mountKey,
     });
     pools.set(pid, snapshotArenaReturnPools(e));
+    strippedAuras.set(pid, snapshotRealmRacersStrippedAuras(e, ctx.tickCount));
   }
   const match: RealmRacersMatch = {
     id,
@@ -1224,6 +1239,7 @@ function startMatch(
     finishOrder: [],
     returns,
     preMatchPools: pools,
+    strippedAuras,
     progress: new Map(
       pids.map((pid) => [
         pid,
@@ -1290,7 +1306,11 @@ function startMatch(
   };
   if (practice) ctx.realmRacers.practices.push(match);
   else ctx.realmRacers.match = match;
-  for (const { meta, e } of grid) standardizeRacer(ctx, match, meta, e);
+  for (const { pid, meta, e } of grid) {
+    standardizeRacer(ctx, match, meta, e);
+    const stripped = strippedAuras.get(pid);
+    if (stripped) settleRealmRacersStrippedAuras(stripped, e);
+  }
   // Slot order IS seat order, so the grid row reads left to right in `pids`.
   for (let slot = 0; slot < grid.length; slot++) {
     placeRacer(ctx, match, grid[slot].e, slot);
@@ -1736,6 +1756,8 @@ export function realmRacersResetPosition(ctx: SimContext, pid?: number): void {
  * strand the character on the circuit), the hp and resource, the cooldowns and
  * charge pools, and the recovery sickness owed. The stowed pet persists via
  * serializePet's delvePetStash fallback; the kit is session-derived, not saved.
+ * The auras the seat stripped are not here because no save writes auras at
+ * all: a leave hands them back on the live body (`returnRacer`) first.
  */
 export function realmRacersSaveOverlay(
   ctx: SimContext,
@@ -1751,15 +1773,19 @@ export function realmRacersSaveOverlay(
   const e = ctx.entities.get(pid);
   if (!ret || !pools || !meta || !e) return null;
   const sickness = pools.sickness;
+  // The bar the pilot walked in on, not the race's: a druid seated in a form
+  // drives in caster form, so the live bar says mana while the pooled value is
+  // the form's rage or energy, and the real mana is the one parked at the seat.
+  const stripped = match?.strippedAuras.get(pid);
   return {
     pos: { x: ret.x, z: ret.z },
     facing: ret.facing,
     hp: pools.hp,
     resource: persistedResource(
       CLASSES[meta.cls].resourceType,
-      e.resourceType,
+      stripped?.resourceType ?? e.resourceType,
       pools.resource,
-      e.savedMana,
+      stripped?.savedMana ?? e.savedMana,
     ),
     resSickness: sickness?.id === RESURRECTION_SICKNESS_ID ? sickness.remaining : null,
     unstuckSickness: sickness?.id === UNSTUCK_SICKNESS_ID ? sickness.remaining : null,

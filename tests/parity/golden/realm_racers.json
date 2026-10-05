@@ -4038,8 +4038,8 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "509c3204",
-      "events": "6ca931a5",
+      "state": "3f8fb89a",
+      "events": "cef9d8e9",
       "rng": {
         "draws": 3510,
         "digest": "e6497939"
@@ -4377,7 +4377,7 @@
               "id": "battle_stance",
               "kind": "battle_stance",
               "name": "Battle Stance",
-              "remaining": 3599.9,
+              "remaining": 3579.45,
               "school": "physical",
               "sourceId": 1010
             }
@@ -4600,7 +4600,7 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "509c3204",
+      "state": "3f8fb89a",
       "events": "741638a5",
       "rng": {
         "draws": 3510,
@@ -4939,7 +4939,7 @@
               "id": "battle_stance",
               "kind": "battle_stance",
               "name": "Battle Stance",
-              "remaining": 3599.9,
+              "remaining": 3579.45,
               "school": "physical",
               "sourceId": 1010
             }
