@@ -3852,7 +3852,6 @@ export class Sim {
     // forces a fresh re-summon instead of laundering the summon cooldown for free.
     // Hunter pets (non-demon) persist. See pet_commands.isDemonPetState.
     const petSnapshot = this.serializePet(pid);
-    const activityReturn = realmRacersMod.realmRacersReturnFor(this.ctx, pid);
     // One fold serves both persisted proficiency keys below: the live counters
     // plus any still-queued grants (foldPendingGatherGrants), so a leave-time
     // save landing between the tick that queued a grant and the tick that
@@ -3895,8 +3894,8 @@ export class Sim {
         e.resource,
         e.savedMana,
       ),
-      pos: activityReturn?.pos ?? ferryMod.ferrySavePosition(e), // never the sea: a ride saves the destination pier
-      facing: activityReturn?.facing ?? e.facing,
+      pos: ferryMod.ferrySavePosition(e), // never the sea: a ride saves the destination pier
+      facing: e.facing,
       // Death state: a released spirit resumes its corpse run on relog, and a
       // dead-but-unreleased corpse auto-releases on load (see addPlayer).
       dead: e.dead,
@@ -4097,6 +4096,7 @@ export class Sim {
       // must never carry an identity claim back in), so its blob and every
       // pre-feature save stay byte-equal.
       ...materialGathererIdentitySaveFragment(meta.gathererIdentity),
+      ...realmRacersMod.realmRacersSaveOverlay(this.ctx, pid), // seated: the pre-race state, never the race's
     };
     // Expired party-trade markers retire at this persistence boundary, never by tick sweep.
     return sanitizeRemovedZone1Content(retirePartyTradeOnSave(state, this.lockoutNowMs())).state;

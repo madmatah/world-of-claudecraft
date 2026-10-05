@@ -23,6 +23,7 @@ import type {
   RealmRacersPhase,
   RealmRacersRacerInfo,
 } from '../../world_api/realm_racers';
+import type { CharacterState } from '../character_state';
 import {
   type RallyHeldSlot,
   REALM_RACERS_EFFECT_ABILITIES,
@@ -36,7 +37,8 @@ import {
   realmRacersCompetitionCircuits,
 } from '../content/realm_racers_circuits';
 import { vehicleProfile } from '../content/vehicles';
-import { abilitiesKnownAt, DUNGEON_X_THRESHOLD } from '../data';
+import { serializeCooldowns } from '../cooldown_persist';
+import { abilitiesKnownAt, CLASSES, DUNGEON_X_THRESHOLD } from '../data';
 import * as deedsMod from '../deeds';
 import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
 import type { RallyDriverTier } from '../realm_racers_driver';
@@ -131,10 +133,13 @@ import {
   rallyLoiterCountdownTicks,
   stepRealmRacersTrackLimits,
 } from '../realm_racers_track_limits';
+import { RESURRECTION_SICKNESS_ID, UNSTUCK_SICKNESS_ID } from '../resurrection';
+import { persistedResource } from '../serialize_resource';
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { settleTeleportArrival } from '../teleport_arrival';
 import { CAST_COMPLETE_EPS, type Entity, TICK_RATE, type VehicleDrive } from '../types';
+import { restoreCooldownsPreservingUnstuck } from '../unstuck_cooldown';
 import {
   type ContactBody,
   resolveVehicleContactSwept,
@@ -1686,18 +1691,49 @@ export function realmRacersResetPosition(ctx: SimContext, pid?: number): void {
 }
 
 /**
- * The pose serializeCharacter saves for a pilot seated in a Realm Racers heat:
- * the pre-race RETURN spot, never a mid-track position (a mid-race save or
- * forfeit must not strand the character on the circuit). Null when not seated.
- * The stowed pet persists via serializePet's delvePetStash fallback; the kit is
- * session-derived, not saved.
+ * What serializeCharacter saves for a pilot seated in a Realm Racers heat, laid
+ * over the live fields it already wrote, or null when not seated. The race runs
+ * on the arena clean slate (full pools, no cooldowns, no sickness) and only a
+ * clean return hands the real values back, so a save taken mid-race (the
+ * autosave, a shutdown) writes what the pilot carried in, as that return will
+ * restore it: the pre-race RETURN spot (never a mid-track pose, which would
+ * strand the character on the circuit), the hp and resource, the cooldowns and
+ * charge pools, and the recovery sickness owed. The stowed pet persists via
+ * serializePet's delvePetStash fallback; the kit is session-derived, not saved.
  */
-export function realmRacersReturnFor(
+export function realmRacersSaveOverlay(
   ctx: SimContext,
   pid: number,
-): { pos: { x: number; z: number }; facing: number } | null {
-  const ret = realmRacersMatchOf(ctx, pid)?.returns.get(pid);
-  return ret ? { pos: { x: ret.x, z: ret.z }, facing: ret.facing } : null;
+): Pick<
+  CharacterState,
+  'pos' | 'facing' | 'hp' | 'resource' | 'resSickness' | 'unstuckSickness' | 'cooldowns'
+> | null {
+  const match = realmRacersMatchOf(ctx, pid);
+  const ret = match?.returns.get(pid);
+  const pools = match?.preMatchPools.get(pid);
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  if (!ret || !pools || !meta || !e) return null;
+  const sickness = pools.sickness;
+  return {
+    pos: { x: ret.x, z: ret.z },
+    facing: ret.facing,
+    hp: pools.hp,
+    resource: persistedResource(
+      CLASSES[meta.cls].resourceType,
+      e.resourceType,
+      pools.resource,
+      e.savedMana,
+    ),
+    resSickness: sickness?.id === RESURRECTION_SICKNESS_ID ? sickness.remaining : null,
+    unstuckSickness: sickness?.id === UNSTUCK_SICKNESS_ID ? sickness.remaining : null,
+    cooldowns: serializeCooldowns(
+      restoreCooldownsPreservingUnstuck(e.cooldowns, pools.cooldowns),
+      e.potionCooldownUntil,
+      ctx.time,
+      pools.abilityCharges,
+    ),
+  };
 }
 
 /**

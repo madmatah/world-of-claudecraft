@@ -27,7 +27,7 @@ export {
   realmRacersQueueLeave,
   realmRacersReady,
   realmRacersResetPosition,
-  realmRacersReturnFor,
+  realmRacersSaveOverlay,
   realmRacersTracksideFor,
 } from './realm_racers';
 export { startRealmRacersPractice } from './realm_racers_bots';

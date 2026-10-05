@@ -23,6 +23,7 @@ import {
   realmRacersPracticeLanes,
 } from '../src/sim/realm_racers_layout';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { RESURRECTION_SICKNESS_ID, UNSTUCK_SICKNESS_ID } from '../src/sim/resurrection';
 import type { CharacterState, Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
@@ -745,6 +746,45 @@ describe('The Realm Racers lifecycle', () => {
     const free = required(sim.serializeCharacter(walker), `save ${walker}`);
     expect(free.pos).toEqual({ x: walkerBody.pos.x, z: walkerBody.pos.z });
     expect(free.facing).toBe(1.25);
+  });
+
+  it.each([
+    [RESURRECTION_SICKNESS_ID, 'resSickness'],
+    [UNSTUCK_SICKNESS_ID, 'unstuckSickness'],
+  ] as const)('saves a seated pilot with the pools, cooldowns and %s carried in', (id, field) => {
+    // The race runs on the arena clean slate (full pools, no cooldowns, no
+    // sickness) and only a clean return hands the real values back, so an
+    // autosave or a shutdown save taken mid-race must write what the pilot
+    // carried in, never the race's reset state.
+    const { sim, pids } = makeGrid();
+    const mage = pids[1];
+    const body = entity(sim, mage);
+    body.hp = Math.floor(body.maxHp / 3);
+    body.resource = Math.floor(body.maxResource / 4);
+    body.cooldowns.set('frost_nova', 12.5);
+    body.auras.push({
+      id,
+      name: id,
+      kind: 'buff_allstats_pct',
+      remaining: 240,
+      duration: 600,
+      value: 0,
+      sourceId: body.id,
+      school: 'physical',
+    } as Entity['auras'][number]);
+    const before = required(sim.serializeCharacter(mage), 'pre-race save');
+    expect(before[field]).toBe(240);
+    expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+    for (let i = 0; i < 5; i++) sim.tick();
+    // The live body is on the clean slate: the save must not be.
+    expect(body.hp).toBe(body.maxHp);
+    expect(body.cooldowns.has('frost_nova')).toBe(false);
+    const seated = required(sim.serializeCharacter(mage), 'mid-race save');
+    for (const key of ['hp', 'resource', 'cooldowns', 'resSickness', 'unstuckSickness'] as const) {
+      expect(seated[key], key).toEqual(before[key]);
+    }
+    expect(seated.pos).toEqual(before.pos);
+    expect(seated.facing).toBe(before.facing);
   });
 
   it('leaves a returned quitter alone in the open world while the race runs on', () => {
