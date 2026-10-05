@@ -999,6 +999,7 @@ const RENDER_PURE_CORES = [
   'src/render/ground_aim_reticle_core.ts',
   'src/render/day_night_rig_core.ts',
   'src/render/realm_racers_audio_core.ts',
+  'src/render/realm_racers_contact_kick_core.ts',
   'src/render/realm_racers_daylight_core.ts',
   'src/render/realm_racers_grass_core.ts',
   'src/render/realm_racers_missed_pickup_core.ts',

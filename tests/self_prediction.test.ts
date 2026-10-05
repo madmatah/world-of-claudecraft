@@ -558,6 +558,8 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     for (let ct = 0; ct < 3; ct++) stepTwin(twin, THROTTLE);
     acknowledge(wire, twin, 2);
     expect(pipeline.display()?.tickOffset).toBe(3);
+    // the acknowledged tick rides with it (the drawn contact bump retires on it)
+    expect(pipeline.display()?.ackTick).toBe(2);
     drivePredictionFrame(pipeline, 6, THROTTLE);
     expect(pipeline.display()?.tickOffset).toBe(4);
     // with the alpha the position was drawn at, for the rival horizon
@@ -576,6 +578,7 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(onFoot).not.toBeNull();
     expect(onFoot?.tickOffset).toBeNull();
     expect(onFoot?.tickAlpha).toBeNull();
+    expect(onFoot?.ackTick).toBeNull();
 
     const runner = predictionFixture();
     drivePredictionFrame(runner.pipeline, 0);

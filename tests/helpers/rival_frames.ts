@@ -597,6 +597,11 @@ export interface DuelOptions {
    *  on by default): each self is drawn ahead of the server, and each rival in
    *  that self's frame. False: both stood down, the `?drivepredict=0` arm. */
   predictDrivers?: boolean;
+  /** Draw the bump at the seen touch (realm_racers_contact_kick_core.ts). Off
+   *  by default here: these scores measure where the projection puts each
+   *  machine, and the drawn bump is measured on its own
+   *  (tests/realm_racers_contact_kick.test.ts). */
+  contactKick?: boolean;
 }
 
 export function runDuel(
@@ -609,6 +614,7 @@ export function runDuel(
     latencyA: racerLink(rttA, 1337),
     latencyB: racerLink(rttB, 7331),
     predictDrivers: options.predictDrivers,
+    contactKick: options.contactKick ?? false,
   });
   try {
     d.seat();

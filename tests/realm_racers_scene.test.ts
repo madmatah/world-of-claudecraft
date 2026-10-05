@@ -18,9 +18,11 @@ vi.mock('../src/render/textures', async (importOriginal) => ({
 }));
 
 import { createOwnBumpFeedback, markLocalBump } from '../src/render/own_bump_feedback_core';
+import { createContactKick, retireContactKick } from '../src/render/realm_racers_contact_kick_core';
 import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import { rallySkyDayNightBiome, realmRacersThemeAt } from '../src/render/realm_racers_themes';
 import { createRemoteVehicleDisplay } from '../src/render/remote_vehicle_display_core';
+import { createSelfRenderPositionState } from '../src/render/self_render_position_core';
 import {
   REALM_RACERS_LANES,
   realmRacersLaneAt,
@@ -45,7 +47,10 @@ function sceneHost(extra: Record<string, unknown> = {}) {
     views: new Map(),
     vfx: { burst: vi.fn(), groundPuff: vi.fn() },
     audioSink: { realmRacersEvent: vi.fn(), vehicle: vi.fn(), stopVehicle: vi.fn() },
-    selfRender: { drive: { source: 'none', velocityX: 0, velocityZ: 0 } },
+    selfRender: {
+      drive: { source: 'none', velocityX: 0, velocityZ: 0 },
+      contactKick: createContactKick(),
+    },
     time: 3,
     groundSample: ground,
     spawnAoeRing: vi.fn(),
@@ -138,7 +143,10 @@ describe('the rally scene', () => {
         realmRacersInfo: { match: race },
         realmRacersTrackside: null,
       },
-      selfRender: { drive: { source: 'predicted', velocityX: 20, velocityZ: 0 } },
+      selfRender: {
+        drive: { source: 'predicted', velocityX: 20, velocityZ: 0 },
+        contactKick: createContactKick(),
+      },
     });
     const scene = new RealmRacersScene(host);
     const rival = {
@@ -178,6 +186,171 @@ describe('the rally scene', () => {
     scene.onEvent({ type: 'realmRacersBump', aId: SELF, bId: RIVAL, x: 0, z: 0, impact: 12 });
     expect(host.audioSink.realmRacersEvent).toHaveBeenCalledOnce();
     vi.restoreAllMocks();
+  });
+
+  it('starts the drawn bump at the seen touch, shifts the drawn rival, folds it back once retired', () => {
+    const drive = createVehicleDrive('rally_loaner');
+    drive.speed = 20;
+    const self = {
+      id: SELF,
+      pos: { x: 0, y: 0, z: 0 },
+      facing: 0,
+      drive,
+      netUpdatedAt: 1000,
+      auras: [],
+    };
+    const race = {
+      phase: 'racing',
+      circuitId: 'c',
+      standings: [SELF, RIVAL].map((pid) => ({ pid, finished: false, retired: false })),
+    };
+    const selfRender = createSelfRenderPositionState();
+    Object.assign(selfRender.drive, {
+      source: 'predicted',
+      velocityX: 0,
+      velocityZ: 20,
+      facing: 0,
+    });
+    const host = sceneHost({
+      sim: {
+        playerId: SELF,
+        player: self,
+        realmRacersInfo: { match: race },
+        realmRacersTrackside: null,
+      },
+      selfRender,
+    });
+    const scene = new RealmRacersScene(host);
+    const rival = {
+      id: RIVAL,
+      pos: { x: 0, y: 0, z: 3 },
+      prevPos: { x: 0, y: 0, z: 3 },
+      facing: 0,
+      prevFacing: 0,
+      drive: createVehicleDrive('rally_loaner'),
+      netUpdatedAt: 1000,
+      auras: [],
+    };
+    const mirrored = JSON.stringify([self, rival]);
+    const motion = {
+      kind: 'reconciled',
+      position: { x: 0, y: 0, z: 0 },
+      residual: null,
+      drive: { facing: 0, velocityX: 0, velocityZ: 20, onGround: true, state: drive },
+      tickOffset: 4,
+      tickAlpha: 0.5,
+      ackTick: 96,
+    } as const;
+    const view = { remoteVehicle: createRemoteVehicleDisplay() };
+    const pose = { x: 0, y: 0, z: 3, facing: 0 };
+    const project = (now: number) =>
+      scene.projectRival(
+        false,
+        view,
+        rival as never,
+        pose,
+        motion as never,
+        now,
+        1 / 60,
+        self as never,
+        self.pos,
+      );
+    project(1000);
+    expect(host.audioSink.realmRacersEvent).toHaveBeenCalledOnce();
+    const kick = selfRender.contactKick;
+    // Touched in the predicted head's client tick: the ack plus the offset.
+    expect([kick.rivalId, kick.touchTick]).toEqual([RIVAL, 100]);
+    expect(kick.selfVz).toBeLessThan(0);
+    expect(kick.rivalVz).toBeGreaterThan(0);
+    // The self display grows it; the scene draws the rival's share.
+    kick.rivalZ = 0.4;
+    project(1016);
+    expect(pose.z).toBe(view.remoteVehicle.z + 0.4);
+    // Never the mirror, never the wire.
+    expect(JSON.stringify([self, rival])).toBe(mirrored);
+    // Retired by the self display: folded into the drawn rival before its
+    // next projection step, so the drawn pose does not jump.
+    const drawnBefore = pose.z;
+    retireContactKick(kick);
+    project(1032);
+    expect(kick.handoffRivalId).toBe(-1);
+    expect(pose.z).toBe(view.remoteVehicle.z);
+    expect(Math.abs(pose.z - drawnBefore)).toBeLessThan(0.4);
+  });
+
+  it('aims every command from the pose without the drawn bump', () => {
+    const selfRender = createSelfRenderPositionState();
+    const host = sceneHost({ selfRender });
+    const scene = new RealmRacersScene(host);
+    selfRender.active = true;
+    selfRender.ready = true;
+    selfRender.position.x = 10;
+    selfRender.position.z = 20;
+    selfRender.contactKick.rivalId = RIVAL;
+    selfRender.contactKick.selfX = 1.5;
+    selfRender.contactKick.selfZ = -2;
+    expect(scene.selfAimPose?.pos).toEqual({ x: 8.5, y: 0, z: 22 });
+  });
+
+  it('draws no bump under ?contactkick=0, the bang still plays', async () => {
+    vi.resetModules();
+    vi.doMock('../src/render/render_dev_flags', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../src/render/render_dev_flags')>()),
+      contactKickRequested: () => false,
+    }));
+    const { RealmRacersScene: Scene } = await import('../src/render/realm_racers_scene');
+    const drive = createVehicleDrive('rally_loaner');
+    drive.speed = 20;
+    const self = { id: SELF, pos: { x: 0, y: 0, z: 0 }, facing: 0, drive, auras: [] };
+    const selfRender = createSelfRenderPositionState();
+    Object.assign(selfRender.drive, {
+      source: 'predicted',
+      velocityX: 0,
+      velocityZ: 20,
+      facing: 0,
+    });
+    const race = {
+      phase: 'racing',
+      standings: [SELF, RIVAL].map((pid) => ({ pid, finished: false, retired: false })),
+    };
+    const host = sceneHost({
+      sim: { playerId: SELF, player: self, realmRacersInfo: { match: race } },
+      selfRender,
+    });
+    const scene = new Scene(host as never);
+    const rival = {
+      id: RIVAL,
+      pos: { x: 0, y: 0, z: 3 },
+      prevPos: { x: 0, y: 0, z: 3 },
+      facing: 0,
+      prevFacing: 0,
+      drive: createVehicleDrive('rally_loaner'),
+      netUpdatedAt: 1000,
+      auras: [],
+    };
+    const motion = {
+      kind: 'reconciled',
+      position: self.pos,
+      residual: null,
+      tickOffset: 4,
+      tickAlpha: 0.5,
+      ackTick: 96,
+    };
+    scene.projectRival(
+      false,
+      { remoteVehicle: createRemoteVehicleDisplay() },
+      rival as never,
+      { x: 0, y: 0, z: 3, facing: 0 },
+      motion as never,
+      1000,
+      1 / 60,
+      self as never,
+      self.pos,
+    );
+    expect(host.audioSink.realmRacersEvent).toHaveBeenCalledOnce();
+    expect(selfRender.contactKick.rivalId).toBe(-1);
+    vi.doUnmock('../src/render/render_dev_flags');
+    vi.resetModules();
   });
 
   it('lifts the drawn hull off the wire pose it read before writing the projection', () => {

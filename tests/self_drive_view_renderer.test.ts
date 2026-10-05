@@ -202,6 +202,8 @@ describe('renderer self-kart reads go through the drive view', () => {
       ['scene', 'if (p.drive && localBumpArmed(h.selfRender.drive.source, race, e, p)) {'],
       ['scene', 'h.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),'],
       ['scene', 'h.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),'],
+      // the bump drawn at the seen touch (its self body)
+      ['scene', 'self.facing = h.selfRender.drive.facing;'],
       // the model yaw
       ['renderer', 'if (id === p.id && this.selfRender.drive.steersHeading) {'],
       ['renderer', 'facing = this.selfRender.drive.facing;'],
@@ -224,7 +226,7 @@ describe('renderer self-kart reads go through the drive view', () => {
     ];
     for (const [where, needle] of consumers) expect(count(where, needle), needle).toBe(1);
     expect(count('renderer', 'this.selfRender.drive.')).toBe(6);
-    expect(count('scene', 'h.selfRender.drive.')).toBe(8);
+    expect(count('scene', 'h.selfRender.drive.')).toBe(9);
     expect(count('kart', 'h.selfRender.drive.')).toBe(2);
     // The two rally modules read it on the renderer's own frame: the rival
     // step before the body is placed, the road effects after the mount pass.

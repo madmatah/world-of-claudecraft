@@ -93,6 +93,12 @@
 //                  (`=off` reads the same). Driver prediction is ON by default;
 //                  this is the A/B arm for a playtest. It reads no tier and no
 //                  frame rate.
+//   ?contactkick=0 - does not draw a Realm Racers contact bump at the seen
+//                  touch (realm_racers_contact_kick_core.ts): the karts move
+//                  only when the server's contact reaches the screen, as
+//                  before (`=off` reads the same). ON by default; the A/B arm
+//                  for a playtest. Display-only either way; reads no tier and
+//                  no frame rate.
 
 /**
  * Sectors per axis each blade-grass pool splits its slot grid into. Four is
@@ -202,4 +208,15 @@ const drivePrediction = ((): boolean => {
 /** False only under `?drivepredict=0` or `=off`: predict a seated driver on wire v2. */
 export function drivePredictionRequested(): boolean {
   return drivePrediction;
+}
+
+const contactKick = ((): boolean => {
+  if (typeof location === 'undefined') return true;
+  const value = new URLSearchParams(location.search).get('contactkick');
+  return value !== '0' && value !== 'off';
+})();
+
+/** False only under `?contactkick=0` or `=off`: draw a seen contact's bump. */
+export function contactKickRequested(): boolean {
+  return contactKick;
 }

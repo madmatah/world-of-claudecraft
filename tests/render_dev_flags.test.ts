@@ -72,6 +72,18 @@ describe('render dev flags: the driver prediction opt-out', () => {
   }, 30_000);
 });
 
+describe('render dev flags: the drawn contact bump opt-out', () => {
+  it('is on by default, on in a headless host, and only off under ?contactkick=0', async () => {
+    expect((await loadFlags('')).contactKickRequested()).toBe(true);
+    expect((await loadFlags(null)).contactKickRequested()).toBe(true);
+    for (const search of ['?contactkick=1', '?contactkick=no', '?contactkick=']) {
+      expect((await loadFlags(search)).contactKickRequested(), search).toBe(true);
+    }
+    expect((await loadFlags('?perf&contactkick=0')).contactKickRequested()).toBe(false);
+    expect((await loadFlags('?contactkick=off')).contactKickRequested()).toBe(false);
+  });
+});
+
 describe('render dev flags: the character cull A/B arm', () => {
   // ?charcull=off has to restore the WHOLE pre-cull submission, not just the
   // renderer's group cull: a skinned caster that keeps three's frustum test on

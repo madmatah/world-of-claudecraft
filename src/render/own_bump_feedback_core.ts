@@ -57,6 +57,22 @@ export function bumpClosingSpeed(dx: number, dz: number, relVx: number, relVz: n
   return Math.max(0, (relVx * dx + relVz * dz) / dist);
 }
 
+/**
+ * The seen touch's closing speed, yd/s: the displayed hulls overlap (centres
+ * closer than `reach`) and approach. 0 otherwise. (dx, dz) and the relative
+ * velocity read as in `bumpClosingSpeed`.
+ */
+export function seenTouchClosing(
+  dx: number,
+  dz: number,
+  reach: number,
+  relVx: number,
+  relVz: number,
+): number {
+  if (dx * dx + dz * dz >= reach * reach) return 0;
+  return bumpClosingSpeed(dx, dz, relVx, relVz);
+}
+
 /** The slice of a standings row the bang gate reads. */
 export interface LocalBumpRacer {
   pid: number;

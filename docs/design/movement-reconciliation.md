@@ -167,7 +167,12 @@ as part of the replayed state:
   the match compares the drive, the vertical state and the airborne flag as
   well as the pose, and a mismatch adopts them with the snapshot's auras. Kernel
   inputs stay the per-tick flags; pickups, contacts, blasts and nitro are
-  server outcomes that arrive through the replay, never predicted.
+  server outcomes that arrive through the replay, never predicted. A rival
+  contact is DRAWN from the seen touch (a display-only shift of the drawn
+  pose, `src/render/realm_racers_contact_kick_core.ts`, retired on the
+  acknowledgement that can carry the server's contact): an exception to the
+  "the drawn pose reflects only input on the wire" rule, named for the
+  maintainer (`docs/prd/realm-racers-contact-lag-compensation.md`).
 - Oil: the one outcome predicted locally, because it is a pure function of
   state the client already mirrors (the patches and their expiry on the match
   readout, the race clock, the pilot's standing with the oil on `rdv` as
