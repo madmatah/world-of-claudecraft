@@ -5,8 +5,8 @@
 // decides what it says; this paints it.
 //
 // Hot: `RealmRacersUi` calls it every painted frame. The text-free skeleton is
-// rebuilt in ONE innerHTML write per signature (once per race phase), the root
-// and the announcer take their attributes once at ensure, and every per-frame
+// rebuilt in ONE innerHTML write per signature (once per race phase), the
+// announcer takes its attributes once at ensure, and every per-frame
 // write rides the PainterHost elided writers. A cell's localized text is
 // resolved again only when a value it spells changes, and the constant labels
 // are written once per rebuild (the lobby curtain's pattern): a rebuild, which
@@ -39,6 +39,7 @@ interface Spelled {
   speed: number;
   ward: number;
   limit: number;
+  wrongWay: boolean | null;
   phaseKey: TranslationKey | null | undefined;
   phaseSeconds: number;
   armed: boolean | null;
@@ -126,6 +127,7 @@ export class RealmRacersStrip {
     speed: -1,
     ward: -1,
     limit: -1,
+    wrongWay: null,
     phaseKey: undefined,
     phaseSeconds: -2,
     armed: null,
@@ -199,7 +201,6 @@ export class RealmRacersStrip {
       this.resetEl?.addEventListener('click', () => this.deps.reset());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
       this.forgetSpelled();
-      if (this.wrongWayEl) w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
       if (this.resetEl) w.setText(this.resetEl, t('hudChrome.rally.reset'));
     }
     // The pill is a VISUAL swap, and a swapped label is not an announcement: a
@@ -267,6 +268,13 @@ export class RealmRacersStrip {
       w.setStyleProp(this.wardEl, 'display', view.warded ? 'block' : 'none');
     }
     if (this.wrongWayEl) {
+      // An alert speaks when its text is inserted, not when it is unhidden, so
+      // the text is written on the rising edge and cleared on the falling one:
+      // every turn the wrong way is announced, not only the first.
+      if (view.wrongWay !== s.wrongWay) {
+        s.wrongWay = view.wrongWay;
+        w.setText(this.wrongWayEl, view.wrongWay ? t('hudChrome.rally.wrongWay') : '');
+      }
       w.setStyleProp(this.wrongWayEl, 'display', view.wrongWay ? 'block' : 'none');
     }
     if (this.limitsEl) {
@@ -325,6 +333,7 @@ export class RealmRacersStrip {
     s.speed = -1;
     s.ward = -1;
     s.limit = -1;
+    s.wrongWay = null;
     s.phaseKey = undefined;
     s.phaseSeconds = -2;
     s.armed = null;
@@ -374,10 +383,10 @@ export class RealmRacersStrip {
     if (this.hudRoot) return this.hudRoot;
     const layer = this.deps.layer();
     if (!layer) return null;
+    // No live-region role of its own: it holds controls and its own status and
+    // alert lines, each of which speaks for itself.
     const root = document.createElement('div');
     root.id = 'realm-racers-hud';
-    root.setAttribute('role', 'status');
-    root.setAttribute('aria-live', 'off');
     layer.appendChild(root);
     this.hudRoot = root;
     return root;

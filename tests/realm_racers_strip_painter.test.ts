@@ -117,7 +117,6 @@ describe('the race strip readout', () => {
       'hudChrome.rally.time',
       'hudChrome.rally.speed',
       'hudChrome.rally.wardHeld',
-      'hudChrome.rally.wrongWay',
       'hudChrome.rally.offTrack',
       'hudChrome.rally.reset',
       'hudChrome.rally.go',
@@ -128,11 +127,35 @@ describe('the race strip readout', () => {
         key,
       ).toHaveLength(1);
     }
-    expect(text('.rallyhud-wrong-way')).not.toBe('');
     expect(text('.rallyhud-reset')).not.toBe('');
     vi.mocked(t).mockClear();
-    strip.update(racing({ wrongWay: true }));
+    strip.update(racing({ resetLocked: true }));
     expect(tKeys()).toEqual([]);
+  });
+
+  it('writes the wrong-way alert on each rising edge, so a screen reader hears every one', () => {
+    const alert = (): HTMLElement => layer.querySelector('.rallyhud-wrong-way') as HTMLElement;
+    const warning = t('hudChrome.rally.wrongWay');
+    vi.mocked(t).mockClear();
+    expect(alert().textContent).toBe('');
+    strip.update(racing({ wrongWay: true }));
+    expect(alert().textContent).toBe(warning);
+    expect(alert().style.display).toBe('block');
+    strip.update(racing({ wrongWay: true }));
+    expect(tKeys()).toEqual(['hudChrome.rally.wrongWay']);
+    strip.update(racing({ wrongWay: false }));
+    expect(alert().textContent).toBe('');
+    expect(alert().style.display).toBe('none');
+    strip.update(racing({ wrongWay: true }));
+    expect(alert().textContent).toBe(warning);
+    expect(tKeys()).toEqual(['hudChrome.rally.wrongWay', 'hudChrome.rally.wrongWay']);
+  });
+
+  it('gives neither the strip nor the standings list a live-region role over its contents', () => {
+    expect(layer.querySelector('#realm-racers-hud')?.getAttribute('role')).toBeNull();
+    // The two lines that do speak keep their own regions.
+    expect(layer.querySelector('.rallyhud-wrong-way')?.getAttribute('role')).toBe('alert');
+    expect(layer.querySelector('.rallyhud-limits')?.getAttribute('role')).toBe('status');
   });
 
   it('arms and disarms the forfeit label only on the press and the lapse', () => {

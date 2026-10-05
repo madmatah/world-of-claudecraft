@@ -729,12 +729,11 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
   },
   // The Realm Racers standings panel is a keyed pool (one row node per pid,
   // held for the race, the auras_painter shape): each row's skeleton is minted
-  // ONCE in rowFor (.className + .innerHTML), the panel root takes its two
-  // ARIA attributes once at ensure(), and every repaint write (placing, name,
-  // lap, movement cues) is facet-routed behind the core's data signature.
+  // ONCE in rowFor (.className + .innerHTML), and every repaint write (placing,
+  // name, lap, movement cues) is facet-routed behind the core's data signature.
   {
     file: 'realm_racers_standings_painter.ts',
-    allow: { '.className': 1, '.innerHTML': 1, '.setAttribute': 2 },
+    allow: { '.className': 1, '.innerHTML': 1 },
     reflowAllow: {},
   },
   // The Realm Racers podium builds its text-free skeleton in ONE innerHTML
@@ -747,14 +746,14 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     reflowAllow: {},
   },
   // The Realm Racers race strip rebuilds its text-free skeleton in ONE innerHTML
-  // write per structural sig (once per race phase); the strip root takes its two
-  // ARIA attributes once at ensureHud() and the off-screen circuit announcer its
-  // class, two ARIA attributes and its data marker once at ensureAnnouncer().
-  // Every per-frame write (placing, lap, time, speed, the status lines, the
-  // reset control's disabled state, the forfeit arm) is facet-routed.
+  // write per structural sig (once per race phase); the off-screen circuit
+  // announcer takes its class, two ARIA attributes and its data marker once at
+  // ensureAnnouncer(). Every per-frame write (placing, lap, time, speed, the
+  // status lines, the reset control's disabled state, the forfeit arm) is
+  // facet-routed.
   {
     file: 'realm_racers_strip_painter.ts',
-    allow: { '.innerHTML': 1, '.setAttribute': 4, '.className': 1, '.dataset': 1 },
+    allow: { '.innerHTML': 1, '.setAttribute': 2, '.className': 1, '.dataset': 1 },
     reflowAllow: {},
   },
   // The Realm Racers lobby curtain (hud/realm_racers/) rebuilds its text-free

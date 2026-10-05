@@ -164,10 +164,10 @@ export class RealmRacersStandingsPanel {
     if (this.list) return this.list;
     const layer = this.deps.layer();
     if (!layer) return null;
+    // A plain list: a live-region role here would replace the list role its
+    // rows need (axe listitem), and the overtakes are not announced anyway.
     const list = document.createElement('ol');
     list.id = 'realm-racers-standings';
-    list.setAttribute('role', 'status');
-    list.setAttribute('aria-live', 'off');
     layer.appendChild(list);
     this.list = list;
     return list;
