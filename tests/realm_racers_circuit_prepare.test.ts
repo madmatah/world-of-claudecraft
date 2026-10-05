@@ -1553,6 +1553,30 @@ describe('a new lobby on a circuit already prepared', () => {
     expect(runs).toHaveLength(3);
   });
 
+  it('re-runs for a new lobby that opened while the last run was still preparing', async () => {
+    const host = fakeHost();
+    const { client, runs } = rerunnableClient(CIRCUIT.id);
+    const seam = new RealmRacersPrepare();
+    seam.useCircuits({ circuitClient: (id) => (id === CIRCUIT.id ? client : null) });
+    const out = { done: 0, total: 0, settled: false };
+    seam.frame(host, loading('loading', 7), LANE.x, LANE.z);
+    expect(runs).toHaveLength(1);
+    // Lobby 7 ends (its curtain fell) with its run still linking, and lobby 8
+    // opens on the same circuit before that run settles.
+    seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
+    seam.frame(host, loading('loading', 8), LANE.x, LANE.z);
+    expect(runs).toHaveLength(1);
+    expect(seam.progress(out, CIRCUIT.id, 8).settled).toBe(false);
+    // The old run settles on a lapsed verdict: read before the next frame, the
+    // new lobby is still unsettled, and its frame starts the re-run.
+    runs[0](false);
+    await flush();
+    expect(seam.progress(out, CIRCUIT.id, 8).settled).toBe(false);
+    seam.frame(host, loading('loading', 8), LANE.x, LANE.z);
+    expect(runs).toHaveLength(2);
+    expect(seam.stateOf(client.prepareId)).toBe('preparing');
+  });
+
   it('carries no verdict from a run whose cover ended first, and re-runs without rebuilding', async () => {
     const { view, lane, markDrawn } = probeView();
     lane.on = true;
@@ -1576,12 +1600,15 @@ describe('a new lobby on a circuit already prepared', () => {
     expect(verdict).not.toBeNull();
     expect(client.rerunDue()).toBe(true);
     // Run two, under the next lobby's cover: everything after the build again
-    // (the gate, the draw, the sky), and every step counted again.
+    // (the gate, the draw, the sky), and every step counted again. A view
+    // already linked is never hidden again for it: its programs stay linked.
+    expect(client.revealReady()).toBe(true);
     const second = cover();
     verdict = null;
     void client.run(gate, second.uncovered).then((ok) => {
       verdict = ok;
     });
+    expect(client.revealReady()).toBe(true);
     expect(client.units().done).toBeLessThan(client.units().total);
     await flush();
     expect(calls).toHaveLength(2);

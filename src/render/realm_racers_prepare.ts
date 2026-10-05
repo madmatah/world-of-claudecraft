@@ -288,9 +288,17 @@ export class RealmRacersPrepare {
     const match = viewer.match;
     this.noteLobby(match?.phase === 'loading' ? (match.circuitId ?? null) : null);
     const lobbyId = match?.phase === 'loading' ? (match.id ?? null) : null;
-    if (lobbyId !== null && lobbyId !== this.lastLobbyId) {
+    const lobbyCircuit = match?.circuitId ?? null;
+    // Latched only once the circuit's last run has settled: a lobby that
+    // opens while that run is still linking waits for its verdict, then
+    // re-runs if the verdict lapsed.
+    if (
+      lobbyId !== null &&
+      lobbyId !== this.lastLobbyId &&
+      !(lobbyCircuit !== null && this.circuitPreparing(lobbyCircuit))
+    ) {
       this.lastLobbyId = lobbyId;
-      const rerun = match?.circuitId ? this.rerunClient(match.circuitId) : null;
+      const rerun = lobbyCircuit ? this.rerunClient(lobbyCircuit) : null;
       if (rerun && this.host) this.start(this.host, rerun);
     }
     const inBand = isAtRealmRacersXZ(x, z);
@@ -365,6 +373,11 @@ export class RealmRacersPrepare {
     this.uncoverWaits.delete(id);
     this.clients.get(id)?.coverEnded?.();
     release();
+  }
+
+  private circuitPreparing(circuitId: string): boolean {
+    const id = this.circuitClientIds.get(circuitId);
+    return id !== undefined && this.stateOf(id) === 'preparing';
   }
 
   /** The circuit's client when it has settled on a verdict that will not

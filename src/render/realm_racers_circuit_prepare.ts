@@ -240,6 +240,9 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
    *  under its cover; a run whose cover ended first leaves a new lobby on this
    *  circuit its readiness to run again. */
   private uploadedCovered = false;
+  /** Gated at least once: a re-run never hides a view whose programs are
+   *  already linked (the pool never disposes a built circuit). */
+  private linkedOnce = false;
 
   /**
    * `view` is the pool's lazy view, which this client builds first, or a view
@@ -278,7 +281,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   }
 
   revealReady(): boolean {
-    return this.gated;
+    return this.gated || this.linkedOnce;
   }
 
   rerunDue(): boolean {
@@ -288,7 +291,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   /** Linked and its sky ready: the upload frame left needs a presented frame,
    *  which a blocking arrival's world-draw hold would otherwise wait out. */
   arrivalReady(): boolean {
-    return this.gated && this.skyReady;
+    return (this.gated || this.linkedOnce) && this.skyReady;
   }
 
   /** The seam's word, inside the frame that noticed it, that the cover this
@@ -335,6 +338,7 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       if (!covered() || (this.fills.total === want && this.fills.done === want)) break;
     }
     this.gated = true;
+    this.linkedOnce = true;
     // The linked view's upload frame (drawn unculled, see `uploadFrame`)
     // uploads every vertex and instance buffer it shows: held until it
     // happened, so that lands under the curtain too. A view built elsewhere
