@@ -833,10 +833,21 @@ function eligible(ctx: SimContext, pid: number): boolean {
  * A pilot still in combat is never SEATED: the seat drops combat and strips
  * every debuff, so a grid that took a fighter would be an escape from any
  * fight. Kept apart from `eligible` on purpose: a queued pilot who is pulled
- * into a fight keeps their place, and the grid waits for it to end.
+ * into a fight keeps their place, and the grid seats the pilots behind them.
  */
 export function realmRacersInCombat(ctx: SimContext, pid: number): boolean {
   return ctx.entities.get(pid)?.inCombat === true;
+}
+
+/** The first queued pilots free to sit now, in queue order, at most a grid: a
+ *  pilot still in a fight is passed over, never a reason to hold the rest. */
+export function realmRacersSeatableWaiters(ctx: SimContext): number[] {
+  const waiters: number[] = [];
+  for (const pid of ctx.realmRacers.queue) {
+    if (waiters.length === REALM_RACERS_GRID_SIZE) break;
+    if (!realmRacersInCombat(ctx, pid)) waiters.push(pid);
+  }
+  return waiters;
 }
 
 export function realmRacersSeatedOrQueued(ctx: SimContext, pid: number): boolean {
@@ -2887,17 +2898,19 @@ function pruneQueue(ctx: SimContext): void {
 function tryMatch(ctx: SimContext): void {
   const rally = ctx.realmRacers;
   if (rally.match || rally.queue.length < REALM_RACERS_GRID_SIZE) return;
-  // A head of the queue still in a fight holds the grid until it ends, in
-  // place: nobody is spliced out, and the start draws nothing.
-  for (let i = 0; i < REALM_RACERS_GRID_SIZE; i++) {
-    if (realmRacersInCombat(ctx, rally.queue[i])) return;
-  }
-  const grid = rally.queue.splice(0, REALM_RACERS_GRID_SIZE);
+  // The first four queued pilots free to sit now. A pilot still in a fight
+  // keeps their place and holds nobody behind them; short of a full grid,
+  // nobody is taken out and the start draws nothing.
+  const grid = realmRacersSeatableWaiters(ctx);
+  if (grid.length < REALM_RACERS_GRID_SIZE) return;
+  const queued = rally.queue;
+  rally.queue = queued.filter((pid) => !grid.includes(pid));
   if (startMatch(ctx, grid)) return;
-  // Put the eligible ones back at the FRONT in their original order. The old
-  // two-pilot code unshifted them one at a time, which reverses the pair; at
-  // four that silently reorders the head of the queue on every refusal.
-  rally.queue.unshift(...grid.filter((pid) => eligible(ctx, pid)));
+  // Refused: the queue as it stood, in its ORIGINAL order, less any of the
+  // grid no longer eligible. (The old two-pilot code unshifted them one at a
+  // time, which reverses the pair; at four that silently reorders the head of
+  // the queue on every refusal.)
+  rally.queue = queued.filter((pid) => !grid.includes(pid) || eligible(ctx, pid));
 }
 
 export function updateRealmRacers(ctx: SimContext): void {

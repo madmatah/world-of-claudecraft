@@ -945,8 +945,8 @@ describe('The Realm Racers lifecycle', () => {
 
   it('never seats a queued pilot still in combat, and keeps their place', () => {
     // The seat drops combat and strips every debuff, so a pop that seated a
-    // fighter would be an escape. The queue holds them instead of evicting:
-    // the grid waits for the fight to end, in the original order.
+    // fighter would be an escape. The queue keeps them instead of evicting,
+    // in their place, and they hold nobody behind them.
     const { sim, pids } = makeGrid();
     for (const pid of pids) sim.realmRacersQueueJoin(pid);
     const fighter = entity(sim, pids[2]);
@@ -956,9 +956,13 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacers.match).toBeNull();
     expect(sim.realmRacers.queue).toEqual(pids);
     expect(fighter.inCombat).toBe(true);
-    for (let i = 0; i < 6 * TICK_RATE && !sim.realmRacers.match; i++) sim.tick();
-    expect(fighter.inCombat).toBe(false);
-    expect(sim.realmRacers.match?.pids).toEqual(pids);
+    // A fifth pilot fills the grid past the fighter, who stays queued.
+    const fifth = addAt(sim, 'warrior', 'Esme', 15, -46);
+    sim.realmRacersQueueJoin(fifth);
+    sim.tick();
+    expect(sim.realmRacers.match?.pids).toEqual([pids[0], pids[1], pids[3], fifth]);
+    expect(sim.realmRacers.queue).toEqual([pids[2]]);
+    expect(fighter.inCombat).toBe(true);
   });
 
   it('shares the viewer-independent half of the readout across one tick', () => {

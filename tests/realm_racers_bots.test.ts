@@ -183,6 +183,25 @@ describe('Realm Racers practice: one press, one race', () => {
     expect(spawned).toBe(REALM_RACERS_GRID_SIZE - 1);
   });
 
+  it('backfills the waiters behind one still in combat, who keeps their place', () => {
+    const sim = makeWorld({ realmRacersBackfill: true });
+    const fighter = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const idle = addAt(sim, 'mage', 'Briar', 9, -40);
+    sim.realmRacersQueueJoin(fighter);
+    sim.realmRacersQueueJoin(idle);
+    const e = sim.entities.get(fighter);
+    if (!e) throw new Error('missing fighter');
+    for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS + 20 && !sim.realmRacers.match; i++) {
+      e.inCombat = true;
+      e.combatTimer = 0;
+      sim.tick();
+    }
+    expect(sim.realmRacers.match?.pids).toContain(idle);
+    expect(sim.realmRacers.match?.pids).not.toContain(fighter);
+    expect(botPidsOf(sim)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+    expect(sim.realmRacers.queue).toEqual([fighter]);
+  });
+
   it('refuses a player who cannot race, and spawns no pilot doing it', () => {
     const sim = makeWorld();
     const dead = addAt(sim, 'warrior', 'Aster', -5, -40);

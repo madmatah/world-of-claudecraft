@@ -50,6 +50,7 @@ import {
   realmRacersInCombat,
   realmRacersMatchOf,
   realmRacersQueueRemove,
+  realmRacersSeatableWaiters,
   realmRacersStartMatch,
   realmRacersStillRunning,
   realmRacersToCanonical,
@@ -210,8 +211,10 @@ function maybeBackfill(sim: Sim): void {
   if (!sim.cfg.realmRacersBackfill) return;
   const rally = sim.realmRacers;
   if (rally.match) return;
-  const waiting = rally.queue.slice(0, REALM_RACERS_GRID_SIZE);
-  // An empty queue has nobody to race, and a full one is the match module's
+  // The waiters free to sit now, in queue order: one still in a fight keeps
+  // their place and holds nobody else (the seat would refuse them).
+  const waiting = realmRacersSeatableWaiters(sim.ctx);
+  // Nobody free to race, or a full grid of them, which is the match module's
   // business: it seats four humans without any help from here.
   if (waiting.length === 0 || waiting.length >= REALM_RACERS_GRID_SIZE) return;
   // The clock is the OLDEST waiter's. Anyone who joined behind them is racing
@@ -223,9 +226,6 @@ function maybeBackfill(sim: Sim): void {
     if (joinedAt !== undefined && joinedAt < oldest) oldest = joinedAt;
   }
   if (sim.tickCount - oldest < REALM_RACERS_BACKFILL_TICKS) return;
-  // A waiter still in a fight holds the backfill until it ends: the seat would
-  // refuse them, after spawning and despawning a pilot per empty seat per tick.
-  for (const pid of waiting) if (realmRacersInCombat(sim.ctx, pid)) return;
   // The PUBLIC circuit: these players queued for a real race and are getting
   // one, just with house pilots in the seats nobody claimed.
   seatWithBots(sim, waiting, REALM_RACERS_BACKFILL_TIER, -1);
