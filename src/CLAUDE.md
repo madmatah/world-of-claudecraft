@@ -56,6 +56,15 @@ lets the same `sim/` run offline, on the server, and headless.
   `ui/deed_border_view` for the deed id -> border palette both the nameplate canvas and the
   portrait ring paint from; enumerate the live set with `grep -rn "from '.*ui/" src/render`).
   A leaf qualifies only while it stays pure: no DOM, no `IWorld`, no mutable UI state.
+- `render/`, `ui/`, `game/` -> **never `editor/`** (the dev-only editor layer is composed
+  OVER the game client, so the arrow points editor -> game). ONE dev edge is sanctioned:
+  `game/realm_racers_draft_dev.ts` imports `editor/circuit/export_core`
+  (`validateCircuitPayload`), so `/dev rallydraft` seats a draft only if the editor's save
+  endpoint would accept it. `export_core` is pure (no DOM) and the path runs behind
+  `import.meta.env.DEV` (`tryDevChatHooks`), so a production build drops it. Moving the
+  validator into `sim/` would carry the editor's own limits (`fences_core`,
+  `pickup_rows_core`) into the game core for no shipped-bundle gain. Pinned by
+  `ALLOWED_EDITOR_IMPORTS` in `tests/architecture.test.ts`; a second edge is a new decision.
 - `net/` -> `sim/` (types plus **pure display helpers** such as `abilitiesKnownAt`/
   `computeQuestState`; the server re-validates everything) + `world_api.ts`
   (`ClientWorld implements IWorld`).
