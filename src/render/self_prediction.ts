@@ -1,6 +1,7 @@
 import type { InputTickFrame } from '../game/input_tick_sampler';
 import { type MovementWireClient, MovementWireGlue } from '../game/movement_wire_glue';
 import type { DelveMotionState } from '../sim/delves/geometry';
+import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
 import {
   DT,
   type Entity,
@@ -24,6 +25,11 @@ import {
   SELF_PREDICTION_RING_CAPACITY,
 } from './self_prediction_core';
 import type { ReconciledSelfPrediction } from './self_render_position_core';
+import {
+  acknowledgedSlickState,
+  SelfSlickPredictor,
+  type SlickPredictionMatch,
+} from './self_slick_prediction_core';
 
 export interface SelfPredictionWire extends MovementWireClient {
   reconAuthoritativeX: number | null;
@@ -41,6 +47,11 @@ export interface SelfPredictionWire extends MovementWireClient {
   /** The vertical state the vehicle kernel reads at the acked tick. */
   reconVy?: number;
   reconOnGround?: boolean;
+  /** The acknowledged standing with the oil, beside `reconDrive`. */
+  reconSlick?: RallySlickRecon | null;
+  /** The race readout of the same snapshot: the patches the predicted kart
+   *  can cross and the race clock the standing is read against. */
+  realmRacersInfo?: { match: SlickPredictionMatch | null };
   /** The ferry timetable at the newest snapshot (IWorld.ferryView): its
    *  schedule clock times the deck-aware prediction. */
   ferryView?(): { clock: number } | null;
@@ -107,6 +118,11 @@ function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
   if (drive) {
     state.drive = { ...drive };
     state.prevFacing = facing;
+    state.slick = acknowledgedSlickState(
+      wire.reconSlick,
+      wire.realmRacersInfo?.match,
+      drive.gripMult,
+    );
   }
   return state;
 }
@@ -117,6 +133,7 @@ function acknowledgedPose(
   self: Entity,
   wire: SelfPredictionWire,
   predicted: MotionState | null,
+  acknowledged: MotionState | null,
 ): PredictionPose {
   const deck = wire.reconDeck ?? null;
   const pose: PredictionPose = deck
@@ -133,6 +150,14 @@ function acknowledgedPose(
   pose.vy = wire.reconVy ?? 0;
   pose.onGround = wire.reconOnGround ?? true;
   pose.auras = self.auras;
+  pose.slick = pose.drive
+    ? acknowledgedSlickState(
+        wire.reconSlick,
+        wire.realmRacersInfo?.match,
+        pose.drive.gripMult,
+        acknowledged,
+      )
+    : null;
   return pose;
 }
 
@@ -154,6 +179,7 @@ export class MovementPredictionPipeline {
    *  not): a re-seed replays the ones the server has yet to consume. */
   private readonly sentFrames: PredictionFrame[] = [];
   private readonly stepFn: PredictionStep;
+  private readonly slickPredictor = new SelfSlickPredictor();
   private wire: SelfPredictionWire | null = null;
   private self: Entity | null = null;
   private enabled = false;
@@ -198,7 +224,11 @@ export class MovementPredictionPipeline {
       (): ClientDelveMotionState | null =>
         this.delve.delveRun ? { run: this.delve.delveRun, solids: this.delve.delveSolids } : null,
     );
-    this.stepFn = createDeckAwareStep(deps, (ct) => this.clockFor(ct));
+    const step = createDeckAwareStep(deps, (ct) => this.clockFor(ct));
+    this.stepFn = (state, frame) => {
+      step(state, frame);
+      if (state.slick) this.slickPredictor.step(state, this.wire?.realmRacersInfo?.match);
+    };
     this.wireGlue.onFrame = (frame) => this.predictFrame(frame);
     this.wireGlue.onNegotiated = () => this.reset();
   }
@@ -265,7 +295,7 @@ export class MovementPredictionPipeline {
       const result = reconcile(
         this.ring,
         wire.reconAckClientTick,
-        acknowledgedPose(self, wire, this.predicted),
+        acknowledgedPose(self, wire, this.predicted, acknowledgedPrediction?.pose ?? null),
         wire.reconOverrideEpoch,
         this.lastEpoch,
         this.stepFn,

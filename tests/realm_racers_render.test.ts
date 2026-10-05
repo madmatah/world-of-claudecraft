@@ -1708,36 +1708,36 @@ describe('the pickup boxes, drawn', () => {
       // hands the road over by SHRINKING away (an instant swap read as the
       // patch teleporting the yard the server pose trails the display).
       time += 0.05;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       expect(provisional.visible).toBe(true);
       expect(provisional.scale.x).toBeLessThanOrEqual(1);
       time += 0.1;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       expect(provisional.scale.x).toBeLessThan(0.8);
       time += RALLY_PROVISIONAL_SLICK_FADE_SEC;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       expect(provisional.visible).toBe(false);
       // A second drop beside the now-KNOWN patch must not be swallowed by it
       // (oil clusters), and with no new patch ever arriving it expires on the
       // timeout, through the same shrink.
       time += 0.05;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       view.dropProvisionalSlick(GARDEN_CIRCUIT.id, world.x, world.z, time);
       time += 0.05;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       expect(provisional.visible).toBe(true);
       expect(provisional.scale.x).toBeCloseTo(1, 6);
       time += 2;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       time += RALLY_PROVISIONAL_SLICK_FADE_SEC;
-      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7, endsAt: 240 }]));
       expect(provisional.visible).toBe(false);
     });
 
     it('shows the newest patch at once when it arrives at the cap and the oldest is soaking away', async () => {
       const { view, slots } = await slicksGroup();
       const here = REALM_RACERS_ORIGIN;
-      const patch = (id: number): RealmRacersSlickInfo => ({ id, x: id * 3, z: -7 });
+      const patch = (id: number): RealmRacersSlickInfo => ({ id, x: id * 3, z: -7, endsAt: 240 });
       const full = Array.from({ length: RALLY_SLICK_POOL }, (_, i) => patch(i + 1));
       let time = 1;
       view.update(here.x, here.z, time, matchWithSlicks(full));
@@ -1782,7 +1782,7 @@ describe('the pickup boxes, drawn', () => {
           view.update(here.x, here.z, time, matchWithSlicks(slicks));
         }
       };
-      frames(1, [{ id: 4, x: 12, z: -7 }]);
+      frames(1, [{ id: 4, x: 12, z: -7, endsAt: 240 }]);
       const shown = slots.filter((slot) => slot.visible);
       expect(shown).toHaveLength(1);
       // At the coordinates the race reported, in the circuit's own frame: what a
@@ -1792,7 +1792,7 @@ describe('the pickup boxes, drawn', () => {
       // FULL radius from the first frame, and it stays there: the sim can report a grip loss for a patch the tick it appears, so a disk still
       // growing would be drawn smaller than it bites.
       expect(shown[0].scale.x).toBeCloseTo(1, 6);
-      frames(10, [{ id: 4, x: 12, z: -7 }]);
+      frames(10, [{ id: 4, x: 12, z: -7, endsAt: 240 }]);
       expect(shown[0].scale.x).toBeCloseTo(1, 6);
     });
 
@@ -1806,7 +1806,7 @@ describe('the pickup boxes, drawn', () => {
           view.update(here.x, here.z, time, matchWithSlicks(slicks));
         }
       };
-      frames(12, [{ id: 4, x: 12, z: -7 }]);
+      frames(12, [{ id: 4, x: 12, z: -7, endsAt: 240 }]);
       const slot = slots.find((child) => child.visible) as THREE.Object3D;
       expect(slot).toBeDefined();
       // The frame the fade STARTS on carries no elapsed time, so the patch is
@@ -1818,7 +1818,7 @@ describe('the pickup boxes, drawn', () => {
       expect(slot.visible).toBe(false);
 
       // And the pool really recycles: a second patch takes the same slot back.
-      frames(1, [{ id: 5, x: -3, z: 9 }]);
+      frames(1, [{ id: 5, x: -3, z: 9, endsAt: 240 }]);
       expect(slot.visible).toBe(true);
       expect(slot.position.x).toBeCloseTo(-3, 6);
     });
@@ -1834,7 +1834,7 @@ describe('the pickup boxes, drawn', () => {
       // simply goes undrawn rather than pushing a live patch off the road.
       const live: RealmRacersSlickInfo[] = Array.from(
         { length: REALM_RACERS_SLICK_CAP + 1 },
-        (_, i) => ({ id: i + 1, x: i * 3, z: -i * 2 }),
+        (_, i) => ({ id: i + 1, x: i * 3, z: -i * 2, endsAt: 240 }),
       );
       view.update(here.x, here.z, 1, matchWithSlicks(live));
       const shown = slots.filter((slot) => slot.visible);
@@ -1858,7 +1858,7 @@ describe('the pickup boxes, drawn', () => {
       for (let i = 0; i < 12; i++) {
         view.update(here.x, here.z, 1 + i * 0.05, {
           ...matchOn((other as RealmRacersCircuit).id, []),
-          slicks: [{ id: 1, x: 0, z: 0 }],
+          slicks: [{ id: 1, x: 0, z: 0, endsAt: 240 }],
         });
       }
       for (const slot of slots) expect(slot.visible).toBe(false);

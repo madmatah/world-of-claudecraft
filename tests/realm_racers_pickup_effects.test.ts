@@ -602,8 +602,9 @@ describe('the held effects', () => {
     expect(slicks[0]).toMatchObject({ ownerPid: a });
     expect(slicks[0].expiresTick).toBe(spentTick + REALM_RACERS_SLICK_LIFETIME_TICKS);
     expect(progressOf(sim, a).heldEffect).toBeNull();
-    // Announced once, world-wide, naming the dropper: the readout's patch
-    // carries no owner, and this is what a client draws the spray from.
+    // Announced once, world-wide, naming the dropper: the readout's patch names
+    // its owner only while they are immune, and this is what a client draws the
+    // spray from.
     const drops = sim.drainEvents().filter((event) => event.type === 'realmRacersSlickDropped');
     const machine = required(sim.entities.get(a), 'dropper').pos;
     const x = Math.round(machine.x * 100) / 100;
@@ -616,12 +617,15 @@ describe('the held effects', () => {
     );
     expect(eventAnchor(drops[0], sim.entities)).toEqual({ x, y: 0, z });
     // And it reaches the readout every racer in the match mirrors, rounded to
-    // the hundredth of a yard the shared builder ships.
+    // the hundredth of a yard the shared builder ships, with the race tick it
+    // dries up on and, while its dropper still stands in it, who is immune.
     expect(sim.realmRacersInfoFor(pids[1]).match?.slicks).toEqual([
       {
         id: slicks[0].id,
         x: Math.round(slicks[0].x * 100) / 100,
         z: Math.round(slicks[0].z * 100) / 100,
+        endsAt: slicks[0].expiresTick - match(sim).goTick,
+        immunePid: a,
       },
     ]);
   });

@@ -1,4 +1,9 @@
 import { type Aura, type Entity, type MoveInput, normAngle, type VehicleDrive } from '../sim/types';
+import {
+  copySlickState,
+  type SlickPredictionState,
+  sameSlickState,
+} from './self_slick_prediction_core';
 
 export const SELF_PREDICTION_RING_CAPACITY = 128;
 
@@ -16,6 +21,8 @@ export interface PredictionPose {
   onGround?: boolean;
   /** The auras of the snapshot that carried the acknowledgement. */
   auras?: readonly Aura[];
+  /** A racing pilot's standing with the oil at the acked tick. */
+  slick?: SlickPredictionState | null;
 }
 
 /** `yaw` rides only when the replayed head drives: the kernel owns a
@@ -37,6 +44,9 @@ export type MotionState = {
   drive?: VehicleDrive | null;
   /** A driver's facing at the tick start, for the display's yaw lerp. */
   prevFacing?: number;
+  /** Set while racing: the oil the predicted kart stands in
+   *  (render/self_slick_prediction_core.ts). */
+  slick?: SlickPredictionState | null;
 } & Pick<
   Entity,
   | 'id'
@@ -85,6 +95,7 @@ export function copyMotionState(state: MotionState): MotionState {
     auras: state.auras.slice(),
   };
   if (state.drive) copy.drive = { ...state.drive };
+  if (state.slick) copy.slick = copySlickState(state.slick);
   return copy;
 }
 
@@ -153,7 +164,9 @@ function matchesAuthoritative(pose: MotionState, authoritative: PredictionPose):
     pose.facing === authoritative.facing &&
     pose.vy === authoritative.vy &&
     pose.onGround === authoritative.onGround &&
-    sameDrive(pose.drive, authoritative.drive)
+    sameDrive(pose.drive, authoritative.drive) &&
+    // a prediction still racing past the acked race's end is no reason to replay
+    (!authoritative.slick || (!!pose.slick && sameSlickState(pose.slick, authoritative.slick)))
   );
 }
 
@@ -172,10 +185,12 @@ function applyAuthoritativePose(state: MotionState, authoritative: PredictionPos
     state.prevFacing = authoritative.facing;
     if (authoritative.vy !== undefined) state.vy = authoritative.vy;
     if (authoritative.onGround !== undefined) state.onGround = authoritative.onGround;
+    state.slick = authoritative.slick ? copySlickState(authoritative.slick) : null;
   } else {
     // a runner's recon carries no vertical state, and the race puts a finished
     // pilot back on the ground: an airborne kart's vy must not fall a runner
     delete state.prevFacing;
+    delete state.slick;
     state.vy = authoritative.vy ?? 0;
     state.onGround = authoritative.onGround ?? true;
   }

@@ -24,6 +24,7 @@ import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
 import { VEHICLE_PROFILES } from '../src/sim/content/vehicles';
 import { createPlayer } from '../src/sim/entity';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import { REALM_RACERS_SLICK_GRIP_TICKS } from '../src/sim/realm_racers_slicks';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
 import { type Entity, TICK_RATE } from '../src/sim/types';
@@ -943,13 +944,20 @@ describe('the drive recon (rdv) byte bound', () => {
     e.drive = drive;
     e.onGround = false;
     e.vy = LONGEST;
-    const rdv = driveReconWire(e);
-    expect(Object.keys(rdv ?? {})).toHaveLength(15);
+    // In the oil: a full grip and contact window, and a patch id far past the
+    // drops one race can make (patch ids count up from 1 per race).
+    const rdv = driveReconWire(e, {
+      gripLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      contactId: 9999,
+      contactLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+    });
+    expect(Object.keys(rdv ?? {})).toHaveLength(18);
     // 12 numbers at 25 characters, the scrape at 23, the keys, the longest
-    // profile key and the two flags. At 20 Hz that caps a seated racer at 8.2 KB/s; a measured
-    // race runs at about 2.4 KB/s (tests/realm_racers_drive_recon_online.test.ts).
+    // profile key, the two flags and the three oil counts. At 20 Hz that caps
+    // a seated racer at 8.8 KB/s; a measured race runs at about 2.4 KB/s
+    // (tests/realm_racers_drive_recon_online.test.ts).
     const bytes = Buffer.byteLength(`,"rdv":${JSON.stringify(rdv)}`);
-    expect(bytes).toBe(410);
-    expect(bytes * SNAPSHOTS_PER_SECOND).toBeLessThanOrEqual(8200);
+    expect(bytes).toBe(436);
+    expect(bytes * SNAPSHOTS_PER_SECOND).toBeLessThanOrEqual(8800);
   });
 });

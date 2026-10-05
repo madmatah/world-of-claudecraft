@@ -5,13 +5,20 @@
 // damage and the coyote jump. Sparse fields fall back to 0 (st, sn, hb) or 1 (g, dg, c, sc);
 // `vy` and `air` ride only while airborne. `ci` (the scrape reading) follows
 // the `drv` rule, above 0.01 only: the kernel never reads it, the self scrape
-// sparks do.
+// sparks do. `og`, `oc` and `ou` are the pilot's standing with the oil
+// (RallySlickRecon: grip ticks left, the patch a crossing remembers, its ticks
+// left), each omitted at 0 or none, so the client predicts a slide the server
+// is about to hand out instead of correcting it a round trip late.
 
+import type { RallySlickRecon } from '../src/sim/realm_racers_slick_contact';
 import type { Entity } from '../src/sim/types';
 
 export type DriveReconWire = Record<string, number | string>;
 
-export function driveReconWire(e: Entity): DriveReconWire | undefined {
+export function driveReconWire(
+  e: Entity,
+  slick: RallySlickRecon | null = null,
+): DriveReconWire | undefined {
   const d = e.drive;
   if (!d) return undefined;
   const out: DriveReconWire = { k: d.profileKey, sp: d.speed, sl: d.slip, yr: d.yawRate };
@@ -27,6 +34,13 @@ export function driveReconWire(e: Entity): DriveReconWire | undefined {
   if (!e.onGround) {
     out.vy = e.vy;
     out.air = 1;
+  }
+  if (slick) {
+    if (slick.gripLeft > 0) out.og = slick.gripLeft;
+    if (slick.contactId !== null) {
+      out.oc = slick.contactId;
+      if (slick.contactLeft > 0) out.ou = slick.contactLeft;
+    }
   }
   return out;
 }

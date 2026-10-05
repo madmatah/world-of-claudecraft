@@ -22,6 +22,7 @@ import type {
   RealmRacersMatchInfo,
   RealmRacersPhase,
   RealmRacersRacerInfo,
+  RealmRacersSlickInfo,
 } from '../../world_api/realm_racers';
 import type { CharacterState } from '../character_state';
 import {
@@ -104,15 +105,17 @@ import {
   travelledFromArc,
 } from '../realm_racers_progress';
 import {
+  applyRallySlickSurface,
+  biteRallySlick,
+  type RallySlickRecon,
+  rallySlickCrossing,
+  rallySlickRecon,
+} from '../realm_racers_slick_contact';
+import {
   type RallySlick,
   type RallySlickRacer,
   REALM_RACERS_SLICK_CAP,
-  REALM_RACERS_SLICK_GRIP,
-  REALM_RACERS_SLICK_GRIP_TICKS,
   REALM_RACERS_SLICK_LIFETIME_TICKS,
-  REALM_RACERS_SLICK_SLIP_CAP,
-  rallySlickContains,
-  realmRacersSlickThrow,
   stepRealmRacersSlicks,
 } from '../realm_racers_slicks';
 import {
@@ -147,12 +150,7 @@ import {
   resolveVehicleContactSwept,
   type SweptContactBody,
 } from '../vehicle_contact';
-import {
-  addVehicleSlip,
-  createVehicleDrive,
-  resetVehicleDrive,
-  vehicleMaxSlip,
-} from '../vehicle_motion';
+import { createVehicleDrive, resetVehicleDrive } from '../vehicle_motion';
 import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from './arena';
 import { realmRacersHeldElsewhere } from './realm_racers_busy';
 import {
@@ -2151,15 +2149,15 @@ function applyVehicleSurface(
   band: RealmRacersSlowBand | null,
   gripPenalty: number,
   speedBoost: number,
-  slipCeiling: number,
+  slicked: boolean,
 ): void {
   if (!racer.drive) return;
-  racer.drive.gripMult = (band ? band.gripMult : 1) * gripPenalty;
+  // The oil goes on last, through the step the client's own-kart prediction
+  // shares. It is also the only thing that raises the slide ceiling: a shove
+  // has nowhere to put a machine that is already at its ceiling, which is
+  // where a pilot attacking a corner lives.
+  applyRallySlickSurface(racer.drive, (band ? band.gripMult : 1) * gripPenalty, slicked);
   racer.drive.dragMult = band ? band.dragMult : 1;
-  // How far sideways this surface lets the machine travel at all. Oil is the
-  // only thing that raises it: a shove has nowhere to put a machine that is
-  // already at its ceiling, which is where a pilot attacking a corner lives.
-  racer.drive.slipCap = slipCeiling;
   // The band's speed loss rides its slow AURA, which the kernel already folds
   // into the top speed, so the surface cap stays neutral off a nitro and nothing
   // is charged twice.
@@ -2276,9 +2274,9 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
     applyVehicleSurface(
       racer,
       band,
-      (shocked ? GROUND_BLAST_SHOCK_GRIP : 1) * (slicked ? REALM_RACERS_SLICK_GRIP : 1),
+      shocked ? GROUND_BLAST_SHOCK_GRIP : 1,
       ctx.tickCount < progress.nitroUntilTick ? REALM_RACERS_NITRO_SPEED_MULT : 1,
-      slicked ? REALM_RACERS_SLICK_SLIP_CAP : 1,
+      slicked,
     );
     const existing = racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     if (!band) {
@@ -2789,79 +2787,36 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
   for (const hit of step.hits) {
     const progress = match.progress.get(hit.pid);
     if (!progress) continue;
-    // Contact with the oil is resolved ONCE per crossing, not once per tick
-    // spent in the puddle: a machine crosses a patch over two or three ticks,
-    // and re-resolving it every one of them would announce twenty times a second
-    // and eat a ward the tick after it had already saved the pilot.
-    // The deadline follows THIS patch's contact, resolved or not, so it can only
-    // lapse once the machine is out of THAT oil. Two halves, both load-bearing:
-    // letting it lapse underneath a machine still sitting in a patch threw a
-    // stopped pilot again every window for the whole twelve seconds the patch
-    // lives (harmless while a crossing only cost grip, a fresh shove once one
-    // moved the machine), and keying it to the patch rather than to the racer is
-    // what stops lingering in one slick from buying a free pass through the next
-    // one down the road. The GRIP window deliberately does NOT follow the
-    // contact: it expires on its own clock, or a machine that stopped in the oil
-    // would never get the grip back to drive out of it.
-    // Overlapping patches are one crossing while the machine has not LEFT the
-    // remembered one: two rivals oiling the same corner overlap, the nearest
-    // patch flips across the equidistance line every wobble, and each flip
-    // used to read as a fresh crossing (a throw and an announcement per flip).
-    // The remembered patch is kept until the machine is really out of it.
-    if (progress.slickContactId !== null && progress.slickContactId !== hit.slick) {
-      const racerEntity = ctx.entities.get(hit.pid);
-      const remembered = match.slicks.find((slick) => slick.id === progress.slickContactId);
-      if (racerEntity && remembered) {
-        const local = realmRacersToCanonical(match, racerEntity.pos.x, racerEntity.pos.z);
-        if (rallySlickContains(remembered, local.x, local.z)) {
-          progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
-          continue;
-        }
-      }
-    }
-    const resolves =
-      progress.slickContactId !== hit.slick || ctx.tickCount >= progress.slickContactUntilTick;
-    progress.slickContactId = hit.slick;
-    progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
-    if (!resolves) continue;
+    // What makes a hit a NEW crossing, and what a crossing does, is shared with
+    // the online client's own-kart prediction (`realm_racers_slick_contact.ts`).
     const racer = ctx.entities.get(hit.pid);
+    const local = racer ? realmRacersToCanonical(match, racer.pos.x, racer.pos.z) : null;
+    const remembered =
+      local && progress.slickContactId !== null && progress.slickContactId !== hit.slick
+        ? match.slicks.find((slick) => slick.id === progress.slickContactId)
+        : undefined;
+    if (
+      !rallySlickCrossing(progress, hit, ctx.tickCount, remembered, local?.x ?? 0, local?.z ?? 0)
+    ) {
+      continue;
+    }
     if (racer && consumeRealmRacersWard(ctx, racer)) {
       ctx.emit({ type: 'realmRacersWardBroken', pid: hit.pid });
       continue;
     }
-    progress.slickGripUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
-    // The shove, which is the half of a slick that does not depend on what the
-    // machine was doing when it arrived. The grip loss above is the other half
-    // and they are written to work together: this takes the machine off the line
-    // it was on, and the missing grip is why it cannot gather it back up. The
-    // ward above absorbs both, as one contact, which is why this sits after it.
-    const drive = racer?.drive;
-    if (!racer || !drive) continue;
-    const profile = vehicleProfile(drive.profileKey);
-    const local = realmRacersToCanonical(match, racer.pos.x, racer.pos.z);
-    const thrown = realmRacersSlickThrow({
-      slip: drive.slip,
-      forwardSpeed: drive.speed,
-      topSpeed: profile.maxSpeed,
-      facing: racer.facing,
-      x: local.x,
-      z: local.z,
-      slickX: hit.x,
-      slickZ: hit.z,
-      slickId: hit.slick,
-      pid: hit.pid,
-    });
+    // The ward above absorbs the grip loss and the shove alike, as one contact,
+    // which is why the bite sits after it.
+    const impact = biteRallySlick(
+      progress,
+      racer?.drive,
+      ctx.tickCount,
+      { pid: hit.pid, facing: racer?.facing ?? 0, x: local?.x ?? 0, z: local?.z ?? 0 },
+      hit,
+    );
     // A machine that is not moving is not thrown by a puddle, and must not
     // ANNOUNCE being thrown either: the event plays the slick's cue, so firing
     // one for a shove of zero would play the noise for nothing.
-    if (thrown.strength <= 0) continue;
-    // The ceiling is raised HERE rather than waited for, exactly as the nitro
-    // raises its own: the surface pass runs earlier in this same tick, so a
-    // shove that clamped against the tarmac ceiling first would be cut to what
-    // the road allows and the raise would arrive a tick after the moment it was
-    // granted for.
-    drive.slipCap = REALM_RACERS_SLICK_SLIP_CAP;
-    addVehicleSlip(drive, thrown.push, vehicleMaxSlip(profile, drive));
+    if (!racer || impact <= 0) continue;
     // World coordinates, and the MACHINE's rather than the patch's: the noise
     // and the smoke come off the tyres that lost, not off the ground.
     ctx.emit({
@@ -2869,7 +2824,7 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
       targetId: hit.pid,
       x: racer.pos.x,
       z: racer.pos.z,
-      impact: thrown.strength,
+      impact,
     });
   }
 }
@@ -3119,7 +3074,7 @@ interface RallySharedReadout {
   participantIds: number[];
   standings: RealmRacersRacerInfo[];
   pickupsTaken: number[];
-  slicks: { id: number; x: number; z: number }[];
+  slicks: RealmRacersSlickInfo[];
   loading: RealmRacersLoadingInfo | null;
 }
 const sharedReadouts = new WeakMap<RealmRacersMatch, RallySharedReadout>();
@@ -3148,6 +3103,8 @@ function sharedMatchReadout(ctx: SimContext, match: RealmRacersMatch): RallyShar
       // the two hosts disagreeing about where the oil is.
       x: roundReadout(slick.x),
       z: roundReadout(slick.z),
+      endsAt: slick.expiresTick - match.goTick,
+      ...(slick.ownerClear ? {} : { immunePid: slick.ownerPid }),
     })),
     loading: realmRacersLoadingInfo(ctx, match),
   };
@@ -3276,6 +3233,17 @@ export function realmRacersTracksideFor(ctx: SimContext, pid: number): RealmRace
     pickupsTaken: shared.pickupsTaken,
     slicks: shared.slicks,
   };
+}
+
+/**
+ * A racing pilot's standing with the oil at this tick, for their own `rdv`
+ * (the drive state their client replays from), or null outside a racing heat.
+ */
+export function realmRacersSlickReconFor(ctx: SimContext, pid: number): RallySlickRecon | null {
+  const match = realmRacersMatchOf(ctx, pid);
+  const progress = match?.progress.get(pid);
+  if (!match || !progress || match.phase !== 'racing') return null;
+  return rallySlickRecon(progress, ctx.tickCount, match.slicks);
 }
 
 export function realmRacersInfoFor(ctx: SimContext, pid: number): RealmRacersInfo {

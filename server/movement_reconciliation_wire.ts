@@ -1,3 +1,5 @@
+import type { SimContext } from '../src/sim/sim_context';
+import { realmRacersSlickReconFor } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
 import { DRIVE_RECON_WIRE_VERSION } from '../src/world_api';
 import { driveReconWire } from './drive_recon_wire';
@@ -17,6 +19,7 @@ export { updateMovementOverrideEpochs as updateOverrideEpochs } from './movement
 export function reconciliationSelfWire(
   session: MovementReconciliationSessionWireState,
   entity: Entity,
+  sim?: { ctx: SimContext },
 ): Record<string, unknown> {
   if (session.movementWireVersion !== 2) return {};
   // Full precision for rpx/rpy/rpz/rpf is LOAD-BEARING for exact-match reconciliation.
@@ -38,7 +41,10 @@ export function reconciliationSelfWire(
     // from `rdv`, so the rounded `drv` wireEntity put on this self record is
     // dropped (undefined never serializes). Any other client keeps `drv` alone.
     ...(entity.drive && session.driveReconWireVersion === DRIVE_RECON_WIRE_VERSION
-      ? { drv: undefined, rdv: driveReconWire(entity) }
+      ? {
+          drv: undefined,
+          rdv: driveReconWire(entity, sim ? realmRacersSlickReconFor(sim.ctx, entity.id) : null),
+        }
       : {}),
   };
 }

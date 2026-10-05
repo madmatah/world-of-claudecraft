@@ -59,7 +59,10 @@ import {
   type RealmRacersStillInfo,
   splitRealmRacersInfo,
 } from '../src/sim/realm_racers_readout_clock';
-import { REALM_RACERS_SLICK_CAP } from '../src/sim/realm_racers_slicks';
+import {
+  REALM_RACERS_SLICK_CAP,
+  REALM_RACERS_SLICK_LIFETIME_TICKS,
+} from '../src/sim/realm_racers_slicks';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
@@ -618,10 +621,12 @@ describe('Realm Racers online parity', () => {
     // Rounded to the hundredth of a yard by the shared readout builder, which is
     // where BOTH hosts do it: the mirror carries exactly what the offline Sim
     // would have handed presentation, to the byte.
+    // The race tick it dries up on rides with it, for the own-kart prediction.
     expect(world.realmRacersInfo.match?.slicks).toContainEqual({
       id: dropped.id,
       x: Math.round(dropped.x * 100) / 100,
       z: Math.round(dropped.z * 100) / 100,
+      endsAt: dropped.expiresTick - match.goTick,
     });
   });
 });
@@ -732,8 +737,9 @@ describe('Realm Racers server wire siblings', () => {
         x: 113_712.345 + i * 7.77,
         z: match.origin.z - 123.456 + i * 9.13,
         ownerPid: sessions[0].pid,
+        // Dropped on the race's last tick: the longest `endsAt` a patch carries.
         ownerClear: true,
-        expiresTick: Number.MAX_SAFE_INTEGER,
+        expiresTick: match.deadlineTick + REALM_RACERS_SLICK_LIFETIME_TICKS,
       });
     }
     match.pickups.taken = match.pickups.taken.map(() => true);
@@ -757,10 +763,11 @@ describe('Realm Racers server wire siblings', () => {
     const { still, clock } = splitRealmRacersInfo(info);
     // The still half: four 16-character standings rows plus `me`, the
     // circuit's boxes and REALM_RACERS_SLICK_CAP hundredth-rounded patches.
-    // Measured 1715 bytes; the old single `rr` (clocks and a full-precision
-    // speed included) measured 1850 and shipped on EVERY racing tick, while
-    // this half ships only when it changes.
-    const RR_STILL_BOUND = 1800;
+    // Measured 1939 bytes, 224 of them the patches' `endsAt` (the owner has
+    // left them all by now, so no `immunePid`); the old single `rr` (clocks
+    // and a full-precision speed included, no `endsAt`) measured 1850 and
+    // shipped on EVERY racing tick, while this half ships only when it changes.
+    const RR_STILL_BOUND = 2050;
     // The clock half: nine scalars, the speed in hundredths, shipped per tick.
     // Measured 129 bytes here; a late-race clock adds a few digits.
     const RR_CLOCK_BOUND = 160;

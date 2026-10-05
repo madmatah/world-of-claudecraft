@@ -15,6 +15,7 @@ import {
   reconcile,
   SELF_PREDICTION_RING_CAPACITY,
 } from '../src/render/self_prediction_core';
+import type { SlickPredictionState } from '../src/render/self_slick_prediction_core';
 import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { stepPlayerMotion } from '../src/sim/player_motion';
 import {
@@ -850,6 +851,48 @@ describe('self prediction core: a seated driver', () => {
     (ack.drive as VehicleDrive).handbrake = 0.5;
     (ack.drive as VehicleDrive).collisionImpact = 3;
     expect(reconcile(ring, 0, ack, 0, 0, step)).toEqual({ mode: 'match' });
+  });
+
+  it('compares the oil standing only against a racing acknowledgement, and adopts a copy', () => {
+    const step = createDeckAwareStep(createClientPlayerMotionDeps(SEED), () => 0);
+    const standing = (contactId: number | null): SlickPredictionState => ({
+      raceTick: 40,
+      slickGripUntilTick: 52,
+      slickContactId: contactId,
+      slickContactUntilTick: contactId === null ? 40 : 60,
+      baseGrip: 1,
+      wardSpent: false,
+    });
+    const ringWith = (slick: SlickPredictionState | null): PredictionRing => {
+      const ring = new PredictionRing();
+      const pilot = seatedPilot();
+      if (slick) pilot.slick = slick;
+      predictTick(ring, pilot, { ct: 0, mi: driveMi({ forward: true }), facing: null }, step);
+      return ring;
+    };
+    const ackOf = (ring: PredictionRing, slick?: SlickPredictionState): PredictionPose => ({
+      ...acknowledgement(ring.find(0)?.pose as MotionState),
+      slick,
+    });
+    let ring = ringWith(standing(3));
+    expect(reconcile(ring, 0, ackOf(ring, standing(3)), 0, 0, step)).toEqual({ mode: 'match' });
+    // The same pose, a different remembered patch: a later tick reads it.
+    ring = ringWith(standing(3));
+    const ack = ackOf(ring, standing(4));
+    const entry = ring.find(0);
+    expect(reconcile(ring, 0, ack, 0, 0, step).mode).toBe('replayed');
+    expect(entry?.pose.slick).toEqual(ack.slick);
+    expect(entry?.pose.slick).not.toBe(ack.slick);
+    // A prediction racing on past the acknowledged race is no reason to replay.
+    ring = ringWith(standing(3));
+    expect(reconcile(ring, 0, ackOf(ring), 0, 0, step)).toEqual({ mode: 'match' });
+    // A racing acknowledgement against a prediction with no standing is.
+    ring = ringWith(null);
+    expect(reconcile(ring, 0, ackOf(ring, standing(null)), 0, 0, step).mode).toBe('replayed');
+    const pilot = seatedPilot();
+    pilot.slick = standing(3);
+    expect(copyMotionState(pilot).slick).not.toBe(pilot.slick);
+    expect(copyMotionState(pilot).slick).toEqual(pilot.slick);
   });
 
   it('mismatches when a runner acknowledgement meets a seated one', () => {

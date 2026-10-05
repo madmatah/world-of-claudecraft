@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { driveReconWire } from '../server/drive_recon_wire';
 import { reconciliationSelfWire } from '../server/movement_reconciliation_wire';
 import { applyReconSelfWire, ReconWireState } from '../src/net/movement_reconciliation_wire';
 import { createClientPlayerMotionDeps } from '../src/render/client_player_motion';
@@ -105,6 +106,26 @@ describe('the drive recon (rdv)', () => {
     expect(mirror.drive).not.toBe(state.reconDrive);
   });
 
+  it('round-trips the standing with the oil, and sends none of it at rest', () => {
+    const e = pilot();
+    const slick = { gripLeft: 17, contactId: 4, contactLeft: 29 };
+    const rdv = JSON.parse(JSON.stringify(driveReconWire(e, slick)));
+    expect(rdv).toMatchObject({ og: 17, oc: 4, ou: 29 });
+    const state = new ReconWireState();
+    applyReconSelfWire(state, { ...overTheWire(e), rdv }, 2);
+    expect(state.reconSlick).toEqual(slick);
+    // A remembered patch whose window has lapsed keeps only its id.
+    const lapsed = driveReconWire(e, { gripLeft: 0, contactId: 4, contactLeft: 0 });
+    expect(lapsed).toEqual({ k: 'rally_loaner', sp: 0, sl: 0, yr: 0, oc: 4 });
+    const none = { gripLeft: 0, contactId: null, contactLeft: 0 };
+    expect(driveReconWire(e, none)).toEqual(driveReconWire(e));
+    applyReconSelfWire(state, overTheWire(e), 2);
+    expect(state.reconSlick).toEqual(none);
+    e.drive = null;
+    applyReconSelfWire(state, overTheWire(e), 2);
+    expect(state.reconSlick).toBeNull();
+  });
+
   it('sends only the always-on fields for a machine at rest on a clean road', () => {
     const e = pilot();
     const wire = overTheWire(e);
@@ -148,6 +169,10 @@ describe('the drive recon (rdv)', () => {
     ['an airborne flag without vy', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, air: 1 }],
     ['a vy on the ground', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, vy: -3 }],
     ['a bad airborne flag', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, air: 2, vy: 1 }],
+    ['a negative grip window', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, og: -3 }],
+    ['a fractional grip window', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, og: 1.5 }],
+    ['a zero patch id', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, oc: 0 }],
+    ['a contact window with no patch', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, ou: 4 }],
   ])('drops %s whole and stands the prediction down', (_name, rdv) => {
     const state = new ReconWireState();
     const mirror = pilot();

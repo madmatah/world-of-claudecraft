@@ -300,8 +300,12 @@ failure, kept as stable English that `main.ts` re-localizes.
   `MovementPredictionPipeline.predictDrivers` (`src/render/self_prediction.ts`)
   is on by default; `?drivepredict=0` (`src/render/render_dev_flags.ts`) is
   the A/B opt-out that draws the kart from the interpolated mirror instead.
-  main.ts never sets it. Contacts, blasts, oil, nitro and pickups stay server
+  main.ts never sets it. Contacts, blasts, nitro and pickups stay server
   outcomes that arrive through the reconcile replay; they are never predicted.
+  The oil is the one exception: its grip loss and throw are a pure function of
+  mirrored state (the readout's patches, the race clock, `rdv`'s `og`/`oc`/`ou`),
+  so the prediction runs the race's own code for it
+  (`src/render/self_slick_prediction_core.ts`).
   Proofs: `tests/realm_racers_prediction_proof.test.ts`,
   `tests/realm_racers_v2_prediction.test.ts`,
   `tests/realm_racers_drive_recon_online.test.ts`, and for rivals drawn in the
