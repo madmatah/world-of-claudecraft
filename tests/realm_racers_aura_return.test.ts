@@ -1,15 +1,19 @@
 // The race strips the auras a pilot walks in with and hands them back on the
 // way out, aged by the time the race held them (social/realm_racers_auras.ts).
 import { describe, expect, it } from 'vitest';
+import { leaveRealmRacersForModeration } from '../server/realm_racers_commands';
 import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
 import { CHEATER_MARK_AURA_ID } from '../src/sim/moderation/cheater_mark';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_OFF_TRACK_AURA,
   REALM_RACERS_RETURN_TICKS,
   REALM_RACERS_WARD_AURA,
+  realmRacersCircuitOf,
   realmRacersMatchOf,
   realmRacersStartMatch,
+  updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import {
   realmRacersAurasAt,
@@ -20,7 +24,7 @@ import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import type { Aura, Entity } from '../src/sim/types';
 import { TICK_RATE } from '../src/sim/types';
 import { WELL_FED_AURA_ID } from '../src/sim/wellfed';
-import { addAt, makeWorld } from './realm_racers_util';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
@@ -218,6 +222,135 @@ describe('Realm Racers hands the stripped auras back on the return', () => {
     expect(e.resourceType).toBe('energy');
     expect(e.resource).toBe(37);
     expect(e.savedMana).toBe(123);
+  });
+});
+
+describe('every return path hands the stripped auras back', () => {
+  /** Drive a pilot round its own race's circuit for `laps` laps in bounded
+   *  hops (the wrap gate needs real forward distance), without ticking. */
+  function driveLaps(sim: Sim, pid: number, laps: number): void {
+    const m = realmRacersMatchOf(sim.ctx, pid);
+    if (!m) throw new Error('not seated');
+    const track = realmRacersTrack(realmRacersCircuitOf(m));
+    for (let lap = 0; lap < laps; lap++) {
+      let left = track.length + 12;
+      while (left > 0 && m.phase === 'racing') {
+        const step = Math.min(40, left);
+        const progress = m.progress.get(pid);
+        if (!progress) throw new Error('no progress');
+        const at = track.pointAt(progress.lastS + step);
+        teleport(sim, pid, m.origin.x + at.x, m.origin.z + at.z);
+        updateRealmRacers(sim.ctx);
+        left -= step;
+      }
+    }
+  }
+
+  function fed(sim: Sim, cls: Parameters<Sim['addPlayer']>[0] = 'warrior'): number {
+    const pid = addAt(sim, cls, 'Pilot');
+    body(sim, pid).auras.push(aura(WELL_FED_AURA_ID, 'buff_sta', 1800));
+    return pid;
+  }
+
+  it('a natural finish: home, and fed again, only when the tableau ends at teardown', () => {
+    const sim = makeWorld();
+    const pid = fed(sim);
+    const bots = [
+      addAt(sim, 'mage', 'Briar', 7, -42),
+      addAt(sim, 'rogue', 'Cass', -9, -38),
+      addAt(sim, 'priest', 'Dell', 11, -44),
+    ];
+    for (const bot of bots) sim.realmRacers.bots.set(bot, 'rookie');
+    const seatTick = sim.tickCount;
+    expect(realmRacersStartMatch(sim.ctx, [pid, ...bots], undefined, RACE_CIRCUIT.id)).toBe(true);
+    const m = realmRacersMatchOf(sim.ctx, pid);
+    if (!m) throw new Error('no match');
+    m.phase = 'racing';
+    driveLaps(sim, pid, m.totalLaps);
+    expect(m.phase).toBe('finished');
+    expect(m.progress.get(pid)?.finishedTick).not.toBeNull();
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS - 2; i++) sim.tick();
+    expect(find(body(sim, pid), WELL_FED_AURA_ID)).toBeUndefined();
+    const home = tickUntilHome(sim, pid);
+    expect(sim.realmRacers.match).toBeNull();
+    expectAged(find(body(sim, pid), WELL_FED_AURA_ID)?.remaining, 1800, seatTick, home);
+  });
+
+  it('Practice ending on its clock: home and fed again after the tableau', () => {
+    const sim = makeWorld();
+    const pid = fed(sim);
+    const seatTick = sim.tickCount;
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    const m = realmRacersMatchOf(sim.ctx, pid);
+    if (!m) throw new Error('no match');
+    m.phase = 'racing';
+    m.deadlineTick = sim.tickCount + 1;
+    sim.tick();
+    expect(m.phase).toBe('finished');
+    expect(m.progress.get(pid)?.retiredTick).toBeNull();
+    const home = tickUntilHome(sim, pid);
+    expect(sim.realmRacers.practices).toHaveLength(0);
+    expectAged(find(body(sim, pid), WELL_FED_AURA_ID)?.remaining, 1800, seatTick, home);
+  });
+
+  it('a pilot who dies mid-race is retired, returned at once, and fed again', () => {
+    const sim = makeWorld();
+    const pid = fed(sim);
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    for (let i = 0; i < 20; i++) sim.tick();
+    body(sim, pid).dead = true;
+    sim.tick();
+    expect(sim.players.get(pid)?.realmRacersMatchId).toBeNull();
+    expect(find(body(sim, pid), WELL_FED_AURA_ID)).toBeDefined();
+  });
+
+  it('a pilot carried off their lane is retired, returned at once, and fed again', () => {
+    const sim = makeWorld();
+    const pid = fed(sim);
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    for (let i = 0; i < 20; i++) sim.tick();
+    // A summon or a GM move: back in the open world, off the race's copy.
+    teleport(sim, pid, 0, -40);
+    sim.tick();
+    expect(sim.players.get(pid)?.realmRacersMatchId).toBeNull();
+    expect(find(body(sim, pid), WELL_FED_AURA_ID)).toBeDefined();
+  });
+
+  it('a moderation move (the jail path) restores the body, auras included, before it moves it', () => {
+    const sim = makeWorld();
+    const pid = fed(sim);
+    const seatPos = { ...body(sim, pid).pos };
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    for (let i = 0; i < 20; i++) sim.tick();
+    const returnedTo = leaveRealmRacersForModeration(sim, pid, body(sim, pid));
+    expect(sim.players.get(pid)?.realmRacersMatchId).toBeNull();
+    expect(returnedTo.x).toBeCloseTo(seatPos.x, 6);
+    expect(returnedTo.z).toBeCloseTo(seatPos.z, 6);
+    expect(find(body(sim, pid), WELL_FED_AURA_ID)).toBeDefined();
+  });
+
+  it('a druid seated in Bear Form comes home in it, on the rage carried in, with the parked mana intact', () => {
+    const sim = makeWorld();
+    const pid = addAt(sim, 'druid', 'Pilot');
+    const e = body(sim, pid);
+    e.auras.push(aura('bear_form', 'form_bear', 3600, { value: 0 }));
+    sim.ctx.recalcPlayer(e);
+    expect(e.resourceType).toBe('rage');
+    e.resource = 40;
+    e.savedMana = 150;
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    for (let i = 0; i < 10; i++) sim.tick();
+    // On the clean slate in caster form, so the recalc refilled the mana bar.
+    expect(e.resourceType).toBe('mana');
+    expect(e.resource).toBe(e.maxResource);
+    sim.realmRacersForfeit(pid);
+    tickUntilHome(sim, pid);
+    expect(find(e, 'bear_form')).toBeDefined();
+    expect(e.resourceType).toBe('rage');
+    expect(e.resource).toBe(40);
+    // The form's recalc parks the full caster bar in savedMana; the return puts
+    // the pre-race amount back over it.
+    expect(e.savedMana).toBe(150);
   });
 });
 
