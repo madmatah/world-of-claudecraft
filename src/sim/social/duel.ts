@@ -14,6 +14,7 @@ import { ownedNecromancyUndead } from '../combat/necromancy';
 import type { DuelState } from '../sim';
 import type { SimContext } from '../sim_context';
 import { DT, dist2d, type Entity } from '../types';
+import { inRealmRacersHeat } from './realm_racers_seat';
 
 const DUEL_COUNTDOWN = 3;
 const DUEL_FORFEIT_DISTANCE = 60;
@@ -24,6 +25,13 @@ export function duelRequest(ctx: SimContext, targetPid: number, pid?: number): v
   const targetE = ctx.entities.get(targetPid);
   if (!r || !target || !targetE) return;
   if (targetPid === r.meta.entityId) return;
+  // A Realm Racers seat owns its pilot until the race returns them, and a grid
+  // (or a bystander at its fence) is well inside duel range.
+  if (inRealmRacersHeat(ctx, r.meta.entityId)) {
+    ctx.error(r.meta.entityId, 'You are busy.');
+    return;
+  }
+  if (inRealmRacersHeat(ctx, targetPid)) return;
   if (
     ctx.entityInDungeon(r.e, 'nythraxis_boss_arena') ||
     ctx.entityInDungeon(targetE, 'nythraxis_boss_arena')
@@ -69,6 +77,12 @@ export function duelAccept(ctx: SimContext, pid?: number): void {
   ctx.duelInvites.delete(r.meta.entityId);
   const other = ctx.players.get(invite.fromPid);
   if (!other) return;
+  // The same seat rule, for a challenge issued before either side was seated.
+  if (inRealmRacersHeat(ctx, r.meta.entityId)) {
+    ctx.error(r.meta.entityId, 'You are busy.');
+    return;
+  }
+  if (inRealmRacersHeat(ctx, invite.fromPid)) return;
   const otherE = ctx.entities.get(invite.fromPid);
   if (
     !otherE ||

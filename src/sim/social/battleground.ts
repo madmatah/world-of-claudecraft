@@ -70,6 +70,7 @@ import {
   openBgProposal,
   sweepBgProposals,
 } from './battleground_proposal';
+import { inRealmRacersHeat } from './realm_racers_seat';
 
 // --- Thornhollow Fields tuning consts (rating reuses the arena's exported eloDelta) ---
 export const BG_BASE_RATING = 1500; // every character starts here on the ladder
@@ -358,13 +359,6 @@ export function bgActiveFighterPids(ctx: SimContext, match: BgMatch): number[] {
 
 function bgEmitAll(_ctx: SimContext, match: BgMatch, ev: (pid: number) => void): void {
   for (const mp of bgAllPids(match)) ev(mp);
-}
-
-/** Seated in a Realm Racers heat, from the loading lobby to the result: the
- *  seat owns the pilot's movement and return point, so a battleground seat
- *  would pull them out of the race mid-lap. */
-function inRealmRacersHeat(ctx: SimContext, pid: number): boolean {
-  return (ctx.players.get(pid)?.realmRacersMatchId ?? null) !== null;
 }
 
 export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?: boolean }): void {

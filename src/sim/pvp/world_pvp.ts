@@ -41,6 +41,7 @@
 import { formatMoney } from '../format_money';
 import type { PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
+import { inRealmRacersHeat } from '../social/realm_racers_seat';
 import type { Entity } from '../types';
 import { grantHonor } from './honor';
 import { updatePvpVitality } from './vitality';
@@ -387,7 +388,7 @@ export function updateWorldPvp(ctx: SimContext): void {
 function inInstancedPvp(ctx: SimContext, pid: number): boolean {
   if (ctx.bgMatches.get(pid)?.state === 'active') return true;
   if (ctx.arenaMatches.get(pid)?.state === 'active') return true;
-  return (ctx.players.get(pid)?.realmRacersMatchId ?? null) !== null;
+  return inRealmRacersHeat(ctx, pid);
 }
 
 /** Two players mid-duel are under the duel's rules: a consensual duel fought
