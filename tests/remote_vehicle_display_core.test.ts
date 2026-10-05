@@ -7,7 +7,7 @@ import {
   type RemoteRacerHorizon,
   type RemoteVehicleDisplayState,
   rallyLaneResolve,
-  remoteRacerDrawnY,
+  remoteRacerDisplayY,
   remoteRacerHorizon,
   remoteRacerMuzzle,
   remoteRacerProjectionAgeMs,
@@ -568,23 +568,42 @@ describe('a held or snared rival is projected the way the server moves it', () =
 describe('the drawn height and the muzzle of a projected rival', () => {
   const ramp = (x: number, z: number): number => 0.25 * x + 0.1 * z;
   const flat = (): number => 0;
+  /** The drawn height with no pop in play, as the rally scene reads it. */
+  const wireDrawnY = (
+    wireX: number,
+    wireY: number,
+    wireZ: number,
+    drawnX: number,
+    drawnZ: number,
+    ground: (x: number, z: number) => number,
+  ): number =>
+    remoteRacerDisplayY(
+      createRemoteVehicleDisplay(),
+      wireX,
+      wireY,
+      wireZ,
+      drawnX,
+      drawnZ,
+      ground,
+      1 / 60,
+    );
 
   it('keeps the wire height where the projection has not moved the hull', () => {
-    expect(remoteRacerDrawnY(10, 3, 10, 10, 10, ramp)).toBe(3);
+    expect(wireDrawnY(10, 3, 10, 10, 10, ramp)).toBe(3);
   });
 
   it('follows the ground under the projected hull with no step, keeping any height above it', () => {
     // Grounded: the wire y is the ground there, the drawn y the ground here.
-    const grounded = remoteRacerDrawnY(10, ramp(10, 10), 10, 22, 14, ramp);
+    const grounded = wireDrawnY(10, ramp(10, 10), 10, 22, 14, ramp);
     expect(grounded).toBeCloseTo(ramp(22, 14), 12);
     // Airborne 2 yd up (a blast pop): still 2 yd over the ground drawn under it.
-    const airborne = remoteRacerDrawnY(10, ramp(10, 10) + 2, 10, 22, 14, ramp);
+    const airborne = wireDrawnY(10, ramp(10, 10) + 2, 10, 22, 14, ramp);
     expect(airborne).toBeCloseTo(ramp(22, 14) + 2, 12);
     // Continuous in the displacement: a hair of projection moves y by a hair.
-    const tiny = remoteRacerDrawnY(10, ramp(10, 10), 10, 10.01, 10, ramp);
+    const tiny = wireDrawnY(10, ramp(10, 10), 10, 10.01, 10, ramp);
     expect(Math.abs(tiny - ramp(10, 10))).toBeLessThan(0.01);
     // A flat circuit band: nothing changes.
-    expect(remoteRacerDrawnY(10, 5, 10, 22, 14, () => -1)).toBe(5);
+    expect(wireDrawnY(10, 5, 10, 22, 14, () => -1)).toBe(5);
   });
 
   const shot = { sourceId: 7, x: 3, z: 4, targetX: 30, targetZ: 40, flightSeconds: 0.6 };
@@ -628,7 +647,7 @@ describe('the drawn height and the muzzle of a projected rival', () => {
     // 100 ms of arrival age: 3 yd up the road from the wire pose.
     expect(view.z).toBeGreaterThan(12.9);
     expect(view.z).toBeLessThan(13.5);
-    const y = remoteRacerDrawnY(10, ramp(10, 10), 10, view.x, view.z, ramp);
+    const y = wireDrawnY(10, ramp(10, 10), 10, view.x, view.z, ramp);
     expect(y).toBeCloseTo(ramp(view.x, view.z), 12);
     expect(y).not.toBeCloseTo(ramp(10, 10), 3);
     const at = remoteRacerMuzzle(new Map([[7, { remoteVehicle: view }]]), shot, 1, flat);

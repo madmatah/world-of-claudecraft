@@ -533,24 +533,6 @@ export function stepRemoteRacerView<E extends RemoteRacerMirror>(
   return false;
 }
 
-/**
- * The drawn height of a projected machine off the wire alone. The wire's
- * vertical stays on the interpolated segment (no vy rides for a rival), so the
- * ground change between that pose and the drawn one is added to it, every
- * frame, on both horizons: a grounded machine follows the surface under where
- * it is drawn, and an airborne one keeps its height above it.
- */
-export function remoteRacerDrawnY(
-  wireX: number,
-  wireY: number,
-  wireZ: number,
-  drawnX: number,
-  drawnZ: number,
-  ground: (x: number, z: number) => number,
-): number {
-  return wireY + ground(drawnX, drawnZ) - ground(wireX, wireZ);
-}
-
 /** The muzzle's height over the ground under it, yd: where the flash plays. */
 export const REMOTE_RACER_MUZZLE_LIFT_YD = 1.1;
 
@@ -662,8 +644,12 @@ export function startRemoteRacerHops(
 }
 
 /**
- * The drawn height of a projected machine: the wire's (`remoteRacerDrawnY`)
- * unless a Ground Blast pop is being drawn ahead of it. The arc is absolute,
+ * The drawn height of a projected machine: the wire's lift over the ground
+ * under it, carried onto the ground under the drawn hull (the wire's vertical
+ * stays on the interpolated segment, no vy rides for a rival), so a grounded
+ * machine follows the surface where it is drawn and an airborne one keeps its
+ * height above it, on both horizons; unless a Ground Blast pop is being drawn
+ * ahead of it. The arc is absolute,
  * like the sim's, and lands where the ground under the drawn hull meets it;
  * the landed machine then stays down until the wire has shown and finished its
  * own copy of the hop, and hands back through a decaying offset, so the wire's

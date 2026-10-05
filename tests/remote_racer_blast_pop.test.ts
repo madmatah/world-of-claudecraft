@@ -15,7 +15,6 @@ import {
   REMOTE_VEHICLE_SNAP_DIST,
   type RemoteVehicleDisplayState,
   remoteRacerDisplayY,
-  remoteRacerDrawnY,
   remoteRacerHopRise,
   remoteRacerHopSeedS,
   startRemoteRacerHop,
@@ -181,7 +180,7 @@ describe('a rival popped by a Ground Blast, drawn from the Hit event', () => {
     const idle = activeDisplay();
     const ramp = (x: number, z: number): number => 0.25 * x + 0.1 * z;
     expect(remoteRacerDisplayY(idle, 10, 7, 10, 22, 14, ramp, FRAME_S)).toBe(
-      remoteRacerDrawnY(10, 7, 10, 22, 14, ramp),
+      7 - ramp(10, 10) + ramp(22, 14),
     );
   });
 
