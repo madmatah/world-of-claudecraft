@@ -1924,7 +1924,7 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
  * on the grid, over the tick's whole motion; or whose cap has run out. Runs right before the contact
  * pass, so a ghost that ends here is solid for that same pass, and one that
  * stays is skipped by it. Clear means clear of the SAME set the contact pass
- * resolves (any seated, living machine), over the same hull circles. A ghost
+ * resolves (any living machine still racing), over the same hull circles. A ghost
  * the cap ends inside a rival leaves the pair PARTING, and this pass ends each
  * parting the first tick its pair is apart, again before the contact pass reads
  * it. Draws no rng.
@@ -1944,7 +1944,7 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
           progress.ghostPartingPids,
           ctx.tickCount,
           progress.ghostPartingEndTick,
-          (otherPid) => hullMeetsMachine(ctx, hull, otherPid),
+          (otherPid) => hullMeetsMachine(ctx, match, hull, otherPid),
         );
       } else {
         progress.ghostPartingPids.length = 0;
@@ -1954,9 +1954,8 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
     let inside: number[] | null = null;
     if (drive) {
       const hull = contactBodyFor(racer, drive);
-      // Returned pilots stay in this set: the contact pass still pairs them.
       for (const otherPid of match.pids) {
-        if (otherPid !== pid && hullMeetsMachine(ctx, hull, otherPid)) {
+        if (otherPid !== pid && hullMeetsMachine(ctx, match, hull, otherPid)) {
           if (inside === null) inside = [];
           inside.push(otherPid);
         }
@@ -1980,8 +1979,15 @@ function tickGhosts(ctx: SimContext, match: RealmRacersMatch): void {
 }
 
 /** Does another machine on the grid meet this hull at any point of the tick?
- *  The same machines, and the same circles, the contact pass resolves. */
-function hullMeetsMachine(ctx: SimContext, hull: SweptContactBody, otherPid: number): boolean {
+ *  The same machines (still racing, living, behind the wheel), and the same
+ *  circles, the contact pass resolves. */
+function hullMeetsMachine(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  hull: SweptContactBody,
+  otherPid: number,
+): boolean {
+  if (!realmRacersStillRunning(match, otherPid)) return false;
   const other = ctx.entities.get(otherPid);
   return (
     !!other?.drive && !other.dead && rallyHullsMeetInTick(hull, contactBodyFor(other, other.drive))
@@ -2012,7 +2018,12 @@ function hullMeetsMachine(ctx: SimContext, hull: SweptContactBody, otherPid: num
  */
 function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
   for (let i = 0; i < match.pids.length; i++) {
+    // A machine out of the race (across the line and free to drive through the
+    // chase window, or pulled off and parked for its tableau) is no longer
+    // solid: it may not ram, block, or spoil the clean run of anyone racing.
+    if (!realmRacersStillRunning(match, match.pids[i])) continue;
     for (let j = i + 1; j < match.pids.length; j++) {
+      if (!realmRacersStillRunning(match, match.pids[j])) continue;
       const a = ctx.entities.get(match.pids[i]);
       const b = ctx.entities.get(match.pids[j]);
       if (!a?.drive || !b?.drive || a.dead || b.dead) continue;

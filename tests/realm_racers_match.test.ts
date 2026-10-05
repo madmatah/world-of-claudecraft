@@ -1339,6 +1339,46 @@ describe('The Realm Racers lifecycle', () => {
     expect(overlap()).toBeCloseTo(2 * LOANER.bodyRadius, 6);
   });
 
+  it('makes a machine out of the race, finished or retired, no longer solid', () => {
+    // A finisher keeps the wheel through the chase window and a quitter sits
+    // parked for its tableau: neither may ram, block, or spoil the clean run
+    // of a pilot still racing.
+    const { sim, pids } = startMatch();
+    const [a, b, c] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    const sample = realmRacersTrack(RACE_CIRCUIT).samples[120];
+    const facing = Math.atan2(sample.tx, sample.tz);
+    const ram = (out: number) => {
+      teleportOnLane(sim, a, sample.x, sample.z);
+      teleportOnLane(sim, out, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
+      for (const [pid, slip] of [
+        [a, -(REALM_RACERS_BUMP_EVENT_MIN_IMPACT + 5) / 2],
+        [out, (REALM_RACERS_BUMP_EVENT_MIN_IMPACT + 5) / 2],
+      ] as const) {
+        const racer = entity(sim, pid);
+        racer.facing = facing;
+        const drive = required(racer.drive, `drive ${pid}`);
+        drive.speed = 20;
+        drive.slip = slip;
+      }
+      sim.tickCount++;
+      sim.drainEvents();
+      updateRealmRacers(sim.ctx);
+      const p = entity(sim, a).pos;
+      const q = entity(sim, out).pos;
+      return {
+        apart: Math.hypot(p.x - q.x, p.z - q.z),
+        bumps: sim.drainEvents().filter((ev) => ev.type === 'realmRacersBump').length,
+      };
+    };
+    required(liveMatch.progress.get(b), `progress ${b}`).finishedTick = sim.tickCount;
+    expect(ram(b)).toEqual({ apart: expect.closeTo(1.2, 6), bumps: 0 });
+    sim.realmRacersForfeit(c);
+    expect(ram(c)).toEqual({ apart: expect.closeTo(1.2, 6), bumps: 0 });
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).hadRivalContact).toBe(false);
+  });
+
   it('announces a real impact once per throttle window, and a rub not at all', () => {
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
