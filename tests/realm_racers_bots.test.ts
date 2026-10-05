@@ -6,7 +6,7 @@
 // The Practice path and the online backfill path share every line below the
 // entry point, so a failure here is a failure of both.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { REALM_RACERS_BOT_NAMES } from '../src/sim/content/realm_racers';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { RALLY_DRIVER_TIERS, type RallyDriverTier } from '../src/sim/realm_racers_driver';
@@ -183,13 +183,16 @@ describe('Realm Racers practice: one press, one race', () => {
     expect(spawned).toBe(REALM_RACERS_GRID_SIZE - 1);
   });
 
-  it('refuses a player who cannot race, and leaks no pilot doing it', () => {
+  it('refuses a player who cannot race, and spawns no pilot doing it', () => {
     const sim = makeWorld();
     const dead = addAt(sim, 'warrior', 'Aster', -5, -40);
     const e = sim.entities.get(dead);
     if (e) e.dead = true;
     const before = sim.players.size;
+    // Refused before any house pilot is spawned, not spawned and reaped again.
+    const spawns = vi.spyOn(sim, 'addPlayer');
     sim.realmRacersPracticeStart('driver', dead);
+    expect(spawns).not.toHaveBeenCalled();
     expect(realmRacersMatchOf(sim.ctx, dead)).toBeNull();
     expect(botPidsOf(sim)).toEqual([]);
     expect(sim.players.size).toBe(before);

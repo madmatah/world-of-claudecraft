@@ -49,6 +49,7 @@ import { vehicleTopSpeedFor, vehicleVelocityX, vehicleVelocityZ } from '../vehic
 import {
   type RealmRacersMatch,
   realmRacersCircuitOf,
+  realmRacersEligible,
   realmRacersFreePracticeSlot,
   realmRacersInCombat,
   realmRacersMatchOf,
@@ -166,15 +167,16 @@ export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: 
   // Already racing, here or on someone else's grid: one machine per pilot.
   // Being QUEUED is not a refusal, though: pressing Play is a clear "race
   // now", and seatWithBots takes them out of the queue. Everything else a
-  // racer can be doing (dead, in a duel, inside an instance) is re-checked by
-  // the match module's own eligibility test, the one every entry point shares.
+  // racer can be doing (dead, in a duel, inside an instance) is the match
+  // module's own eligibility test, the one every entry point shares, asked
+  // here before any house pilot is spawned: the seat would refuse it anyway,
+  // but only after spawning and despawning three of them.
   if (realmRacersMatchOf(sim.ctx, id)) return false;
-  // Before any house pilot is spawned: the seat would refuse it anyway, but only
-  // after spawning and despawning three of them.
   if (realmRacersInCombat(sim.ctx, id)) {
     sim.ctx.error(id, "You can't do that while in combat.");
     return false;
   }
+  if (!realmRacersEligible(sim.ctx, id)) return false;
   const slot = realmRacersFreePracticeSlot(sim.ctx);
   if (slot < 0) return false;
   return seatWithBots(sim, [id], tier, slot);
@@ -202,6 +204,7 @@ export function startRealmRacersDevRace(
   const id = resolved.meta.entityId;
   if (realmRacersMatchOf(sim.ctx, id)) return false;
   if (!realmRacersCircuitById(circuitId)) return false;
+  if (!realmRacersEligible(sim.ctx, id) || realmRacersInCombat(sim.ctx, id)) return false;
   return seatWithBots(sim, [id], tier, -1, circuitId);
 }
 

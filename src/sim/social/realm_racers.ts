@@ -810,6 +810,13 @@ export function realmRacersFreePracticeSlot(ctx: SimContext): number {
   return -1;
 }
 
+/** The seat's one eligibility test (combat aside, see realmRacersInCombat),
+ *  for a caller that must refuse before it spends anything on a seat: the
+ *  Practice and dev-race entry points ask it before spawning house pilots. */
+export function realmRacersEligible(ctx: SimContext, pid: number): boolean {
+  return eligible(ctx, pid);
+}
+
 function eligible(ctx: SimContext, pid: number): boolean {
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
