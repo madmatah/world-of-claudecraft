@@ -1,8 +1,14 @@
 // The pure core behind the end-of-race podium.
+//
+// It returns ONE reused container mutated in place per call (the
+// allocation-light per-frame contract: it is built every frame the podium is
+// up), so a test that compares two builds captures the PRIMITIVES it needs (a
+// sig string) before building the next one, never two object handles.
 
 import { describe, expect, it } from 'vitest';
 import { buildRealmRacersPodiumView, RALLY_PODIUM_STEPS } from '../src/ui/realm_racers_podium_view';
 import type { RealmRacersInfo } from '../src/world_api';
+import { assertAllocationStable } from './util/alloc_probe';
 
 type Match = NonNullable<RealmRacersInfo['match']>;
 type Racer = Match['standings'][number];
@@ -132,16 +138,17 @@ describe('Realm Racers podium core', () => {
     // rebuilds it, and it is an id rather than a name: this core is i18n-free.
     const view = buildRealmRacersPodiumView(match({ circuitId: 'evergarden_express_tour' }));
     expect(view.circuitId).toBe('evergarden_express_tour');
-    expect(view.sig).not.toBe(buildRealmRacersPodiumView(match()).sig);
+    const raced = view.sig;
+    expect(buildRealmRacersPodiumView(match()).sig).not.toBe(raced);
     expect(buildRealmRacersPodiumView(null).circuitId).toBe('');
   });
 
   it('keeps the countdown out of its signature, and the classification in', () => {
-    const base = buildRealmRacersPodiumView(match());
+    const base = buildRealmRacersPodiumView(match()).sig;
     // The return clock ticks once a second and the painter writes it through
     // the elided writers; rebuilding the whole ceremony for it would restart
     // its entrance six times.
-    expect(buildRealmRacersPodiumView(match({ returnIn: 3 })).sig).toBe(base.sig);
+    expect(buildRealmRacersPodiumView(match({ returnIn: 3 })).sig).toBe(base);
     const reordered = buildRealmRacersPodiumView(
       match({}, [
         racer({ pid: 3, name: 'Cass', position: 1 }),
@@ -150,7 +157,32 @@ describe('Realm Racers podium core', () => {
         racer({ pid: 1, name: 'Aster', position: 4 }),
       ]),
     );
-    expect(reordered.sig).not.toBe(base.sig);
-    expect(buildRealmRacersPodiumView(match({ result: 'won' })).sig).not.toBe(base.sig);
+    expect(reordered.sig).not.toBe(base);
+    expect(buildRealmRacersPodiumView(match({ result: 'won' })).sig).not.toBe(base);
+  });
+
+  it('allocates nothing per frame while the podium is up: the container, its lists and every entry keep their identity', () => {
+    const decided = match();
+    expect(() =>
+      assertAllocationStable(() => buildRealmRacersPodiumView(decided), 64, 'podium view'),
+    ).not.toThrow();
+    expect(() =>
+      assertAllocationStable(() => buildRealmRacersPodiumView(decided).steps, 64, 'podium steps'),
+    ).not.toThrow();
+    expect(() =>
+      assertAllocationStable(() => buildRealmRacersPodiumView(decided).rest, 64, 'podium rest'),
+    ).not.toThrow();
+    // ...and an inactive frame hands back the same container, emptied.
+    const up = buildRealmRacersPodiumView(decided);
+    const down = buildRealmRacersPodiumView(null);
+    expect(down).toBe(up);
+    expect(down.active).toBe(false);
+    expect(down.steps).toEqual([]);
+    expect(down.rest).toEqual([]);
+    // A frame read back after the next build still carries this frame's values.
+    const again = buildRealmRacersPodiumView(match({ returnIn: 2 }));
+    expect(again.active).toBe(true);
+    expect(again.returnIn).toBe(2);
+    expect(again.steps.map((step) => step.name)).toEqual(['Cass', 'Briar', 'Dell']);
   });
 });

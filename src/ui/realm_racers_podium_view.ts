@@ -52,11 +52,24 @@ export interface RealmRacersPodiumView {
   sig: string;
 }
 
-const EMPTY: RealmRacersPodiumView = {
+/**
+ * Module-level REUSED containers (the allocation-light per-frame contract,
+ * src/ui/CLAUDE.md), the standings view's shape: this view is built every frame
+ * the podium is up, so a fresh entry per pilot, two lists and a view per call is
+ * per-frame garbage. `entryPool` keeps the high-water entry objects in
+ * classification order while `steps` and `rest` are refilled in place, so every
+ * entry keeps its identity across frames and only primitives are mutated. A
+ * caller reads a frame's values before the next build, which the synchronous
+ * paint in `RealmRacersPodium.update` does.
+ */
+const entryPool: RealmRacersPodiumEntry[] = [];
+const steps: RealmRacersPodiumEntry[] = [];
+const rest: RealmRacersPodiumEntry[] = [];
+const state: RealmRacersPodiumView = {
   active: false,
   circuitId: '',
-  steps: [],
-  rest: [],
+  steps,
+  rest,
   totalLaps: 0,
   result: null,
   returnIn: 0,
@@ -69,36 +82,62 @@ const STEP_ORDER = [1, 0, 2] as const;
 export function buildRealmRacersPodiumView(
   match: RealmRacersMatchInfo | null,
 ): RealmRacersPodiumView {
+  steps.length = 0;
+  rest.length = 0;
   // A void race has no classification to celebrate.
-  if (!match || !match.decided || match.voided) return EMPTY;
+  if (!match || !match.decided || match.voided) {
+    state.active = false;
+    state.circuitId = '';
+    state.totalLaps = 0;
+    state.result = null;
+    state.returnIn = 0;
+    state.sig = 'off';
+    return state;
+  }
   const viewerPid = match.me.pid;
-  const entries = match.standings.map((racer) => ({
-    pid: racer.pid,
-    placing: racer.position,
-    name: racer.name,
-    cls: racer.cls,
-    isMe: racer.pid === viewerPid,
-    finishSeconds: racer.finishSeconds,
-    lap: racer.lap,
-    retired: racer.retired,
-  }));
-  const top = entries.slice(0, RALLY_PODIUM_STEPS);
-  const steps = STEP_ORDER.flatMap((index) => (top[index] ? [top[index]] : []));
-  return {
-    active: true,
-    circuitId: match.circuitId,
-    steps,
-    rest: entries.slice(RALLY_PODIUM_STEPS),
-    totalLaps: match.totalLaps,
-    result: match.result,
-    returnIn: match.returnIn,
-    // The return countdown is out: it ticks once a second and the painter writes
-    // it through the elided writers, so it may not rebuild the whole ceremony.
-    // The circuit is IN, even though it cannot move inside one match id: the
-    // heading is structure the painter builds from it, so the thing that
-    // decides the heading has to be the thing that rebuilds it.
-    sig: `${match.id}|${match.circuitId}|${match.result ?? '-'}|${entries
-      .map((entry) => `${entry.pid}:${entry.placing}${entry.isMe ? '*' : ''}`)
-      .join(',')}`,
-  };
+  const standings = match.standings;
+  // The return countdown is out of the signature: it ticks once a second and
+  // the painter writes it through the elided writers, so it may not rebuild the
+  // whole ceremony. The circuit is IN, even though it cannot move inside one
+  // match id: the heading is structure the painter builds from it, so the thing
+  // that decides the heading has to be the thing that rebuilds it.
+  let sig = `${match.id}|${match.circuitId}|${match.result ?? '-'}|`;
+  for (let i = 0; i < standings.length; i++) {
+    let entry = entryPool[i];
+    if (!entry) {
+      entry = {
+        pid: 0,
+        placing: 0,
+        name: '',
+        cls: 'warrior',
+        isMe: false,
+        finishSeconds: null,
+        lap: 0,
+        retired: false,
+      };
+      entryPool[i] = entry;
+    }
+    const racer = standings[i];
+    entry.pid = racer.pid;
+    entry.placing = racer.position;
+    entry.name = racer.name;
+    entry.cls = racer.cls;
+    entry.isMe = racer.pid === viewerPid;
+    entry.finishSeconds = racer.finishSeconds;
+    entry.lap = racer.lap;
+    entry.retired = racer.retired;
+    sig += `${i === 0 ? '' : ','}${entry.pid}:${entry.placing}${entry.isMe ? '*' : ''}`;
+    if (i >= RALLY_PODIUM_STEPS) rest.push(entry);
+  }
+  for (let i = 0; i < STEP_ORDER.length; i++) {
+    const index = STEP_ORDER[i];
+    if (index < standings.length && index < RALLY_PODIUM_STEPS) steps.push(entryPool[index]);
+  }
+  state.active = true;
+  state.circuitId = match.circuitId;
+  state.totalLaps = match.totalLaps;
+  state.result = match.result;
+  state.returnIn = match.returnIn;
+  state.sig = sig;
+  return state;
 }
