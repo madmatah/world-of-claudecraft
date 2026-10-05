@@ -1,5 +1,5 @@
 import type { Entity, FerryDeckMirror, VehicleDrive } from '../sim/types';
-import { parseDriveRecon } from './drive_recon_wire';
+import { parseDriveRecon, restingDriveRecon } from './drive_recon_wire';
 import { QuestWorldWireState } from './quest_world_wire_state';
 import { parseFerryDeck } from './transport_wire';
 
@@ -22,8 +22,9 @@ export class ReconWireState extends QuestWorldWireState {
   reconDrive: VehicleDrive | null = null;
   reconVy = 0;
   reconOnGround = true;
-  /** The last well-formed `rdv` drive, for PRESENTATION only: the mirror keeps
-   *  drawing the machine across a malformed row. Never a replay input. */
+  /** The last well-formed `rdv` drive (or a resting one while no good row has
+   *  landed yet), for PRESENTATION only: the mirror keeps drawing the machine
+   *  across a malformed row. Never a replay input. */
   reconDriveShown: VehicleDrive | null = null;
 
   resetReconWireState(): void {
@@ -71,6 +72,9 @@ export function applyReconSelfWire(
   if (movementWireVersion === 2) {
     if (drive) target.reconDriveShown = { ...drive.drive };
     else if (self.rdv === undefined) target.reconDriveShown = null;
+    // A malformed row with no good one held yet still means a seated pilot: a
+    // resting machine is drawn, never a runner, until a good row lands.
+    else target.reconDriveShown ??= restingDriveRecon(self.rdv);
   }
   // A self record with `rdv` carries no rounded `drv` beside it: the mirror is
   // this, or the last good row's machine while a malformed one stands down.

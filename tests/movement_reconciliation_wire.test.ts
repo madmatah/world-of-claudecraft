@@ -155,7 +155,8 @@ describe('the drive recon (rdv)', () => {
     applyReconSelfWire(state, { ...overTheWire(pilot()), rdv }, 2, mirror);
     expect(state.reconDrive).toBeNull();
     expect(state.reconOverrideActive).toBe(true);
-    expect(mirror.drive).toBeNull();
+    // Never replayed, only drawn: a resting machine of the default profile.
+    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
   });
 
   it('keeps the last good machine on the mirror across consecutive malformed rows', () => {
@@ -175,14 +176,26 @@ describe('the drive recon (rdv)', () => {
     }
   });
 
-  it('has no machine to hold on a malformed first row, and still stands down', () => {
+  it('draws a resting machine on a malformed first row, never a runner, and still stands down', () => {
+    // With no good row to hold yet, the own kart would otherwise be drawn as
+    // a runner until one landed.
     const state = new ReconWireState();
     const mirror = pilot();
     mirror.drive = null;
     applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: { k: 'rally_loaner' } }, 2, mirror);
-    expect(mirror.drive).toBeNull();
+    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
     expect(state.reconDrive).toBeNull();
     expect(state.reconOverrideActive).toBe(true);
+    // A second malformed row keeps it; the first good row replaces it.
+    mirror.drive = null;
+    applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: 3 }, 2, mirror);
+    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
+    const e = pilot();
+    (e.drive as VehicleDrive).speed = 21.25;
+    mirror.drive = null;
+    applyReconSelfWire(state, overTheWire(e), 2, mirror);
+    expect((mirror.drive as VehicleDrive | null)?.speed).toBe(21.25);
+    expect(state.reconOverrideActive).toBe(false);
   });
 
   it('forgets the held machine at the unseat and on reset', () => {
@@ -196,7 +209,8 @@ describe('the drive recon (rdv)', () => {
     const mirror = pilot();
     mirror.drive = null;
     applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: 3 }, 2, mirror);
-    expect(mirror.drive).toBeNull();
+    // The held machine is gone, so the malformed row draws a resting one.
+    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
 
     applyReconSelfWire(state, overTheWire(pilot()), 2);
     state.resetReconWireState();

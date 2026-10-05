@@ -4,8 +4,9 @@
 // whole (null), so a version-skewed frame can never hand the prediction a drive
 // it would replay wrong. DOM-free and ClientWorld-free.
 
-import { VEHICLE_PROFILES } from '../sim/content/vehicles';
+import { DEFAULT_VEHICLE_PROFILE_KEY, VEHICLE_PROFILES } from '../sim/content/vehicles';
 import type { VehicleDrive } from '../sim/types';
+import { createVehicleDrive } from '../sim/vehicle_motion';
 
 export interface DriveRecon {
   drive: VehicleDrive;
@@ -71,4 +72,18 @@ export function parseDriveRecon(rdv: unknown): DriveRecon | null {
     vy: airborne ? (w.vy as number) : 0,
     onGround: !airborne,
   };
+}
+
+/**
+ * A resting machine for a seated pilot whose `rdv` row is malformed before any
+ * good one has landed: the profile the row names when it names a known one,
+ * the default otherwise. PRESENTATION only (the own kart is drawn instead of a
+ * runner until a good row arrives); the prediction stands down on that row.
+ */
+export function restingDriveRecon(rdv: unknown): VehicleDrive {
+  const k =
+    typeof rdv === 'object' && rdv !== null ? (rdv as Record<string, unknown>).k : undefined;
+  return createVehicleDrive(
+    typeof k === 'string' && Object.hasOwn(VEHICLE_PROFILES, k) ? k : DEFAULT_VEHICLE_PROFILE_KEY,
+  );
 }
