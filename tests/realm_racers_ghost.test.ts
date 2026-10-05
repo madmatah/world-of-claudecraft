@@ -208,6 +208,24 @@ describe('the ghost rule, on its own', () => {
     expect(rallyHullsMeetInTick(ghost, { ...ghost, x: 1, prevX: 1 })).toBe(true);
   });
 
+  it('sweeps the ghost own motion too, and keeps two machines running abreast apart', () => {
+    const r = PROFILE.bodyRadius;
+    // The GHOST drives straight through a parked rival: both ends clear, the
+    // middle of the tick meets, from either side of the pair.
+    const parked = { x: 0, z: 0, prevX: 0, prevZ: 0, radius: r };
+    const driving = { x: 10, z: 0, prevX: -10, prevZ: 0, radius: r };
+    expect(rallyHullsOverlap(driving, parked)).toBe(false);
+    expect(rallyHullsMeetInTick(driving, parked)).toBe(true);
+    expect(rallyHullsMeetInTick(parked, driving)).toBe(true);
+    // Two machines running abreast just outside reach never close the gap,
+    // whether at one speed or at two: the relative motion runs along the road.
+    const abreast = { x: 10, z: REACH + 0.5, prevX: -10, prevZ: REACH + 0.5, radius: r };
+    expect(rallyHullsMeetInTick(driving, abreast)).toBe(false);
+    expect(rallyHullsMeetInTick(abreast, driving)).toBe(false);
+    const faster = { x: 20, z: REACH + 0.5, prevX: -5, prevZ: REACH + 0.5, radius: r };
+    expect(rallyHullsMeetInTick(driving, faster)).toBe(false);
+  });
+
   it('does not count a contact between a pair still parting from a ghost that ended on it', () => {
     expect(rallyContactCounts(1, [], 2, [])).toBe(true);
     expect(rallyContactCounts(1, undefined, 2, undefined)).toBe(true);
