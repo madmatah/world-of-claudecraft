@@ -78,12 +78,29 @@ export function isTeleportGap(
  * The teleport limit for this frame. A seated driver outruns the 23.1 yd/s
  * premise above several times over, so its limit adds the ground its speed
  * budget (self_motion.ts displaySpeedBudget) covers in this frame: a racer at
- * speed, or across a render hitch, glides instead of popping.
+ * speed, or across a render hitch, glides instead of popping. While a predicted
+ * kart is in play (`leadMs`, `selfFrameLeadMs`) it also adds the ground covered
+ * over that lead plus a tick: the predicted kart leads the snapshot by the lead
+ * and the mirror trails it by up to a tick, so a stand-down, a resume or a
+ * replay residual spans that much legitimately (9 to 15 yd at race speed).
  */
-export function teleportGapLimitSq(p: Entity, dt: number): number {
+export function teleportGapLimitSq(p: Entity, dt: number, leadMs: number | null = null): number {
   if (!p.drive) return SELF_MOTION_SNAP_DIST_SQ;
-  const reach = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + displaySpeedBudget(p) * Math.max(0, dt);
+  const span = Math.max(0, dt) + (leadMs === null ? 0 : Math.max(0, leadMs) / 1000 + DT);
+  const reach = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + displaySpeedBudget(p) * span;
   return reach * reach;
+}
+
+/** The lead a handoff this frame may span: last frame's predicted lead or
+ *  this frame's, whichever is deeper, or null when neither predicted. */
+function handoffLeadMs(
+  state: SelfRenderPositionState,
+  selfMotion: SelfRenderPrediction | null,
+): number | null {
+  const previous = state.active ? state.reconciledLeadMs : null;
+  const current = selfFrameLeadMs(selfMotion);
+  if (previous === null) return current;
+  return current === null ? previous : Math.max(previous, current);
 }
 
 /**
@@ -268,7 +285,7 @@ export function updateSelfRenderPosition(
   authoritativeDiscontinuity: boolean,
   riftCollisionToken = 0,
 ): Vec3Like {
-  const teleportLimitSq = teleportGapLimitSq(p, dt);
+  const teleportLimitSq = teleportGapLimitSq(p, dt, handoffLeadMs(state, selfMotion));
   // Online intent-driven extrapolation: when active it owns the position and
   // the lead-smoothing path below becomes the fallback (both write the same
   // position, so enable/disable hands off without a pop, absorbed by the

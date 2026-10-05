@@ -831,6 +831,120 @@ describe('updateSelfRenderPosition teleport rule for a seated driver', () => {
   });
 });
 
+describe('a predicted driver hands off across its lead without popping', () => {
+  // At race speed the predicted kart leads the snapshot by its lead (about the
+  // round trip) and the mirror trails it by up to a tick, so the gap a stand
+  // down (race end, forfeit, a malformed rdv) or a resume has to glide is
+  // speed x (lead + a tick): 9 to 15 yd, past a one-frame limit of ~7 yd.
+  const SPEED = 55;
+  const TICK = 0.05;
+  const ALPHA = 0.5;
+  /** A driver at speed up +z whose newest snapshot pose is z = 100. */
+  const racer = (): Entity =>
+    ({
+      prevPos: { x: 0, y: 0, z: 100 - SPEED * TICK },
+      pos: { x: 0, y: 0, z: 100 },
+      prevFacing: 0,
+      facing: 0,
+      vy: 0,
+      onGround: true,
+      auras: [],
+      ghost: false,
+      drive: createVehicleDrive('rally_loaner'),
+    }) as unknown as Entity;
+  /** The lead as the predictor reports it: (tickOffset - 1 + alpha) ticks. */
+  const predictedAt = (
+    leadMs: number,
+    residual: ReconciledSelfPrediction['residual'] = null,
+  ): ReconciledSelfPrediction => {
+    const ticks = leadMs / 50 + 1 - ALPHA;
+    return {
+      kind: 'reconciled',
+      position: { x: 0, y: 0, z: 100 + (SPEED * leadMs) / 1000 },
+      residual,
+      drive: {
+        facing: 0,
+        velocityX: 0,
+        velocityZ: SPEED,
+        onGround: true,
+        state: createVehicleDrive('rally_loaner'),
+      },
+      tickOffset: ticks,
+      tickAlpha: ALPHA,
+    };
+  };
+  const draw = (state: SelfRenderPositionState, motion: SelfRenderPrediction | null) =>
+    updateSelfRenderPosition(state, racer(), SEED, ALPHA, FRAME_DT, 0, motion, false);
+  const mirrorZ = 100 - SPEED * TICK * (1 - ALPHA);
+
+  for (const leadMs of [60, 120, 200]) {
+    it(`stands down at ${leadMs} ms of lead with a glide back, not a snap`, () => {
+      const state = createSelfRenderPositionState();
+      for (let i = 0; i < 4; i++) draw(state, predictedAt(leadMs));
+      const before = state.position.z;
+      expect(before - mirrorZ).toBeGreaterThan(SPEED * (leadMs / 1000));
+      draw(state, null);
+      expect(state.active).toBe(false);
+      // Still near the drawn kart, shedding the gap at the rewind cap.
+      expect(before - state.position.z).toBeLessThan(2);
+      expect(state.position.z).toBeGreaterThan(mirrorZ + 1);
+      for (let i = 0; i < 60; i++) draw(state, null);
+      expect(state.position.z).toBeCloseTo(mirrorZ, 6);
+    });
+
+    it(`resumes at ${leadMs} ms of lead with a glide forward, not a snap`, () => {
+      const state = createSelfRenderPositionState();
+      for (let i = 0; i < 4; i++) draw(state, null);
+      expect(state.position.z).toBeCloseTo(mirrorZ, 9);
+      state.drive.facing = 0.2;
+      draw(state, predictedAt(leadMs));
+      expect(state.active).toBe(true);
+      // The drawn kart has not jumped the gap, and its heading still glides.
+      expect(Math.abs(state.position.z - mirrorZ)).toBeLessThan(
+        (SPEED * (leadMs / 1000 + TICK)) / 2,
+      );
+      expect(state.offset.z).toBeLessThan(0);
+      expect(state.drive.yawOffset).not.toBe(0);
+    });
+  }
+
+  it('glides a hard bump residual at 200 ms of lead, keeping the yaw glide', () => {
+    const state = createSelfRenderPositionState();
+    for (let i = 0; i < 4; i++) draw(state, predictedAt(200));
+    const before = { ...state.position };
+    // The replay moved the head 8 yd sideways: old head minus new head.
+    const bumped = predictedAt(200, { x: 8, y: 0, z: 0, yaw: 0.4 });
+    bumped.position.x -= 8;
+    draw(state, bumped);
+    expect(state.offset.x).toBeGreaterThan(4);
+    expect(Math.abs(state.position.x - before.x)).toBeLessThan(4);
+    expect(state.drive.yawOffset).toBeGreaterThan(0.2);
+  });
+
+  it('sizes the limit by the speed budget over the frame, the lead and a tick', () => {
+    const budget = vehicleProfile('rally_loaner').maxSpeed;
+    const reach = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + budget * (FRAME_DT + 0.2 + TICK);
+    expect(teleportGapLimitSq(racer(), FRAME_DT, 200)).toBeCloseTo(reach * reach, 9);
+    // No lead in play: the one-frame limit, exactly as before.
+    const frameReach = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + budget * FRAME_DT;
+    expect(teleportGapLimitSq(racer(), FRAME_DT, null)).toBeCloseTo(frameReach * frameReach, 9);
+    // A runner keeps the six-yard rule whatever the lead.
+    expect(
+      teleportGapLimitSq(playerAt({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }), FRAME_DT, 200),
+    ).toBe(SELF_MOTION_SNAP_DIST_SQ);
+  });
+
+  it('still snaps a predicted driver across a real teleport at 200 ms of lead', () => {
+    const state = createSelfRenderPositionState();
+    for (let i = 0; i < 4; i++) draw(state, predictedAt(200));
+    const far = predictedAt(200);
+    far.position = { x: 0, y: 0, z: 700 };
+    draw(state, far);
+    expect(state.offset).toEqual({ x: 0, y: 0, z: 0 });
+    expect(state.position.z).toBe(700);
+  });
+});
+
 describe('selfPredictionLeadMs and displayedAimPose', () => {
   const kart = {
     prevPos: { x: 2, y: 0, z: 3 },
