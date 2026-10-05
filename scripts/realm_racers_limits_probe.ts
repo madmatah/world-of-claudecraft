@@ -73,7 +73,7 @@ const HONEST_SEEDS = [4242, 7, 1337, 90210, 555, 31415];
 function makeSim(seed = SEED): Sim {
   // `noPlayer` would leave nobody to seat the dev race on, so the probe's own
   // pilot is the primary player and every rival is a house pilot.
-  return new Sim({ seed, playerClass: 'warrior', autoEquip: true });
+  return new Sim({ seed, playerClass: 'warrior', autoEquip: true, devCommands: true });
 }
 
 /** One reconstructed excursion: what the referee would have measured. */

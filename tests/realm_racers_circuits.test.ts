@@ -60,6 +60,7 @@ import {
   type RealmRacersMatch,
   type RealmRacersProgress,
   realmRacersCircuitOf,
+  realmRacersDevGrantKit,
   realmRacersMatchOf,
   realmRacersStartMatch,
 } from '../src/sim/social/realm_racers';
@@ -1032,7 +1033,7 @@ describe('Realm Racers competition circuits: raceable to the flag', () => {
   it.each(realmRacersCompetitionCircuits().map((c) => [c.id, c] as const))(
     '%s runs to completion inside its own deadline, at the design length',
     (_id, circuit) => {
-      const sim = makeWorld();
+      const sim = makeWorld({ devCommands: true });
       const human = addAt(sim, 'warrior', 'Aster', -5, -40);
       expect(startRealmRacersDevRace(sim, circuit.id, 'ace', human)).toBe(true);
       readyAllRacers(sim);
@@ -1288,8 +1289,27 @@ describe('Realm Racers circuit draw: which circuit a queued race gets', () => {
 });
 
 describe('Realm Racers dev race: reaching a circuit without queueing', () => {
-  it('seats the caller on the named circuit against a full grid of house pilots', () => {
+  it('refuses the dev race and the dev kit on a world without dev commands', () => {
+    // Defense in depth: both are reached only through the /dev gate today, and
+    // must still refuse if a future caller forgets it.
     const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const target = realmRacersCompetitionCircuits()[0];
+    expect(startRealmRacersDevRace(sim, target.id, 'ace', human)).toBe(false);
+    expect(realmRacersMatchOf(sim.ctx, human)).toBeNull();
+    expect(sim.realmRacers.bots.size).toBe(0);
+    sim.realmRacersPracticeStart('rookie', human);
+    const match = realmRacersMatchOf(sim.ctx, human);
+    if (!match) throw new Error('no practice race');
+    const progress = match.progress.get(human);
+    const charges = progress?.heldWeapon?.charges;
+    expect(realmRacersDevGrantKit(sim.ctx, human, 50)).toBe(false);
+    expect(progress?.devHeldCharges).toBeNull();
+    expect(progress?.heldWeapon?.charges).toBe(charges);
+  });
+
+  it('seats the caller on the named circuit against a full grid of house pilots', () => {
+    const sim = makeWorld({ devCommands: true });
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
     const target = realmRacersCompetitionCircuits()[0];
     expect(startRealmRacersDevRace(sim, target.id, 'ace', human)).toBe(true);
@@ -1304,7 +1324,7 @@ describe('Realm Racers dev race: reaching a circuit without queueing', () => {
   });
 
   it('races the practice circuit too, which no queue can reach', () => {
-    const sim = makeWorld();
+    const sim = makeWorld({ devCommands: true });
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
     expect(startRealmRacersDevRace(sim, REALM_RACERS_PRACTICE_CIRCUIT_ID, 'rookie', human)).toBe(
       true,
@@ -1313,7 +1333,7 @@ describe('Realm Racers dev race: reaching a circuit without queueing', () => {
   });
 
   it('refuses an unauthored circuit, and a pilot already racing', () => {
-    const sim = makeWorld();
+    const sim = makeWorld({ devCommands: true });
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
     expect(startRealmRacersDevRace(sim, 'no_such_circuit', 'ace', human)).toBe(false);
     expect(realmRacersMatchOf(sim.ctx, human)).toBeNull();

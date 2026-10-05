@@ -1569,7 +1569,7 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
   });
 
   it('never credits a house pilot, even the winner, in a bot-backfilled rated heat', () => {
-    const sim = makeWorld();
+    const sim = makeWorld({ devCommands: true });
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
     expect(startRealmRacersDevRace(sim, RACE_CIRCUIT.id, 'ace', human)).toBe(true);
     const liveMatch = match(sim);

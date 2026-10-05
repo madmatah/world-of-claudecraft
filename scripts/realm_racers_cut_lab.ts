@@ -37,7 +37,7 @@ import { TICK_RATE } from '../src/sim/types';
 /** A world with one pilot and a full house grid seated on `circuit`, past the
  *  countdown and racing. */
 function seat(circuit: RealmRacersCircuit, seed: number) {
-  const sim = new Sim({ seed, playerClass: 'warrior', autoEquip: true });
+  const sim = new Sim({ seed, playerClass: 'warrior', autoEquip: true, devCommands: true });
   if (!startRealmRacersDevRace(sim, circuit.id, 'ace')) {
     throw new Error(`could not seat a grid on ${circuit.id}`);
   }

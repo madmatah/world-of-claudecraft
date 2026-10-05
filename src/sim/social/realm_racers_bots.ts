@@ -189,7 +189,7 @@ export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: 
  * tuned. It takes the circuit's PUBLIC lane rather than a private copy, since
  * that is the lane a real race drives and the one worth testing, so it refuses
  * while a public race is already running. Gated by `ctx.devCommands` at its
- * caller, never reachable in production.
+ * caller and again here, never reachable in production.
  */
 export function startRealmRacersDevRace(
   sim: Sim,
@@ -197,6 +197,7 @@ export function startRealmRacersDevRace(
   tier: RallyDriverTier,
   pid?: number,
 ): boolean {
+  if (!sim.ctx.devCommands) return false;
   const resolved = sim.ctx.resolve(pid);
   if (!resolved) return false;
   const id = resolved.meta.entityId;

@@ -2634,7 +2634,8 @@ export function realmRacersSpendPickupEffect(
  * and over while it is being tuned.
  *
  * Gated by `ctx.devCommands` at the call site, exactly like `realmRacersDevRace`
- * beside it. It grants what a race can actually hold: the signature weapon's
+ * beside it, and again here so a caller that forgets cannot reach it. It
+ * grants what a race can actually hold: the signature weapon's
  * budget is a real count and is set outright, while a pickup effect is a
  * one-charge slot by design, so "a stack of them" is expressed as the refill
  * latch rather than by inventing a second counter the rest of the code would
@@ -2643,6 +2644,7 @@ export function realmRacersSpendPickupEffect(
  * Returns false when the pilot is not in a race, which is the only way to fail.
  */
 export function realmRacersDevGrantKit(ctx: SimContext, pid: number, charges: number): boolean {
+  if (!ctx.devCommands) return false;
   const match = realmRacersMatchOf(ctx, pid);
   const racer = ctx.entities.get(pid);
   const progress = match?.progress.get(pid);
