@@ -471,10 +471,10 @@ const ANSWERED: readonly AnsweredSurface[] = [
   },
   {
     file: 'realm_racers_strip_painter.ts',
-    memos: ['lastHudSig'],
+    memos: ['lastHudSig', 'paintedCells'],
     // Same arm, one hop, like the window.
     answer: 'this.realmRacersUi.relocalize',
-    why: 'the race phase and controls that gate the localized race-strip skeleton, forwarded by the Rally composer that owns it',
+    why: 'the race phase and controls that gate the localized race-strip skeleton, plus the values each cell last painted (reset by that rebuild), forwarded by the Rally composer that owns it',
   },
   {
     file: 'realm_racers_standings_painter.ts',

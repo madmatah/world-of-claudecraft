@@ -482,6 +482,10 @@ describe('Realm Racers practice setup screen', () => {
     // top-left corner where the party frames do.
     expect(panel).not.toBeNull();
     expect(panel.parentElement).toBe(h.layer);
+    // A plain ordered list: a live-region role on it would replace the list
+    // role its rows need (the axe listitem rule).
+    expect(panel.tagName).toBe('OL');
+    expect(panel.getAttribute('role')).toBeNull();
     expect(h.layer.querySelector('#realm-racers-hud .rally-standing')).toBeNull();
 
     const rows = [...panel.querySelectorAll('.rally-standing')];

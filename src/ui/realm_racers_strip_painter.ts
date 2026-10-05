@@ -29,9 +29,9 @@ const num = (value: number): string => formatNumber(value, { maximumFractionDigi
  */
 const FORFEIT_ARM_MS = 3000;
 
-/** What each cell last spelled; -1 (or undefined) until the rebuild's first
+/** What each cell last painted; -1 (or undefined) until the rebuild's first
  *  paint, so a rebuild re-resolves every cell. */
-interface Spelled {
+interface PaintedCells {
   position: number;
   grid: number;
   lap: number;
@@ -120,8 +120,9 @@ export class RealmRacersStrip {
   private resetEl: HTMLElement | null = null;
   private forfeitEl: HTMLElement | null = null;
   private forfeitArmedUntil = 0;
-  /** Reset by every skeleton rebuild, which `relocalize()` forces. */
-  private readonly spelled: Spelled = {
+  /** What each cell last painted, reset by every skeleton rebuild, which
+   *  `relocalize()` forces: a language switch re-resolves every cell. */
+  private readonly paintedCells: PaintedCells = {
     position: -1,
     grid: -1,
     lap: -1,
@@ -203,7 +204,7 @@ export class RealmRacersStrip {
       this.forfeitEl = root.querySelector('.rallyhud-forfeit');
       this.resetEl?.addEventListener('click', () => this.deps.reset());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
-      this.forgetSpelled();
+      this.forgetPaintedCells();
       if (this.resetEl) w.setText(this.resetEl, t('hudChrome.rally.reset'));
     }
     // The pill is a VISUAL swap, and a swapped label is not an announcement: a
@@ -215,10 +216,12 @@ export class RealmRacersStrip {
     // when the draw lands on the same circuit.
     const announcer = this.ensureAnnouncer();
     if (announcer) w.setText(announcer, this.circuitName ?? '');
-    const s = this.spelled;
-    if (this.positionEl && (view.position !== s.position || view.gridSize !== s.grid)) {
-      s.position = view.position;
-      s.grid = view.gridSize;
+    if (
+      this.positionEl &&
+      (view.position !== this.paintedCells.position || view.gridSize !== this.paintedCells.grid)
+    ) {
+      this.paintedCells.position = view.position;
+      this.paintedCells.grid = view.gridSize;
       w.setText(
         this.positionEl,
         t('hudChrome.rally.position', {
@@ -227,17 +230,20 @@ export class RealmRacersStrip {
         }),
       );
     }
-    if (this.lapEl && (view.lap !== s.lap || view.totalLaps !== s.laps)) {
-      s.lap = view.lap;
-      s.laps = view.totalLaps;
+    if (
+      this.lapEl &&
+      (view.lap !== this.paintedCells.lap || view.totalLaps !== this.paintedCells.laps)
+    ) {
+      this.paintedCells.lap = view.lap;
+      this.paintedCells.laps = view.totalLaps;
       w.setText(
         this.lapEl,
         t('hudChrome.rally.lap', { lap: num(view.lap), total: num(view.totalLaps) }),
       );
     }
     const second = Math.floor(view.elapsed);
-    if (this.timeEl && second !== s.second) {
-      s.second = second;
+    if (this.timeEl && second !== this.paintedCells.second) {
+      this.paintedCells.second = second;
       const minutes = Math.floor(second / 60);
       const seconds = second % 60;
       w.setText(
@@ -250,8 +256,8 @@ export class RealmRacersStrip {
     }
     // The speed is absolute, so rounding it here spells what `num` would.
     const speed = Math.round(view.speed);
-    if (this.speedEl && speed !== s.speed) {
-      s.speed = speed;
+    if (this.speedEl && speed !== this.paintedCells.speed) {
+      this.paintedCells.speed = speed;
       w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(speed) }));
     }
     if (this.wardEl) {
@@ -259,8 +265,8 @@ export class RealmRacersStrip {
       // rides setStyleProp, whose own (element, 'display') slot keeps the two
       // writes eliding independently (the same shape the limits line below uses).
       const ward = view.wardIn > 0 ? view.wardIn : 0;
-      if (ward !== s.ward) {
-        s.ward = ward;
+      if (ward !== this.paintedCells.ward) {
+        this.paintedCells.ward = ward;
         w.setText(
           this.wardEl,
           ward > 0
@@ -274,8 +280,8 @@ export class RealmRacersStrip {
       // An alert speaks when its text is inserted, not when it is unhidden, so
       // the text is written on the rising edge and cleared on the falling one:
       // every turn the wrong way is announced, not only the first.
-      if (view.wrongWay !== s.wrongWay) {
-        s.wrongWay = view.wrongWay;
+      if (view.wrongWay !== this.paintedCells.wrongWay) {
+        this.paintedCells.wrongWay = view.wrongWay;
         w.setText(this.wrongWayEl, view.wrongWay ? t('hudChrome.rally.wrongWay') : '');
       }
       w.setStyleProp(this.wrongWayEl, 'display', view.wrongWay ? 'block' : 'none');
@@ -284,8 +290,8 @@ export class RealmRacersStrip {
       // The text is written even while the line is hidden, so a locale flip
       // lands on it; visibility rides its own setStyleProp slot.
       const limit = view.trackLimit === 'cutReturned' ? CUT_RETURNED : view.offTrackIn;
-      if (limit !== s.limit) {
-        s.limit = limit;
+      if (limit !== this.paintedCells.limit) {
+        this.paintedCells.limit = limit;
         w.setText(
           this.limitsEl,
           limit === CUT_RETURNED
@@ -300,9 +306,12 @@ export class RealmRacersStrip {
     }
     if (this.phaseEl) {
       const line = phaseLineOf(view, this.phaseLine);
-      if (line.key !== s.phaseKey || line.seconds !== s.phaseSeconds) {
-        s.phaseKey = line.key;
-        s.phaseSeconds = line.seconds;
+      if (
+        line.key !== this.paintedCells.phaseKey ||
+        line.seconds !== this.paintedCells.phaseSeconds
+      ) {
+        this.paintedCells.phaseKey = line.key;
+        this.paintedCells.phaseSeconds = line.seconds;
         w.setText(
           this.phaseEl,
           line.key === null
@@ -315,8 +324,8 @@ export class RealmRacersStrip {
     }
     if (this.forfeitEl) {
       const armed = this.forfeitArmedUntil > this.deps.now();
-      if (armed !== s.armed) {
-        s.armed = armed;
+      if (armed !== this.paintedCells.armed) {
+        this.paintedCells.armed = armed;
         w.setText(
           this.forfeitEl,
           armed ? t('hudChrome.rally.forfeitConfirm') : t('hudChrome.rally.forfeit'),
@@ -326,8 +335,8 @@ export class RealmRacersStrip {
     }
   }
 
-  private forgetSpelled(): void {
-    const s = this.spelled;
+  private forgetPaintedCells(): void {
+    const s = this.paintedCells;
     s.position = -1;
     s.grid = -1;
     s.lap = -1;

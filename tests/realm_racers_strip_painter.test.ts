@@ -7,14 +7,14 @@
 // written once per skeleton rebuild, and a language switch (which forces one)
 // re-resolves every cell.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/ui/i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/ui/i18n')>();
   return { ...actual, t: vi.fn(actual.t), formatNumber: vi.fn(actual.formatNumber) };
 });
 
-import { formatNumber, t } from '../src/ui/i18n';
+import { ensureLocaleLoaded, formatNumber, setLanguage, t } from '../src/ui/i18n';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersStrip } from '../src/ui/realm_racers_strip_painter';
 import type { RealmRacersHudView } from '../src/ui/realm_racers_view';
@@ -58,7 +58,12 @@ const tKeys = (): string[] => vi.mocked(t).mock.calls.map(([key]) => key as stri
 const text = (selector: string): string | null | undefined =>
   layer.querySelector(selector)?.textContent;
 
+beforeAll(async () => {
+  await ensureLocaleLoaded('zh_CN');
+});
+
 beforeEach(() => {
+  clock.now = 0;
   layer = document.createElement('div');
   document.body.appendChild(layer);
   strip = new RealmRacersStrip({
@@ -75,6 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   layer.remove();
+  setLanguage('en');
 });
 
 describe('the race strip readout', () => {
@@ -135,6 +141,21 @@ describe('the race strip readout', () => {
     expect(tKeys()).toEqual([]);
   });
 
+  it('repaints every cell in the new language after a language switch', () => {
+    const english = text('.rallyhud-position');
+    // A loaded locale that spells these keys apart from English, so a cell
+    // still showing English is a stale latch.
+    setLanguage('zh_CN');
+    strip.relocalize();
+    strip.update(racing());
+    const switched = t('hudChrome.rally.position', { position: '2', total: '4' });
+    expect(switched).not.toBe(english);
+    expect(text('.rallyhud-position')).toBe(switched);
+    expect(text('.rallyhud-speed')).toBe(t('hudChrome.rally.speed', { speed: '24' }));
+    expect(text('.rallyhud-reset')).toBe(t('hudChrome.rally.reset'));
+    expect(text('.rallyhud-phase')).toBe(t('hudChrome.rally.go'));
+  });
+
   it('writes the wrong-way alert on each rising edge, so a screen reader hears every one', () => {
     const alert = (): HTMLElement => layer.querySelector('.rallyhud-wrong-way') as HTMLElement;
     const warning = t('hudChrome.rally.wrongWay');
@@ -153,7 +174,7 @@ describe('the race strip readout', () => {
     expect(tKeys()).toEqual(['hudChrome.rally.wrongWay', 'hudChrome.rally.wrongWay']);
   });
 
-  it('gives neither the strip nor the standings list a live-region role over its contents', () => {
+  it('gives the strip root no live-region role over its contents', () => {
     expect(layer.querySelector('#realm-racers-hud')?.getAttribute('role')).toBeNull();
     // The two lines that do speak keep their own regions.
     expect(layer.querySelector('.rallyhud-wrong-way')?.getAttribute('role')).toBe('alert');
