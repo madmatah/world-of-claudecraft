@@ -221,6 +221,40 @@ describe('Realm Racers hands the stripped auras back on the return', () => {
   });
 });
 
+describe('a restored periodic aura keeps its original tick schedule', () => {
+  it('a HoT ticks exactly the beats its seat-time schedule had left after the return', () => {
+    const sim = makeWorld();
+    const pid = addAt(sim, 'warrior', 'Pilot');
+    const e = body(sim, pid);
+    e.hp = Math.floor(e.maxHp / 4);
+    // Fresh at the seat: beats every 3 s, ten in all.
+    e.auras.push(
+      aura('test_renew', 'hot', 30, { value: 1, tickInterval: 3, tickTimer: 3, duration: 30 }),
+    );
+    const seatTick = sim.tickCount;
+    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
+    for (let i = 0; i < 200; i++) sim.tick();
+    sim.realmRacersForfeit(pid);
+    const home = tickUntilHome(sim, pid);
+    // The restore landed on tick `home - 1` or `home`: with beats 60 ticks
+    // apart and this gap well clear of a beat, both readings agree.
+    const left = (gap: number) =>
+      Array.from({ length: 10 }, (_, k) => (k + 1) * 3 * TICK_RATE).filter((at) => at > gap).length;
+    const expected = left(home - seatTick);
+    expect(left(home - 1 - seatTick)).toBe(expected);
+    expect(left(home + 1 - seatTick)).toBe(expected);
+    let beats = 0;
+    for (let i = 0; i < 40 * TICK_RATE && find(e, 'test_renew'); i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type === 'heal2' && (ev as { abilityId?: string }).abilityId === 'test_renew')
+          beats++;
+      }
+    }
+    expect(find(e, 'test_renew')).toBeUndefined();
+    expect(beats).toBe(expected);
+  });
+});
+
 describe('realmRacersAurasAt (pure)', () => {
   it('ages timed auras by the ticks since the seat and drops the expired ones', () => {
     const e = {
@@ -243,5 +277,48 @@ describe('realmRacersAurasAt (pure)', () => {
     // Fresh copies: the snapshot is unchanged and reusable.
     expect(snapshot.auras[0].remaining).toBe(10);
     expect(at[0]).not.toBe(snapshot.auras[0]);
+  });
+
+  it('ages the tick phase and the thorns cooldown, wrapping the phase like the aura pass', () => {
+    const e = {
+      auras: [
+        aura('hot', 'hot', 30, { tickInterval: 3, tickTimer: 3 }),
+        aura('fresh', 'hot', 30, { tickInterval: 3 }),
+        aura('grace', 'buff_mana_grace', 0, { permanent: true, tickInterval: 5, tickTimer: 1 }),
+        aura('shield', 'thorns', 600, { icd: 2, icdMax: 5 }),
+      ],
+      resourceType: 'mana',
+      savedMana: 0,
+    } as unknown as Entity;
+    const snapshot = snapshotRealmRacersStrippedAuras(e, 0);
+    e.auras = [];
+    settleRealmRacersStrippedAuras(snapshot, e);
+    const at = realmRacersAurasAt(snapshot, 10 * TICK_RATE);
+    const byId = new Map(at.map((a) => [a.id, a]));
+    // 3 - 10 = -7: three beats fired, the next is 2 s out; 20 s left = 7 beats.
+    expect(byId.get('hot')?.remaining).toBeCloseTo(20, 9);
+    expect(byId.get('hot')?.tickTimer).toBeCloseTo(2, 9);
+    // An unset phase starts at the interval, as the pass reads it.
+    expect(byId.get('fresh')?.tickTimer).toBeCloseTo(2, 9);
+    // Untimed auras keep their remaining but their beat still ran: 1 - 10 = -9,
+    // two beats at 1 and 6, the next at 11.
+    expect(byId.get('grace')?.tickTimer).toBeCloseTo(1, 9);
+    expect(byId.get('grace')?.remaining).toBe(0);
+    expect(byId.get('shield')?.icd).toBe(0);
+  });
+
+  it('a gloomtithe the aura pass would hold is not aged; one it would age is', () => {
+    const e = {
+      auras: [aura('gloomtithe', 'gloomtithe', 8)],
+      resourceType: 'mana',
+      savedMana: 0,
+    } as unknown as Entity;
+    const snapshot = snapshotRealmRacersStrippedAuras(e, 0);
+    e.auras = [];
+    settleRealmRacersStrippedAuras(snapshot, e);
+    const held = realmRacersAurasAt(snapshot, 5 * TICK_RATE, (a) => a.kind === 'gloomtithe');
+    expect(held[0]?.remaining).toBe(8);
+    const aged = realmRacersAurasAt(snapshot, 5 * TICK_RATE);
+    expect(aged[0]?.remaining).toBeCloseTo(3, 9);
   });
 });

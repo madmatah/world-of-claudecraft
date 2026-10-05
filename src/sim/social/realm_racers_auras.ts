@@ -19,6 +19,7 @@
 // should write (persistedResource).
 //
 // Sim time in ticks only; draws no rng.
+import { preservesGloomtithe } from '../combat/priest/vespers';
 import { isPersistentEngineAura } from '../persistent_aura';
 import { SICKNESS_AURA_IDS } from '../resurrection';
 import type { SimContext } from '../sim_context';
@@ -65,19 +66,49 @@ function untimed(aura: Aura): boolean {
   return aura.permanent === true || isPersistentEngineAura(aura.id);
 }
 
+/** Where a periodic beat stands `elapsed` seconds on, exactly as the aura pass
+ *  would have moved it tick by tick: the timer runs down, and every time it
+ *  reaches zero it fires and is re-armed by one interval. An unset timer starts
+ *  at the interval, as the pass reads it. */
+function agedTickTimer(tickTimer: number, tickInterval: number, elapsed: number): number {
+  let timer = tickTimer - elapsed;
+  if (timer <= CAST_COMPLETE_EPS) {
+    timer += (Math.floor((CAST_COMPLETE_EPS - timer) / tickInterval) + 1) * tickInterval;
+  }
+  return timer;
+}
+
 /** The stripped auras as they stand `tick`: aged by the time since the seat,
- *  the expired ones dropped. Pure; returns fresh copies. */
-export function realmRacersAurasAt(snapshot: RealmRacersStrippedAuras, tick: number): Aura[] {
+ *  the expired ones dropped. `held` names an aura the aura pass would not age
+ *  right now (a gloomtithe while its Effigy stands: preservesGloomtithe), whose
+ *  remaining time is handed back untouched. Pure; returns fresh copies.
+ *
+ *  Every clock an aura carries in seconds ages with it, so a restored DoT or
+ *  HoT keeps its seat-time schedule: the beat phase (tickTimer) and a thorns
+ *  internal cooldown (icd). The other per-aura numbers are amounts or absolute
+ *  sim times (tickDoom, actionGainLockout), which need nothing. */
+export function realmRacersAurasAt(
+  snapshot: RealmRacersStrippedAuras,
+  tick: number,
+  held: (aura: Aura) => boolean = () => false,
+): Aura[] {
   const elapsed = Math.max(0, tick - snapshot.tick) / TICK_RATE;
   const out: Aura[] = [];
   for (const aura of snapshot.auras) {
-    if (untimed(aura)) {
-      out.push({ ...aura });
-      continue;
+    const back: Aura = { ...aura };
+    if (!untimed(aura) && !held(aura)) {
+      back.remaining = aura.remaining - elapsed;
+      if (back.remaining <= CAST_COMPLETE_EPS) continue;
     }
-    const remaining = aura.remaining - elapsed;
-    if (remaining <= CAST_COMPLETE_EPS) continue;
-    out.push({ ...aura, remaining });
+    if (aura.tickInterval) {
+      back.tickTimer = agedTickTimer(
+        aura.tickTimer ?? aura.tickInterval,
+        aura.tickInterval,
+        elapsed,
+      );
+    }
+    if (aura.icd !== undefined && aura.icd > 0) back.icd = Math.max(0, aura.icd - elapsed);
+    out.push(back);
   }
   return out;
 }
@@ -92,7 +123,11 @@ export function restoreRealmRacersStrippedAuras(
   e: Entity,
   snapshot: RealmRacersStrippedAuras,
 ): void {
-  const back = realmRacersAurasAt(snapshot, ctx.tickCount);
+  const back = realmRacersAurasAt(
+    snapshot,
+    ctx.tickCount,
+    (aura) => aura.kind === 'gloomtithe' && preservesGloomtithe(ctx, e.id),
+  );
   if (back.length === 0) return;
   e.auras.push(...back);
   e.stealthed = e.auras.some((aura) => aura.kind === 'stealth');
