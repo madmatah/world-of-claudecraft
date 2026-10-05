@@ -24,6 +24,7 @@ import {
   arrivalCoverActive,
   arrivalCoverDepthForTest,
   resetArrivalCoverForTest,
+  setArrivalCover,
 } from '../src/render/arrival_cover';
 import {
   RealmRacersPrepare,
@@ -171,6 +172,8 @@ function harness() {
     prepareProgress: (out, circuitId) => source.progress(out, circuitId),
     connectionDropped: () => link.dropped,
     now: () => clock.now,
+    // The real cover, as the HUD parts wire it, so the depth tests read it.
+    setArrivalCover,
   });
   /** One HUD frame: the ready send above the paint cut, then the paint. */
   const frame = (): void => {

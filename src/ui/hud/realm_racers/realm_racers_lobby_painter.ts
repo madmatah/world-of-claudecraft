@@ -23,7 +23,6 @@
 // bar ride the PainterHost elided writers, and a localized string is resolved
 // again only when the value it spells changes.
 
-import { setArrivalCover } from '../../../render/arrival_cover';
 import { durationText } from '../../duration_text';
 import { esc } from '../../esc';
 import { formatNumber, t } from '../../i18n';
@@ -43,8 +42,9 @@ export interface RealmRacersLobbyDeps {
   /** The HUD layer the curtain mounts into (null before the HUD exists). */
   layer(): HTMLElement | null;
   writers: PainterHostWriters;
-  /** Raise or drop one arrival-cover depth; the real cover by default. */
-  setCover?: (active: boolean) => void;
+  /** Raise or drop one arrival-cover depth: the render-side cover
+   *  (`src/render/arrival_cover.ts`), handed in by the HUD parts. */
+  setCover: (active: boolean) => void;
   /** The window and menu key hold this curtain drives while it is shown. */
   hold?: Pick<RealmRacersLobbyHold, 'set'>;
   /** The element carrying the shown state class; body by default. */
@@ -129,7 +129,7 @@ export class RealmRacersLobby {
   private cover(active: boolean): void {
     if (active === this.raised) return;
     this.raised = active;
-    (this.deps.setCover ?? setArrivalCover)(active);
+    this.deps.setCover(active);
   }
 
   private hold(active: boolean): void {

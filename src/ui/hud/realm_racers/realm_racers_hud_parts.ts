@@ -4,6 +4,7 @@
 // hud.ts in tests/realm_racers_ui.test.ts.
 import { audio } from '../../../game/audio';
 import { sfx } from '../../../game/sfx';
+import { setArrivalCover } from '../../../render/arrival_cover';
 import type { RealmRacersPrepareProgress } from '../../../render/realm_racers_prepare';
 import type { IWorld } from '../../../world_api';
 import { prewarmIconCache } from '../../icon_prewarm';
@@ -82,6 +83,9 @@ export function realmRacersUiDeps(hud: object): RealmRacersDeps {
     clearPickupSplash: () => h.realmRacersSplash.clear(),
     writers: h.writerFacet,
     prepareProgress: (out, circuitId) => h.renderer.realmRacers.prepare.progress(out, circuitId),
+    // The lobby curtain's arrival-cover depth: the render-side cover reaches
+    // the painter through this seam rather than a default import of its own.
+    setArrivalCover,
     raceWarm: {
       preloadSfx: (key) => sfx.preload(key),
       // Eager: an idle-only pump can starve behind a busy lobby, and each

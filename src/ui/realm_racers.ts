@@ -68,6 +68,9 @@ export interface RealmRacersDeps {
   /** The client clock the lobby failsafe and the strip's forfeit arm run on;
    *  performance.now by default. */
   now?(): number;
+  /** Raise or drop one arrival-cover depth for the lobby curtain: the
+   *  render-side cover, handed in by the HUD parts so no UI painter imports it. */
+  setArrivalCover(active: boolean): void;
   /** Where the race warm sends the first-use sounds and icons it prepares on
    *  the commitment trigger; without it nothing is warmed. */
   raceWarm?: RealmRacersRaceWarmSinks;
@@ -117,6 +120,7 @@ export class RealmRacersUi {
       layer: () => deps.layer(),
       writers: deps.writers,
       hold: this.lobbyHold,
+      setCover: deps.setArrivalCover,
     });
   }
 

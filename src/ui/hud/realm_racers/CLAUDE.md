@@ -54,8 +54,9 @@ down (the race strip rules in `src/styles/components.css`, the touch twin in
   `#realm-racers-lobby` curtain (`role="dialog"`, named by the circuit heading, NOT modal:
   the chat frame outside it stays reachable), mounted FIRST in the HUD layer. It marks body
   with `RALLY_LOBBY_SHOWN_CLASS` while shown.
-  - It holds one arrival-cover depth (`src/render/arrival_cover.ts`) only while this
-    machine is still preparing: the GPU-prep admission then runs on the cover rule, as
+  - It holds one arrival-cover depth (`src/render/arrival_cover.ts`, injected as
+    `setCover` by `realm_racers_hud_parts.ts`, never imported by the painter) only while
+    this machine is still preparing: the GPU-prep admission then runs on the cover rule, as
     under the loading screen. Once settled the depth drops while the curtain stays up, so
     the lanes the cover refuses run behind the curtain, not in the countdown.
   - While shown it holds the window and menu keys (below). It never touches the ready

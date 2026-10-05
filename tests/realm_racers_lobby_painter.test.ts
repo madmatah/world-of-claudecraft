@@ -4,11 +4,14 @@
 // value through the elided writers, and exactly one arrival-cover depth held
 // for as long as the curtain is up.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setArrivalCover } from '../src/render/arrival_cover';
 import {
   buildRealmRacersLobbyView,
   RealmRacersLobby,
   type RealmRacersLobbyProgress,
+  realmRacersUiDeps,
 } from '../src/ui/hud/realm_racers';
 import { t } from '../src/ui/i18n';
 import { makeWriterFacet } from '../src/ui/painter_host';
@@ -211,5 +214,20 @@ describe('RealmRacersLobby painter', () => {
     r.painter.update(buildRealmRacersLobbyView(lobby(), PREPARING));
     expect(r.innerHtml).toHaveBeenCalledTimes(2);
     r.innerHtml.mockRestore();
+  });
+});
+
+describe('the arrival cover the curtain holds', () => {
+  it('reaches it only through its injected seam, wired by the HUD parts', () => {
+    // The painter is a UI module: the render-side cover is handed to it by the
+    // composition glue rather than imported as a default it falls back to.
+    const painter = readFileSync('src/ui/hud/realm_racers/realm_racers_lobby_painter.ts', 'utf8');
+    expect(painter).not.toMatch(/from '(\.\.\/)+render\//);
+    const composer = readFileSync('src/ui/realm_racers.ts', 'utf8');
+    expect(composer).toContain('setCover: deps.setArrivalCover');
+    const deps = realmRacersUiDeps({
+      windowFocus: () => ({ captureFocus: () => null, restoreFocus: () => {} }),
+    });
+    expect(deps.setArrivalCover).toBe(setArrivalCover);
   });
 });

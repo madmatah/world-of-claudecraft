@@ -125,6 +125,7 @@ function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
     clearPickupSplash: noop,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
     prepareProgress: (out) => out,
+    setArrivalCover: noop,
   });
   ui.toggle();
   return { ui, root };

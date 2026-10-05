@@ -372,6 +372,7 @@ describe('the HUD wiring of the race warm', () => {
       prepareProgress: (progress) => Object.assign(progress, { done: 0, total: 1, settled: false }),
       connectionDropped: () => false,
       now: () => 0,
+      setArrivalCover: noop,
       raceWarm: out,
     });
     ui.sendReady();
