@@ -65,6 +65,7 @@ import {
 import {
   type RallyPoint,
   REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
   rallyGateCrossingFraction,
@@ -713,6 +714,25 @@ function matchSeats(match: RealmRacersMatch | null, pid: number): boolean {
 export function realmRacersStillRunning(match: RealmRacersMatch, pid: number): boolean {
   const progress = match.progress.get(pid);
   return !!progress && progress.finishedTick === null && progress.retiredTick === null;
+}
+
+/**
+ * Is this racer standing on its OWN race's copy of the circuit? Only the race
+ * moves a seated pilot onto or off a lane (the seat and the return), and every
+ * lane is drivable band, which is why being on the band is not enough. Lane
+ * records are stable objects, so identity is the comparison, with no allocation
+ * on this per-racer, per-tick path.
+ */
+function onOwnLane(match: RealmRacersMatch, e: Entity): boolean {
+  const here = realmRacersLaneAt(e.pos.x, e.pos.z);
+  return (
+    here !== null &&
+    here ===
+      realmRacersLaneAt(
+        REALM_RACERS_ORIGIN.x + match.origin.x,
+        REALM_RACERS_ORIGIN.z + match.origin.z,
+      )
+  );
 }
 
 /** Seated and held on the grid: the loading lobby or the countdown. */
@@ -2817,9 +2837,12 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     if (!matchSeats(match, pid)) continue;
     const meta = ctx.players.get(pid);
     const e = ctx.entities.get(pid);
-    if (!meta || !e || meta.leaving || e.dead || e.ghost) {
+    if (!meta || !e || meta.leaving || e.dead || e.ghost || !onOwnLane(match, e)) {
       // A disconnect is a forfeit: this pilot is classified last and returned
-      // at once, and three other people's race is not ended by it.
+      // at once, and three other people's race is not ended by it. So is a
+      // body carried off its copy of the circuit by something that never went
+      // through the race (a summon, a portal, a GM move): re-forcing the
+      // machine there would leave a seated pilot driving in the open world.
       retireRacer(ctx, match, pid, true);
       continue;
     }

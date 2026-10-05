@@ -83,11 +83,13 @@ function racing(): { sim: Sim; a: number; b: number; pids: number[] } {
   if (match(sim).circuitId !== RACE_CIRCUIT.id) throw new Error('race seated on another circuit');
   // The rest of the field is parked far around the lap. A blast catches EVERY
   // racer inside it, which is the point of the weapon, so a shell aimed at one
-  // named rival has to be fired somewhere the others are not.
+  // named rival has to be fired somewhere the others are not. On the race's
+  // OWN copy of the circuit: a body on any other lane is retired as moved off.
   const track = realmRacersTrack(RACE_CIRCUIT);
+  const origin = match(sim).origin;
   pids.slice(2).forEach((pid, i) => {
     const away = track.pointAt(track.length * (0.4 + i * 0.2));
-    teleport(sim, pid, away.x, away.z);
+    teleport(sim, pid, origin.x + away.x, origin.z + away.z);
   });
   match(sim).phase = 'racing';
   // The phase drives the CONTROL LOCK, which the match module writes onto each

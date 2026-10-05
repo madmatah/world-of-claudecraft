@@ -823,17 +823,18 @@ describe('Realm Racers match-scoped interest', () => {
     const [a, b] = grid;
     for (const member of grid) member.session.timerWireVersion = STABLE_TIMER_WIRE_VERSION;
     // The pair under test out on the instance plane, the rest of the field far
-    // enough away that only the match pins reach them.
-    moveMember(server, a, 113_700, 0);
-    moveMember(server, b, 113_870, 0);
-    for (let i = 2; i < grid.length; i++) {
-      moveMember(server, grid[i], 113_700, 400 + (i - 2) * 400);
-    }
+    // enough away that only the match pins reach them. All of it on the race's
+    // OWN lane, since the sim ticks here and retires a racer found on any other.
+    const laneZ = server.sim.realmRacers.match?.origin.z ?? 0;
+    moveMember(server, a, 113_700, laneZ);
+    moveMember(server, b, 113_870, laneZ);
+    moveMember(server, grid[2], 113_420, laneZ + 140);
+    moveMember(server, grid[3], 113_990, laneZ - 140);
     refreshGrids(server);
 
     for (let i = 0; i < 4; i++) {
       server.sim.tick();
-      moveMember(server, b, 113_870 + i, 0);
+      moveMember(server, b, 113_870 + i, laneZ);
       refreshGrids(server);
       const ref = referenceEntsKeep(
         server,

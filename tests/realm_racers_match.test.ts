@@ -19,6 +19,8 @@ import {
   REALM_RACERS_GRID_SIZE,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_VERGE_MARGIN,
+  realmRacersLaneOffset,
+  realmRacersPracticeLanes,
 } from '../src/sim/realm_racers_layout';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { CharacterState, Sim } from '../src/sim/sim';
@@ -110,6 +112,12 @@ function placeAtS(sim: Sim, pid: number, s: number, lateral = 0): void {
 function onLane(sim: Sim, x: number, z: number): { x: number; z: number } {
   const liveMatch = match(sim);
   return { x: liveMatch.origin.x + x, z: liveMatch.origin.z + z };
+}
+
+/** `teleport` to a canonical point on the race's OWN lane (see `onLane`). */
+function teleportOnLane(sim: Sim, pid: number, x: number, z: number): void {
+  const at = onLane(sim, x, z);
+  teleport(sim, pid, at.x, at.z);
 }
 
 /**
@@ -538,6 +546,46 @@ describe('The Realm Racers lifecycle', () => {
     expect(required(sim.players.get(a), `player ${a}`).realmRacersMatchId).toBeNull();
     expect(sim.realmRacersInfoFor(a).match).toBeNull();
     expect(sim.realmRacersInfoFor(b).match?.phase).toBe('racing');
+  });
+
+  it('retires a pilot moved off the circuit mid-race instead of re-seating them', () => {
+    // A summon, a portal or a GM move can carry a seated racer off the lane
+    // without going through the race: the roster pass must close the
+    // parenthesis rather than re-force the machine in the open world.
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    const original = required(liveMatch.returns.get(a), `return ${a}`);
+    teleport(sim, a, 40, -60);
+    updateRealmRacers(sim.ctx);
+    const progress = required(liveMatch.progress.get(a), `progress ${a}`);
+    expect(progress.retiredTick).not.toBeNull();
+    expect(progress.returned).toBe(true);
+    const body = entity(sim, a);
+    expect(body.drive).toBeNull();
+    expect(body.mountKey).not.toBe(REALM_RACERS_MOUNT_KEY);
+    expect(body.pos).toMatchObject({ x: original.x, z: original.z });
+    expect(required(sim.players.get(a), `player ${a}`).realmRacersMatchId).toBeNull();
+    expect(sim.realmRacersInfoFor(b).match?.phase).toBe('racing');
+  });
+
+  it('retires a pilot moved onto another copy of the circuit', () => {
+    // Every lane is drivable band, so being ON the band is not enough: a racer
+    // dropped on somebody else's copy is off their own race.
+    const { sim, pids } = startMatch();
+    const [a] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    const body = entity(sim, a);
+    const otherLane = realmRacersLaneOffset(realmRacersPracticeLanes()[0].index);
+    expect(otherLane.z).not.toBe(liveMatch.origin.z);
+    teleport(sim, a, body.pos.x, body.pos.z - liveMatch.origin.z + otherLane.z);
+    updateRealmRacers(sim.ctx);
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).returned).toBe(true);
+    expect(entity(sim, a).drive).toBeNull();
   });
 
   it('keeps Ground Blast mounted and applies one short no-damage destabilization', () => {
@@ -1069,7 +1117,7 @@ describe('The Realm Racers lifecycle', () => {
     // The whole field stacked into one heap: four machines is six unordered
     // pairs, and the pass has to separate all of them, not just the first.
     pids.forEach((pid, i) => {
-      teleport(sim, pid, sample.x - sample.tz * (i * 0.6), sample.z + sample.tx * (i * 0.6));
+      teleportOnLane(sim, pid, sample.x - sample.tz * (i * 0.6), sample.z + sample.tx * (i * 0.6));
       const racer = entity(sim, pid);
       racer.facing = facing;
       const drive = required(racer.drive, `drive ${pid}`);
@@ -1163,8 +1211,8 @@ describe('The Realm Racers lifecycle', () => {
     const racerA = entity(sim, a);
     const racerB = entity(sim, b);
     const overlap = () => {
-      teleport(sim, a, sample.x, sample.z);
-      teleport(sim, b, sample.x - sample.tz * 0.8, sample.z + sample.tx * 0.8);
+      teleportOnLane(sim, a, sample.x, sample.z);
+      teleportOnLane(sim, b, sample.x - sample.tz * 0.8, sample.z + sample.tx * 0.8);
       updateRealmRacers(sim.ctx);
       return Math.hypot(racerA.pos.x - racerB.pos.x, racerA.pos.z - racerB.pos.z);
     };
@@ -1191,8 +1239,8 @@ describe('The Realm Racers lifecycle', () => {
     // closing speed the pass measures is exactly what is set here.
     const facing = Math.atan2(sample.tx, sample.tz);
     const lean = (closingSpeed: number) => {
-      teleport(sim, a, sample.x, sample.z);
-      teleport(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
+      teleportOnLane(sim, a, sample.x, sample.z);
+      teleportOnLane(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
       const racerA = entity(sim, a);
       const racerB = entity(sim, b);
       racerA.facing = facing;
@@ -1245,8 +1293,8 @@ describe('The Realm Racers lifecycle', () => {
     const racerB = entity(sim, b);
     // A comes past B on its right shoulder, leaning in: same heading, real
     // difference in pace, so the carcasses scrape rather than only push.
-    teleport(sim, a, sample.x, sample.z);
-    teleport(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
+    teleportOnLane(sim, a, sample.x, sample.z);
+    teleportOnLane(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
     racerA.facing = facing;
     racerB.facing = facing;
     const driveA = required(racerA.drive, 'drive A');
@@ -1525,8 +1573,8 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     const sample = track.samples[120];
     const facing = Math.atan2(sample.tx, sample.tz);
     const lean = (closingSpeed: number) => {
-      teleport(sim, a, sample.x, sample.z);
-      teleport(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
+      teleportOnLane(sim, a, sample.x, sample.z);
+      teleportOnLane(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
       const racerA = entity(sim, a);
       const racerB = entity(sim, b);
       racerA.facing = facing;
@@ -1568,8 +1616,8 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     const driveB = required(racerB.drive, 'drive B');
     // B runs down the road at 30 yd/s; A sits 4.25 yd to the side, matching
     // B's forward speed and closing laterally at 15 yd/s.
-    teleport(sim, b, sample.x, sample.z);
-    teleport(sim, a, sample.x + latX * 4.25, sample.z + latZ * 4.25);
+    teleportOnLane(sim, b, sample.x, sample.z);
+    teleportOnLane(sim, a, sample.x + latX * 4.25, sample.z + latZ * 4.25);
     racerB.prevPos = {
       x: racerB.pos.x - sample.tx * 1.5,
       y: racerB.pos.y,
