@@ -5,8 +5,10 @@ import {
   REMOTE_VEHICLE_AGE_CAP_MS,
   REMOTE_VEHICLE_LEAD_CAP_MS,
   type RemoteRacerHorizon,
+  type RemoteRacerMirror,
   type RemoteVehicleDisplayState,
   rallyLaneResolve,
+  remoteRacerAuraMult,
   remoteRacerDisplayY,
   remoteRacerHorizon,
   remoteRacerMuzzle,
@@ -21,9 +23,10 @@ import {
   selfFrameLeadMs,
 } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { auraSpeedMult } from '../src/sim/player_motion';
 import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_ORIGIN, realmRacersLaneAt } from '../src/sim/realm_racers_layout';
-import { type Aura, DT, type VehicleDrive } from '../src/sim/types';
+import { type Aura, DT, type Entity, type VehicleDrive } from '../src/sim/types';
 import {
   advanceVehicleDrive,
   createVehicleDrive,
@@ -548,6 +551,21 @@ describe('a held or snared rival is projected the way the server moves it', () =
     }
     expect(direct.z).toBeGreaterThan(0.5);
     expect(s.z).toBeGreaterThan(direct.z);
+  });
+
+  it('reads the same aura multiplier the server movement pass does, ghost included', () => {
+    const mirror = (over: Partial<RemoteRacerMirror>): RemoteRacerMirror => ({
+      pos: { x: 0, z: 0 },
+      facing: 0,
+      drive: null,
+      ...over,
+    });
+    expect(remoteRacerAuraMult(mirror({}))).toBe(1);
+    expect(remoteRacerAuraMult(mirror({ auras: [] }))).toBe(1);
+    expect(remoteRacerAuraMult(mirror({ auras: slow(0.6) }))).toBe(0.6);
+    const ghost = mirror({ auras: [], ghost: true });
+    expect(remoteRacerAuraMult(ghost)).toBe(auraSpeedMult(ghost as unknown as Entity));
+    expect(remoteRacerAuraMult(ghost)).not.toBe(1);
   });
 
   it("honours a snared rival's own slow, off the auras its wire record carries", () => {

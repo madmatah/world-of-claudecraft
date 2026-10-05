@@ -404,8 +404,11 @@ export interface RemoteRacerMirror {
   drive: VehicleDrive | null;
   /** Arrival time of its newest wire pose (performance.now() ms). */
   netUpdatedAt?: number;
-  /** Its mirrored auras: every entity record carries them. */
+  /** Its mirrored auras (every entity record carries them) and the two flags
+   *  `auraSpeedMult` reads beside them. */
   auras?: readonly Aura[];
+  ghost?: boolean;
+  dead?: boolean;
 }
 
 /**
@@ -414,7 +417,8 @@ export interface RemoteRacerMirror {
  * the auras its wire record mirrors; 1 for a mirror that carries none.
  */
 export function remoteRacerAuraMult(e: RemoteRacerMirror): number {
-  return e.auras && e.auras.length > 0 ? auraSpeedMult(e as Entity) : 1;
+  if (!e.auras || (e.auras.length === 0 && !e.ghost)) return 1;
+  return auraSpeedMult(e as Entity);
 }
 
 export interface RemoteRacerHorizon {
