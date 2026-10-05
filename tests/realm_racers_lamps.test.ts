@@ -8,20 +8,36 @@
 // lane nobody is on; left registered, they light it forever.
 
 import * as THREE from 'three';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// The Lambert tier's glow pool paints a canvas texture, which this host has no
+// canvas for.
+vi.mock('../src/render/textures', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/render/textures')>()),
+  radialGlowTexture: () =>
+    new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat),
+}));
+
+import { programVariantOf } from '../src/render/compile_gate_pieces';
 import {
   ensureNightLightField,
+  hasNightLightField,
   nightLightStaticCount,
   nightLightUniforms,
   resetNightLightFieldForTest,
   updateNightLightField,
 } from '../src/render/night_light_field';
+import { materialProgramSignature } from '../src/render/prewarm_policy';
+import { buildRealmRacersCommonRoot } from '../src/render/realm_racers_circuit_prepare';
+import { realmRacersCommonBuild } from '../src/render/realm_racers_common_pieces';
 import {
   buildRealmRacersLamps,
   type RallyLampPlacement,
   realmRacersLampInternalsForTest,
   updateRealmRacersLampGlow,
 } from '../src/render/realm_racers_lamps';
+import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
+import { createRealmRacersTrackPalette } from '../src/render/realm_racers_track_palette';
 import {
   LIGHT_SOCKET_NODE,
   STREETLAMP_ASSET_DEFS,
@@ -30,16 +46,19 @@ import {
 } from '../src/render/streetlamp_assets';
 import { LAMP_SOURCE_MATERIAL } from '../src/render/streetlamp_emissive';
 import { LAMP_FIELD_RADIUS } from '../src/render/streetlamp_light_site';
+import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
+import type { StreetlampStyleId } from '../src/sim/streetlamp_style';
 
 afterEach(() => {
   resetNightLightFieldForTest();
   streetlampPreloadInternalsForTest.reset();
   realmRacersLampInternalsForTest.reset();
+  vi.unstubAllGlobals();
 });
 
 /** A stand-in fixture with the two things the preparer reads: a mesh to scale,
  *  and a socket node saying where its light hangs. */
-function installFixture(style: 'evergarden_flower' | 'frostveil_icicle', socketX = 1.2): void {
+function installFixture(style: StreetlampStyleId, socketX = 1.2): void {
   const source = new THREE.Group();
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(1, 1, 1),
@@ -199,5 +218,74 @@ describe('the glow every circuit lamp burns at', () => {
     // ...and a lit frame breaks the latch, so the lamps come back on at dusk.
     updateRealmRacersLampGlow(0.8, 0);
     expect(material.emissiveIntensity).toBeCloseTo(lit, 6);
+  });
+});
+
+/** The lamp styles the shipped circuits place, off their records. */
+function shippedLampStyles(): Set<StreetlampStyleId> {
+  const styles = new Set<StreetlampStyleId>();
+  for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    for (const asset of [
+      ...(circuit.props ?? []).map((prop) => prop.asset),
+      ...(circuit.scatters ?? []).map((scatter) => scatter.asset),
+    ]) {
+      const visual = REALM_RACERS_PROP_VISUALS[asset];
+      if (visual?.kind === 'streetlamp') styles.add(visual.style);
+    }
+  }
+  return styles;
+}
+
+/** The common client's root from the records, its prop piece run. */
+function commonLampRoot(): THREE.Group {
+  const build = realmRacersCommonBuild(REALM_RACERS_CIRCUIT_LIST, createRealmRacersTrackPalette());
+  const props = build.pieces.find((piece) => piece.kind === 'props');
+  if (!props) throw new Error('the common build has no prop piece');
+  props.run();
+  return buildRealmRacersCommonRoot([build.sampler]);
+}
+
+const POOL = 'realmRacersLamps:pool';
+
+function poolsUnder(root: THREE.Object3D): THREE.Mesh[] {
+  const pools: THREE.Mesh[] = [];
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.isMesh && (mesh.material as THREE.Material).name === POOL) pools.push(mesh);
+  });
+  return pools;
+}
+
+const programOf = (mesh: THREE.Mesh): string =>
+  `${materialProgramSignature(mesh.material as THREE.Material)}#${programVariantOf(mesh)}`;
+
+describe('the common preparation of the circuit lamps (rallyCommon)', () => {
+  it('links the Lambert tier pool a lamp-lit circuit draws', () => {
+    const styles = shippedLampStyles();
+    // Non-vacuity: a shipped circuit places lamps, or there is no pool to link.
+    expect(styles.size).toBeGreaterThan(0);
+    for (const style of styles) installFixture(style);
+    // The pool is drawn only on a DOM host and only where the night field does
+    // not light the road (the Lambert tier).
+    vi.stubGlobal('document', {});
+    expect(hasNightLightField()).toBe(false);
+    const common = poolsUnder(commonLampRoot());
+    expect(common).toHaveLength(1);
+    // ...and it is the very program a circuit's own pool draws.
+    const [style] = styles;
+    const circuit = buildRealmRacersLamps('rally:pool-probe', [
+      { x: 10, y: 0, z: 0, yaw: 0, style },
+    ]);
+    const drawn = poolsUnder(circuit?.group ?? new THREE.Group());
+    expect(drawn).toHaveLength(1);
+    expect(programOf(common[0])).toBe(programOf(drawn[0]));
+  });
+
+  it('links no pool where the night field lights the road, as a circuit draws none', () => {
+    for (const style of shippedLampStyles()) installFixture(style);
+    vi.stubGlobal('document', {});
+    ensureNightLightField();
+    expect(hasNightLightField()).toBe(true);
+    expect(poolsUnder(commonLampRoot())).toEqual([]);
   });
 });
