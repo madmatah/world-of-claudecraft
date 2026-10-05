@@ -1,5 +1,6 @@
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GROUND_BLAST_PUSH } from '../src/sim/realm_racers_ground_blast';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import {
   REALM_RACERS_NITRO_KICK,
   REALM_RACERS_NITRO_SPEED_MULT,
@@ -143,9 +144,12 @@ export function vehicleStepKinematicYd(profileKey: string): number {
   );
 }
 
-/** A rival contact's depenetration: at most a full overlap of two hulls. */
+/** The contact pass's depenetration of one hull: each pair moves it by at
+ *  most half a full overlap (one profile, equal masses: a body radius), and a
+ *  hull left inside the next rival is moved again, so a pile-up of the whole
+ *  grid moves it a radius per rival. */
 export function vehicleStepSettleMarginYd(profileKey: string): number {
-  return 2 * vehicleProfile(profileKey).bodyRadius;
+  return (REALM_RACERS_GRID_SIZE - 1) * vehicleProfile(profileKey).bodyRadius;
 }
 
 export function vehicleStepCeilingYd(profileKey: string): number {

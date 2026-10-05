@@ -595,6 +595,29 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     expect(shove[0]).toEqual([]);
   });
 
+  it('covers a hull settled out of every rival at once in a four-kart pile-up', () => {
+    // Each pair moves a hull by half its overlap (one profile, equal masses),
+    // so a hull that comes out of the last pair still inside the next rival is
+    // moved again: three rivals stacked that way push it three body radii,
+    // past a margin sized for one full overlap of two hulls.
+    const s = straightest(40);
+    const r = racing(s);
+    const [a, b, c, d] = r.pids;
+    const radius = vehicleProfile(r.entity(a).drive!.profileKey).bodyRadius;
+    const eps = 0.01;
+    r.place(a, s);
+    r.place(b, s, { lateral: eps });
+    r.place(c, s, { lateral: -radius + 1.5 * eps });
+    r.place(d, s, { lateral: -2 * radius + 2 * eps });
+    r.resetWorst();
+    const bumped = r.step();
+    expect(r.worst[0]).toBeGreaterThan(2 * radius + 1);
+    expect(r.worst[0]).toBeLessThanOrEqual(
+      vehicleStepSettleMarginYd(r.entity(a).drive!.profileKey),
+    );
+    expect(bumped[0]).toBe(false);
+  });
+
   it('never bumps through a Ground Blast pop, the slow it leaves, the flight and the landing', () => {
     const s = straightest(100);
     const r = racing(s);
