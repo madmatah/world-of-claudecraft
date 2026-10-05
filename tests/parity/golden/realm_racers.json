@@ -3972,8 +3972,8 @@
       "tick": 300,
       "time": 15,
       "nextId": 1014,
-      "state": "cb48fbbf",
-      "events": "08c306de",
+      "state": "eb9c2740",
+      "events": "c1d47ffc",
       "rng": {
         "draws": 2485,
         "digest": "62e5d087"
@@ -3983,7 +3983,7 @@
       "tick": 320,
       "time": 16,
       "nextId": 1014,
-      "state": "b684b262",
+      "state": "5895ec83",
       "events": "9e15a1da",
       "rng": {
         "draws": 2689,
@@ -3994,7 +3994,7 @@
       "tick": 340,
       "time": 17,
       "nextId": 1014,
-      "state": "00b0a2ad",
+      "state": "dc5c3c5e",
       "events": "741638a5",
       "rng": {
         "draws": 2883,
@@ -4005,7 +4005,7 @@
       "tick": 360,
       "time": 18,
       "nextId": 1014,
-      "state": "013207b8",
+      "state": "bd9b3d99",
       "events": "741638a5",
       "rng": {
         "draws": 3070,
@@ -4016,7 +4016,7 @@
       "tick": 380,
       "time": 19,
       "nextId": 1014,
-      "state": "c1be6a7b",
+      "state": "fe9952ac",
       "events": "741638a5",
       "rng": {
         "draws": 3249,
@@ -4027,7 +4027,7 @@
       "tick": 400,
       "time": 20,
       "nextId": 1014,
-      "state": "6483af7e",
+      "state": "aaaa7d6f",
       "events": "741638a5",
       "rng": {
         "draws": 3414,
@@ -4038,7 +4038,7 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "b2a12a30",
+      "state": "76ef6729",
       "events": "cef9d8e9",
       "rng": {
         "draws": 3510,
@@ -4081,12 +4081,6 @@
               "worn_sword"
             ]
           },
-          "deedsEarned": [
-            [
-              "pvp_rr_first_win",
-              ""
-            ]
-          ],
           "delveClears": {},
           "delveDaily": {},
           "entityId": 1010,
@@ -4117,7 +4111,6 @@
             "counts": {},
             "firstFind": {}
           },
-          "rrWins": 1,
           "talents": {
             "rows": {}
           },
@@ -4596,7 +4589,7 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "b2a12a30",
+      "state": "76ef6729",
       "events": "741638a5",
       "rng": {
         "draws": 3510,
@@ -4639,12 +4632,6 @@
               "worn_sword"
             ]
           },
-          "deedsEarned": [
-            [
-              "pvp_rr_first_win",
-              ""
-            ]
-          ],
           "delveClears": {},
           "delveDaily": {},
           "entityId": 1010,
@@ -4675,7 +4662,6 @@
             "counts": {},
             "firstFind": {}
           },
-          "rrWins": 1,
           "talents": {
             "rows": {}
           },

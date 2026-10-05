@@ -415,7 +415,7 @@ describe('Realm Racers race decided before GO is void', () => {
     expect(required(sim.players.get(a), 'meta').realmRacersMatchId).toBeNull();
   });
 
-  it('still credits the survivor of a walkover once the race has started', () => {
+  it('decides a walkover once the race has started, without banking a win nobody raced for', () => {
     const { sim, pids, match } = seatedGrid();
     readyAllRacers(sim);
     sim.tick();
@@ -434,11 +434,13 @@ describe('Realm Racers race decided before GO is void', () => {
     // Absent, not false, on a race that ran: an ordinary readout pays no bytes.
     expect('voided' in lobbyOf(sim, a)).toBe(false);
     const meta = required(sim.players.get(a), 'winner');
-    // The three who quit after the flag were the human field the win needs.
-    expect(meta.rrWins).toBe(1);
+    // The three who quit after the flag never completed a lap, so none of them
+    // is the human rival a win needs (realm_racers_credit.ts): the walkover is
+    // decided and not void, but it banks no win.
+    expect(meta.rrWins).toBe(0);
     // A walkover is a win, not a crossing: the finish deed waits for the line.
     expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
     updateDeeds(sim.ctx);
-    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(true);
+    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(false);
   });
 });

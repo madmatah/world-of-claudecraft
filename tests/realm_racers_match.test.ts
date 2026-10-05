@@ -11,6 +11,7 @@ import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_
  *  competition circuit instead of silently measuring the practice one. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
+import { stopDisconnectedPlayerInput } from '../server/disconnected_player_input';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { updateDeeds } from '../src/sim/deeds';
 import { forceDismount } from '../src/sim/mounts';
@@ -168,6 +169,19 @@ function completeLap(sim: Sim, pid: number): void {
   // The SEATED circuit's lap, so a heat that came through the queue's draw
   // wraps the line on whichever competition circuit it landed on.
   advanceArc(sim, pid, realmRacersTrack(realmRacersCircuitOf(match(sim))).length + 12);
+}
+
+/** A hand-flipped GO for the cases that skip the countdown: the phase, and the
+ *  roster the real flip records (everyone still driving). */
+function flagDown(sim: Sim): void {
+  const liveMatch = match(sim);
+  liveMatch.phase = 'racing';
+  liveMatch.goTick = sim.tickCount;
+  liveMatch.seatedAtGo = liveMatch.pids.filter(
+    (pid) =>
+      liveMatch.progress.get(pid)?.retiredTick === null &&
+      liveMatch.progress.get(pid)?.finishedTick === null,
+  );
 }
 
 describe('The Realm Racers loaned machine', () => {
@@ -892,10 +906,11 @@ describe('The Realm Racers lifecycle', () => {
     // win, and the rated meter, to someone who never crossed.
     const { sim, a, pids } = startMatch();
     const m = match(sim);
-    m.phase = 'racing';
-    // The flag drops now, so the rivals who quit below quit a race they started
-    // (realm_racers_credit.ts counts them as the human field a win needs).
-    m.goTick = sim.ctx.tickCount;
+    flagDown(sim);
+    // B drives a lap before quitting below, so B is the human rival the win
+    // needs (realm_racers_credit.ts).
+    crossStart(sim, pids[1]);
+    completeLap(sim, pids[1]);
     const progress = required(m.progress.get(a), `progress ${a}`);
     progress.finishedTick = sim.ctx.tickCount;
     sim.preparePlayerLeave(a);
@@ -1700,8 +1715,7 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
   }
 
   function dropFlag(sim: Sim): void {
-    match(sim).phase = 'racing';
-    match(sim).goTick = sim.tickCount;
+    flagDown(sim);
   }
 
   function winRace(sim: Sim, pid: number): void {
@@ -1729,17 +1743,101 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(meta.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
   });
 
-  it('one other human on the grid at the GO is enough for the win', () => {
+  /** Ready the lobby and tick the real countdown through the GO, which is
+   *  what records the roster seated at the flag. */
+  function throughCountdown(sim: Sim, beforeGoTick?: () => void): void {
+    readyAllRacers(sim);
+    sim.tick();
+    expect(match(sim).phase).toBe('countdown');
+    while (sim.tickCount < match(sim).goTick - 1) sim.tick();
+    beforeGoTick?.();
+    sim.tick();
+    expect(match(sim).phase).toBe('racing');
+  }
+
+  function closeChase(sim: Sim): void {
+    sim.tickCount = required(match(sim).chaseUntilTick, 'chase window');
+    updateRealmRacers(sim.ctx);
+    expect(match(sim).phase).toBe('finished');
+  }
+
+  it.each([
+    [true, 1],
+    [false, 0],
+  ])(
+    'records who was still seated when the flag dropped: a countdown quit and a retire on the GO tick are out, a quit after the GO is in (D laps: %s)',
+    (dLaps, wins) => {
+      const { sim, pids } = makeGrid();
+      const [a, b, c, d] = pids;
+      expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+      sim.tick();
+      readyAllRacers(sim);
+      sim.tick();
+      expect(match(sim).phase).toBe('countdown');
+      sim.realmRacersForfeit(b);
+      while (sim.tickCount < match(sim).goTick - 1) sim.tick();
+      // C dies on the GO tick itself: the roster pass retires them on that tick,
+      // before the phase flips, so their retiredTick IS the goTick.
+      entity(sim, c).dead = true;
+      sim.tick();
+      expect(match(sim).phase).toBe('racing');
+      expect(match(sim).progress.get(c)?.retiredTick).toBe(match(sim).goTick);
+      expect(match(sim).seatedAtGo).toEqual([a, d]);
+      // Even credited with a lap, neither B nor C started the race, so neither
+      // can be the rival a win needs (C's retiredTick equal to the goTick is the
+      // case a tick comparison would have misread); D, who did start, is that
+      // rival only after driving a lap before quitting.
+      required(match(sim).progress.get(b), 'b').lap = 2;
+      required(match(sim).progress.get(c), 'c').lap = 2;
+      if (dLaps) {
+        crossStart(sim, d);
+        completeLap(sim, d);
+      }
+      sim.realmRacersForfeit(d);
+      winRace(sim, a);
+      expect(match(sim).phase).toBe('finished');
+      expect(match(sim).winnerPid).toBe(a);
+      expect(required(sim.players.get(a), 'a').rrWins).toBe(wins);
+    },
+  );
+
+  it('a rival seated at the GO who never completes a lap (linkdead from the countdown) unlocks no win', () => {
     const { sim, humanPids } = mixedHeat(2);
     const [winner, rival] = humanPids;
-    dropFlag(sim);
+    sim.tick();
+    throughCountdown(sim, () => stopDisconnectedPlayerInput(sim, rival));
+    expect(match(sim).seatedAtGo).toContain(rival);
     const progress = required(match(sim).progress.get(winner), 'winner progress');
     progress.wasLastPlace = true;
     progress.hitByShell = true;
     winRace(sim, winner);
-    // The rival is still out: the chase window closes the heat on them.
-    sim.tickCount = required(match(sim).chaseUntilTick, 'chase window');
-    updateRealmRacers(sim.ctx);
+    closeChase(sim);
+    expect(match(sim).winnerPid).toBe(winner);
+    const meta = required(sim.players.get(winner), 'winner');
+    expect(meta.rrWins).toBe(0);
+    updateDeeds(sim.ctx);
+    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(false);
+    expect(meta.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    // The rival idled to the flag: no finish deed either.
+    expect(required(sim.players.get(rival), 'rival').deedsEarned.has('pvp_rr_first_race')).toBe(
+      false,
+    );
+  });
+
+  it('a rival who drove a lap and then left the world unlocks the win', () => {
+    const { sim, humanPids } = mixedHeat(2);
+    const [winner, rival] = humanPids;
+    sim.tick();
+    throughCountdown(sim);
+    crossStart(sim, rival);
+    completeLap(sim, rival);
+    expect(match(sim).progress.get(rival)?.lap).toBe(2);
+    sim.preparePlayerLeave(rival);
+    expect(match(sim).progress.get(rival)?.retiredTick).not.toBeNull();
+    const progress = required(match(sim).progress.get(winner), 'winner progress');
+    progress.wasLastPlace = true;
+    progress.hitByShell = true;
+    winRace(sim, winner);
     expect(match(sim).phase).toBe('finished');
     expect(match(sim).winnerPid).toBe(winner);
     const meta = required(sim.players.get(winner), 'winner');
@@ -1747,35 +1845,20 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     updateDeeds(sim.ctx);
     expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(true);
     expect(meta.deedsEarned.has('pvp_rr_comeback')).toBe(true);
-    // The rival idled to the flag: no win, and no finish deed either.
-    const rivalMeta = required(sim.players.get(rival), 'rival');
-    expect(rivalMeta.rrWins).toBe(0);
-    expect(rivalMeta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
   });
 
-  it('a human who quit before the GO never raced anyone, so no win is banked against them', () => {
+  it('a rival who finished the heat unlocks the win', () => {
     const { sim, humanPids } = mixedHeat(2);
-    const [winner, quitter] = humanPids;
-    expect(match(sim).phase).toBe('loading');
-    sim.realmRacersForfeit(quitter);
-    expect(match(sim).phase).toBe('loading');
-    sim.tickCount++;
-    dropFlag(sim);
+    const [winner, rival] = humanPids;
+    sim.tick();
+    throughCountdown(sim);
     winRace(sim, winner);
-    expect(match(sim).winnerPid).toBe(winner);
-    expect(match(sim).voided).toBe(false);
-    expect(required(sim.players.get(winner), 'winner').rrWins).toBe(0);
-  });
-
-  it('a human who quits after the GO still counts as the rival a win needs', () => {
-    const { sim, humanPids } = mixedHeat(2);
-    const [winner, quitter] = humanPids;
-    dropFlag(sim);
     sim.tickCount++;
-    sim.realmRacersForfeit(quitter);
-    winRace(sim, winner);
+    winRace(sim, rival);
+    expect(match(sim).phase).toBe('finished');
     expect(match(sim).winnerPid).toBe(winner);
     expect(required(sim.players.get(winner), 'winner').rrWins).toBe(1);
+    expect(required(sim.players.get(rival), 'rival').rrWins).toBe(0);
   });
 
   it('never credits a house pilot, even the winner, in a bot-backfilled rated heat', () => {
@@ -2316,7 +2399,7 @@ describe('Realm Racers rrWins persistence', () => {
     const clean = sim.serializeCharacter(a)!;
     expect('rrWins' in clean).toBe(false);
 
-    match(sim).phase = 'racing';
+    flagDown(sim);
     crossStart(sim, a);
     completeLap(sim, a);
     completeLap(sim, a);
@@ -2365,8 +2448,11 @@ describe('Realm Racers rrWins persistence', () => {
     for (const pid of fullGrid) sim2.realmRacersQueueJoin(pid);
     sim2.tick();
     expect(sim2.realmRacers.match).not.toBeNull();
-    sim2.realmRacers.match!.phase = 'racing';
     const winMatch = sim2.realmRacers.match!;
+    winMatch.phase = 'racing';
+    winMatch.seatedAtGo = [...fullGrid];
+    // One rival has a lap behind them: the human field a win needs.
+    winMatch.progress.get(grid2[0])!.lap = 2;
     const track2 = realmRacersTrack(realmRacersCircuitOf(winMatch));
     const placeReloaded = (s: number) => {
       const sample = track2.pointAt(s);

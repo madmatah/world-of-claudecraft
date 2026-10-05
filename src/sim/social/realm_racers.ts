@@ -162,7 +162,7 @@ import {
   snapshotRealmRacersStrippedAuras,
 } from './realm_racers_auras';
 import { realmRacersHeldElsewhere } from './realm_racers_busy';
-import { realmRacersHadHumanRival, realmRacersHumansAtGo } from './realm_racers_credit';
+import { realmRacersHadHumanRival } from './realm_racers_credit';
 import {
   beginRealmRacersCountdown,
   clearRealmRacersReady,
@@ -610,6 +610,10 @@ export interface RealmRacersMatch {
   chaseUntilTick: number | null;
   /** Final classification, first to last. Empty until the race is decided. */
   finishOrder: number[];
+  /** Every pilot still driving on the tick the phase turned to racing, in grid
+   *  order; empty until then. Who started the race, for the win credit
+   *  (realm_racers_credit.ts). */
+  seatedAtGo: number[];
   returns: Map<number, RealmRacersReturn>;
   preMatchPools: Map<number, ArenaReturnPools>;
   /** What the seat's clean slate took off each pilot, handed back (aged) on
@@ -1238,6 +1242,7 @@ function startMatch(
     winnerPid: null,
     chaseUntilTick: null,
     finishOrder: [],
+    seatedAtGo: [],
     returns,
     preMatchPools: pools,
     strippedAuras,
@@ -1491,17 +1496,17 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // next full deeds pass, the same bug class the retired Vale Cup's `rated`
   // gate on `applyStanding` existed to prevent.
   //
-  // A win also needs another human on the grid at the GO
+  // A win also needs another human who started the heat and raced it
   // (realm_racers_credit.ts): a solo queuer the backfill seats against three
   // house pilots races a rated heat and keeps the finish deeds, but beating
-  // the house alone banks no win and no win deed.
+  // the house (or an idle human) alone banks no win and no win deed.
   if (match.voided) return;
-  const humansAtGo = realmRacersHumansAtGo(match, ctx.realmRacers.bots);
+  const bots = ctx.realmRacers.bots;
   if (
     match.practice === null &&
     match.winnerPid !== null &&
-    !ctx.realmRacers.bots.has(match.winnerPid) &&
-    realmRacersHadHumanRival(humansAtGo, match.winnerPid)
+    !bots.has(match.winnerPid) &&
+    realmRacersHadHumanRival(match, bots, match.winnerPid)
   ) {
     const winnerMeta = ctx.players.get(match.winnerPid);
     if (winnerMeta) winnerMeta.rrWins++;
@@ -1510,12 +1515,12 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     const progress = match.progress.get(pid) as RealmRacersProgress;
     return {
       pid,
-      bot: ctx.realmRacers.bots.has(pid),
+      bot: bots.has(pid),
       retired: progress.retiredTick !== null,
       finished: progress.finishedTick !== null,
       clean: !progress.hadRivalContact && !progress.hadOffTrackContact,
       won: match.winnerPid === pid,
-      humanRival: realmRacersHadHumanRival(humansAtGo, pid),
+      humanRival: realmRacersHadHumanRival(match, bots, pid),
       comeback: progress.wasLastPlace && progress.hitByShell,
     };
   });
@@ -3028,6 +3033,8 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     }
     if (ctx.tickCount >= match.goTick) {
       match.phase = 'racing';
+      // After this tick's roster pass, so a pilot it just retired is not on it.
+      match.seatedAtGo = match.pids.filter((pid) => realmRacersStillRunning(match, pid));
       for (const pid of match.pids) {
         ctx.emit({ type: 'realmRacersGo', pid });
         const progress = match.progress.get(pid);
