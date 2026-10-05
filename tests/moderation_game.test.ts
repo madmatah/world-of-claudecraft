@@ -94,6 +94,8 @@ type TestFrame = {
 type GameServerInternals = {
   broadcastSnapshots(): void;
   enforceJailStates(): void;
+  enterSpectate(moderator: ClientSession, target: ClientSession): void;
+  exitSpectate(moderator: ClientSession): void;
   routeEvents(events: ReturnType<GameServer['sim']['tick']>): void;
 };
 
@@ -1181,5 +1183,36 @@ describe('jailing a Realm Racers pilot', () => {
       internals(server).enforceJailStates();
     }
     expect(moderator.jailVisit).not.toBeNull();
+  });
+
+  it('forfeits a moderator who starts spectating from a race, and saves where it found them', () => {
+    // Spectating parks the body in limbo; a seat left standing would have the
+    // race return it out of limbo, and save a spot on the circuit to come back to.
+    const rig = practiceRig();
+    const { server, moderator, pilot } = rig;
+    const at = entity(server, moderator.pid).pos;
+    const original = { x: at.x, z: at.z };
+    cmd(server, moderator, { cmd: 'realm_racers_practice', tier: 'rookie' });
+    const match = server.sim.realmRacers.practices.find((m) => m.pids.includes(moderator.pid));
+    expect(match).toBeDefined();
+    internals(server).enterSpectate(moderator, pilot);
+    expect(server.sim.meta(moderator.pid)?.realmRacersMatchId).toBeNull();
+    expect(entity(server, moderator.pid).drive).toBeNull();
+    expect(moderator.spectating?.savedPos).toMatchObject(original);
+    const limbo = { ...entity(server, moderator.pid).pos };
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 40; i++) server.sim.tick();
+    expect(entity(server, moderator.pid).pos).toMatchObject({ x: limbo.x, z: limbo.z });
+    internals(server).exitSpectate(moderator);
+    expect(entity(server, moderator.pid).pos.x).toBeCloseTo(original.x);
+    expect(entity(server, moderator.pid).pos.z).toBeCloseTo(original.z);
+  });
+
+  it('drops a queued moderator from the queue on spectate entry', () => {
+    const rig = practiceRig();
+    const { server, moderator, pilot } = rig;
+    cmd(server, moderator, { cmd: 'realm_racers_join' });
+    expect(server.sim.realmRacers.queue).toContain(moderator.pid);
+    internals(server).enterSpectate(moderator, pilot);
+    expect(server.sim.realmRacers.queue).not.toContain(moderator.pid);
   });
 });

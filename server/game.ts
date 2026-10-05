@@ -426,7 +426,7 @@ import { recordLevelUp } from './progress_events';
 import * as questWire from './quest_command_wire';
 import * as questSnap from './quest_snapshot_wire';
 import { REALM, REALM_PUBLIC_ORIGIN, REALM_RESET_TIME_ZONE } from './realm';
-import { dispatchRealmRacersCommand } from './realm_racers_commands';
+import { dispatchRealmRacersCommand, leaveRealmRacersForModeration } from './realm_racers_commands';
 import { driveWire } from './realm_racers_drive_wire';
 import { realmRacersInterestParticipantIds } from './realm_racers_interest';
 import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from './realm_racers_self_wire';
@@ -2002,7 +2002,7 @@ export class GameServer {
       moderator.spectating.characterId = target.characterId;
       moderator.spectating.name = target.name;
     } else {
-      const savedPos = { ...moderatorEntity.pos };
+      const savedPos = leaveRealmRacersForModeration(this.sim, moderator.pid, moderatorEntity);
       const priorGm = !!moderatorEntity.gm;
       const stowedPet = this.sim.stowPetForSpectate(moderator.pid);
       const limbo = this.sim.groundPos(SPECTATE_LIMBO_X, SPECTATE_LIMBO_Z);

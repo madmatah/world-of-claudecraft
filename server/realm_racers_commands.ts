@@ -7,6 +7,7 @@
 import { isRallyDriverTier } from '../src/sim/realm_racers_driver';
 import type { Sim } from '../src/sim/sim';
 import { realmRacersReady } from '../src/sim/social/realm_racers';
+import type { Entity, Vec3 } from '../src/sim/types';
 
 export type RealmRacersCommandName =
   | 'realm_racers_join'
@@ -52,4 +53,20 @@ export function dispatchRealmRacersCommand(
       realmRacersReady(sim.ctx, pid);
       break;
   }
+}
+
+/**
+ * Out of the rally (queue and seat) before a moderation move takes the body
+ * somewhere else, as the jail paths do: a seat left standing would have the
+ * race return the body out of wherever the move put it. The race restores the
+ * body first, so the position returned is where the race found them, never a
+ * spot on the circuit, and it is what the caller saves to come back to.
+ */
+export function leaveRealmRacersForModeration(
+  sim: Pick<Sim, 'realmRacersForfeit'>,
+  pid: number,
+  entity: Entity,
+): Vec3 {
+  sim.realmRacersForfeit(pid, true);
+  return { ...entity.pos };
 }
