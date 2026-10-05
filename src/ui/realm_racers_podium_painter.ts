@@ -38,6 +38,11 @@ export class RealmRacersPodium {
   private root: HTMLElement | null = null;
   private returnEl: HTMLElement | null = null;
   private lastSig = '';
+  /** What the return headline last spelled: it is resolved again only when
+   *  the second or the result moves, and every rebuild (which a language
+   *  switch forces) re-resolves it. */
+  private lastReturnIn = -1;
+  private lastReturnResult: RealmRacersPodiumView['result'] | undefined = undefined;
 
   constructor(private readonly deps: RealmRacersPodiumDeps) {}
 
@@ -65,8 +70,17 @@ export class RealmRacersPodium {
       root.innerHTML = this.markup(view, circuit);
       this.returnEl = root.querySelector('.rally-podium-return');
       this.paintNames(root, view, circuit);
+      this.lastReturnIn = -1;
+      this.lastReturnResult = undefined;
     }
-    if (this.returnEl) w.setText(this.returnEl, returnLabel(view));
+    if (
+      this.returnEl &&
+      (view.returnIn !== this.lastReturnIn || view.result !== this.lastReturnResult)
+    ) {
+      this.lastReturnIn = view.returnIn;
+      this.lastReturnResult = view.result;
+      w.setText(this.returnEl, returnLabel(view));
+    }
   }
 
   /**

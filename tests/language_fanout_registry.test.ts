@@ -488,11 +488,11 @@ const ANSWERED: readonly AnsweredSurface[] = [
   },
   {
     file: 'realm_racers_podium_painter.ts',
-    memos: ['lastSig'],
+    memos: ['lastReturnIn', 'lastReturnResult', 'lastSig'],
     // Same arm, one hop, for the same reason the standings panel is: the Rally
     // painter owns the ceremony and its relocalize() forwards to it.
     answer: 'this.realmRacersUi.relocalize',
-    why: 'the classification that gates the localized end-of-race ceremony, forwarded by the Rally painter that owns it',
+    why: 'the classification that gates the localized end-of-race ceremony, plus the return headline latch reset by that rebuild, forwarded by the Rally painter that owns it',
   },
   {
     file: 'hud/realm_racers/realm_racers_lobby_painter.ts',
