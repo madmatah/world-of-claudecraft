@@ -65,7 +65,8 @@ export interface RealmRacersDeps {
   /** A lost connection, which takes the lobby curtain down at once; the
    *  reconnect overlay's readout by default. */
   connectionDropped?(): boolean;
-  /** The client clock the lobby failsafe runs on; performance.now by default. */
+  /** The client clock the lobby failsafe and the strip's forfeit arm run on;
+   *  performance.now by default. */
   now?(): number;
   /** Where the race warm sends the first-use sounds and icons it prepares on
    *  the commitment trigger; without it nothing is warmed. */
@@ -102,6 +103,7 @@ export class RealmRacersUi {
       writers: deps.writers,
       reset: () => deps.world().resetRealmRacersPosition(),
       forfeit: () => deps.world().forfeitRealmRacers(),
+      now: () => this.now(),
     });
     this.standings = new RealmRacersStandingsPanel({
       layer: () => deps.layer(),
@@ -171,11 +173,15 @@ export class RealmRacersUi {
       : NOT_PREPARED;
   }
 
+  /** The client clock the lobby failsafe and the forfeit arm run on. */
+  private now(): number {
+    return this.deps.now?.() ?? performance.now();
+  }
+
   /** The lobby curtain stands for the server's lobby, unless the connection
    *  dropped or the client failsafe ran out. */
   private lobbyCurtainStands(match: RealmRacersInfo['match']): boolean {
-    const now = this.deps.now?.() ?? performance.now();
-    if (!stepRealmRacersLobbyFailsafe(this.lobbyFailsafe, match, now)) return false;
+    if (!stepRealmRacersLobbyFailsafe(this.lobbyFailsafe, match, this.now())) return false;
     return !(this.deps.connectionDropped ?? connectionDropActive)();
   }
 

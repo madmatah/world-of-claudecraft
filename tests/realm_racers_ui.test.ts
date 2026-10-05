@@ -1036,15 +1036,8 @@ describe('Realm Racers window lifecycle', () => {
 });
 
 describe('Realm Racers strip forfeit control', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-30T12:00:00Z'));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
+  // The arm window runs on the injected client clock (`deps.now`), the one the
+  // lobby failsafe runs on, never the wall clock.
   it('takes two presses inside the arm window to forfeit', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing' });
@@ -1059,7 +1052,7 @@ describe('Realm Racers strip forfeit control', () => {
     expect(button?.textContent).toBe(t('hudChrome.rally.forfeitConfirm'));
     expect(button?.classList.contains('armed')).toBe(true);
 
-    vi.advanceTimersByTime(1000);
+    h.clock.now += 1000;
     button?.click();
     expect(h.forfeitRealmRacers).toHaveBeenCalledTimes(1);
   });
@@ -1071,7 +1064,7 @@ describe('Realm Racers strip forfeit control', () => {
     const button = h.forfeitButton();
 
     button?.click();
-    vi.advanceTimersByTime(3001);
+    h.clock.now += 3001;
     h.ui.update();
     expect(button?.textContent).toBe(t('hudChrome.rally.forfeit'));
     expect(button?.classList.contains('armed')).toBe(false);

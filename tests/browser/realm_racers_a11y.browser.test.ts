@@ -93,7 +93,13 @@ describe('Realm Racers in-race HUD accessibility', () => {
     const noop = (): void => {};
     const writers = makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop);
     const standings = new RealmRacersStandingsPanel({ layer: () => layer, writers });
-    const hud = new RealmRacersStrip({ layer: () => layer, writers, reset: noop, forfeit: noop });
+    const hud = new RealmRacersStrip({
+      layer: () => layer,
+      writers,
+      reset: noop,
+      forfeit: noop,
+      now: () => 0,
+    });
     hud.update(strip);
     standings.update(buildRealmRacersStandingsView(liveMatch()));
     const list = layer.querySelector('#realm-racers-standings') as HTMLElement;

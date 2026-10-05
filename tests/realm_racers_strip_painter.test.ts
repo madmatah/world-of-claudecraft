@@ -51,6 +51,7 @@ function racing(over: Partial<RealmRacersHudView> = {}): RealmRacersHudView {
 
 let layer: HTMLElement;
 let strip: RealmRacersStrip;
+const clock = { now: 0 };
 
 const noop = (): void => {};
 const tKeys = (): string[] => vi.mocked(t).mock.calls.map(([key]) => key as string);
@@ -65,6 +66,7 @@ beforeEach(() => {
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
     reset: noop,
     forfeit: noop,
+    now: () => clock.now,
   });
   strip.update(racing());
   vi.mocked(t).mockClear();
@@ -158,21 +160,16 @@ describe('the race strip readout', () => {
     expect(layer.querySelector('.rallyhud-limits')?.getAttribute('role')).toBe('status');
   });
 
-  it('arms and disarms the forfeit label only on the press and the lapse', () => {
-    vi.useFakeTimers();
-    try {
-      const forfeit = layer.querySelector('.rallyhud-forfeit') as HTMLButtonElement;
-      forfeit.click();
-      strip.update(racing());
-      expect(tKeys()).toEqual(['hudChrome.rally.forfeitConfirm']);
-      vi.mocked(t).mockClear();
-      strip.update(racing());
-      expect(tKeys()).toEqual([]);
-      vi.advanceTimersByTime(5000);
-      strip.update(racing());
-      expect(tKeys()).toEqual(['hudChrome.rally.forfeit']);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('arms and disarms the forfeit label only on the press and the lapse, on the injected clock', () => {
+    const forfeit = layer.querySelector('.rallyhud-forfeit') as HTMLButtonElement;
+    forfeit.click();
+    strip.update(racing());
+    expect(tKeys()).toEqual(['hudChrome.rally.forfeitConfirm']);
+    vi.mocked(t).mockClear();
+    strip.update(racing());
+    expect(tKeys()).toEqual([]);
+    clock.now += 5000;
+    strip.update(racing());
+    expect(tKeys()).toEqual(['hudChrome.rally.forfeit']);
   });
 });

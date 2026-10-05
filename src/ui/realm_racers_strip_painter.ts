@@ -94,6 +94,8 @@ export interface RealmRacersStripDeps {
   reset(): void;
   /** The forfeit control's confirmed second press: end the race. */
   forfeit(): void;
+  /** The client clock the forfeit arm window runs on. */
+  now(): number;
 }
 
 export class RealmRacersStrip {
@@ -312,7 +314,7 @@ export class RealmRacersStrip {
       }
     }
     if (this.forfeitEl) {
-      const armed = this.forfeitArmedUntil > Date.now();
+      const armed = this.forfeitArmedUntil > this.deps.now();
       if (armed !== s.armed) {
         s.armed = armed;
         w.setText(
@@ -343,7 +345,7 @@ export class RealmRacersStrip {
   // Two-step: the first press arms, a second press inside the window forfeits,
   // and a press after it lapses re-arms instead of ending the race.
   private pressForfeit(): void {
-    const now = Date.now();
+    const now = this.deps.now();
     if (this.forfeitArmedUntil > now) {
       this.forfeitArmedUntil = 0;
       this.deps.forfeit();
