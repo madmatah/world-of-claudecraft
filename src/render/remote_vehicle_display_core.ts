@@ -157,7 +157,8 @@ export interface RemoteVehicleDisplayState extends RemoteVehiclePose {
   active: boolean;
   hop: RemoteRacerHop;
   /** Reused kernel scratch: the wire drive is copied in every step, so the
-   *  projection never allocates and never writes into the mirrored object. */
+   *  projection never writes into the mirrored object and allocates no drive
+   *  of its own (a collision resolve still returns a fresh pose per step). */
   scratch: VehicleDrive;
   input: VehicleStepInput;
   /** The part of a horizon switch still being slewed in, ms (0 at rest). */
