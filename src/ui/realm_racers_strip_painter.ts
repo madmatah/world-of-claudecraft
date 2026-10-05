@@ -7,10 +7,13 @@
 // Hot: `RealmRacersUi` calls it every painted frame. The text-free skeleton is
 // rebuilt in ONE innerHTML write per signature (once per race phase), the root
 // and the announcer take their attributes once at ensure, and every per-frame
-// write rides the PainterHost elided writers.
+// write rides the PainterHost elided writers. A cell's localized text is
+// resolved again only when a value it spells changes, and the constant labels
+// are written once per rebuild (the lobby curtain's pattern): a rebuild, which
+// a new race and a language switch both force, re-resolves every cell.
 
 import { esc } from './esc';
-import { formatNumber, t } from './i18n';
+import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
 import type { RealmRacersHudView } from './realm_racers_view';
@@ -24,6 +27,63 @@ const num = (value: number): string => formatNumber(value, { maximumFractionDigi
  * Presentation-only state: it never reaches the sim.
  */
 const FORFEIT_ARM_MS = 3000;
+
+/** What each cell last spelled; -1 (or undefined) until the rebuild's first
+ *  paint, so a rebuild re-resolves every cell. */
+interface Spelled {
+  position: number;
+  grid: number;
+  lap: number;
+  laps: number;
+  second: number;
+  speed: number;
+  ward: number;
+  limit: number;
+  phaseKey: TranslationKey | null | undefined;
+  phaseSeconds: number;
+  armed: boolean | null;
+}
+
+/** The phase line's copy key (null: the line says nothing) and the seconds it
+ *  spells (-1 for a line that spells no number). */
+interface PhaseLine {
+  key: TranslationKey | null;
+  seconds: number;
+}
+
+/** The limits cell's key for the cut notice, which spells no number. */
+const CUT_RETURNED = -2;
+
+function phaseLineOf(view: RealmRacersHudView, out: PhaseLine): PhaseLine {
+  out.seconds = -1;
+  if (view.phase === 'loading' || view.phase === 'countdown') {
+    out.key = view.countdown > 0 ? 'hudChrome.rally.countdown' : null;
+    out.seconds = view.countdown;
+  } else if (view.phase === 'finished') {
+    // The podium carries the result headline and the return countdown once the
+    // RACE is over, so this line stands down rather than saying the same thing
+    // twice. A pilot who merely quit still gets it here: there is no ceremony
+    // for them, and neither is there for a void race.
+    out.key = view.voided
+      ? 'hudChrome.rally.voidReturn'
+      : view.decided
+        ? null
+        : view.result === 'won'
+          ? 'hudChrome.rally.wonReturn'
+          : view.result === 'draw'
+            ? 'hudChrome.rally.drawReturn'
+            : 'hudChrome.rally.lostReturn';
+    out.seconds = view.returnIn;
+  } else if (view.chaseIn > 0) {
+    // The winner is home and this pilot is not: they are racing a clock now,
+    // and it says so rather than cutting them off unwarned.
+    out.key = 'hudChrome.rally.chase';
+    out.seconds = view.chaseIn;
+  } else {
+    out.key = view.lap === view.totalLaps ? 'hudChrome.rally.finalLap' : 'hudChrome.rally.go';
+  }
+  return out;
+}
 
 export interface RealmRacersStripDeps {
   layer(): HTMLElement | null;
@@ -56,6 +116,21 @@ export class RealmRacersStrip {
   private resetEl: HTMLElement | null = null;
   private forfeitEl: HTMLElement | null = null;
   private forfeitArmedUntil = 0;
+  /** Reset by every skeleton rebuild, which `relocalize()` forces. */
+  private readonly spelled: Spelled = {
+    position: -1,
+    grid: -1,
+    lap: -1,
+    laps: -1,
+    second: -1,
+    speed: -1,
+    ward: -1,
+    limit: -1,
+    phaseKey: undefined,
+    phaseSeconds: -2,
+    armed: null,
+  };
+  private readonly phaseLine: PhaseLine = { key: null, seconds: 0 };
 
   constructor(private readonly deps: RealmRacersStripDeps) {}
 
@@ -123,6 +198,9 @@ export class RealmRacersStrip {
       this.forfeitEl = root.querySelector('.rallyhud-forfeit');
       this.resetEl?.addEventListener('click', () => this.deps.reset());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
+      this.forgetSpelled();
+      if (this.wrongWayEl) w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
+      if (this.resetEl) w.setText(this.resetEl, t('hudChrome.rally.reset'));
     }
     // The pill is a VISUAL swap, and a swapped label is not an announcement: a
     // screen-reader user would otherwise first learn the circuit at the podium,
@@ -133,7 +211,10 @@ export class RealmRacersStrip {
     // when the draw lands on the same circuit.
     const announcer = this.ensureAnnouncer();
     if (announcer) w.setText(announcer, this.circuitName ?? '');
-    if (this.positionEl)
+    const s = this.spelled;
+    if (this.positionEl && (view.position !== s.position || view.gridSize !== s.grid)) {
+      s.position = view.position;
+      s.grid = view.gridSize;
       w.setText(
         this.positionEl,
         t('hudChrome.rally.position', {
@@ -141,14 +222,20 @@ export class RealmRacersStrip {
           total: num(view.gridSize),
         }),
       );
-    if (this.lapEl)
+    }
+    if (this.lapEl && (view.lap !== s.lap || view.totalLaps !== s.laps)) {
+      s.lap = view.lap;
+      s.laps = view.totalLaps;
       w.setText(
         this.lapEl,
         t('hudChrome.rally.lap', { lap: num(view.lap), total: num(view.totalLaps) }),
       );
-    if (this.timeEl) {
-      const minutes = Math.floor(view.elapsed / 60);
-      const seconds = Math.floor(view.elapsed % 60);
+    }
+    const second = Math.floor(view.elapsed);
+    if (this.timeEl && second !== s.second) {
+      s.second = second;
+      const minutes = Math.floor(second / 60);
+      const seconds = second % 60;
       w.setText(
         this.timeEl,
         t('hudChrome.rally.time', {
@@ -157,77 +244,90 @@ export class RealmRacersStrip {
         }),
       );
     }
-    if (this.speedEl)
-      w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(view.speed) }));
+    // The speed is absolute, so rounding it here spells what `num` would.
+    const speed = Math.round(view.speed);
+    if (this.speedEl && speed !== s.speed) {
+      s.speed = speed;
+      w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(speed) }));
+    }
     if (this.wardEl) {
       // Written even while hidden, so a locale flip lands on the text. Visibility
       // rides setStyleProp, whose own (element, 'display') slot keeps the two
       // writes eliding independently (the same shape the limits line below uses).
-      w.setText(
-        this.wardEl,
-        view.wardIn > 0
-          ? t('hudChrome.rally.wardHeldFor', { seconds: num(view.wardIn) })
-          : t('hudChrome.rally.wardHeld'),
-      );
+      const ward = view.wardIn > 0 ? view.wardIn : 0;
+      if (ward !== s.ward) {
+        s.ward = ward;
+        w.setText(
+          this.wardEl,
+          ward > 0
+            ? t('hudChrome.rally.wardHeldFor', { seconds: num(ward) })
+            : t('hudChrome.rally.wardHeld'),
+        );
+      }
       w.setStyleProp(this.wardEl, 'display', view.warded ? 'block' : 'none');
     }
     if (this.wrongWayEl) {
-      w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
       w.setStyleProp(this.wrongWayEl, 'display', view.wrongWay ? 'block' : 'none');
     }
     if (this.limitsEl) {
       // The text is written even while the line is hidden, so a locale flip
       // lands on it; visibility rides its own setStyleProp slot.
-      w.setText(
-        this.limitsEl,
-        view.trackLimit === 'cutReturned'
-          ? t('hudChrome.rally.cutReturned')
-          : t('hudChrome.rally.offTrack', { seconds: num(view.offTrackIn) }),
-      );
+      const limit = view.trackLimit === 'cutReturned' ? CUT_RETURNED : view.offTrackIn;
+      if (limit !== s.limit) {
+        s.limit = limit;
+        w.setText(
+          this.limitsEl,
+          limit === CUT_RETURNED
+            ? t('hudChrome.rally.cutReturned')
+            : t('hudChrome.rally.offTrack', { seconds: num(limit) }),
+        );
+      }
       w.setStyleProp(this.limitsEl, 'display', view.trackLimit === 'none' ? 'none' : 'block');
     }
     if (this.resetEl) {
-      w.setText(this.resetEl, t('hudChrome.rally.reset'));
       w.setAttr(this.resetEl, 'disabled', view.resetLocked ? '' : null);
     }
     if (this.phaseEl) {
-      const phase =
-        view.phase === 'loading' || view.phase === 'countdown'
-          ? view.countdown > 0
-            ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
-            : ''
-          : view.phase === 'finished'
-            ? // The podium carries the result headline and the return
-              // countdown once the RACE is over, so this line stands down
-              // rather than saying the same thing twice. A pilot who merely
-              // quit still gets it here: there is no ceremony for them, and
-              // neither is there for a void race.
-              view.voided
-              ? t('hudChrome.rally.voidReturn', { seconds: num(view.returnIn) })
-              : view.decided
-                ? ''
-                : view.result === 'won'
-                  ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
-                  : view.result === 'draw'
-                    ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
-                    : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
-            : // The winner is home and this pilot is not: they are racing a
-              // clock now, and it says so rather than cutting them off unwarned.
-              view.chaseIn > 0
-              ? t('hudChrome.rally.chase', { seconds: num(view.chaseIn) })
-              : view.lap === view.totalLaps
-                ? t('hudChrome.rally.finalLap')
-                : t('hudChrome.rally.go');
-      w.setText(this.phaseEl, phase);
+      const line = phaseLineOf(view, this.phaseLine);
+      if (line.key !== s.phaseKey || line.seconds !== s.phaseSeconds) {
+        s.phaseKey = line.key;
+        s.phaseSeconds = line.seconds;
+        w.setText(
+          this.phaseEl,
+          line.key === null
+            ? ''
+            : line.seconds < 0
+              ? t(line.key)
+              : t(line.key, { seconds: num(line.seconds) }),
+        );
+      }
     }
     if (this.forfeitEl) {
       const armed = this.forfeitArmedUntil > Date.now();
-      w.setText(
-        this.forfeitEl,
-        armed ? t('hudChrome.rally.forfeitConfirm') : t('hudChrome.rally.forfeit'),
-      );
+      if (armed !== s.armed) {
+        s.armed = armed;
+        w.setText(
+          this.forfeitEl,
+          armed ? t('hudChrome.rally.forfeitConfirm') : t('hudChrome.rally.forfeit'),
+        );
+      }
       w.toggleClass(this.forfeitEl, 'armed', armed);
     }
+  }
+
+  private forgetSpelled(): void {
+    const s = this.spelled;
+    s.position = -1;
+    s.grid = -1;
+    s.lap = -1;
+    s.laps = -1;
+    s.second = -1;
+    s.speed = -1;
+    s.ward = -1;
+    s.limit = -1;
+    s.phaseKey = undefined;
+    s.phaseSeconds = -2;
+    s.armed = null;
   }
 
   // Two-step: the first press arms, a second press inside the window forfeits,
