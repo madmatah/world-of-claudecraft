@@ -336,7 +336,10 @@ start arch, grid banner and shore reed, and the barrier kits its record authors,
 (`tests/realm_racers_boot_cost.test.ts`). It then waits for the fill models, gates the view,
 prepares the theme sky and waits for the upload frame. The seam (`src/render/realm_racers_prepare.ts`, triggers in
 `src/render/realm_racers_prepare_core.ts`) records each verdict as a `prepare` gpu-prep event;
-the lobby's progress bar is its unit tally, and the ready send waits for every verdict. Pinned
+the lobby's progress bar is its unit tally, and the ready send waits for every verdict. A
+circuit is asked once per renderer, but a new lobby (a new match id) on a circuit whose last
+verdict lapsed (unproven, or its cover ended before its upload frame drew) runs that client
+again under the new cover, keeping the build (`rerunDue`). Pinned
 by `tests/realm_racers_lazy_build.test.ts`, `tests/realm_racers_circuit_prepare.test.ts` and
 `tests/realm_racers_prepare.test.ts`.
 
