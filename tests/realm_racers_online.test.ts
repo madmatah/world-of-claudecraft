@@ -49,6 +49,13 @@ import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GHOST_AURA, realmRacersGhosted } from '../src/sim/realm_racers_ghost';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
+import {
+  mergeRealmRacersInfo,
+  type RealmRacersMatchClock,
+  type RealmRacersStillInfo,
+  splitRealmRacersInfo,
+} from '../src/sim/realm_racers_readout_clock';
+import { REALM_RACERS_SLICK_CAP } from '../src/sim/realm_racers_slicks';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
@@ -262,8 +269,13 @@ describe('Realm Racers online parity', () => {
     const match = server.sim.realmRacers.match;
     if (!match) throw new Error('missing match');
     expect(match.phase).toBe('loading');
+    // The readout as the client folds it: the last `rr` and the last `rrc`
+    // (an absent key is an unchanged one, so the latest send of each is exact).
     const lobbyOf = (client: FakeClient) =>
-      (selfFields(client, 'rr').at(-1) as { match: RealmRacersMatchInfo }).match;
+      mergeRealmRacersInfo(
+        selfFields(client, 'rr').at(-1) as RealmRacersStillInfo,
+        selfFields(client, 'rrc').at(-1) as RealmRacersMatchClock | null,
+      ).match as RealmRacersMatchInfo;
     expect(lobbyOf(clients[3]).loading).toEqual({
       secondsLeft: REALM_RACERS_LOADING_MAX_TICKS / TICK_RATE,
       readyIds: [],
@@ -699,12 +711,101 @@ describe('Realm Racers server wire siblings', () => {
     );
   });
 
+  it('splits the heat readout into a still rr and a per-tick rrc, within named bounds', () => {
+    // The worst case one pilot's readout can reach: a full grid with names at
+    // the 16-character cap, every box taken and the oil at its cap, a ward up.
+    const server = new GameServer();
+    const names = ['Aaaaaaaaaaaaaaaa', 'Bbbbbbbbbbbbbbbb', 'Cccccccccccccccc', 'Dddddddddddddddd'];
+    const sessions = names.map((name, i) => join(server, fakeClient(), i + 1, name));
+    for (const session of sessions) command(server, session, 'realm_racers_join');
+    advance(server);
+    const match = server.sim.realmRacers.match;
+    if (!match) throw new Error('no heat');
+    match.phase = 'racing';
+    for (let i = 0; i < REALM_RACERS_SLICK_CAP; i++) {
+      match.slicks.push({
+        id: 1000 + i,
+        x: 113_712.345 + i * 7.77,
+        z: match.origin.z - 123.456 + i * 9.13,
+        ownerPid: sessions[0].pid,
+        ownerClear: true,
+        expiresTick: Number.MAX_SAFE_INTEGER,
+      });
+    }
+    match.pickups.taken = match.pickups.taken.map(() => true);
+    const pilot = server.sim.entities.get(sessions[0].pid);
+    if (!pilot?.drive) throw new Error('no machine');
+    server.sim.ctx.applyAura(pilot, {
+      id: REALM_RACERS_WARD_AURA,
+      name: 'Racing Ward',
+      kind: 'rally_ward',
+      remaining: REALM_RACERS_WARD_AURA_SECONDS,
+      duration: REALM_RACERS_WARD_AURA_SECONDS,
+      value: 0,
+      sourceId: pilot.id,
+      school: 'physical',
+    });
+    advance(server);
+    pilot.drive.speed = 47.123456789;
+    const info = server.sim.realmRacersInfoFor(sessions[0].pid);
+    expect(info.match?.slicks).toHaveLength(REALM_RACERS_SLICK_CAP);
+    expect(info.match?.wardIn).toBeGreaterThan(0);
+    const { still, clock } = splitRealmRacersInfo(info);
+    // The still half: four 16-character standings rows plus `me`, the
+    // circuit's boxes and REALM_RACERS_SLICK_CAP hundredth-rounded patches.
+    // Measured 1715 bytes; the old single `rr` (clocks and a full-precision
+    // speed included) measured 1850 and shipped on EVERY racing tick, while
+    // this half ships only when it changes.
+    const RR_STILL_BOUND = 1800;
+    // The clock half: nine scalars, the speed in hundredths, shipped per tick.
+    // Measured 129 bytes here; a late-race clock adds a few digits.
+    const RR_CLOCK_BOUND = 160;
+    expect(JSON.stringify(still).length).toBeLessThanOrEqual(RR_STILL_BOUND);
+    expect(JSON.stringify(clock).length).toBeLessThanOrEqual(RR_CLOCK_BOUND);
+    expect(clock?.speed).toBe(47.12);
+    expect(still.match).not.toHaveProperty('speed');
+    expect(still.match).not.toHaveProperty('elapsedTicks');
+    expect(mergeRealmRacersInfo(still, clock)).toEqual(info);
+  });
+
+  it('ships rrc every racing tick, rr only on a real change, and the mirror equals the sim', () => {
+    const server = new GameServer();
+    const names = ['Aster', 'Briar', 'Cass', 'Dell'];
+    const clients = names.map(() => fakeClient());
+    const sessions = names.map((name, i) => join(server, clients[i], i + 1, name));
+    for (const session of sessions) command(server, session, 'realm_racers_join');
+    advance(server);
+    for (const session of sessions) command(server, session, 'realm_racers_ready');
+    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS + 2; i++) advance(server);
+    expect(server.sim.realmRacers.match?.phase).toBe('racing');
+    const meta = server.sim.players.get(sessions[0].pid);
+    if (!meta) throw new Error('no pilot');
+    const client = bareClient(sessions[0].pid);
+    for (const frame of clients[0].sent.filter((f) => f.t === 'snap')) {
+      (client as unknown as { applySnapshot(snap: unknown): void }).applySnapshot(frame);
+    }
+    clients[0].sent.length = 0;
+    const TICKS = 40;
+    for (let i = 0; i < TICKS; i++) {
+      meta.moveInput.forward = true;
+      advance(server);
+      const snap = clients[0].sent.filter((f) => f.t === 'snap').at(-1);
+      (client as unknown as { applySnapshot(snap: unknown): void }).applySnapshot(snap);
+      expect(client.realmRacersInfo, `tick ${i}`).toEqual(
+        server.sim.realmRacersInfoFor(sessions[0].pid),
+      );
+    }
+    expect(selfFields(clients[0], 'rrc')).toHaveLength(TICKS);
+    expect(selfFields(clients[0], 'rr').length).toBeLessThan(TICKS / 4);
+  });
+
   it('emits rr then rrt, and the kit with its held list or an explicit null', () => {
     const keys: [string, unknown][] = [];
     const maybe = (key: string, value: unknown) => keys.push([key, value]);
+    const idle = { queued: true, match: null };
     emitRealmRacersSelfKeys(
       maybe,
-      { realmRacersInfoFor: () => 'info', realmRacersTracksideFor: () => null } as never,
+      { realmRacersInfoFor: () => idle, realmRacersTracksideFor: () => null } as never,
       7,
     );
     const weapon = { def: { id: 'rally_ground_blast' }, charges: 3 };
@@ -713,7 +814,8 @@ describe('Realm Racers server wire siblings', () => {
     emitRealmRacersKitKey(maybe, { realmRacersMatchId: 1, known: [weapon] } as never);
     emitRealmRacersKitKey(maybe, { realmRacersMatchId: null, known: [weapon] } as never);
     expect(keys).toEqual([
-      ['rr', 'info'],
+      ['rr', idle],
+      ['rrc', null],
       ['rrt', null],
       ['rrkit', { active: true, w: 'rally_ground_blast', c: 3, h: ['slick'] }],
       ['rrkit', { active: true, w: 'rally_ground_blast', c: 3 }],

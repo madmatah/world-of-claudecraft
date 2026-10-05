@@ -1,12 +1,19 @@
 // The Realm Racers readouts of the snapshot self record: `rr` (queue, heat and
-// standings) and `rrt` (the trackside lane the viewer stands on). Both are
-// delta-omitted (server selfWireJson `maybe(...)`): an ABSENT key keeps the
+// standings), `rrc` (the heat's per-tick clocks and speed, folded back into
+// the same readout) and `rrt` (the trackside lane the viewer stands on). All
+// are delta-omitted (server selfWireJson `maybe(...)`): an ABSENT key keeps the
 // prior mirror, and an explicit null is the key's own "nothing". Sibling of
 // social_self_wire.ts, which owns the rest of the social/PvP cohort. Also the
 // Rally kit mirror (`rrkit`) and the known list it resolves.
 
 import { REALM_RACERS_EFFECT_ABILITIES, resolveRealmRacersKit } from '../sim/content/realm_racers';
 import { type RallyHeldEffect, rallyHeldEffectFromWire } from '../sim/realm_racers_pickup_effects';
+import {
+  mergeRealmRacersInfo,
+  type RealmRacersMatchClock,
+  type RealmRacersStillInfo,
+  realmRacersClockOf,
+} from '../sim/realm_racers_readout_clock';
 import type { ResolvedAbility } from '../sim/sim';
 import type { Entity } from '../sim/types';
 import type { RealmRacersInfo, RealmRacersLaneView } from '../world_api/realm_racers';
@@ -18,6 +25,7 @@ export interface RealmRacersSelfMirrors {
 
 export interface RealmRacersSelfRecord {
   rr?: unknown;
+  rrc?: unknown;
   rrt?: unknown;
 }
 
@@ -37,8 +45,18 @@ export function applyRealmRacersSelfWire(
   target: RealmRacersSelfMirrors,
   s: RealmRacersSelfRecord,
 ): void {
-  if (s.rr !== undefined)
-    target.realmRacersInfo = (s.rr as RealmRacersInfo | null) ?? idleRealmRacersInfo();
+  // Either half may arrive alone; the mirror itself carries the other one, so
+  // the readout is folded back from whichever moved and what is already held.
+  if (s.rr !== undefined || s.rrc !== undefined) {
+    const prior = target.realmRacersInfo;
+    const still =
+      s.rr !== undefined ? ((s.rr as RealmRacersStillInfo | null) ?? idleRealmRacersInfo()) : prior;
+    const clock =
+      s.rrc !== undefined
+        ? ((s.rrc as RealmRacersMatchClock | null) ?? null)
+        : realmRacersClockOf(prior.match);
+    target.realmRacersInfo = mergeRealmRacersInfo(still, clock);
+  }
   if (s.rrt !== undefined)
     target.realmRacersTrackside = (s.rrt as RealmRacersLaneView | null) ?? null;
 }

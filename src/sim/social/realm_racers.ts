@@ -3131,7 +3131,9 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     standings,
     gridSize: match.gridSize,
     decided: match.phase === 'finished',
-    speed: Math.abs(racerEntity?.drive?.speed ?? 0),
+    // Hundredths, like every positional readout: it rides the per-tick clock
+    // key (realm_racers_readout_clock.ts), and the strip shows whole yd/s.
+    speed: roundReadout(Math.abs(racerEntity?.drive?.speed ?? 0)),
     wrongWay: me.wrongWay,
     // The referee's two banners, both derived rather than stored: how long this
     // pilot has left off the road before they are put back, and whether they

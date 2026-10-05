@@ -6025,6 +6025,7 @@ const ALL_DELTA_KEYS = [
   'reliq',
   'renown',
   'rr',
+  'rrc',
   'rrkit',
   'rrt',
   'rxp',
@@ -6756,7 +6757,10 @@ describe('full self-state snapshot delta fixture', () => {
     // `rrt` is the one key whose non-null value is POSITION-exclusive with the
     // rest of this fixture: a body cannot stand at the bank and at a rally
     // fence at once, so it gets its own dedicated first-snapshot test below.
-    const positionExclusive = new Set(['rrt']);
+    // `rrc` is non-null only for a pilot seated in a live heat, which this
+    // fixture fakes for `rrkit` without one; its round trip is pinned in
+    // tests/realm_racers_online.test.ts.
+    const positionExclusive = new Set(['rrt', 'rrc']);
     for (const key of ALL_DELTA_KEYS) {
       // `de` is capability-only and this fixture joins WITHOUT the
       // entry-facing capability on purpose (its mirror assertions pin the
@@ -7523,9 +7527,10 @@ describe('delta-key contract pins (anti-drift)', () => {
     // The release's faction currency stock facCur and the treasure map tmap
     // make 113. This branch's Realm Racers state, temporary-kit and track keys
     // (rr/rrkit/rrt), at the release/v0.44.0 merge into feature/realm-racers,
-    // make 116.
-    expect(ALL_DELTA_KEYS).toHaveLength(116);
-    expect(new Set(ALL_DELTA_KEYS).size).toBe(116);
+    // make 116, and the heat's per-tick clock key rrc, split out of rr so the
+    // standings stop resending every racing tick, makes 117.
+    expect(ALL_DELTA_KEYS).toHaveLength(117);
+    expect(new Set(ALL_DELTA_KEYS).size).toBe(117);
     expect([...ALL_DELTA_KEYS]).toEqual([...ALL_DELTA_KEYS].sort());
   });
 
@@ -7696,8 +7701,9 @@ describe('delta-key contract pins (anti-drift)', () => {
     // The World PvP readout wpvp and the King of the Hill readout hill make 109.
     // The release batch's pending Town Focus and Spell Crit core keys make 111.
     // The release's faction currency stock facCur and treasure map tmap make 113.
-    // This branch's Realm Racers keys (rr/rrkit/rrt) make 116.
-    expect(scraped.size).toBe(116);
+    // This branch's Realm Racers keys (rr/rrkit/rrt) make 116, and the heat's
+    // per-tick clock key rrc makes 117.
+    expect(scraped.size).toBe(117);
     expect([...scraped].sort()).toEqual([...ALL_DELTA_KEYS].sort());
   });
 
@@ -7789,6 +7795,9 @@ describe('delta-key contract pins (anti-drift)', () => {
     // rrkit selects a temporary client-side ability resolver rather than
     // mirroring one IWorld member, so it is asserted directly in the round trip.
     expect('rrkit' in TERSE_TO_IWORLD).toBe(false);
+    // rrc is the per-tick clock half of realmRacersInfo, folded into the same
+    // member `rr` decodes onto, so it never names a member of its own.
+    expect('rrc' in TERSE_TO_IWORLD).toBe(false);
     // sorted-membership pin: adding or renaming an entry must be a deliberate,
     // reviewable change landing in alphabetical order
     expect(Object.keys(TERSE_TO_IWORLD)).toEqual([...Object.keys(TERSE_TO_IWORLD)].sort());

@@ -3,19 +3,27 @@
 // calls each emitter at its own spot so the self JSON keeps its key order.
 import { realmRacersHeldEffectOf } from '../src/sim/content/realm_racers';
 import type { RallyHeldEffect } from '../src/sim/realm_racers_pickup_effects';
+import { splitRealmRacersInfo } from '../src/sim/realm_racers_readout_clock';
 import type { PlayerMeta, Sim } from '../src/sim/sim';
 
 type EmitSelfKey = (key: string, value: unknown) => void;
 
-/** The per-tick `rr` (queue and heat) and `rrt` (trackside lane) keys. */
+/** The per-tick `rr` (queue and heat), `rrc` (the heat's clocks) and `rrt`
+ *  (trackside lane) keys. */
 export function emitRealmRacersSelfKeys(
   maybe: EmitSelfKey,
   sim: Pick<Sim, 'realmRacersInfoFor' | 'realmRacersTracksideFor'>,
   pid: number,
 ): void {
   // Per-tick, bounded by the race grid: at most REALM_RACERS_GRID_SIZE
-  // standings rows plus three queue scalars (one indexOf over the realm queue).
-  maybe('rr', sim.realmRacersInfoFor(pid));
+  // standings rows, the circuit's boxes and REALM_RACERS_SLICK_CAP patches,
+  // plus three queue scalars (one indexOf over the realm queue). The clocks
+  // and the speed move every racing tick, so they ride `rrc` on their own:
+  // `rr` then matches its last send, and is skipped, until something real
+  // changes (an overtake, a box, a patch of oil).
+  const { still, clock } = splitRealmRacersInfo(sim.realmRacersInfoFor(pid));
+  maybe('rr', still);
+  maybe('rrc', clock);
   // The lane the viewer is STANDING on while not seated in its race: null for
   // almost everyone (the lane test is the same O(1) band check the movement
   // kernel runs), and the slick/box arrays are bounded by the circuit's own

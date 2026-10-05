@@ -339,6 +339,10 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
   the Discord presence): its theme's zone, and the default theme's between lanes. The
   band is on the instance plane, where `zoneAt` answers a lane with whatever zone band
   its z shares. A sibling of the lane leaf because it reads the `data.ts` zone table.
+- `realm_racers_readout_clock.ts`: the per-tick half of the match readout (the clocks
+  and the speed), split off for the server's `rrc` self key and folded back on the
+  client, so the heavy `rr` (standings, boxes, oil) resends only on a real change and
+  presentation still reads the one `RealmRacersMatchInfo` the offline Sim builds.
 - `realm_racers_draft_registry.ts`: the session-only DRAFT circuit overlay: a table
   with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
   `realm_racers_layout.ts` consult it and either importing something that imported it
