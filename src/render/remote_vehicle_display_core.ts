@@ -47,13 +47,13 @@
 
 import { resolveMovement } from '../sim/colliders';
 import { vehicleProfile } from '../sim/content/vehicles';
-import { GRAVITY } from '../sim/player_motion';
+import { auraSpeedMult, GRAVITY } from '../sim/player_motion';
 import {
   GROUND_BLAST_MUZZLE_NOSE_YD,
   GROUND_BLAST_POP_VELOCITY,
 } from '../sim/realm_racers_ground_blast';
 import { realmRacersLaneAt } from '../sim/realm_racers_layout';
-import { DT, type VehicleDrive } from '../sim/types';
+import { type Aura, DT, type Entity, type VehicleDrive } from '../sim/types';
 import {
   advanceVehicleDrive,
   type VehicleStepInput,
@@ -193,8 +193,10 @@ export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
     // The held-input assumption: a racer is at the throttle almost every
     // moment of a race, and the wire carries no intent. A rival braking into
     // a hairpin is over-projected by well under a yard per horizon and the
-    // glide absorbs the correction. Grounded always: the wire carries no
-    // vertical state, and airborne machines are rare and brief.
+    // glide absorbs the correction. A machine the race holds is never
+    // projected at all. Grounded always: the wire carries no vertical state,
+    // and airborne machines are rare and brief. `auraMult` is set per step,
+    // from the rival's own slows.
     input: { throttle: 1, steer: 0, handbrake: false, onGround: true, auraMult: 1 },
     leadCarryMs: 0,
     lastLeadMs: 0,
@@ -271,8 +273,14 @@ export function stepRemoteVehicleDisplay(
   /** How much the horizon itself moved this frame beyond the frame's own time,
    *  ms (a slewed lead decaying): the drawn pose rides it like the projection. */
   horizonShiftMs = 0,
+  /** The rival's own aura speed multiplier (`remoteRacerAuraMult`). */
+  auraMult = 1,
 ): RemoteVehicleDisplayState {
-  let remaining = Math.min(Math.max(ageMs, 0), capMs) / 1000;
+  // A machine the race holds (the grid, a recovery, a retirement, the finished
+  // tableau) does not move on the server: its movement pass returns before the
+  // kernel. It is drawn at its wire pose, with no horizon and no carry.
+  const held = drive.controlsLocked;
+  let remaining = held ? 0 : Math.min(Math.max(ageMs, 0), capMs) / 1000;
   const d = s.scratch;
   d.profileKey = drive.profileKey;
   d.speed = drive.speed;
@@ -285,9 +293,11 @@ export function stepRemoteVehicleDisplay(
   d.dragMult = drive.dragMult;
   d.speedCap = drive.speedCap;
   d.slipCap = drive.slipCap;
+  d.controlsLocked = held;
   const profile = vehicleProfile(d.profileKey);
   const input = s.input;
   input.handbrake = d.handbrake > 0.5;
+  input.auraMult = auraMult;
   let tx = wireX;
   let tz = wireZ;
   let tf = wireFacing;
@@ -342,7 +352,7 @@ export function stepRemoteVehicleDisplay(
   // the time the target's horizon advanced: only the decay below is clamped,
   // since a carry clamped to a 30 fps frame left a slower client's rival a
   // steady speed x (dt - 1/30) behind its projection.
-  const carrying = ageMs < capMs;
+  const carrying = ageMs < capMs && !held;
   const carry = carrying ? frameDt + horizonShiftMs / 1000 : 0;
   const carriedX = s.x + vehicleVelocityX(d, tf) * carry;
   const carriedZ = s.z + vehicleVelocityZ(d, tf) * carry;
@@ -375,6 +385,17 @@ export interface RemoteRacerMirror {
   drive: VehicleDrive | null;
   /** Arrival time of its newest wire pose (performance.now() ms). */
   netUpdatedAt?: number;
+  /** Its mirrored auras: every entity record carries them. */
+  auras?: readonly Aura[];
+}
+
+/**
+ * The rival's aura speed multiplier as its own server movement pass reads it
+ * (`auraSpeedMult`: a Ground Blast's control slow, the off-track bands), off
+ * the auras its wire record mirrors; 1 for a mirror that carries none.
+ */
+export function remoteRacerAuraMult(e: RemoteRacerMirror): number {
+  return e.auras && e.auras.length > 0 ? auraSpeedMult(e as Entity) : 1;
 }
 
 export interface RemoteRacerHorizon {
@@ -490,6 +511,7 @@ export function stepRemoteRacerView<E extends RemoteRacerMirror>(
       horizon.capMs + Math.max(0, s.leadCarryMs),
       resolve,
       shiftMs,
+      remoteRacerAuraMult(e),
     );
     return true;
   }

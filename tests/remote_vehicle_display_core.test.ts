@@ -23,7 +23,7 @@ import {
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_ORIGIN, realmRacersLaneAt } from '../src/sim/realm_racers_layout';
-import { DT, type VehicleDrive } from '../src/sim/types';
+import { type Aura, DT, type VehicleDrive } from '../src/sim/types';
 import {
   advanceVehicleDrive,
   createVehicleDrive,
@@ -494,6 +494,74 @@ describe('the self-frame horizon: rivals drawn where the local kart is', () => {
     expect(frame.tickOffset).toBe(5);
     expect(mirror.pos.x).toBe(1);
     expect(drive.speed).toBe(30);
+  });
+});
+
+describe('a held or snared rival is projected the way the server moves it', () => {
+  const TICK_MS = DT * 1000;
+  /** A driving frame leading the snapshot by 250 ms. */
+  const leading: ReconciledSelfPrediction = {
+    kind: 'reconciled',
+    position: { x: 0, y: 0, z: 0 },
+    residual: null,
+    tickOffset: 6,
+    tickAlpha: 0,
+  };
+  const machine = (speed: number, locked: boolean): VehicleDrive => {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = speed;
+    drive.controlsLocked = locked;
+    return drive;
+  };
+  const slow = (value: number) => [{ id: 'snare', kind: 'slow', value }] as unknown as Aura[];
+
+  it('draws a machine held on the grid exactly at its wire pose, frame after frame', () => {
+    // The server's movement pass returns before the kernel while the race holds
+    // a machine: projecting it at full throttle drew it jumping the start.
+    for (const speed of [0, 30]) {
+      const mirror = {
+        pos: { x: 4, z: 9 },
+        facing: 0.5,
+        drive: machine(speed, true),
+        netUpdatedAt: 1000,
+      };
+      for (const frame of [leading, null]) {
+        const s = createRemoteVehicleDisplay();
+        for (let i = 0; i < 20; i++) {
+          stepRemoteRacerView(s, mirror, frame, 1000 + i * FRAME_MS, FRAME_MS / 1000, 1000, null);
+          expect({ x: s.x, z: s.z, facing: s.facing }).toEqual({ x: 4, z: 9, facing: 0.5 });
+        }
+      }
+    }
+  });
+
+  it('projects the machine again from the first unheld snapshot', () => {
+    const s = createRemoteVehicleDisplay();
+    const held = { pos: { x: 0, z: 0 }, facing: 0, drive: machine(0, true), netUpdatedAt: 1000 };
+    stepRemoteRacerView(s, held, leading, 1000, FRAME_MS / 1000, 1000, null);
+    expect(s.z).toBe(0);
+    const go = { ...held, drive: machine(0, false), netUpdatedAt: 1050 };
+    const direct = createRemoteVehicleDisplay();
+    stepRemoteVehicleDisplay(direct, 0, 0, 0, go.drive, 5 * TICK_MS, 0, 5000);
+    for (let i = 0; i < 30; i++) {
+      stepRemoteRacerView(s, go, leading, 1050 + i * FRAME_MS, FRAME_MS / 1000, 1050, null);
+    }
+    expect(direct.z).toBeGreaterThan(0.5);
+    expect(s.z).toBeGreaterThan(direct.z);
+  });
+
+  it("honours a snared rival's own slow, off the auras its wire record carries", () => {
+    // A Ground Blast leaves its target at 0.6 of its top speed for a moment.
+    const drive = machine(55, false);
+    const snared = { pos: { x: 0, z: 0 }, facing: 0, drive, netUpdatedAt: 1000, auras: slow(0.6) };
+    const s = createRemoteVehicleDisplay();
+    stepRemoteRacerView(s, snared, leading, 1000, FRAME_MS / 1000, 1000, null);
+    const direct = createRemoteVehicleDisplay();
+    stepRemoteVehicleDisplay(direct, 0, 0, 0, drive, 5 * TICK_MS, 0, 5000, null, 0, 0.6);
+    expect(s.z).toBeCloseTo(direct.z, 9);
+    const free = createRemoteVehicleDisplay();
+    stepRemoteRacerView(free, { ...snared, auras: [] }, leading, 1000, FRAME_MS / 1000, 1000, null);
+    expect(free.z - s.z).toBeGreaterThan(0.5);
   });
 });
 
