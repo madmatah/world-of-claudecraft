@@ -67,7 +67,6 @@
 
 import { moverHeight, resolveMovement } from '../sim/colliders';
 import { hasValkyrsCallingFlightAura } from '../sim/combat/paladin_valkyrs_calling_state';
-import { vehicleProfile } from '../sim/content/vehicles';
 import { isRiftPos } from '../sim/data';
 import {
   clampDelveDoorSolids,
@@ -75,12 +74,7 @@ import {
   type DelveDoorClampSolid,
 } from '../sim/delves/geometry';
 import { isFerryPassenger } from '../sim/ferry_passenger';
-import {
-  auraSpeedMult,
-  moveSpeedMult,
-  type PlayerMotionDeps,
-  stepPlayerMotion,
-} from '../sim/player_motion';
+import { moveSpeedMult, type PlayerMotionDeps, stepPlayerMotion } from '../sim/player_motion';
 import { DT, type Entity, type MoveInput, RUN_SPEED } from '../sim/types';
 import type { DelveRunInfo } from '../world_api/delves';
 import type { RiftFloorView } from '../world_api/dungeons';
@@ -177,28 +171,6 @@ export interface Vec3Like {
 }
 
 const clamp = (n: number, min: number, max: number): number => Math.max(min, Math.min(max, n));
-
-/**
- * The honest upper bound on how fast this body can legitimately travel. A
- * runner's is their run speed, which is what the predictor's leash and lead
- * telemetry are measured in (it only ever predicts a runner). A PILOT's is
- * their machine's top speed, which sizes the display fallback's teleport limit
- * and rewind cap for a seated driver (self_render_position_core.ts): sized off
- * run speed instead, ordinary racing would read as a teleport.
- *
- * A driver's budget is FLOORED at the profile's own maximum on purpose: the
- * surface cap and the slow auras ride `speedCap`/auras and COLLAPSE the
- * moment the machine crosses onto grass or takes a shell, while the gap the
- * display is closing was built at the old ceiling. Only a ceiling RAISED above
- * it (the nitro's 1.3 on the same cap channel) raises the budget with it.
- */
-export function displaySpeedBudget(e: Entity): number {
-  if (e.drive) {
-    const profile = vehicleProfile(e.drive.profileKey);
-    return profile.maxSpeed * Math.max(1, e.drive.speedCap * auraSpeedMult(e));
-  }
-  return RUN_SPEED * moveSpeedMult(e, 0);
-}
 
 /**
  * Whether display-only self prediction is allowed to run for the local player
@@ -451,9 +423,6 @@ export class SelfMotionPredictor {
     const liftAt = (x: number, z: number): number =>
       riftOrigin ? riftLiftFor(riftPlan, riftOrigin, x, z) : 0;
 
-    const latencyMs = frame.echoMs + 0.5 * frame.jitterMs;
-    const capMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_CAP_MAX_MS);
-
     // Re-adopt the authoritative pose outright on identity/life-state flips and
     // teleports; otherwise keep the persistent scratch actor.
     const flipped =
@@ -524,6 +493,7 @@ export class SelfMotionPredictor {
     // (mountCastKey === '') does not root movement and is move-cancelable.
     actor.mountCastRemaining = self.mountCastRemaining;
     actor.mountCastKey = self.mountCastKey;
+
     // Verticality: strip the raised-tier lift from the WORKING actor before
     // any of this frame's position math runs, exactly like
     // Sim.updatePlayerMovement strips it before the kernel (its
@@ -544,10 +514,9 @@ export class SelfMotionPredictor {
     actor.pos.y -= liftAt(actor.pos.x, actor.pos.z);
     actor.prevPos.y -= liftAt(actor.prevPos.x, actor.prevPos.z);
 
-    // Fixed-step advance with the held intent. Turn flags stay stripped (never
-    // set on stepInput): the heading is assigned from the one display source
-    // each step, and letting the kernel integrate tl/tr on top would double
-    // the turn.
+    // Fixed-step advance with the held intent. Turn flags are stripped: the
+    // heading is assigned from the one display source each step, and letting
+    // the kernel integrate tl/tr on top would double the turn.
     const inp = this.stepInput;
     inp.forward = frame.moveInput.forward;
     inp.back = frame.moveInput.back;
@@ -579,7 +548,6 @@ export class SelfMotionPredictor {
       actor.prevPos.x = actor.pos.x;
       actor.prevPos.y = actor.pos.y;
       actor.prevPos.z = actor.pos.z;
-      // Facing is client-authoritative input: the display source owns it.
       actor.facing = frame.displayFacing;
       // actor.pos.y is flat-baseline here (stripped above): the kernel's
       // gravity/onGround pass integrates against the true flat rift floor,
@@ -589,9 +557,7 @@ export class SelfMotionPredictor {
     }
     const frac = this.acc / DT;
 
-    // The honest legitimate-travel rate for this body (its run speed). Both the
-    // leash below and the block episode's lend and drain are measured in it.
-    const leashSpeed = displaySpeedBudget(actor);
+    const runSpeed = RUN_SPEED * moveSpeedMult(actor, 0);
     // The local block episode (rationale: the header's Bounded exception).
     // An ISOLATED long frame is the trigger, staleness not required: in the
     // deliver-before ordering there is no staleness to see. Isolation is what
@@ -645,6 +611,8 @@ export class SelfMotionPredictor {
     // glides the visual back at SELF_MOTION_BLEND_RATE. Server-driven motion
     // with no local intent (charge, knockback) is also captured: the history
     // stands still while the anchor moves, so the error tracks the ride.
+    const latencyMs = frame.echoMs + 0.5 * frame.jitterMs;
+    const capMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_CAP_MAX_MS);
     const measureMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_MEASURE_MAX_MS);
     const past = this.sampleHistory(this.timeMs - measureMs);
     if (past && servoActive) {
@@ -685,26 +653,25 @@ export class SelfMotionPredictor {
     // budget is the honest upper bound; only corrections consume the slack).
     // Vertical is exempt (a jump apex must not be leash-clipped; gravity
     // bounds it).
-    const baseBudget = (leashSpeed * capMs) / 1000 + LEASH_SLACK_YD;
+    const baseBudget = (runSpeed * capMs) / 1000 + LEASH_SLACK_YD;
     const ex = actor.pos.x - ax;
     const ez = actor.pos.z - az;
     const elen = Math.hypot(ex, ez);
     if (blockedFrame) {
-      // Lend at that rate IN WALL CLOCK, and only what THIS episode has
+      // Lend at RUN SPEED IN WALL CLOCK, and only what THIS episode has
       // earned. Wall clock rather than a tick per frame because the fixed-step
       // accumulator lands a whole 50 ms step inside a 10 ms catch-up frame and
       // clipping THAT is the stall again. Per episode rather than cumulative
       // because otherwise a machine hitching every few frames ratchets the
       // boundary outward at every hitch and, against a server that never
       // confirms the motion, walks the display to the 6 yd re-adopt.
-      this.episodeCapYd += leashSpeed * dt;
+      this.episodeCapYd += runSpeed * dt;
       this.staleAllowanceYd = Math.max(
         this.staleAllowanceYd,
         Math.min(elen - baseBudget, this.episodeCapYd),
       );
     } else {
-      // The allowance drains at that same rate once the snapshots flow again,
-      // but
+      // The allowance drains at run speed once the snapshots flow again, but
       // never below the lead currently in use: draining THROUGH the live lead
       // would clamp the display back at run speed, the same stall this fix
       // removes, one beat later. Shrinking the lead is the servo's job, and
@@ -713,7 +680,7 @@ export class SelfMotionPredictor {
         0,
         Math.min(
           this.staleAllowanceYd,
-          Math.max(elen - baseBudget, this.staleAllowanceYd - leashSpeed * dt),
+          Math.max(elen - baseBudget, this.staleAllowanceYd - runSpeed * dt),
         ),
       );
     }
@@ -742,7 +709,7 @@ export class SelfMotionPredictor {
     this.out.z = actor.prevPos.z + (actor.pos.z - actor.prevPos.z) * frac;
     this.recordHistory(this.out.x, this.out.y, this.out.z);
     this.leadMs =
-      leashSpeed > 0 ? (Math.hypot(this.out.x - ax, this.out.z - az) / leashSpeed) * 1000 : 0;
+      runSpeed > 0 ? (Math.hypot(this.out.x - ax, this.out.z - az) / runSpeed) * 1000 : 0;
     return this.out;
   }
 }

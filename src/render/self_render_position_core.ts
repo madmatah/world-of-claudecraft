@@ -4,6 +4,8 @@
 // without a camera step. Pure ({x,y,z} in and out, no Three), so the renderer
 // is a thin consumer and a headless latency harness can drive the same math.
 
+import { vehicleProfile } from '../sim/content/vehicles';
+import { auraSpeedMult, moveSpeedMult } from '../sim/player_motion';
 import { DT, type Entity, RUN_SPEED } from '../sim/types';
 import {
   createSelfDriveView,
@@ -13,7 +15,6 @@ import {
   type SelfDriveView,
 } from './self_drive_view_core';
 import {
-  displaySpeedBudget,
   SELF_MOTION_SNAP_DIST_SQ,
   type SelfMotionFrame,
   SelfMotionPredictor,
@@ -27,6 +28,26 @@ export const SELF_MOTION_HANDOFF_RATE = 15;
 export const MAX_SELF_REWIND_YD_PER_SEC = 12;
 
 const SELF_OFFSET_FLUSH_YD = 1e-3;
+
+/**
+ * The honest upper bound on how fast this body can legitimately travel: a
+ * runner's run speed, or a PILOT's machine top speed, which sizes the
+ * display's teleport limit and rewind cap for a seated driver (sized off run
+ * speed instead, ordinary racing would read as a teleport).
+ *
+ * A driver's budget is FLOORED at the profile's own maximum on purpose: the
+ * surface cap and the slow auras ride `speedCap`/auras and COLLAPSE the
+ * moment the machine crosses onto grass or takes a shell, while the gap the
+ * display is closing was built at the old ceiling. Only a ceiling RAISED above
+ * it (the nitro's 1.3 on the same cap channel) raises the budget with it.
+ */
+export function displaySpeedBudget(e: Entity): number {
+  if (e.drive) {
+    const profile = vehicleProfile(e.drive.profileKey);
+    return profile.maxSpeed * Math.max(1, e.drive.speedCap * auraSpeedMult(e));
+  }
+  return RUN_SPEED * moveSpeedMult(e, 0);
+}
 
 /** The fallback's rewind cap: a runner's, or scaled by a seated driver's
  *  speed budget (displaySpeedBudget: profile top speed, raised by a boost)
@@ -77,7 +98,7 @@ export function isTeleportGap(
 /**
  * The teleport limit for this frame. A seated driver outruns the 23.1 yd/s
  * premise above several times over, so its limit adds the ground its speed
- * budget (self_motion.ts displaySpeedBudget) covers in this frame: a racer at
+ * budget (displaySpeedBudget) covers in this frame: a racer at
  * speed, or across a render hitch, glides instead of popping. While a predicted
  * kart is in play (`leadMs`, `selfFrameLeadMs`) it also adds the ground covered
  * over that lead plus a tick: the predicted kart leads the snapshot by the lead

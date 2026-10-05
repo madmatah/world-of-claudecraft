@@ -9,7 +9,6 @@ import {
   SELF_YAW_SNAP_RAD,
 } from '../src/render/self_drive_view_core';
 import {
-  displaySpeedBudget,
   SELF_MOTION_SNAP_DIST_SQ,
   type SelfMotionFrame,
   updateSelfRenderFallback,
@@ -17,6 +16,7 @@ import {
 } from '../src/render/self_motion';
 import {
   createSelfRenderPositionState,
+  displaySpeedBudget,
   MAX_SELF_REWIND_YD_PER_SEC,
   type ReconciledSelfPrediction,
   type SelfRenderPositionState,
