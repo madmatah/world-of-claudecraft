@@ -22,7 +22,11 @@ import {
   realmRacersLaneOffset,
   realmRacersPracticeLanes,
 } from '../src/sim/realm_racers_layout';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import {
+  rallyGardenEdgeOffsetAt,
+  realmRacersGates,
+  realmRacersTrack,
+} from '../src/sim/realm_racers_spline';
 import { RESURRECTION_SICKNESS_ID, UNSTUCK_SICKNESS_ID } from '../src/sim/resurrection';
 import type { CharacterState, Sim } from '../src/sim/sim';
 import {
@@ -445,6 +449,48 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacersInfoFor(d).match?.result).toBe('lost');
     expect(sim.realmRacersInfoFor(c).match?.me.position).toBe(3);
     expect(sim.realmRacersInfoFor(d).match?.me.position).toBe(4);
+  });
+
+  it('ranks a lap-two pilot behind the line behind the lap-two field, at the deadline too', () => {
+    // A lap-two recovery onto gate 0 (a hair short of the line) and a reverse
+    // back over the line both used to read as a full lap AHEAD: a straggler
+    // could back over the line at the deadline and take the win.
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    const lapLength = realmRacersTrack(RACE_CIRCUIT).length;
+    for (const pid of [a, b, c]) {
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      expect(required(liveMatch.progress.get(pid), `progress ${pid}`).lap).toBe(2);
+    }
+    advanceArc(sim, b, lapLength * 0.4);
+    // a: recovered onto gate 0 with what the wrapping gate-0 crossing records.
+    const progressA = required(liveMatch.progress.get(a), `progress ${a}`);
+    progressA.resetS = realmRacersGates(RACE_CIRCUIT)[0].s;
+    progressA.resetLap = 2;
+    progressA.resetDistanceSinceWrap = 0;
+    sim.realmRacersResetPosition(a);
+    expect(progressA.travelled).toBeLessThanOrEqual(lapLength + 1e-6);
+    // c: backs up over the line in short steps.
+    const progressC = required(liveMatch.progress.get(c), `progress ${c}`);
+    for (let back = 0; back < 40 && progressC.lastS < lapLength / 2; back++) {
+      placeAtS(sim, c, progressC.lastS - 3);
+      updateRealmRacers(sim.ctx);
+    }
+    expect(progressC.lap).toBe(2);
+    expect(progressC.lastS).toBeGreaterThan(lapLength / 2);
+    expect(progressC.travelled).toBeLessThan(lapLength);
+    sim.tickCount++;
+    const order = sim.realmRacersInfoFor(d).match?.standings.map((row) => row.pid) ?? [];
+    expect(order.indexOf(b)).toBeLessThan(order.indexOf(a));
+    expect(order.indexOf(b)).toBeLessThan(order.indexOf(c));
+    // And the clock closes it on b, the one genuinely furthest round.
+    liveMatch.deadlineTick = sim.tickCount + 1;
+    sim.tick();
+    expect(liveMatch.phase).toBe('finished');
+    expect(liveMatch.winnerPid).toBe(b);
   });
 
   it('ranks the whole field by yards down the circuit', () => {

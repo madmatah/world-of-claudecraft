@@ -41,9 +41,14 @@ export function travelledFromArc(
   // into the second half while the lap counter still reads one (the first line
   // crossing is deliberately lap-neutral), and reading the latter as negative
   // inverted the live standings between the two halves of every first lap. The
-  // odometer disambiguates: a machine that has covered less than half a lap of
-  // ground and sits in the second half of the arc can only be behind the line.
-  const behindTheLine = lap === 1 && wrapped > lapLength / 2 && distanceSinceWrap < lapLength / 2;
+  // odometer disambiguates: a machine in the second half of the arc that has
+  // covered less ground than its arc stands past halfway can only be behind the
+  // line. On EVERY lap, not just the first: a machine short of the line on a
+  // later lap (recovered onto gate 0, or backed over it) has covered one lap
+  // fewer, never one more. The bound is the arc past halfway rather than half a
+  // lap because a later lap's odometer starts at the wrap tick, already a few
+  // yards past the line, so it trails the arc by that overshoot all lap long.
+  const behindTheLine = distanceSinceWrap < wrapped - lapLength / 2;
   return (lap - 1) * lapLength + wrapped - (behindTheLine ? lapLength : 0);
 }
 

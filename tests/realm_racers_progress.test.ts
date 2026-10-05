@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  REALM_RACERS_CIRCUIT_LIST,
+} from '../src/sim/content/realm_racers_circuits';
 import {
   forwardArcDelta,
   REALM_RACERS_MIN_LAP_FRACTION,
   stepRealmRacersProgress,
   travelledFromArc,
 } from '../src/sim/realm_racers_progress';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 const L = 100;
 
@@ -126,6 +129,81 @@ describe('Realm Racers arc progress', () => {
     // And the honest racer outranks a first-half rival, not the other way round.
     expect(travelledFromArc(1, 70, L, 77)).toBeGreaterThan(travelledFromArc(1, 30, L, 37));
   });
+
+  it('reads a racer behind the line on a later lap as behind it, not a lap ahead', () => {
+    // Lap two starts AT the line (the wrap zeroes the odometer), so a machine
+    // a yard short of it on lap two has covered one lap, never two.
+    expect(travelledFromArc(2, 99, L, 0)).toBe(99);
+    expect(travelledFromArc(3, 99, L, 1)).toBe(199);
+    // Honest second-half driving on a later lap still reads as itself, even a
+    // yard past halfway: that lap's odometer started at the wrap tick, a few
+    // yards past the line, so it trails the arc by that overshoot.
+    expect(travelledFromArc(2, 70, L, 70)).toBe(170);
+    expect(travelledFromArc(2, 51, L, 48)).toBe(151);
+  });
+
+  it('keeps travelled monotone over several laps, through every wrap and halfway', () => {
+    // Seven-yard ticks never land on the line, so every wrap overshoots it and
+    // every later lap's odometer trails its arc: no tick may fall back a lap.
+    let lap = 1;
+    let lastS = L - 7;
+    let distanceSinceWrap = 0;
+    let previous = Number.NEGATIVE_INFINITY;
+    for (let driven = 7; driven <= 2.6 * L; driven += 7) {
+      const step = stepRealmRacersProgress({
+        lap,
+        lastS,
+        s: (L - 7 + driven) % L,
+        distanceSinceWrap,
+        lapLength: L,
+        totalLaps: 4,
+      });
+      expect(step.travelled, `after ${driven} yd`).toBeGreaterThan(previous);
+      previous = step.travelled;
+      lap = step.lap;
+      lastS = step.lastS;
+      distanceSinceWrap = step.distanceSinceWrap;
+    }
+    expect(lap).toBe(3);
+  });
+
+  it.each(REALM_RACERS_CIRCUIT_LIST.map((circuit) => [circuit.id, circuit] as const))(
+    '%s: a lap-two recovery onto gate 0, or a reverse over the line, never ranks a lap ahead',
+    (_id, circuit) => {
+      const track = realmRacersTrack(circuit);
+      const lapLength = track.length;
+      // The recovery: the gate-0 crossing that wrapped hands back lap two with
+      // a zeroed odometer, at the gate's own arc (a hair short of the line on
+      // most circuits).
+      const anchor = track.pointAt(realmRacersGates(circuit)[0].s);
+      const recovered = travelledFromArc(2, anchor.s, lapLength, 0);
+      expect(recovered).toBeLessThanOrEqual(lapLength + 1e-6);
+      expect(recovered).toBeGreaterThan(lapLength - 10);
+      // The reverse: just over the line on lap two, then backing up over it.
+      let step = stepRealmRacersProgress({
+        lap: 2,
+        lastS: 0,
+        s: 4,
+        distanceSinceWrap: 0,
+        lapLength,
+        totalLaps: 3,
+      });
+      const ahead = step.travelled;
+      for (const s of [1, lapLength - 2, lapLength - 5]) {
+        step = stepRealmRacersProgress({
+          lap: step.lap,
+          lastS: step.lastS,
+          s,
+          distanceSinceWrap: step.distanceSinceWrap,
+          lapLength,
+          totalLaps: 3,
+        });
+        expect(step.lap).toBe(2);
+        expect(step.travelled, `at s ${s}`).toBeLessThanOrEqual(ahead);
+      }
+      expect(step.travelled).toBeCloseTo(lapLength - 5, 6);
+    },
+  );
 
   it('keeps travelled monotone for a racer driving honestly from the grid', () => {
     // Step-driven through the whole first lap from 7 yd behind the line, the
