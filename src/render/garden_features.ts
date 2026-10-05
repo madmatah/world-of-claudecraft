@@ -21,7 +21,6 @@ import {
   planGardenMazePieces,
 } from './garden_maze_core';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
-import { GFX } from './gfx';
 import { applySurfaceDetail, GREAT_TREE_BARK_DETAIL, isBarkMaterialName } from './worn_stone';
 
 export interface GardenFeaturesView {

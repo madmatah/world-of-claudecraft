@@ -19,8 +19,6 @@
 // vocabulary and may not import render code, while a cycle phase means nothing
 // without `day_night_core.ts`'s parameterization, which is render's.
 
-import { REALM_RACERS_TIME_OF_DAY_IDS } from '../sim/content/realm_racers_circuits';
-
 /**
  * The cycle phase each authored hour stands at, in `day_night_core.ts`'s own
  * parameterization: 0 is midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset.
@@ -48,10 +46,6 @@ export const REALM_RACERS_TIME_OF_DAY_PHASE: Readonly<Record<string, number>> = 
   night: 0.86,
   midnight: 0,
 };
-
-/** The hours in the vocabulary's own order, for a picker that wants no guessing
- *  about which module is the source. */
-export const REALM_RACERS_TIME_OF_DAY_ORDER: readonly string[] = REALM_RACERS_TIME_OF_DAY_IDS;
 
 /**
  * The phase an authored hour stands at, or null when the circuit authors none.

@@ -27,10 +27,7 @@
 //
 // Pure core: no three, no DOM, deterministic, and a plain Vitest drives it.
 
-import {
-  type RealmRacersCircuit,
-  realmRacersCircuitById,
-} from '../sim/content/realm_racers_circuits';
+import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../sim/geometry2d';
 import { realmRacersGroundShape, realmRacersGroundSpansAt } from '../sim/realm_racers_ground';
 import { REALM_RACERS_ORIGIN } from '../sim/realm_racers_layout';
@@ -269,12 +266,6 @@ export function realmRacersGrassAllowed(
   if (col < 0 || row < 0 || col >= mask.columns || row >= mask.rows) return false;
   return mask.blocked[row * mask.columns + col] === 0;
 }
-
-/** Test-only window onto the id resolution the mask memoizes against. */
-export const realmRacersGrassInternalsForTest = {
-  circuitById: realmRacersCircuitById,
-  maskCell: MASK_CELL,
-};
 
 /** Yards of tile edge. Each tile becomes its own instanced draw so the frustum
  *  can throw away what is behind the camera: one mesh for a whole circuit would

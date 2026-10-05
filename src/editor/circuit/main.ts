@@ -37,12 +37,7 @@ import {
 } from '../../sim/realm_racers_circuit_metrics';
 import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
 import { realmRacersGroundShape } from '../../sim/realm_racers_ground';
-import {
-  type RallyPoint,
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_ORIGIN,
-} from '../../sim/realm_racers_layout';
+import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import {
   REALM_RACERS_PICKUP_BOX_HALF,
   realmRacersPickupBoxes,
