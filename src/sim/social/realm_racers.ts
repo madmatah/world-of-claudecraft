@@ -2059,11 +2059,10 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       if (contact.impact < REALM_RACERS_BUMP_EVENT_MIN_IMPACT) continue;
       // Deed-tracking only (docs/design/deeds.md): a real, announced bump
       // (the same floor the event above uses) disqualifies a clean race for
-      // BOTH cars, not just the one that gets the announce credit. Gated on
-      // still racing: a pilot who already crossed the line clean keeps that
-      // outcome through the post-finish tableau, a rival's business no
-      // longer touches theirs. A pair still parting from a ghost the cap
-      // ended inside the other is being separated by the race, not racing.
+      // BOTH cars, not just the one that gets the announce credit. Only pairs
+      // still racing reach here (a finisher keeps a clean run through the
+      // tableau). A pair still parting from a ghost the cap ended inside the
+      // other is being separated by the race, not racing.
       const progressA = match.progress.get(match.pids[i]);
       const progressB = match.progress.get(match.pids[j]);
       const counts = rallyContactCounts(
@@ -2072,8 +2071,8 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
         match.pids[j],
         progressB?.ghostPartingPids,
       );
-      if (counts && progressA?.finishedTick === null) progressA.hadRivalContact = true;
-      if (counts && progressB?.finishedTick === null) progressB.hadRivalContact = true;
+      if (counts && progressA) progressA.hadRivalContact = true;
+      if (counts && progressB) progressB.hadRivalContact = true;
       const pair = i * match.pids.length + j;
       const last = match.bumpTicks.get(pair);
       if (last !== undefined && ctx.tickCount - last < REALM_RACERS_BUMP_EVENT_TICKS) continue;
@@ -2338,9 +2337,12 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
     // The next gate, or one of the few after it (REALM_RACERS_GATE_RESYNC_WINDOW),
     // nearest first: a machine shoved wide of one gate's band resyncs on the
     // next one it really crosses instead of losing every anchor for the lap.
+    // Never so wide it wraps onto the gate behind the last one crossed, which
+    // a short circuit's few gates would otherwise put inside the window.
     let gate: RallyGate | undefined;
     let crossing: number | null = null;
-    for (let k = 0; k < REALM_RACERS_GATE_RESYNC_WINDOW && k < gates.length; k++) {
+    const span = Math.max(1, Math.min(REALM_RACERS_GATE_RESYNC_WINDOW, gates.length - 2));
+    for (let k = 0; k < span && k < gates.length; k++) {
       const candidate = gates[(progress.nextResetGate + k) % gates.length];
       crossing = rallyGateCrossingFraction(from, to, candidate);
       if (crossing !== null) {
@@ -2920,7 +2922,9 @@ export function updateRealmRacers(ctx: SimContext): void {
   // SAME body: a practice lap is not a lesser mode with its own rules, it is the
   // race on a different copy of the circuit. Walked in place rather than over a
   // copied list: a practice race its own tick tears down is spliced out under
-  // the walk, so the index moves on only past a race that is still there.
+  // the walk, so the index moves on only past a race that is still there. That
+  // holds because a race's tick removes only itself and nothing in this phase
+  // starts one (practice starts arrive as commands between ticks).
   const rally = ctx.realmRacers;
   if (rally.match) tickMatch(ctx, rally.match);
   for (let i = 0; i < rally.practices.length; ) {
