@@ -5,16 +5,68 @@ import { realmRacersHeldEffectOf } from '../src/sim/content/realm_racers';
 import type { RallyHeldEffect } from '../src/sim/realm_racers_pickup_effects';
 import { splitRealmRacersInfo } from '../src/sim/realm_racers_readout_clock';
 import type { PlayerMeta, Sim } from '../src/sim/sim';
+import { realmRacersSeatedOrQueued } from '../src/sim/social/realm_racers';
+import type { RealmRacersInfo } from '../src/world_api/realm_racers';
+import {
+  createRealmReadoutMemo,
+  type RealmReadoutMemo,
+  realmReadoutJson,
+} from './realm_readout_memo';
 
 type EmitSelfKey = (key: string, value: unknown) => void;
+
+type RealmRacersSelfSim = Pick<
+  Sim,
+  'ctx' | 'tickCount' | 'realmRacersInfoFor' | 'realmRacersTracksideFor'
+>;
+
+/** One idle-readout memo per Sim (server-host state, keyed by the Sim so two
+ *  realms in one process never share a build). */
+const idleReadouts = new WeakMap<object, RealmReadoutMemo<RealmRacersInfo>>();
+
+/** The memo behind the idle `rr`, created on a Sim's first pass. */
+export function realmRacersIdleReadout(sim: object): RealmReadoutMemo<RealmRacersInfo> {
+  let memo = idleReadouts.get(sim);
+  if (!memo) {
+    memo = createRealmReadoutMemo<RealmRacersInfo>();
+    idleReadouts.set(sim, memo);
+  }
+  return memo;
+}
 
 /** The per-tick `rr` (queue and heat), `rrc` (the heat's clocks) and `rrt`
  *  (trackside lane) keys. */
 export function emitRealmRacersSelfKeys(
   maybe: EmitSelfKey,
-  sim: Pick<Sim, 'realmRacersInfoFor' | 'realmRacersTracksideFor'>,
+  maybeRaw: (key: string, serialized: string) => void,
+  sim: RealmRacersSelfSim,
   pid: number,
 ): void {
+  // Almost every viewer is neither queued nor seated, and for all of them the
+  // readout is the same value (no queue place, no heat, the realm's free
+  // practice copy and queue viability): built and stringified once per pass
+  // through the realm-readout memo and shipped raw, like the `dfb` board.
+  if (!realmRacersSeatedOrQueued(sim.ctx, pid)) {
+    maybeRaw(
+      'rr',
+      realmReadoutJson(realmRacersIdleReadout(sim), sim.tickCount, () =>
+        sim.realmRacersInfoFor(pid),
+      ),
+    );
+    maybeRaw('rrc', 'null');
+  } else {
+    emitRealmRacersHeatKeys(maybe, sim, pid);
+  }
+  // The lane the viewer is STANDING on while not seated in its race: null for
+  // almost everyone (the lane test is the same O(1) band check the movement
+  // kernel runs), and the slick/box arrays are bounded by the circuit's own
+  // pickup and slick counts and built once per match per tick, so a stand
+  // full of watchers serializes one build.
+  maybe('rrt', sim.realmRacersTracksideFor(pid));
+}
+
+/** The per-viewer `rr` and `rrc` of a queued or seated viewer. */
+function emitRealmRacersHeatKeys(maybe: EmitSelfKey, sim: RealmRacersSelfSim, pid: number): void {
   // Per-tick, bounded by the race grid: at most REALM_RACERS_GRID_SIZE
   // standings rows, the circuit's boxes and REALM_RACERS_SLICK_CAP patches,
   // plus three queue scalars (one indexOf over the realm queue). The clocks
@@ -24,12 +76,6 @@ export function emitRealmRacersSelfKeys(
   const { still, clock } = splitRealmRacersInfo(sim.realmRacersInfoFor(pid));
   maybe('rr', still);
   maybe('rrc', clock);
-  // The lane the viewer is STANDING on while not seated in its race: null for
-  // almost everyone (the lane test is the same O(1) band check the movement
-  // kernel runs), and the slick/box arrays are bounded by the circuit's own
-  // pickup and slick counts and built once per match per tick, so a stand
-  // full of watchers serializes one build.
-  maybe('rrt', sim.realmRacersTracksideFor(pid));
 }
 
 /** The wireRev-gated `rrkit` key of the heavy self block. */

@@ -8451,7 +8451,7 @@ export class GameServer {
     maybe('trade', tradeWire(this.sim, anchorSession.pid));
     maybe('duel', duelWire(this.sim, anchorSession.pid));
     maybe('cardDuel', this.sim.cardMinigameInfoFor(anchorSession.pid));
-    emitRealmRacersSelfKeys(maybe, this.sim, anchorSession.pid);
+    emitRealmRacersSelfKeys(maybe, maybeRaw, this.sim, anchorSession.pid);
     // Small PvP-ledger scalars, delta-guarded like delve marks (a fresh session gets both).
     maybe('honor', meta.honor);
     maybe('lhonor', meta.lifetimeHonor);

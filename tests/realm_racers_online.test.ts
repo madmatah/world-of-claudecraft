@@ -36,7 +36,11 @@ vi.mock('../server/db', () => ({
 
 import { type ClientSession, GameServer } from '../server/game';
 import { driveWire } from '../server/realm_racers_drive_wire';
-import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from '../server/realm_racers_self_wire';
+import {
+  emitRealmRacersKitKey,
+  emitRealmRacersSelfKeys,
+  realmRacersIdleReadout,
+} from '../server/realm_racers_self_wire';
 import { ClientWorld } from '../src/net/online';
 import { decodeDriveWire } from '../src/net/realm_racers_drive_wire';
 import { decodeRealmRacersKit, realmRacersKnownOr } from '../src/net/realm_racers_self_wire';
@@ -799,13 +803,62 @@ describe('Realm Racers server wire siblings', () => {
     expect(selfFields(clients[0], 'rr').length).toBeLessThan(TICKS / 4);
   });
 
+  it('builds the idle rr once per pass for every idle viewer, and ships it raw', () => {
+    // Most viewers are neither queued nor seated, and their readout is one
+    // value for all of them: one build and one stringify per broadcast pass.
+    const server = new GameServer();
+    const idle = ['Eira', 'Finn', 'Gale', 'Hale', 'Ivo'].map((name, i) => {
+      const client = fakeClient();
+      return { client, session: join(server, client, 10 + i, name) };
+    });
+    const queuedClient = fakeClient();
+    const queued = join(server, queuedClient, 20, 'Juno');
+    command(server, queued, 'realm_racers_join');
+    const memo = realmRacersIdleReadout(server.sim);
+    const builds = vi.spyOn(server.sim, 'realmRacersInfoFor');
+    advance(server);
+    // One build serves all five idle viewers; the queued one builds its own.
+    expect(builds).toHaveBeenCalledTimes(2);
+    expect(memo.objectBuilds).toBe(1);
+    expect(memo.stringifies).toBe(1);
+    for (const { client, session } of idle) {
+      const sent = client.sent.filter((f) => f.t === 'snap').at(-1) as { self: { rr: unknown } };
+      // Byte-identical to the per-viewer build it replaces.
+      expect(JSON.stringify(sent.self.rr)).toBe(
+        JSON.stringify(server.sim.realmRacersInfoFor(session.pid)),
+      );
+      expect((sent.self as { rrc?: unknown }).rrc).toBeNull();
+    }
+    const queuedRr = selfFields(queuedClient, 'rr').at(-1) as { queued: boolean };
+    expect(queuedRr.queued).toBe(true);
+    // An unchanged pass elides the key for every idle viewer, a changed queue
+    // reaches them on the next pass with one fresh build.
+    for (const { client } of idle) client.sent.length = 0;
+    advance(server);
+    expect(memo.objectBuilds).toBe(2);
+    for (const { client } of idle) expect(selfFields(client, 'rr')).toEqual([]);
+    command(server, idle[0].session, 'realm_racers_join');
+    advance(server);
+    expect(selfFields(idle[1].client, 'rr').at(-1)).toMatchObject({ queued: false, queueSize: 2 });
+    expect(selfFields(idle[0].client, 'rr').at(-1)).toMatchObject({ queued: true, queueSize: 2 });
+    builds.mockRestore();
+  });
+
   it('emits rr then rrt, and the kit with its held list or an explicit null', () => {
     const keys: [string, unknown][] = [];
     const maybe = (key: string, value: unknown) => keys.push([key, value]);
     const idle = { queued: true, match: null };
     emitRealmRacersSelfKeys(
       maybe,
-      { realmRacersInfoFor: () => idle, realmRacersTracksideFor: () => null } as never,
+      () => {
+        throw new Error('a queued viewer builds its own readout');
+      },
+      {
+        ctx: { realmRacers: { queue: [7], match: null, practices: [] } },
+        tickCount: 1,
+        realmRacersInfoFor: () => idle,
+        realmRacersTracksideFor: () => null,
+      } as never,
       7,
     );
     const weapon = { def: { id: 'rally_ground_blast' }, charges: 3 };
