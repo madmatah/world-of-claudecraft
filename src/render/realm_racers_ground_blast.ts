@@ -15,9 +15,11 @@
 // itself at the tick its impact was scheduled for, so the marker is up for
 // exactly the flight and no event ordering can strand one on the ground.
 //
-// The whole pool is built by `prepare()`, which the race preparation seam
+// The whole pool, its shared geometries, materials and marker texture included,
+// is built by `prepare()`, which the race preparation seam
 // (realm_racers_prepare.ts) calls when the viewer commits to racing and then
-// links and uploads off the live frame; a shot never builds or waits.
+// links and uploads off the live frame; a shot never builds or waits, and a
+// player who never races mints none of it.
 //
 // The local pilot's own shell can leave on the input frame (`launchOwn`): it is
 // one of the same pooled slots, its Fired event ADOPTS it instead of drawing a
@@ -132,6 +134,111 @@ const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 
 const materialName = (role: string): string => `realmRacersGroundBlast:${role}`;
 
+/** The geometries and materials every slot shares (the marker, core, column,
+ *  flash and wave materials are cloned per slot from these). */
+interface GroundBlastKit {
+  readonly projectileGeometry: THREE.BufferGeometry;
+  readonly glowGeometry: THREE.BufferGeometry;
+  readonly moteGeometry: THREE.BufferGeometry;
+  readonly markerGeometry: THREE.BufferGeometry;
+  readonly coreGeometry: THREE.BufferGeometry;
+  readonly columnGeometry: THREE.BufferGeometry;
+  readonly waveGeometry: THREE.BufferGeometry;
+  readonly flashGeometry: THREE.BufferGeometry;
+  readonly projectileMaterial: THREE.MeshBasicMaterial;
+  readonly glowMaterial: THREE.MeshBasicMaterial;
+  readonly trailMaterial: THREE.MeshBasicMaterial;
+  readonly markerMaterial: THREE.MeshBasicMaterial;
+  readonly coreMaterial: THREE.MeshBasicMaterial;
+  readonly columnMaterial: THREE.MeshBasicMaterial;
+  readonly waveMaterial: THREE.MeshBasicMaterial;
+  readonly flashMaterial: THREE.MeshBasicMaterial;
+}
+
+function buildGroundBlastKit(): GroundBlastKit {
+  return {
+    projectileGeometry: new THREE.IcosahedronGeometry(0.3, 1),
+    glowGeometry: new THREE.IcosahedronGeometry(0.72, 1),
+    moteGeometry: new THREE.IcosahedronGeometry(0.2, 0),
+    markerGeometry: new THREE.PlaneGeometry(GROUND_BLAST_RADIUS * 2, GROUND_BLAST_RADIUS * 2),
+    coreGeometry: new THREE.CircleGeometry(GROUND_BLAST_RADIUS, 40),
+    columnGeometry: new THREE.CylinderGeometry(
+      GROUND_BLAST_RADIUS * 0.94,
+      GROUND_BLAST_RADIUS * 0.94,
+      COLUMN_HEIGHT,
+      28,
+      1,
+      true,
+    ),
+    waveGeometry: new THREE.RingGeometry(0.82, 1, 48, 1),
+    flashGeometry: new THREE.IcosahedronGeometry(1, 2),
+    projectileMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('projectile'),
+      color: 0xdcf7ff,
+    }),
+    glowMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('glow'),
+      color: 0x63d5ff,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+    trailMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('trail'),
+      color: 0x9ce6ff,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+    markerMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('marker'),
+      map: rallyGroundBlastMarkerTexture(),
+      color: COOL.clone(),
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+    coreMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('core'),
+      color: COOL.clone(),
+      transparent: true,
+      opacity: 0.26,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    }),
+    columnMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('column'),
+      color: COOL.clone(),
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    }),
+    waveMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('wave'),
+      color: 0xffd9a0,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    }),
+    flashMaterial: new THREE.MeshBasicMaterial({
+      name: materialName('flash'),
+      color: 0xfff0cf,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  };
+}
+
 export class RealmRacersGroundBlastVisuals {
   readonly prepareId = 'groundBlast';
   readonly group = new THREE.Group();
@@ -147,90 +254,9 @@ export class RealmRacersGroundBlastVisuals {
   private clock = 0;
   private readonly ownShots = createOwnShotLedger();
 
-  private projectileGeometry = new THREE.IcosahedronGeometry(0.3, 1);
-  private glowGeometry = new THREE.IcosahedronGeometry(0.72, 1);
-  private moteGeometry = new THREE.IcosahedronGeometry(0.2, 0);
-  private markerGeometry = new THREE.PlaneGeometry(
-    GROUND_BLAST_RADIUS * 2,
-    GROUND_BLAST_RADIUS * 2,
-  );
-  private coreGeometry = new THREE.CircleGeometry(GROUND_BLAST_RADIUS, 40);
-  private columnGeometry = new THREE.CylinderGeometry(
-    GROUND_BLAST_RADIUS * 0.94,
-    GROUND_BLAST_RADIUS * 0.94,
-    COLUMN_HEIGHT,
-    28,
-    1,
-    true,
-  );
-  private waveGeometry = new THREE.RingGeometry(0.82, 1, 48, 1);
-  private flashGeometry = new THREE.IcosahedronGeometry(1, 2);
-
-  private markerTexture = rallyGroundBlastMarkerTexture();
-  private projectileMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('projectile'),
-    color: 0xdcf7ff,
-  });
-  private glowMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('glow'),
-    color: 0x63d5ff,
-    transparent: true,
-    opacity: 0.4,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  private trailMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('trail'),
-    color: 0x9ce6ff,
-    transparent: true,
-    opacity: 0.7,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  private markerMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('marker'),
-    map: this.markerTexture,
-    color: COOL.clone(),
-    transparent: true,
-    opacity: 0.9,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  private coreMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('core'),
-    color: COOL.clone(),
-    transparent: true,
-    opacity: 0.26,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-  });
-  private columnMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('column'),
-    color: COOL.clone(),
-    transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-  });
-  private waveMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('wave'),
-    color: 0xffd9a0,
-    transparent: true,
-    opacity: 0.9,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-  });
-  private flashMaterial = new THREE.MeshBasicMaterial({
-    name: materialName('flash'),
-    color: 0xfff0cf,
-    transparent: true,
-    opacity: 1,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
+  /** Minted by `prepare()`, never at construction: a player who never races
+   *  holds none of it. */
+  private kit: GroundBlastKit | null = null;
 
   constructor() {
     this.group.name = 'realmRacersGroundBlast';
@@ -251,9 +277,11 @@ export class RealmRacersGroundBlastVisuals {
   prepare(): THREE.Object3D {
     if (this.prepared || this.disposed) return this.group;
     this.prepared = true;
+    const kit = buildGroundBlastKit();
+    this.kit = kit;
     for (let i = 0; i < POOL_SIZE; i++) {
-      this.slots[i] = this.buildSlot(i);
-      this.bursts[i] = this.buildBurst();
+      this.slots[i] = this.buildSlot(i, kit);
+      this.bursts[i] = this.buildBurst(kit);
     }
     tagVfxSubtree(this.group);
     return this.group;
@@ -264,14 +292,14 @@ export class RealmRacersGroundBlastVisuals {
     return this.prepared;
   }
 
-  private buildSlot(index: number): GroundBlastSlot {
-    const projectile = new THREE.Mesh(this.projectileGeometry, this.projectileMaterial);
-    const glow = new THREE.Mesh(this.glowGeometry, this.glowMaterial);
-    const trail = new THREE.InstancedMesh(this.moteGeometry, this.trailMaterial, TRAIL_MOTES);
+  private buildSlot(index: number, kit: GroundBlastKit): GroundBlastSlot {
+    const projectile = new THREE.Mesh(kit.projectileGeometry, kit.projectileMaterial);
+    const glow = new THREE.Mesh(kit.glowGeometry, kit.glowMaterial);
+    const trail = new THREE.InstancedMesh(kit.moteGeometry, kit.trailMaterial, TRAIL_MOTES);
     trail.frustumCulled = false;
-    const marker = new THREE.Mesh(this.markerGeometry, this.markerMaterial.clone());
-    const core = new THREE.Mesh(this.coreGeometry, this.coreMaterial.clone());
-    const column = new THREE.Mesh(this.columnGeometry, this.columnMaterial.clone());
+    const marker = new THREE.Mesh(kit.markerGeometry, kit.markerMaterial.clone());
+    const core = new THREE.Mesh(kit.coreGeometry, kit.coreMaterial.clone());
+    const column = new THREE.Mesh(kit.columnGeometry, kit.columnMaterial.clone());
     // Flat on the ground rather than facing the camera: the marker is a mark on
     // the track, and a billboard would read as a UI element floating over it.
     marker.rotation.x = -Math.PI / 2;
@@ -325,9 +353,9 @@ export class RealmRacersGroundBlastVisuals {
     return slot;
   }
 
-  private buildBurst(): BurstSlot {
-    const flash = new THREE.Mesh(this.flashGeometry, this.flashMaterial.clone());
-    const wave = new THREE.Mesh(this.waveGeometry, this.waveMaterial.clone());
+  private buildBurst(kit: GroundBlastKit): BurstSlot {
+    const flash = new THREE.Mesh(kit.flashGeometry, kit.flashMaterial.clone());
+    const wave = new THREE.Mesh(kit.waveGeometry, kit.waveMaterial.clone());
     wave.rotation.x = -Math.PI / 2;
     wave.renderOrder = floorVfxRenderOrder('player', 0);
     flash.castShadow = false;
@@ -620,29 +648,33 @@ export class RealmRacersGroundBlastVisuals {
       (burst.flash.material as THREE.Material).dispose();
       (burst.wave.material as THREE.Material).dispose();
     }
-    for (const geometry of [
-      this.projectileGeometry,
-      this.glowGeometry,
-      this.moteGeometry,
-      this.markerGeometry,
-      this.coreGeometry,
-      this.columnGeometry,
-      this.waveGeometry,
-      this.flashGeometry,
-    ]) {
-      geometry.dispose();
-    }
-    for (const material of [
-      this.projectileMaterial,
-      this.glowMaterial,
-      this.trailMaterial,
-      this.markerMaterial,
-      this.coreMaterial,
-      this.columnMaterial,
-      this.waveMaterial,
-      this.flashMaterial,
-    ]) {
-      material.dispose();
+    const kit = this.kit;
+    this.kit = null;
+    if (kit) {
+      for (const geometry of [
+        kit.projectileGeometry,
+        kit.glowGeometry,
+        kit.moteGeometry,
+        kit.markerGeometry,
+        kit.coreGeometry,
+        kit.columnGeometry,
+        kit.waveGeometry,
+        kit.flashGeometry,
+      ]) {
+        geometry.dispose();
+      }
+      for (const material of [
+        kit.projectileMaterial,
+        kit.glowMaterial,
+        kit.trailMaterial,
+        kit.markerMaterial,
+        kit.coreMaterial,
+        kit.columnMaterial,
+        kit.waveMaterial,
+        kit.flashMaterial,
+      ]) {
+        material.dispose();
+      }
     }
     this.slots.length = 0;
     this.bursts.length = 0;

@@ -7,8 +7,9 @@
 // viewer commits to racing, so a drop never links a program on a live frame.
 // Every slot wears ONE module-level material and ONE geometry, shared by every
 // pool and never disposed: a material minted per drop and freed when the spray
-// ends would relink its program on the next one. Teardown gives back only the
-// per-slot instance buffers.
+// ends would relink its program on the next one. Both are minted by the first
+// `prepare()`, never at import, so a player who never races holds neither.
+// Teardown gives back only the per-slot instance buffers.
 //
 // Cosmetic, and drawn the same on every preset: the hazard is the patch, which
 // the slick layer draws whatever the spray does.
@@ -30,13 +31,23 @@ import { tagVfxSubtree } from './renderer_diagnostics';
 const POOL_SIZE = 4;
 const DROPLET_RADIUS = 0.18;
 
-/** The pool's one geometry and one material, shared by every pool, never
- *  disposed (see the header). */
-const DROPLET_GEOMETRY = new THREE.IcosahedronGeometry(DROPLET_RADIUS, 0);
-export const REALM_RACERS_OIL_SPRAY_MATERIAL = new THREE.MeshBasicMaterial({
-  name: 'realmRacersOilSpray:droplet',
-  color: REALM_RACERS_SLICK_COLOR,
-});
+let dropletGeometry: THREE.IcosahedronGeometry | null = null;
+let dropletMaterial: THREE.MeshBasicMaterial | null = null;
+
+/** The pool's one material, shared by every pool, minted on first use and
+ *  never disposed (see the header). */
+export function realmRacersOilSprayMaterial(): THREE.MeshBasicMaterial {
+  dropletMaterial ??= new THREE.MeshBasicMaterial({
+    name: 'realmRacersOilSpray:droplet',
+    color: REALM_RACERS_SLICK_COLOR,
+  });
+  return dropletMaterial;
+}
+
+function realmRacersOilSprayGeometry(): THREE.IcosahedronGeometry {
+  dropletGeometry ??= new THREE.IcosahedronGeometry(DROPLET_RADIUS, 0);
+  return dropletGeometry;
+}
 
 interface SpraySlot {
   droplets: THREE.InstancedMesh;
@@ -70,12 +81,10 @@ export class RealmRacersOilSprayVisuals {
   prepare(): THREE.Object3D {
     if (this.prepared || this.disposed) return this.group;
     this.prepared = true;
+    const geometry = realmRacersOilSprayGeometry();
+    const material = realmRacersOilSprayMaterial();
     for (let i = 0; i < POOL_SIZE; i++) {
-      const droplets = new THREE.InstancedMesh(
-        DROPLET_GEOMETRY,
-        REALM_RACERS_OIL_SPRAY_MATERIAL,
-        RALLY_OIL_SPRAY_DROPLETS,
-      );
+      const droplets = new THREE.InstancedMesh(geometry, material, RALLY_OIL_SPRAY_DROPLETS);
       droplets.name = `oilSpray${i}`;
       droplets.frustumCulled = false;
       droplets.castShadow = false;

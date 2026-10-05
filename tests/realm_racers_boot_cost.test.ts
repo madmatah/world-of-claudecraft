@@ -1,11 +1,15 @@
 // What the rally presentation costs a player who never races: nothing fetched
-// at boot. A circuit's kit (its theme's start arch, grid banner and shore reed,
+// and nothing minted at boot. A circuit's kit (its theme's start arch, grid banner and shore reed,
 // and the barrier kits its record authors) is fetched when THAT circuit's build
 // starts, which is the race preparation's commitment to it
 // (realm_racers_circuit_prepare.ts asks the build of the drawn circuit only),
 // and a login mid-race, which builds at once, still rides the circuit's fill
-// ledger so its preparation waits for the kit under the cover.
+// ledger so its preparation waits for the kit under the cover. The Ground Blast
+// and oil-spray pools mint their geometries, materials and marker texture in
+// their own `prepare()`, which the race preparation seam calls at the same
+// commitment; importing or constructing them mints nothing.
 
+import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { asked, rallyRegistrations } = vi.hoisted(() => ({
@@ -38,6 +42,13 @@ vi.mock('../src/render/assets/preload', async (importOriginal) => {
   };
 });
 
+vi.mock('../src/render/textures', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/render/textures')>()),
+  rallyGroundBlastMarkerTexture: vi.fn(
+    () => new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat),
+  ),
+}));
+
 vi.mock('../src/render/assets/loader', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/render/assets/loader')>()),
   // Never settles: what is under test is the ASK.
@@ -51,6 +62,17 @@ import { beginDeferredPreloads } from '../src/render/assets/preload';
 import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
 import { realmRacersFills } from '../src/render/realm_racers_fills';
 import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
+import { rallyGroundBlastMarkerTexture } from '../src/render/textures';
+// What the two pool modules import, evaluated here first, so the window below
+// sees only what the pool modules themselves mint.
+import '../src/render/compile_exclusion';
+import '../src/render/floor_vfx_layer';
+import '../src/render/own_shot_launch_core';
+import '../src/render/realm_racers_oil_spray_core';
+import '../src/render/realm_racers_prepare_core';
+import '../src/render/realm_racers_slicks_core';
+import '../src/render/renderer_diagnostics';
+import '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
 
 const EVERY_KIT = new Set([...REALM_RACERS_THEME_ASSET_URLS, ...REALM_RACERS_BARRIER_ASSET_URLS]);
@@ -107,5 +129,60 @@ describe('the Realm Racers circuit kits', () => {
     expect(otherBanners.length).toBeGreaterThan(0);
     for (const url of otherBanners) expect(asked.slice(atCommit), url).not.toContain(url);
     tracks.dispose();
+  });
+});
+
+/** Three gives every material and every geometry an id off its own counter:
+ *  the next id of each, read by minting one probe of each. */
+function nextIds(): { material: number; geometry: number } {
+  const material = new THREE.MeshBasicMaterial() as THREE.MeshBasicMaterial & {
+    readonly id: number;
+  };
+  return { material: material.id, geometry: new THREE.BufferGeometry().id };
+}
+
+describe('the race pools', () => {
+  it('mint no geometry, material or texture at import or construction, only at prepare', async () => {
+    const before = nextIds();
+    const { RealmRacersGroundBlastVisuals } = await import(
+      '../src/render/realm_racers_ground_blast'
+    );
+    const { RealmRacersOilSprayVisuals } = await import('../src/render/realm_racers_oil_spray');
+    const blasts = new RealmRacersGroundBlastVisuals();
+    const sprays = new RealmRacersOilSprayVisuals();
+    const constructed = nextIds();
+    // Only the probes themselves were minted in between.
+    expect(constructed.material - before.material).toBe(1);
+    expect(constructed.geometry - before.geometry).toBe(1);
+    expect(rallyGroundBlastMarkerTexture).not.toHaveBeenCalled();
+    expect(blasts.group.children).toEqual([]);
+    expect(sprays.group.children).toEqual([]);
+    // A frame of a session that never races mints nothing either.
+    blasts.update(1 / 20);
+    sprays.update(1 / 20);
+    const ticked = nextIds();
+    expect(ticked.material - constructed.material).toBe(1);
+    expect(ticked.geometry - constructed.geometry).toBe(1);
+
+    // The commitment: both pools mint their whole set at once.
+    blasts.prepare();
+    sprays.prepare();
+    const prepared = nextIds();
+    expect(prepared.material - ticked.material).toBeGreaterThan(1);
+    expect(prepared.geometry - ticked.geometry).toBeGreaterThan(1);
+    expect(rallyGroundBlastMarkerTexture).toHaveBeenCalledTimes(1);
+    expect(blasts.group.children.length).toBeGreaterThan(0);
+    expect(sprays.group.children.length).toBeGreaterThan(0);
+    // A second pool of each shares the spray's one module material and
+    // geometry: only the blast pool's own set is minted again.
+    const second = new RealmRacersOilSprayVisuals();
+    const beforeSecond = nextIds();
+    second.prepare();
+    const afterSecond = nextIds();
+    expect(afterSecond.material - beforeSecond.material).toBe(1);
+    expect(afterSecond.geometry - beforeSecond.geometry).toBe(1);
+    blasts.dispose();
+    sprays.dispose();
+    second.dispose();
   });
 });

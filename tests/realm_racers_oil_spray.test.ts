@@ -21,8 +21,8 @@ vi.mock('../src/render/textures', async (importOriginal) => {
 
 import { RealmRacersFieldCues } from '../src/render/realm_racers_field_cues';
 import {
-  REALM_RACERS_OIL_SPRAY_MATERIAL,
   RealmRacersOilSprayVisuals,
+  realmRacersOilSprayMaterial,
 } from '../src/render/realm_racers_oil_spray';
 import {
   RALLY_OIL_SPRAY_DROPLETS,
@@ -240,11 +240,13 @@ describe('the spray pool preparation', () => {
   it('wears one shared, named material across every pool, never one per drop', () => {
     const a = new RealmRacersOilSprayVisuals();
     const b = new RealmRacersOilSprayVisuals();
-    expect(materialsUnder(a.prepare())).toEqual(new Set([REALM_RACERS_OIL_SPRAY_MATERIAL]));
-    expect(materialsUnder(b.prepare())).toEqual(new Set([REALM_RACERS_OIL_SPRAY_MATERIAL]));
-    expect(REALM_RACERS_OIL_SPRAY_MATERIAL.name).toBe('realmRacersOilSpray:droplet');
+    const shared = realmRacersOilSprayMaterial();
+    expect(materialsUnder(a.prepare())).toEqual(new Set([shared]));
+    expect(materialsUnder(b.prepare())).toEqual(new Set([shared]));
+    expect(realmRacersOilSprayMaterial()).toBe(shared);
+    expect(shared.name).toBe('realmRacersOilSpray:droplet');
     // Drawn as an instanced single-sided opaque program: no second pass to link.
-    expect(REALM_RACERS_OIL_SPRAY_MATERIAL.transparent).toBe(false);
+    expect(shared.transparent).toBe(false);
     const geometries = new Set(
       drawsUnder(a.group).map((draw) => (draw.object as THREE.Mesh).geometry),
     );
@@ -270,9 +272,10 @@ describe('the spray pool preparation', () => {
     const meshDisposed = vi.fn();
     for (const mesh of meshes) mesh.addEventListener('dispose', meshDisposed);
     const materialDisposed = vi.fn();
-    REALM_RACERS_OIL_SPRAY_MATERIAL.addEventListener('dispose', materialDisposed);
+    const shared = realmRacersOilSprayMaterial();
+    shared.addEventListener('dispose', materialDisposed);
     pool.dispose();
-    REALM_RACERS_OIL_SPRAY_MATERIAL.removeEventListener('dispose', materialDisposed);
+    shared.removeEventListener('dispose', materialDisposed);
     expect(meshDisposed).toHaveBeenCalledTimes(meshes.length);
     expect(materialDisposed).not.toHaveBeenCalled();
     expect(pool.group.children).toHaveLength(0);
