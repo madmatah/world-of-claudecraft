@@ -2076,13 +2076,13 @@ const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: numbe
 
 /** One pilot's race-end tableau, already resolved by the rally module (which
  *  owns the progress state this is read from): whether they are a house
- *  pilot, forfeited or disconnected under their own choice (rather than
- *  seeing the heat out, finished or still driving when it was decided),
- *  finished under their own power, kept the run clean (never left the
+ *  pilot, forfeited or disconnected under their own choice, crossed the
+ *  finish line under their own power, kept the run clean (never left the
  *  racing surface and never traded paint with a rival), took the overall
- *  win, and, if they won, whether that win followed being dead last and
- *  caught by a Ground Blast. Structural rather than the real
- *  `RealmRacersProgress`, so this module never imports `social/realm_racers.ts`. */
+ *  win, had another human on the grid at the GO (realm_racers_credit.ts),
+ *  and, if they won, whether that win followed being dead last and caught by
+ *  a Ground Blast. Structural rather than the real `RealmRacersProgress`, so
+ *  this module never imports `social/realm_racers.ts`. */
 export interface RallyRaceDeedEntry {
   pid: number;
   bot: boolean;
@@ -2090,11 +2090,14 @@ export interface RallyRaceDeedEntry {
   finished: boolean;
   clean: boolean;
   won: boolean;
+  humanRival: boolean;
   comeback: boolean;
 }
 
 /** Full time (or the last pilot pulling off) on a rated (non-practice) heat.
- *  Practice laps and house pilots never earn a Rally deed. */
+ *  Practice laps and house pilots never earn a Rally deed. Win-based credit
+ *  (the rrWins meter deeds, the comeback) also needs `humanRival`; the finish
+ *  and clean-run deeds do not, so a solo backfilled heat still earns those. */
 export function onRallyRaceEndForDeeds(
   ctx: SimContext,
   practice: boolean,
@@ -2108,12 +2111,16 @@ export function onRallyRaceEndForDeeds(
     // The rally module already moved meta.rrWins for a winning entry: this is
     // the meter's one full-pass re-check site (rrWins carries no narrow key).
     markDeedsDirty(ctx, entry.pid);
-    // "See out a full heat": a forfeiter or a disconnect never earns it, only
-    // a pilot who finished or was still driving when the classification
-    // closed (the deadline or the chase window), matching the deed's desc.
-    if (!entry.retired) grantDeed(ctx, meta, 'pvp_rr_first_race');
+    // Crossing the line, never merely being on the grid: a forfeiter, a
+    // disconnect, and a pilot idling until the clock closed the heat all go
+    // without (a crossing is never also a retirement: retireRacer clears it).
+    if (entry.finished) grantDeed(ctx, meta, 'pvp_rr_first_race');
     if (entry.finished && entry.clean) grantDeed(ctx, meta, 'pvp_rr_clean_race');
-    if (entry.won && entry.comeback) grantDeed(ctx, meta, 'pvp_rr_comeback');
+    // A win-based deed, so it needs another human at the GO, like the rrWins
+    // meter the rally module only moves on the same condition.
+    if (entry.won && entry.humanRival && entry.comeback) {
+      grantDeed(ctx, meta, 'pvp_rr_comeback');
+    }
   }
 }
 

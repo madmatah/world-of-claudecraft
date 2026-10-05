@@ -309,13 +309,13 @@ The `pvp_rr_*` family in `src/sim/content/deeds.ts` covers the Realm Racers vehi
 
 | Id | Trigger | Earned by |
 |---|---|---|
-| `pvp_rr_first_race` | `manual` | seeing out a rated heat: finished, or still driving when the classification closed (never a pilot who quit) |
-| `pvp_rr_first_win` | `meter` on `rrWins` | the meter reaching the record's `amount` |
-| `pvp_rr_wins_10` | `meter` on `rrWins` | the meter reaching the record's `amount` |
-| `pvp_rr_wins_25` | `meter` on `rrWins` | the meter reaching the record's `amount`; rewards a title |
+| `pvp_rr_first_race` | `manual` | crossing the finish line in a rated heat (never a pilot who quit or was still out when the classification closed) |
+| `pvp_rr_first_win` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need another human at the GO) |
+| `pvp_rr_wins_10` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need another human at the GO) |
+| `pvp_rr_wins_25` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need another human at the GO); rewards a title |
 | `pvp_rr_fast_lap` | `manual` | a lap of its circuit under that circuit's threshold |
 | `pvp_rr_clean_race` | `manual` | finishing a rated heat without a garden excursion or a counted rival contact |
-| `pvp_rr_comeback` | `manual` | winning a rated heat after being dead last and hit by a Ground Blast |
+| `pvp_rr_comeback` | `manual` | winning a rated heat with another human at the GO, after being dead last and hit by a Ground Blast |
 | `pvp_rr_rampart_lap` | `manual` | a lap of its circuit under that circuit's threshold |
 | `pvp_rr_lagoon_lap` | `manual` | a lap of its circuit under that circuit's threshold |
 
@@ -329,13 +329,14 @@ this family included, is pinned by `tests/deeds_completion.test.ts`.
 **Placing-based.** A heat has a whole finishing order, not a win/lose pair, so the family counts
 outcomes along that order and carries no loss counter. The win thresholds read the `rrWins`
 meter: `endMatch` (`src/sim/social/realm_racers.ts`) adds one for a human winner of a rated
-heat, then `onRallyRaceEndForDeeds` marks every human on the grid dirty so the meter deeds
+heat who had another human on the grid at the GO, then `onRallyRaceEndForDeeds` marks every human on the grid dirty so the meter deeds
 re-check on the next deeds pass (`rrWins` carries no narrow dirty key). The other deeds are
 bespoke grants:
 
 - `onRallyRaceEndForDeeds` (`src/sim/deeds.ts`) runs once at race end over a structural entry per
-  pilot (`RallyRaceDeedEntry`): `pvp_rr_first_race` for anyone not retired, `pvp_rr_clean_race`
-  for a finisher whose run stayed clean, `pvp_rr_comeback` for the winner flagged for a comeback.
+  pilot (`RallyRaceDeedEntry`): `pvp_rr_first_race` for a finisher, `pvp_rr_clean_race` for a
+  finisher whose run stayed clean, `pvp_rr_comeback` for the winner flagged for a comeback who
+  had another human at the GO (`humanRival`).
 - Clean means that, before crossing the line, the pilot never entered the garden band (the verge
   does not count) and never traded a counted bump with a rival: an announced contact at or above
   `REALM_RACERS_BUMP_EVENT_MIN_IMPACT`, excluding a pair still parting from a recovery ghost
@@ -355,16 +356,20 @@ committed for the family yet, so each id rides its category crest through `DEED_
 **Practice and house pilots.** Only a rated heat counts: one seated from the queue on a
 circuit's public lane (`match.practice === null`). Both hooks return at once for a practice
 heat, and `endMatch` gates the `rrWins` increment on the same test. A queued heat that the
-server backfilled with house pilots is rated like any other: house pilots are the ordinary field
-there, so a human who wins one banks the win and the deeds. A house pilot never earns: its entry
+server backfilled with house pilots is rated, but a win counts only against people
+(`src/sim/social/realm_racers_credit.ts`): the win and every win deed (`first_win`, `wins_10`,
+`wins_25`, `comeback`) need at least one OTHER human seated at the GO, which means on the grid
+and not retired before the final `goTick` (a human who quit after the flag still counts). A solo
+queuer backfilled against three house pilots keeps the finish deeds (`first_race`,
+`clean_race`) and the flying laps, which are time trials, and banks no win. A house pilot never earns: its entry
 is skipped by `onRallyRaceEndForDeeds`, `onRallyLapForDeeds` returns for it, and its win moves
 no `rrWins`. A heat decided before GO is void and credits nothing: no lap has been run, and
 `endMatch` returns before the meter or the race-end hook runs.
 
 Pinned tests: `tests/deeds_sites_pin.test.ts` (each hook and its refusals),
 `tests/realm_racers_match.test.ts` (crediting from a real heat, practice and house-pilot
-refusals, `rrWins` persistence), `tests/realm_racers_loading_lobby.test.ts` (void heats credit
-nothing, a walkover after GO does), `tests/deeds_content.test.ts` (append order, Renown values,
+refusals, the other-human rule, `rrWins` persistence), `tests/realm_racers_loading_lobby.test.ts`
+(void heats credit nothing, a walkover after GO banks the win but no crossing), `tests/deeds_content.test.ts` (append order, Renown values,
 meter triggers) and `tests/deeds_completion.test.ts` (the zero-Renown set).
 
 ## Deliberately deferred (do not "fix" these by shipping them)

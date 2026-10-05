@@ -3972,8 +3972,8 @@
       "tick": 300,
       "time": 15,
       "nextId": 1014,
-      "state": "81e67497",
-      "events": "30d2edc1",
+      "state": "cb48fbbf",
+      "events": "08c306de",
       "rng": {
         "draws": 2485,
         "digest": "62e5d087"
@@ -3983,7 +3983,7 @@
       "tick": 320,
       "time": 16,
       "nextId": 1014,
-      "state": "e1a606d4",
+      "state": "b684b262",
       "events": "9e15a1da",
       "rng": {
         "draws": 2689,
@@ -3994,7 +3994,7 @@
       "tick": 340,
       "time": 17,
       "nextId": 1014,
-      "state": "0f7c9a59",
+      "state": "00b0a2ad",
       "events": "741638a5",
       "rng": {
         "draws": 2883,
@@ -4005,7 +4005,7 @@
       "tick": 360,
       "time": 18,
       "nextId": 1014,
-      "state": "1f842c2e",
+      "state": "013207b8",
       "events": "741638a5",
       "rng": {
         "draws": 3070,
@@ -4016,7 +4016,7 @@
       "tick": 380,
       "time": 19,
       "nextId": 1014,
-      "state": "0454a3db",
+      "state": "c1be6a7b",
       "events": "741638a5",
       "rng": {
         "draws": 3249,
@@ -4027,7 +4027,7 @@
       "tick": 400,
       "time": 20,
       "nextId": 1014,
-      "state": "14740978",
+      "state": "6483af7e",
       "events": "741638a5",
       "rng": {
         "draws": 3414,
@@ -4038,7 +4038,7 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "3f8fb89a",
+      "state": "b2a12a30",
       "events": "cef9d8e9",
       "rng": {
         "draws": 3510,
@@ -4082,10 +4082,6 @@
             ]
           },
           "deedsEarned": [
-            [
-              "pvp_rr_first_race",
-              ""
-            ],
             [
               "pvp_rr_first_win",
               ""
@@ -4600,7 +4596,7 @@
       "tick": 411,
       "time": 20.55,
       "nextId": 1014,
-      "state": "3f8fb89a",
+      "state": "b2a12a30",
       "events": "741638a5",
       "rng": {
         "draws": 3510,
@@ -4644,10 +4640,6 @@
             ]
           },
           "deedsEarned": [
-            [
-              "pvp_rr_first_race",
-              ""
-            ],
             [
               "pvp_rr_first_win",
               ""

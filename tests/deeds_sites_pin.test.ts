@@ -722,12 +722,13 @@ describe('Realm Racers sites', () => {
       finished: true,
       clean: false,
       won: false,
+      humanRival: true,
       comeback: false,
       ...over,
     };
   }
 
-  it('pvp_rr_first_race: any non-bot on a rated heat; a bot, a practice lap, and a forfeiter never earn it', () => {
+  it('pvp_rr_first_race: a non-bot who crosses the line on a rated heat; a bot, a practice lap, a forfeiter and an idler never earn it', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Racer');
     onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId })]);
@@ -751,6 +752,23 @@ describe('Realm Racers sites', () => {
       rallyEntry({ pid: quitter.entityId, retired: true, finished: false }),
     ]);
     expect(quitter.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+
+    // Still on the grid when the clock closed the heat, never across the line:
+    // idling to the deadline is not a race.
+    const idleSim = makeSim();
+    const idler = addMeta(idleSim, 'Idler');
+    onRallyRaceEndForDeeds(idleSim.ctx, false, [
+      rallyEntry({ pid: idler.entityId, retired: false, finished: false }),
+    ]);
+    expect(idler.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+
+    // A finish is a finish with or without another human on the grid.
+    const soloSim = makeSim();
+    const solo = addMeta(soloSim, 'Solo');
+    onRallyRaceEndForDeeds(soloSim.ctx, false, [
+      rallyEntry({ pid: solo.entityId, humanRival: false }),
+    ]);
+    expect(solo.deedsEarned.has('pvp_rr_first_race')).toBe(true);
   });
 
   it('pvp_rr_first_win / wins_10 / wins_25: the rrWins meter, moved by the caller before the hook runs', () => {
@@ -823,6 +841,22 @@ describe('Realm Racers sites', () => {
       rallyEntry({ pid: hero.entityId, won: true, comeback: true }),
     ]);
     expect(hero.deedsEarned.has('pvp_rr_comeback')).toBe(true);
+
+    // Beating only house pilots: no win-based deed, however dramatic.
+    const houseOnly = addMeta(sim, 'HouseOnly');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: houseOnly.entityId, won: true, comeback: true, humanRival: false }),
+    ]);
+    expect(houseOnly.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+  });
+
+  it('pvp_rr_clean_race stays solo-earnable: no other human needed', () => {
+    const sim = makeSim();
+    const solo = addMeta(sim, 'SoloClean');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: solo.entityId, finished: true, clean: true, humanRival: false }),
+    ]);
+    expect(solo.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
   });
 
   it('pvp_rr_fast_lap: only the Express Tour, only under the threshold, never practice or a bot', () => {

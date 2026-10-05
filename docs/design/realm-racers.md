@@ -180,8 +180,11 @@ Practice (`startRealmRacersPractice`, the `realm_racers_practice` command,
 - credits nothing: no `rrWins` and no deed (the practice gates in `endMatch`,
   `onRallyRaceEndForDeeds` and `onRallyLapForDeeds`).
 
-In a rated heat a human winner's `rrWins` goes up by one, and the deed hooks run for every
-human on the grid.
+In a rated heat a human winner's `rrWins` goes up by one if at least one other human was seated
+at the GO (`src/sim/social/realm_racers_credit.ts`: on the grid and not retired before the final
+`goTick`), and the deed hooks run for every human on the grid. A solo queuer backfilled against
+house pilots races a rated heat for the finish deeds and the flying laps, but banks no win and no
+win deed.
 
 The dev-only `/dev rally <circuit> [tier]` (`startRealmRacersDevRace`) seats a named
 circuit's public lane with house pilots, so it is a rated heat; it is unreachable without
@@ -192,14 +195,16 @@ circuit's public lane with house pilots, so it is a rated heat; it is unreachabl
 - **Deeds**: the `pvp_rr_*` family in `src/sim/content/deeds.ts`, every one at Renown 0 and
   still counted toward Book completion. The only reward in the family is a cosmetic title on
   `pvp_rr_wins_25`. Rules and pins: "Realm Racers deeds" in `docs/design/deeds.md`.
-- **`rrWins`**: rated first-place finishes (`RealmRacersPlayerMeta.rrWins`), the only Realm
+- **`rrWins`**: rated first-place finishes with another human at the GO
+  (`RealmRacersPlayerMeta.rrWins`), the only Realm
   Racers field that persists (`CharacterState.rrWins`, written once non-zero). It feeds the
   win-threshold deeds and nothing else reads it. There is no loss counter: a heat has a full
   finishing order, not a win/lose pair.
 - **No XP, no money, no items, no reputation.** The rally modules make none of these grants.
 - **Never earns**: a house pilot (no `rrWins`, no deed, even as the winner), any practice
-  heat, any void heat. A pilot who quits keeps nothing from the race end, though a fast lap
-  already posted was granted at its lap.
+  heat, any void heat. A pilot who quits, or who is still out when the classification closes,
+  keeps nothing from the race end (the finish deed needs the line), though a fast lap already
+  posted was granted at its lap. A win against house pilots alone banks nothing.
 
 ## Track limits
 

@@ -434,8 +434,10 @@ describe('Realm Racers race decided before GO is void', () => {
     // Absent, not false, on a race that ran: an ordinary readout pays no bytes.
     expect('voided' in lobbyOf(sim, a)).toBe(false);
     const meta = required(sim.players.get(a), 'winner');
+    // The three who quit after the flag were the human field the win needs.
     expect(meta.rrWins).toBe(1);
-    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(true);
+    // A walkover is a win, not a crossing: the finish deed waits for the line.
+    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
     updateDeeds(sim.ctx);
     expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(true);
   });

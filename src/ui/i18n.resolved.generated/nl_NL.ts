@@ -8483,7 +8483,7 @@ export const nl_NL: EnTranslations = {
       "circuitsCompetitionTitle": "Competition circuits",
       "circuitsCompetitionBody": "A queued race never runs the practice loop. Instead it draws from a separate pool of longer competition circuits, each one dressed in the theme of the game zone it borrows its ground from, so the venue changes even when the machine does not.",
       "rewardsHeading": "What you race for",
-      "rewardsBody": "Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: first races, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear."
+      "rewardsBody": "Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: crossing the finish line, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. A win only counts when at least one other player started the heat with you: beating the house pilots alone is practice, not a record. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear."
     },
     "factionsPage": {
       "heading": "Facties en Status",

@@ -162,6 +162,7 @@ import {
   snapshotRealmRacersStrippedAuras,
 } from './realm_racers_auras';
 import { realmRacersHeldElsewhere } from './realm_racers_busy';
+import { realmRacersHadHumanRival, realmRacersHumansAtGo } from './realm_racers_credit';
 import {
   beginRealmRacersCountdown,
   clearRealmRacersReady,
@@ -1490,16 +1491,17 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // next full deeds pass, the same bug class the retired Vale Cup's `rated`
   // gate on `applyStanding` existed to prevent.
   //
-  // Deliberately NOT excluded: a QUEUED heat backfilled with house pilots. A
-  // human who wins a bot-backfilled public race still banks the win and the
-  // deed credit, unlike the retired Vale Cup's bot-backfilled-bout exclusion,
-  // because house pilots ARE the ordinary field here (every queued heat seats
-  // three of them until the grid fills with humans), not a friendly-only mode.
+  // A win also needs another human on the grid at the GO
+  // (realm_racers_credit.ts): a solo queuer the backfill seats against three
+  // house pilots races a rated heat and keeps the finish deeds, but beating
+  // the house alone banks no win and no win deed.
   if (match.voided) return;
+  const humansAtGo = realmRacersHumansAtGo(match, ctx.realmRacers.bots);
   if (
     match.practice === null &&
     match.winnerPid !== null &&
-    !ctx.realmRacers.bots.has(match.winnerPid)
+    !ctx.realmRacers.bots.has(match.winnerPid) &&
+    realmRacersHadHumanRival(humansAtGo, match.winnerPid)
   ) {
     const winnerMeta = ctx.players.get(match.winnerPid);
     if (winnerMeta) winnerMeta.rrWins++;
@@ -1513,6 +1515,7 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
       finished: progress.finishedTick !== null,
       clean: !progress.hadRivalContact && !progress.hadOffTrackContact,
       won: match.winnerPid === pid,
+      humanRival: realmRacersHadHumanRival(humansAtGo, pid),
       comeback: progress.wasLastPlace && progress.hitByShell,
     };
   });

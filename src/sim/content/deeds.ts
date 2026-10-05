@@ -3603,14 +3603,17 @@ export const DEEDS: Record<string, DeedDef> = {
   // win/lose pair, since a four-pilot heat has a whole finishing order. Only
   // rated (queued, non-practice) heats count, and a house pilot never earns
   // one of these (see onRallyRaceEndForDeeds / onRallyLapForDeeds in
-  // src/sim/deeds.ts, credited from src/sim/social/realm_racers.ts).
+  // src/sim/deeds.ts, credited from src/sim/social/realm_racers.ts). The win
+  // deeds (first_win, wins_10, wins_25, comeback) also need another human on
+  // the grid at the GO (src/sim/social/realm_racers_credit.ts); the finish,
+  // clean-run and flying-lap deeds stay solo-earnable.
   // Zero Renown, still counted in the Book: a casual unranked heat the server
   // backfills with house pilots never scores the Renown board (the rule the
   // release applied to the Vale Cup and Fiesta families).
   pvp_rr_first_race: {
     id: 'pvp_rr_first_race',
     name: 'Wheels on the Line',
-    desc: 'See out a full rated Realm Racers heat, placing or not.',
+    desc: 'Cross the finish line in a rated Realm Racers heat, placing or not.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
@@ -3618,7 +3621,7 @@ export const DEEDS: Record<string, DeedDef> = {
   pvp_rr_first_win: {
     id: 'pvp_rr_first_win',
     name: 'Chequered and Cheered',
-    desc: 'Take first place in a rated Realm Racers heat.',
+    desc: 'Take first place in a rated Realm Racers heat with another player on the grid.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'meter', meter: 'rrWins', amount: 1 },
@@ -3626,7 +3629,7 @@ export const DEEDS: Record<string, DeedDef> = {
   pvp_rr_wins_10: {
     id: 'pvp_rr_wins_10',
     name: 'Podium Regular',
-    desc: 'Take first place in 10 rated Realm Racers heats.',
+    desc: 'Take first place in 10 rated Realm Racers heats with another player on the grid.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'meter', meter: 'rrWins', amount: 10 },
@@ -3634,7 +3637,7 @@ export const DEEDS: Record<string, DeedDef> = {
   pvp_rr_wins_25: {
     id: 'pvp_rr_wins_25',
     name: 'Circuit Legend',
-    desc: 'Take first place in 25 rated Realm Racers heats.',
+    desc: 'Take first place in 25 rated Realm Racers heats with another player on the grid.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'meter', meter: 'rrWins', amount: 25 },
@@ -3659,7 +3662,7 @@ export const DEEDS: Record<string, DeedDef> = {
   pvp_rr_comeback: {
     id: 'pvp_rr_comeback',
     name: 'From the Back of the Pack',
-    desc: 'Take first place in a rated Realm Racers heat after falling to dead last and taking a Ground Blast hit.',
+    desc: 'Take first place in a rated Realm Racers heat with another player on the grid, after falling to dead last and taking a Ground Blast hit.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
