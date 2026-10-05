@@ -325,7 +325,8 @@ export function stepRemoteVehicleDisplay(
       tz = nz;
     }
   }
-  const step = Math.max(0, Math.min(dt, 1 / 30));
+  const frameDt = Math.max(0, dt);
+  const step = Math.min(frameDt, 1 / 30);
   if (!s.active) {
     s.active = true;
     s.x = tx;
@@ -337,9 +338,12 @@ export function stepRemoteVehicleDisplay(
   // continuity gap against the fresh target is the only thing to smooth. Once
   // the horizon is at the cap (a broadcast stall) the target is frozen, so
   // the carry stops too: otherwise the pose would keep sailing speed/rate
-  // past the cap before the decay caught it.
+  // past the cap before the decay caught it. The carry is the WHOLE frame,
+  // the time the target's horizon advanced: only the decay below is clamped,
+  // since a carry clamped to a 30 fps frame left a slower client's rival a
+  // steady speed x (dt - 1/30) behind its projection.
   const carrying = ageMs < capMs;
-  const carry = carrying ? step + horizonShiftMs / 1000 : 0;
+  const carry = carrying ? frameDt + horizonShiftMs / 1000 : 0;
   const carriedX = s.x + vehicleVelocityX(d, tf) * carry;
   const carriedZ = s.z + vehicleVelocityZ(d, tf) * carry;
   const carriedF = wrapAngle(s.facing + (d.yawRate + d.spin) * carry);

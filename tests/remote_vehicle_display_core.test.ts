@@ -122,10 +122,11 @@ interface RunResult {
 function run(
   truth: TruthSample[],
   seconds: number,
-  opts: { stallFromMs?: number; stallToMs?: number } = {},
+  opts: { stallFromMs?: number; stallToMs?: number; frameMs?: number } = {},
 ): RunResult {
+  const frameMs = opts.frameMs ?? FRAME_MS;
   const s = createRemoteVehicleDisplay();
-  const frames = Math.round((seconds * 1000) / FRAME_MS);
+  const frames = Math.round((seconds * 1000) / frameMs);
   const snapCount = Math.floor((seconds * 1000) / SNAP_MS);
   const jitter = jitterSequence(snapCount + 1, 1234);
   const arrivals: { atMs: number; sample: TruthSample }[] = [];
@@ -145,7 +146,7 @@ function run(
   let wireIdx = -1;
   let wireArrivedAt = 0;
   for (let i = 0; i < frames; i++) {
-    const now = (i + 1) * FRAME_MS;
+    const now = (i + 1) * frameMs;
     while (wireIdx + 1 < arrivals.length && arrivals[wireIdx + 1].atMs <= now) {
       wireIdx++;
       wireArrivedAt = arrivals[wireIdx].atMs;
@@ -160,12 +161,12 @@ function run(
       w.facing,
       w.drive,
       now - wireArrivedAt + DOWNLINK_MS,
-      FRAME_MS / 1000,
+      frameMs / 1000,
     );
     const t = truthAt(truth, now);
     const speed = Number.isNaN(lastX)
       ? Number.NaN
-      : Math.hypot(s.x - lastX, s.z - lastZ) / (FRAME_MS / 1000);
+      : Math.hypot(s.x - lastX, s.z - lastZ) / (frameMs / 1000);
     out.frames.push([
       now,
       Math.hypot(s.x - t.x, s.z - t.z),
@@ -222,6 +223,37 @@ describe('remote vehicle display projection', () => {
     expect(mean(corner.map(([, e]) => e))).toBeLessThan(0.4);
     expect(Math.max(...corner.map(([, e]) => e))).toBeLessThan(0.8);
     expect(mean(corner.map(([, , f]) => f))).toBeLessThan(0.12);
+  });
+
+  it('keeps the drawn pose on its projection at 15, 20, 24, 30 and 60 fps', () => {
+    // Between arrivals the target moves with the horizon, by the machine's
+    // velocity times the whole frame. A carry capped at a 30 fps frame left a
+    // slower client's rival steadily behind it (measured at 55 yd/s: 0.75 yd
+    // at 24 fps, 1.5 at 20, 3.1 at 15, against a 3.4 yd contact reach).
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = 55;
+    const targetAt = (ageMs: number): RemoteVehicleDisplayState =>
+      stepRemoteVehicleDisplay(createRemoteVehicleDisplay(), 0, 0, 0, drive, ageMs, 0, 5000);
+    for (const fps of [15, 20, 24, 30, 60]) {
+      const s = createRemoteVehicleDisplay();
+      let worst = 0;
+      for (let i = 0; i <= fps; i++) {
+        const ageMs = 50 + (i * 1000) / fps;
+        stepRemoteVehicleDisplay(s, 0, 0, 0, drive, ageMs, 1 / fps, 5000);
+        const target = targetAt(ageMs);
+        worst = Math.max(worst, Math.hypot(s.x - target.x, s.z - target.z));
+      }
+      expect(worst, `${fps} fps`).toBeLessThan(0.02);
+    }
+    // The jittered straight at speed: every frame rate tracks the present as
+    // closely as 60 fps does.
+    const truth = driveTruth(6, () => 0);
+    const at60 = mean(inWindow(run(truth, 6), 3000, 6000).map(([, e]) => e));
+    for (const fps of [15, 20, 24, 30]) {
+      const r = run(truth, 6, { frameMs: 1000 / fps });
+      const errs = inWindow(r, 3000, 6000).map(([, e]) => e);
+      expect(mean(errs), `${fps} fps`).toBeLessThan(at60 + 0.1);
+    }
   });
 
   it('snaps outright on a teleport-sized correction', () => {
