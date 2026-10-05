@@ -21,7 +21,6 @@
 // code; `tests/realm_racers_themes.test.ts` pins the whole contract.
 
 import {
-  REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_DEFAULT_THEME_ID,
   type RealmRacersCircuit,
 } from '../sim/content/realm_racers_circuits';
@@ -1284,10 +1283,9 @@ export function realmRacersThemeAt(x: number, z: number): RallyCircuitTheme {
  * the barrier catalog took over: a circuit's visible boundary is authored now
  * (`fences` on the record, drawn from
  * `src/render/realm_racers_barrier_visuals.ts`), so the models it wears follow
- * the RECORD rather than the theme, and they ride their own lane below.
+ * the RECORD rather than the theme.
  *
- * NOT the prop palette either, which rides the authored-dressing catalog's own
- * lane.
+ * NOT the prop palette either: dressing is fetched when a circuit places it.
  */
 function themeKitUrls(theme: RallyCircuitTheme): readonly string[] {
   return [
@@ -1301,38 +1299,22 @@ function themeKitUrls(theme: RallyCircuitTheme): readonly string[] {
  * Every model ANY theme can ask for.
  *
  * What the disk and media-manifest guards cover, so a record naming a file
- * nobody shipped fails before anyone drives it. It is deliberately NOT the boot
- * lane any more (see below).
+ * nobody shipped fails before anyone drives it. Nothing preloads it: a circuit
+ * fetches its own theme's kit when its build starts
+ * (`realmRacersThemeKitUrls`).
  */
 export const REALM_RACERS_THEME_ASSET_URLS: readonly string[] = [
   ...new Set(Object.values(CIRCUIT_THEMES).flatMap(themeKitUrls)),
 ];
 
 /**
- * The kits that ride the BOOT lane: the ones a shipped circuit actually wears.
- *
- * It used to be every theme's, on the reasoning that structure a circuit cannot
- * draw late (the wall, the arch, the grid banner) must be resident before the
- * lights. That reasoning still holds; what stopped holding is the assumption
- * underneath it, that the registry is a handful of records. At one theme per
- * world zone it is fourteen, and a lane holding all fourteen kits would pin
- * about forty parsed scenes for the whole session, on a map that never clears,
- * for a player who may never race at all. That is the exact retention the
- * dressing catalog was kept out of the lane to avoid.
- *
- * So the lane is scoped to what is actually raced. The default theme is in it
- * unconditionally, because an unknown theme id falls back to it mid-build. A
- * theme with no circuit on it (the registry is meant to be written a zone ahead
- * of its circuit, and all but the worn ones are) reaches the draw path through
- * `instanceModel`'s fetch-and-fill arm instead: one bounded fetch at circuit
- * build, on the dev routes that are the only way to see such a circuit today
- * (the editor's preview and `/dev rallydraft`).
+ * The theme kit one circuit wears, read through the same fallback the build
+ * reads (an unknown theme id wears the default theme's kit). The track builder
+ * fetches it when that circuit's build starts, which is the race preparation's
+ * commitment to that circuit, never at boot: a boot preload of every worn kit
+ * pinned parsed scenes all session on a map that never clears, for a player who
+ * may never race.
  */
-export const REALM_RACERS_THEME_BOOT_URLS: readonly string[] = [
-  ...new Set(
-    [
-      CIRCUIT_THEMES[REALM_RACERS_DEFAULT_THEME_ID],
-      ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => realmRacersTheme(circuit)),
-    ].flatMap(themeKitUrls),
-  ),
-];
+export function realmRacersThemeKitUrls(circuit: RealmRacersCircuit): readonly string[] {
+  return themeKitUrls(realmRacersTheme(circuit));
+}

@@ -42,12 +42,9 @@ import { ignivarEnvPropsInternalsForTest } from '../src/render/ignivar_env_props
 import { mailboxPreloadInternalsForTest } from '../src/render/mailbox';
 import { propPreloadInternalsForTest } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
-import {
-  REALM_RACERS_BARRIER_ASSET_URLS,
-  REALM_RACERS_BARRIER_BOOT_URLS,
-} from '../src/render/realm_racers_barrier_visuals';
+import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
 import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
-import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
+import { realmRacersCircuitKitUrls } from '../src/render/realm_racers_track';
 import { stationsPreloadInternalsForTest } from '../src/render/stations';
 import { transportShipInternalsForTest } from '../src/render/transport_ship';
 import { wickharborHarborInternalsForTest } from '../src/render/wickharbor_harbor';
@@ -57,6 +54,7 @@ import { wispMazeKitPreloadInternalsForTest } from '../src/render/wisp_maze_kit'
 import { wyrmwatchHarborInternalsForTest } from '../src/render/wyrmwatch_harbor';
 import { yumiMazePreloadInternalsForTest } from '../src/render/yumi_maze';
 import { EASTBROOK_GRAND_ARMOURY } from '../src/sim/building_layout';
+import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
 import type { BuildingDef } from '../src/sim/types';
 
 const repoDir = path.join(__dirname, '..');
@@ -788,10 +786,9 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
   });
 
   it('Realm Racers circuit assets', () => {
-    // EVERY theme's kit AND every barrier kit, not just the boot lane's: the
-    // lane is scoped to what a shipped circuit wears, and a record written a
-    // zone ahead of its circuit is exactly the one whose url nobody has looked
-    // at yet.
+    // EVERY theme's kit AND every barrier kit, not just what a shipped circuit
+    // fetches: a record written a zone ahead of its circuit is exactly the one
+    // whose url nobody has looked at yet.
     //
     // The barrier half is not an afterthought. When the perimeter box stopped
     // being drawn, `themeKitUrls` lost its wall pair, and three models
@@ -803,14 +800,12 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     for (const url of covered) {
       expectAssetExistsAndManifested(url);
     }
-    // ...and the lane is inside it, so scoping the lane can never take a url
-    // out of this guard's reach. Both lanes: the track builder preloads the
-    // union of the theme and barrier boot lists.
-    for (const url of realmRacersPreloadInternalsForTest.assetUrls) {
-      expect(covered, url).toContain(url);
-    }
-    for (const url of REALM_RACERS_BARRIER_BOOT_URLS) {
-      expect(REALM_RACERS_BARRIER_ASSET_URLS, url).toContain(url);
+    // ...and what every shipped circuit fetches at its build is inside it, so
+    // no circuit can ask for a url outside this guard's reach.
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      for (const url of realmRacersCircuitKitUrls(circuit)) {
+        expect(covered, `${circuit.id} ${url}`).toContain(url);
+      }
     }
     // Non-vacuity: the barrier half has to be carrying real urls, or the loop
     // above passes over an empty list and says nothing at all.

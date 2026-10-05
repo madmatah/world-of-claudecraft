@@ -21,6 +21,10 @@ const loaderControl = vi.hoisted(() => ({
   deferred: false,
   pending: [] as { url: string; resolve: () => void; reject: () => void }[],
   calls: [] as string[],
+  /** One load per url, as the real loader caches it: a circuit build starts
+   *  its kit's fetch ahead of the piece that places it, and both must ride the
+   *  same load. */
+  loads: new Map<string, Promise<unknown>>(),
 }));
 
 vi.mock('../src/render/textures', () => {
@@ -65,15 +69,20 @@ vi.mock('../src/render/assets/loader', async (importOriginal) => {
       // loads character models at import, which no circuit draws.
       if (!url.startsWith('/models/')) return new Promise(() => undefined);
       loaderControl.calls.push(url);
+      const known = loaderControl.loads.get(url);
+      if (known) return known;
       const gltf = () => ({ scene: mirrorGltfScene(url, 'public') });
-      if (!loaderControl.deferred) return Promise.resolve(gltf());
-      return new Promise((resolve, reject) => {
-        loaderControl.pending.push({
-          url,
-          resolve: () => resolve(gltf()),
-          reject: () => reject(new Error('fetch failed')),
-        });
-      });
+      const load = loaderControl.deferred
+        ? new Promise((resolve, reject) => {
+            loaderControl.pending.push({
+              url,
+              resolve: () => resolve(gltf()),
+              reject: () => reject(new Error('fetch failed')),
+            });
+          })
+        : Promise.resolve(gltf());
+      loaderControl.loads.set(url, load);
+      return load;
     }),
   };
 });
@@ -150,6 +159,7 @@ beforeEach(() => {
   loaderControl.deferred = false;
   loaderControl.pending.length = 0;
   loaderControl.calls.length = 0;
+  loaderControl.loads.clear();
   // The fetch-and-fill arm only runs where a window exists.
   vi.stubGlobal('window', {});
 });

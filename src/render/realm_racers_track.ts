@@ -34,7 +34,6 @@ import {
 import { type RallySample, realmRacersTrack } from '../sim/realm_racers_spline';
 import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
-import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
 import { excludeFromParentCompile } from './compile_exclusion';
 import { attachSceneGroupGated } from './gated_scene_attach';
@@ -51,7 +50,7 @@ import {
   paintInstanceGround,
 } from './instance_surface';
 import {
-  REALM_RACERS_BARRIER_BOOT_URLS,
+  realmRacersBarrierKitUrls,
   realmRacersBarrierVisual,
 } from './realm_racers_barrier_visuals';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
@@ -81,8 +80,8 @@ import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
   type RallyCircuitTheme,
   type RallySkyKey,
-  REALM_RACERS_THEME_BOOT_URLS,
   realmRacersTheme,
+  realmRacersThemeKitUrls,
 } from './realm_racers_themes';
 import {
   type RallyBasinMesh,
@@ -216,30 +215,30 @@ const loaded = new Map<string, THREE.Group>();
 /** The gate source of each authored circuit's group, read when a fill lands. */
 const fillGates = new WeakMap<THREE.Object3D, () => FillGate | undefined>();
 
-function preload(url: string): void {
-  registerDeferredPreload(() =>
-    loadGltf(url).then((gltf) => {
-      loaded.set(url, gltf.scene);
-    }),
-  );
+/**
+ * What one circuit WEARS: its theme's start arch, grid banner and shore reed,
+ * and the barrier kits its record authors. Structure rather than dressing, so a
+ * circuit that drew them a second late would be a circuit whose start line or
+ * wall appeared after the lights.
+ */
+export function realmRacersCircuitKitUrls(circuit: RealmRacersCircuit): readonly string[] {
+  return [
+    ...new Set([...realmRacersThemeKitUrls(circuit), ...realmRacersBarrierKitUrls([circuit])]),
+  ];
 }
 
-// What a SHIPPED circuit actually wears rides the boot lane: the start arch and
-// the grid banner are structure rather than dressing, and a circuit that drew
-// them a second late would be a circuit whose start line appeared after the
-// lights. The authored BARRIERS are structure by the same argument, and they
-// come from the records rather than from the themes
-// (`REALM_RACERS_BARRIER_BOOT_URLS`), because a circuit's edge is placed by hand
-// now rather than derived from a rectangle.
-//
-// It used to be every theme's kit, worn or not. That stopped being tenable at
-// one theme per world zone: fourteen kits is about forty parsed scenes pinned
-// on the never-clearing map below, for the whole session, for a player who may
-// never race at all, which is the same retention the dressing catalog is kept
-// out of this lane to avoid. The two BOOT lists decide the scope; a kit no
-// shipped circuit wears takes `instanceModel`'s fetch-and-fill arm instead,
-// which is what the dev preview and `/dev rallydraft` already rely on for every
-// piece of dressing.
+// The kit is fetched when the circuit's build STARTS, which is the race
+// preparation's commitment to that circuit (its loading lobby, a practice
+// seat, a login or a step onto its lane), never at boot: a boot preload of
+// every worn kit pinned parsed scenes on the never-clearing map above, for the
+// whole session, for a player who may never race. The fetch starts here rather
+// than when a piece places the model, so the build's pieces usually find it
+// landed; a piece that gets there first takes `instanceModel`'s fetch-and-fill
+// arm on the same in-flight load, which records it on the circuit's fill
+// ledger, and the circuit's preparation waits for that ledger under the lobby
+// or arrival cover (realm_racers_circuit_prepare.ts). A circuit drawn in the
+// open (a walker on a lane, no cover) shows the kit when it lands, through the
+// same gated fill.
 //
 // THE DRESSING CATALOG IS DELIBERATELY NOT HERE, and that is the resident half
 // of the catalog's zero-overhead promise. This map never clears, so every url
@@ -247,20 +246,24 @@ function preload(url: string): void {
 // better part of two hundred models, against `props.ts`, which goes out of its
 // way to release each parse once its geometry is extracted (and eagerly so on
 // the iOS memory profile that has already killed a session once). Since every
-// dressing url is BY CONSTRUCTION one the world already fetches, preloading it
-// here bought nothing but retention. `instanceModel` fetches a dressing model
-// when a circuit is actually built instead, so what stays resident is what an
+// dressing url is BY CONSTRUCTION one the world already fetches, fetching it
+// ahead bought nothing but retention. `instanceModel` fetches a dressing model
+// when a circuit's piece places it instead, so what stays resident is what an
 // authored circuit places rather than what the catalog could offer.
-const ASSET_URLS = [
-  ...new Set([...REALM_RACERS_THEME_BOOT_URLS, ...REALM_RACERS_BARRIER_BOOT_URLS]),
-];
-for (const url of ASSET_URLS) preload(url);
-
-/** Test-only window onto the boot-lane asset set (see
- *  tests/render_glb_replacement_assets and tests/realm_racers_props). */
-export const realmRacersPreloadInternalsForTest = {
-  assetUrls: ASSET_URLS,
-};
+function fetchCircuitKit(circuit: RealmRacersCircuit): void {
+  if (typeof window === 'undefined') return;
+  for (const url of realmRacersCircuitKitUrls(circuit)) {
+    if (loaded.has(url) || realmRacersDressingRoute(url) === 'worldKit') continue;
+    loadGltf(url).then(
+      (gltf) => {
+        loaded.set(url, gltf.scene);
+      },
+      // The piece that places it fetches through the same load and names the
+      // failure (`instanceModel`).
+      () => undefined,
+    );
+  }
+}
 
 interface ModelSpot {
   x: number;
@@ -275,11 +278,12 @@ interface ModelSpot {
 /**
  * Draw a model at every spot, or fetch it and draw when it lands.
  *
- * The cached arm is what every theme kit takes, since those rode the boot lane.
- * The DRESSING does not (see the lane comment above), so the first circuit to
- * place a model pays for it: on a desktop client `loadGltf` usually answers off
- * its own cache, and where it does not this is one bounded fetch at circuit
- * build, for racers only, rather than a parse every player carries all session.
+ * The cached arm is what a theme or barrier kit usually takes, since its fetch
+ * started with the build (`fetchCircuitKit`). The DRESSING is not fetched ahead
+ * (see the comment above it), so the first circuit to place a model pays for
+ * it: on a desktop client `loadGltf` usually answers off its own cache, and
+ * where it does not this is one bounded fetch at circuit build, for racers
+ * only, rather than a parse every player carries all session.
  *
  * A fill landing on a group a rebuild already gave back is harmless and
  * deliberately unguarded: `disposeRealmRacersTrackGroup` detaches and clears
@@ -310,13 +314,9 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
         landFill(group, (target) => drawInstances(target, url, gltf.scene, spots));
       })
       .catch((err) => {
-        // Named rather than swallowed, and that changed with the boot lane's
-        // scoping: this arm used to carry only optional DRESSING, where a
-        // missing piece is a thinner lawn. It now also carries the perimeter
-        // wall, the start arch and the grid banner of any theme no shipped
-        // circuit wears, which is exactly what the editor preview and
-        // `/dev rallydraft` exist to look at. Silent there means a circuit
-        // drawn with no wall and no start gate and no reason given.
+        // Named rather than swallowed: this arm carries the walls, the start
+        // arch and the grid banner as well as optional DRESSING, and a circuit
+        // drawn with no wall and no start gate needs a reason given.
         // Dev-channel English, per the render i18n carve-out.
         console.warn('Realm Racers: circuit model failed to load', url, err);
       });
@@ -1134,6 +1134,7 @@ export function realmRacersTrackBuild(
 ): RealmRacersTrackBuild {
   group.name = 'realm-racers-track';
   group.visible = false;
+  fetchCircuitKit(circuit);
   const stream = textureRandomStream(`realm-racers:circuit:${circuit.id}`);
   // Everything below that is a colour, a model or a size comes from the THEME.
   // The geometry is the same on every circuit in every zone; the skin is not.

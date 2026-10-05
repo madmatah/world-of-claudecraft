@@ -19,8 +19,8 @@ import { JUNGLE_PALM_URLS, JUNGLE_PROP_URLS } from '../src/render/jungle_prop_ur
 import { PROP_ASSET_DEFS } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
 import {
-  REALM_RACERS_BARRIER_BOOT_URLS,
   REALM_RACERS_BARRIER_VISUALS,
+  realmRacersBarrierKitUrls,
 } from '../src/render/realm_racers_barrier_visuals';
 import { realmRacersDressingRoute } from '../src/render/realm_racers_dressing_material';
 import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
@@ -30,8 +30,9 @@ import {
   rallySkyDayNightBiome,
   realmRacersTheme,
   realmRacersThemeAt,
+  realmRacersThemeKitUrls,
 } from '../src/render/realm_racers_themes';
-import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
+import { realmRacersCircuitKitUrls } from '../src/render/realm_racers_track';
 import { rallyBorderFlowerSpots } from '../src/render/realm_racers_track_core';
 import { BIOME_PALETTE } from '../src/render/terrain_palette';
 import { WATER_FLORA_SKIP_BIOMES } from '../src/render/water_flora_core';
@@ -306,57 +307,35 @@ describe('Realm Racers circuit themes', () => {
     });
   });
 
-  it('preloads the kit of every theme a shipped circuit wears, and no other', () => {
-    // The boot lane is structure a circuit cannot draw late (the wall, the
-    // arch, the grid banner), so what a raced circuit wears must be resident
-    // before the lights. What is NOT in it is the point of this case: at one
-    // theme per world zone the registry is fourteen kits, and preloading all
-    // of them would pin about forty parsed scenes on a map that never clears,
-    // for the whole session, for a player who may never race. An unworn
-    // theme's wall takes the builder's fetch-and-fill arm instead.
-    const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
-    const worn = new Set([
-      REALM_RACERS_DEFAULT_THEME_ID,
-      ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.theme),
-    ]);
-    // Derived from the circuit list rather than listed, so the day a Frostveil
-    // circuit ships, its wall joins the lane without anyone remembering to.
-    //
-    // The BARRIER boot list is in the expectation for the same reason and not
-    // as a loosening: the lane has always opened with both, and that list was
-    // empty for exactly as long as no shipped circuit authored a fence, so the
-    // equality read as "theme urls only" while it was never saying that. The
-    // first circuit to author a hedge is what tells the two apart.
-    expect([...lane].sort()).toEqual(
-      [
-        ...new Set([
-          ...[...worn].flatMap((themeId) => themeUrls(themeId)),
-          ...REALM_RACERS_BARRIER_BOOT_URLS,
-        ]),
-      ].sort(),
-    );
-    for (const themeId of worn) {
-      for (const url of themeUrls(themeId)) expect(lane, `${themeId} ${url}`).toContain(url);
+  it('fetches with a circuit build exactly the kit that circuit wears', () => {
+    // Structure a circuit cannot draw late (the wall, the arch, the grid
+    // banner) is fetched when ITS build starts, the race preparation's
+    // commitment to it, never at boot: a boot preload of every worn kit pinned
+    // parsed scenes on a map that never clears, for a player who may never
+    // race. Each circuit asks for its own theme's kit and the barrier kits its
+    // record authors, and nothing of another theme.
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      const kit = realmRacersCircuitKitUrls(circuit);
+      expect([...kit].sort(), circuit.id).toEqual(
+        [...new Set([...themeUrls(circuit.theme), ...realmRacersBarrierKitUrls([circuit])])].sort(),
+      );
+      const own = new Set(themeUrls(circuit.theme));
+      for (const [themeId, theme] of Object.entries(CIRCUIT_THEMES)) {
+        if (own.has(theme.startFixture.bannerUrl)) continue;
+        expect(kit, `${circuit.id} ${themeId} banner`).not.toContain(theme.startFixture.bannerUrl);
+      }
     }
-    // ...and the counter-example, stated positively: a theme written a zone
-    // ahead of its circuit is out of the lane, wall and banner both.
-    const unworn = Object.keys(CIRCUIT_THEMES).filter((id) => !worn.has(id));
-    // Only a non-vacuity floor: the equality above already fixes the lane
-    // exactly, so this exists so the loop under it registers cases at all.
-    // Deliberately NOT a count near today's thirteen, which would go red the
-    // day enough circuits ship to drain it, reporting success as a regression.
-    expect(unworn.length).toBeGreaterThan(0);
-    for (const themeId of unworn) {
-      const theme = CIRCUIT_THEMES[themeId];
-      expect(lane, `${themeId} banner`).not.toContain(theme.startFixture.bannerUrl);
-    }
+    // An unknown theme id wears the default theme's kit, the fallback the
+    // build itself reads mid-build.
+    const unknown = { ...GARDEN_CIRCUIT, theme: 'no_such_theme', fences: [] };
+    expect(realmRacersThemeKitUrls(unknown)).toEqual(themeUrls(REALM_RACERS_DEFAULT_THEME_ID));
     // The whole reason for the scoping, stated against the thing it is scoped
-    // FROM rather than against an absolute: the lane is strictly smaller than
-    // the registry's own kit set. An absolute ceiling would have to be raised
-    // every time a circuit ships, which is the one event that must not need a
-    // test edit; this one holds until every realm has a circuit, and on that
-    // day it is correct that scoping bought nothing.
-    expect(lane.size).toBeLessThan(REALM_RACERS_THEME_ASSET_URLS.length);
+    // FROM: no circuit asks for the registry's whole kit set.
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      expect(realmRacersThemeKitUrls(circuit).length).toBeLessThan(
+        REALM_RACERS_THEME_ASSET_URLS.length,
+      );
+    }
   });
 
   it('sends the one place-keyed dome to the realm under it', () => {
@@ -492,15 +471,15 @@ describe('Realm Racers circuit themes', () => {
         }));
       };
 
-      it('asks for an unworn wall at build time, since the lane no longer holds it', async () => {
-        // THE assumption the whole boot-lane scoping rests on, and the one
-        // thing about it nothing else can see. Scoping the lane is only safe
-        // because a theme no circuit wears still reaches the draw path, through
-        // `instanceModel`'s fetch-and-fill arm; if that arm ever regressed (an
-        // added must-be-preloaded assert, or the headless early return moving
-        // above the fetch), thirteen themes would draw no wall, no arch and no
-        // banner, and every other case here would stay green because none of
-        // them can tell an unfetched model from an undrawn one.
+      it('asks for a circuit kit at build time, since nothing preloads it', async () => {
+        // THE assumption the race-time kit fetch rests on, and the one thing
+        // about it nothing else can see. Nothing preloads a kit, so a circuit's
+        // wall, arch and banner reach the draw path only through its build's
+        // own fetch (and `instanceModel`'s fetch-and-fill arm); if that ever
+        // regressed (an added must-be-preloaded assert, or the headless early
+        // return moving above the fetch), every circuit would draw no wall, no
+        // arch and no banner, and every other case here would stay green
+        // because none of them can tell an unfetched model from an undrawn one.
         //
         // The window stub is load-bearing rather than incidental: that arm is
         // gated on a browser host, so without it the builder takes the headless
@@ -531,9 +510,6 @@ describe('Realm Racers circuit themes', () => {
           // arm exists for.
           const kit = theme.barriers[0];
           const barrier = REALM_RACERS_BARRIER_VISUALS[kit];
-          // Not in the lane, which is the precondition that makes the rest mean
-          // something rather than restate it.
-          expect(realmRacersPreloadInternalsForTest.assetUrls).not.toContain(barrier.panelUrl);
           buildRealmRacersTrack({
             ...probeCircuit(themeId),
             id: 'fetch_and_fill_probe',
@@ -547,8 +523,7 @@ describe('Realm Racers circuit themes', () => {
               },
             ],
           });
-          // Structure, not dressing: the barrier and the grid banner are what
-          // the lane used to guarantee.
+          // Structure, not dressing: the barrier and the grid banner.
           expect(asked, 'barrier').toContain(barrier.panelUrl);
           expect(asked, 'banner').toContain(theme.startFixture.bannerUrl);
         } finally {
@@ -724,7 +699,7 @@ describe('Realm Racers circuit themes', () => {
       }
     });
 
-    it('dresses the shipped Rampart Run from the zone own vocabulary, one banner in the boot lane', () => {
+    it('dresses the shipped Rampart Run from the zone own vocabulary, one banner of its own', () => {
       // The one shipped Drakelands circuit places only what this theme offers
       // and walls only with its two kits, so it wears what the zone draws.
       const rampart = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === 'drakelands_rampart_run');
@@ -735,9 +710,9 @@ describe('Realm Racers circuit themes', () => {
       for (const fence of rampart.fences ?? []) {
         expect(theme.barriers.includes(fence.kit), fence.kit).toBe(true);
       }
-      // What shipping it adds to the boot lane every player pays for: the red
-      // grid banner, and nothing of its walls (template-drawn, resident already).
-      const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+      // What racing it fetches that no other shipped circuit does: the red grid
+      // banner, and nothing of its walls (template-drawn, resident already).
+      const lane = new Set(realmRacersCircuitKitUrls(rampart));
       const others = new Set(
         REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== rampart.id).flatMap((c) =>
           themeUrls(c.theme),
@@ -857,7 +832,7 @@ describe('Realm Racers circuit themes', () => {
       }
     });
 
-    it('dresses the shipped Lagoon Run from the zone own vocabulary, one banner in the boot lane', () => {
+    it('dresses the shipped Lagoon Run from the zone own vocabulary, one banner of its own', () => {
       // The one shipped Palmreach circuit places only what this theme offers and
       // walls with nothing: its edge is the island's own shore.
       const lagoon = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === 'palmreach_lagoon_run');
@@ -868,9 +843,9 @@ describe('Realm Racers circuit themes', () => {
       }
       expect(lagoon.fences ?? []).toEqual([]);
       expect(lagoon.groundOutline?.length ?? 0).toBeGreaterThan(0);
-      // What shipping it adds to the boot lane every player pays for: the green
-      // grid banner, and nothing else (the arch and the rim reed ride it already).
-      const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+      // What racing it fetches that no other shipped circuit does: the green
+      // grid banner, and nothing else (the arch and the rim reed are shared).
+      const lane = new Set(realmRacersCircuitKitUrls(lagoon));
       const others = new Set(
         REALM_RACERS_CIRCUIT_LIST.filter((c) => c.id !== lagoon.id).flatMap((c) =>
           themeUrls(c.theme),

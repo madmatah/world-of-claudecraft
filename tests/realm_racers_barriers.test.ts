@@ -8,9 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   REALM_RACERS_BARRIER_ASSET_URLS,
-  REALM_RACERS_BARRIER_BOOT_URLS,
   REALM_RACERS_BARRIER_VISUALS,
-  realmRacersBarrierBootUrls,
+  realmRacersBarrierKitUrls,
 } from '../src/render/realm_racers_barrier_visuals';
 import { realmRacersDressingRoute } from '../src/render/realm_racers_dressing_material';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
@@ -240,28 +239,26 @@ describe('the barrier kit catalog', () => {
     }
   });
 
-  it('scopes the boot lane to the kits a SHIPPED circuit authors', () => {
-    // The lane rule 25 established, applied to the kits: it must never widen to
-    // "everything the catalog could offer", which would pin a parsed scene per
-    // kit on a map that never clears.
+  it('scopes the race-time barrier fetch to the kits the circuits author', () => {
+    // A circuit build fetches the kits its record authors and nothing else: it
+    // must never widen to "everything the catalog could offer", which would pin
+    // a parsed scene per kit on a map that never clears.
     //
-    // Derived from the shipped RECORDS rather than pinned to a list, and that
-    // is the whole rule rather than a convenience. It was pinned to `[]` while
-    // no shipped circuit authored a fence, which read as the rule and was only
-    // ever the empty case: the first circuit to author a hedge turned three
-    // lane guards red at once for doing exactly what the lane exists to serve.
+    // Derived from the shipped RECORDS rather than pinned to a list: the first
+    // circuit to author a hedge must not need a test edit.
     const worn = new Set(
       REALM_RACERS_CIRCUIT_LIST.flatMap((circuit) => circuit.fences ?? []).map(
         (fence) => fence.kit,
       ),
     );
-    expect([...REALM_RACERS_BARRIER_BOOT_URLS].sort()).toEqual(
+    const fetched = realmRacersBarrierKitUrls(REALM_RACERS_CIRCUIT_LIST);
+    expect([...fetched].sort()).toEqual(
       [
         ...new Set(
           [...worn].flatMap((kit) => {
             const visual = REALM_RACERS_BARRIER_VISUALS[kit];
             expect(visual, `${kit} should be a real kit`).toBeDefined();
-            // A kit drawn from the world's templates never rides it (the case
+            // A kit drawn from the world's templates is never fetched (the case
             // below), which the Drakelands Rampart Run's two kits are.
             if (visual.worldTemplate) return [];
             return visual.corner === 'none'
@@ -271,16 +268,14 @@ describe('the barrier kit catalog', () => {
         ),
       ].sort(),
     );
-    // ...and the scoping bought something: the lane is strictly smaller than the
-    // catalog it is scoped from. Holds until every kit is worn somewhere, and on
-    // that day it is correct that it bought nothing.
-    expect(REALM_RACERS_BARRIER_BOOT_URLS.length).toBeLessThan(
-      REALM_RACERS_BARRIER_ASSET_URLS.length,
-    );
+    // ...and the scoping bought something: the fetch is strictly smaller than
+    // the catalog it is scoped from. Holds until every kit is worn somewhere,
+    // and on that day it is correct that it bought nothing.
+    expect(fetched.length).toBeLessThan(REALM_RACERS_BARRIER_ASSET_URLS.length);
   });
 
   it('flags exactly the kits the dressing draws from the world templates', () => {
-    // The boot lane reads the flag rather than the route, so the barrier
+    // The race-time fetch reads the flag rather than the route, so the barrier
     // catalog stays Three-free; this is what keeps the two from disagreeing.
     let flagged = 0;
     for (const [kit, visual] of Object.entries(REALM_RACERS_BARRIER_VISUALS)) {
@@ -295,11 +290,11 @@ describe('the barrier kit catalog', () => {
     expect(flagged).toBe(2);
   });
 
-  it('keeps a kit drawn from the world templates out of the boot lane, whoever authors it', () => {
+  it('never fetches a kit drawn from the world templates, whoever authors it', () => {
     // The fortress wall and its tower caps are the world's own env-prop
-    // templates, resident from world entry; a lane parse of their files would
-    // be a second copy nothing draws. A plain kit on the same record still
-    // rides it, which is what keeps this from passing on an empty lane.
+    // templates, resident from world entry; a parse of their files would be a
+    // second copy nothing draws. A plain kit on the same record is still
+    // fetched, which is what keeps this from passing on an empty list.
     const run = (kit: string): RallyFence => ({
       kit,
       points: [
@@ -312,7 +307,7 @@ describe('the barrier kit catalog', () => {
       id: 'barrier_boot_probe',
       fences: [run('fortressWall'), run('keepFence'), run('ironwork')],
     };
-    const lane = realmRacersBarrierBootUrls([circuit]);
+    const lane = realmRacersBarrierKitUrls([circuit]);
     const fortress = REALM_RACERS_BARRIER_VISUALS.fortressWall;
     expect(fortress.corner).not.toBe('none');
     const kitUrls = [
@@ -323,12 +318,13 @@ describe('the barrier kit catalog', () => {
     for (const url of kitUrls) expect(lane, url).not.toContain(url);
     expect(lane).toContain(REALM_RACERS_BARRIER_VISUALS.ironwork.panelUrl);
     // And on the shipped pool, where a circuit really does author both kits:
-    // they stay out of the lane every player pays for.
+    // racing it never fetches them.
     const worn = new Set(
       REALM_RACERS_CIRCUIT_LIST.flatMap((c) => c.fences ?? []).map((fence) => fence.kit),
     );
     expect(worn.has('fortressWall') && worn.has('keepFence')).toBe(true);
-    for (const url of kitUrls) expect(REALM_RACERS_BARRIER_BOOT_URLS, url).not.toContain(url);
+    const fetched = realmRacersBarrierKitUrls(REALM_RACERS_CIRCUIT_LIST);
+    for (const url of kitUrls) expect(fetched, url).not.toContain(url);
   });
 
   it('gives every theme a vocabulary of real kits', () => {

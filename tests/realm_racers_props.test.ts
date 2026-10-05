@@ -33,7 +33,7 @@ import {
   REALM_RACERS_WORLD_KIT_URLS,
 } from '../src/render/realm_racers_prop_visuals';
 import { CIRCUIT_THEMES, REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
-import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
+import { realmRacersCircuitKitUrls } from '../src/render/realm_racers_track';
 import { STREETLAMP_ASSET_DEFS } from '../src/render/streetlamp_assets';
 import { resolvePosition } from '../src/sim/colliders';
 import {
@@ -379,32 +379,27 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     }
   });
 
-  it('keeps the dressing OUT of the rally boot lane and the theme kits in it', () => {
-    // The resident half of the zero-overhead promise. That lane's map never
-    // clears, so a url fed to it pins a parsed scene for the whole session;
-    // feeding it a catalog this wide would pin the better part of two hundred,
-    // against `props.ts`, which goes out of its way to RELEASE each parse once
-    // its geometry is extracted. So the dressing is fetched when a circuit
-    // places it and only the theme kits (wall, arch, grid banner: structure a
-    // circuit cannot draw late) ride the lane.
-    const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+  it('keeps the dressing OUT of the race-time kit fetch and the theme kits in it', () => {
+    // The resident half of the zero-overhead promise. A circuit build fetches
+    // its kit ahead of its pieces into a map that never clears, so a url fed to
+    // it pins a parsed scene for the whole session; feeding it a catalog this
+    // wide would pin the better part of two hundred, against `props.ts`, which
+    // goes out of its way to RELEASE each parse once its geometry is extracted.
+    // So the dressing is fetched when a circuit places it and only the kits
+    // (wall, arch, grid banner: structure a circuit cannot draw late) are
+    // fetched with the build.
+    const lane = new Set(REALM_RACERS_CIRCUIT_LIST.flatMap(realmRacersCircuitKitUrls));
     const themeKit = new Set(REALM_RACERS_THEME_ASSET_URLS);
-    // The lane is KIT urls and nothing else. Stated as a subset rather than an
-    // equality, because the lane is scoped to the kits a SHIPPED circuit wears
-    // (`tests/realm_racers_themes.test.ts` owns that half, and pins the unworn
-    // ones OUT); what this case owns is the other direction, that no DRESSING
-    // url got in. A subset rather than "no dressing url is in it" because a
-    // handful of models are BOTH (the garden's iron fence is the Evergarden's
-    // perimeter and an authorable piece), and the rule is about which door put a
-    // url in the lane.
+    // The fetch is KIT urls and nothing else. Stated as a subset rather than an
+    // equality, because it is scoped to what each circuit wears
+    // (`tests/realm_racers_themes.test.ts` owns that half); what this case owns
+    // is the other direction, that no DRESSING url got in. A subset rather than
+    // "no dressing url is in it" because a handful of models are BOTH (the
+    // garden's iron fence is the Evergarden's perimeter and an authorable
+    // piece), and the rule is about which door put a url in.
     //
-    // BOTH kit vocabularies, and the barrier half is not decoration on this
-    // list: the lane opens with `REALM_RACERS_BARRIER_BOOT_URLS` too, and that
-    // list was empty for as long as no shipped circuit authored a fence. The
-    // first one that does is a hedge appearing here, which read as a dressing
-    // model sneaking into the lane while it was the guard being written against
-    // an empty case. A barrier is structure, like a wall and an arch, and rides
-    // the lane for the same stated reason.
+    // BOTH kit vocabularies: a barrier is structure, like a wall and an arch,
+    // and is fetched with the build for the same stated reason.
     const kit = new Set([...themeKit, ...REALM_RACERS_BARRIER_ASSET_URLS]);
     expect([...lane].filter((url) => !kit.has(url))).toEqual([]);
     expect(lane.size).toBeLessThan(20);
@@ -412,11 +407,11 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     const dressingOnly = REALM_RACERS_PROP_URLS.filter((url) => !themeKit.has(url));
     expect(dressingOnly.length).toBeGreaterThan(150);
     for (const url of dressingOnly) {
-      expect(lane.has(url), `${url} should NOT be preloaded by the rally lane`).toBe(false);
+      expect(lane.has(url), `${url} should NOT be fetched with a circuit build`).toBe(false);
     }
 
     // Hand-pinned, both ways, so neither half can quietly become the other: two
-    // pieces of the raced circuit's own kit that must stay in the lane, and two
+    // pieces of a raced circuit's own kit that must stay in the fetch, and two
     // dressing models that must stay out of it.
     expect(lane.has('/models/props/course_arch.glb')).toBe(true);
     expect(lane.has('/models/dungeon/banner_patterna_white.glb')).toBe(true);

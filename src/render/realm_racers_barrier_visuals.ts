@@ -20,9 +20,9 @@
 // contradictory. The dressing catalog may only name a model the client already
 // fetches at world entry, and mints every entry through a helper typed against
 // `PROP_ASSET_DEFS` so that promise holds by construction. A KIT is structure: it
-// rides the boot lane when a shipped circuit wears it and `instanceModel`'s
-// fetch-and-fill arm when it does not, exactly as the theme kits did, so
-// membership of the world's prop registry buys it nothing. What guards it
+// is fetched when the circuit authoring it starts its build, exactly as the
+// theme kits are, so membership of the world's prop registry buys it nothing.
+// What guards it
 // instead is `REALM_RACERS_BARRIER_ASSET_URLS` below, walked against disk and the
 // media manifest by `tests/render_glb_replacement_assets.test.ts`, which is the
 // same guard `REALM_RACERS_THEME_ASSET_URLS` has always had.
@@ -65,10 +65,7 @@
 // from where it was drawn. Correcting it would mean a lateral offset field one
 // kit in the registry uses, so the Galecrest takes the harbour parapet instead.
 
-import {
-  REALM_RACERS_CIRCUIT_LIST,
-  type RealmRacersCircuit,
-} from '../sim/content/realm_racers_circuits';
+import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { GARDEN_MAZE_WALL_URL } from './garden_maze_core';
 
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
@@ -109,7 +106,7 @@ export interface RallyBarrierVisual {
   /**
    * Drawn from the world's own env-prop templates (the `worldKit` dressing
    * route, realm_racers_dressing_material.ts) rather than from its files, which
-   * are resident from world entry: the boot lane never parses such a kit.
+   * are resident from world entry: a circuit build never fetches such a kit.
    * `tests/realm_racers_barriers.test.ts` holds the flag to the route.
    */
   worldTemplate?: true;
@@ -263,34 +260,28 @@ function kitUrls(visual: RallyBarrierVisual): readonly string[] {
 }
 
 /** Every model any barrier kit can ask for: what the disk and media-manifest
- *  guards cover. NOT the boot lane, which is scoped to the kits a SHIPPED
- *  circuit actually authors (`REALM_RACERS_BARRIER_BOOT_URLS`). */
+ *  guards cover. Nothing preloads it: a circuit fetches the kits it authors
+ *  when its build starts (`realmRacersBarrierKitUrls`). */
 export const REALM_RACERS_BARRIER_ASSET_URLS: readonly string[] = [
   ...new Set(Object.values(REALM_RACERS_BARRIER_VISUALS).flatMap(kitUrls)),
 ];
 
 /**
- * The barrier models that ride the BOOT lane: the kits a shipped circuit
- * actually authors, and only those.
+ * The barrier models these circuits fetch when their builds start: the kits
+ * their records author, and only those.
  *
- * It replaces the perimeter pair the theme lane used to open with, and it keeps
- * that lane's rule rather than inheriting its old shape. The rule is 25's: a
- * circuit's STRUCTURE has to be resident before the lights, because a wall that
- * arrived a frame late would be a wall that appeared during the countdown, but
- * the lane must never widen to "everything the catalog could offer". Thirteen
- * kits is about thirty parsed scenes pinned on a map that never clears, for a
- * player who may never race.
+ * A circuit's STRUCTURE has to be there before the lights, because a wall that
+ * arrived a frame late would be a wall that appeared during the countdown, so
+ * the track builder starts these fetches with the build (the race
+ * preparation's commitment to that circuit) and the circuit's preparation waits
+ * for them under the lobby or arrival cover. It is walked off the RECORDS, so a
+ * circuit that authors no barrier asks for nothing.
  *
- * So it walks the shipped RECORDS. A circuit that authors no barrier contributes
- * nothing, which is the honest answer while the shipped pool has none: the lane
- * is empty, and a draft or a dev preview reaches a kit through `instanceModel`'s
- * fetch-and-fill arm, one bounded fetch at circuit build.
- *
- * A kit drawn from the world's env-prop templates never rides it, whoever
+ * A kit drawn from the world's env-prop templates is never in it, whoever
  * authors it: the template is resident from world entry, and a parse of its
  * file here would be a second copy nothing draws.
  */
-export function realmRacersBarrierBootUrls(
+export function realmRacersBarrierKitUrls(
   circuits: readonly RealmRacersCircuit[],
 ): readonly string[] {
   return [
@@ -303,6 +294,3 @@ export function realmRacersBarrierBootUrls(
     ),
   ];
 }
-
-export const REALM_RACERS_BARRIER_BOOT_URLS: readonly string[] =
-  realmRacersBarrierBootUrls(REALM_RACERS_CIRCUIT_LIST);

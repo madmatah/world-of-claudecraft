@@ -56,14 +56,16 @@ Everything else is a sibling module in one of these families:
   raceable are authored props wearing the world's own streetlamp fixtures
   (`realm_racers_lamps.ts`), each joining the night light field from its authored
   socket, and the field runs in the band because the band's ground IS the world's
-  splat material. There is now one record per world-map
-  ZONE, which is what makes the boot lane scoped rather than complete: only the
-  kits a SHIPPED circuit wears are preloaded (`REALM_RACERS_THEME_BOOT_URLS`,
-  against the whole-registry `REALM_RACERS_THEME_ASSET_URLS` the manifest guard
-  walks), because the rally lane's map never clears and fourteen kits would pin
-  parsed scenes all session for a player who may never race. A theme written a
-  zone ahead of its circuit reaches the draw path through `instanceModel`'s
-  fetch-and-fill arm. The renderer reaches the whole rally presentation
+  splat material. There is one record per world-map ZONE, and nothing of a
+  circuit's kit is preloaded: a circuit fetches what it wears (its theme's arch,
+  banner and reed plus the barrier kits its record authors,
+  `realmRacersCircuitKitUrls`) when ITS build starts, the race preparation's
+  commitment to it, and its preparation waits for those fills under the lobby or
+  arrival cover; the manifest guard walks the whole registry
+  (`REALM_RACERS_THEME_ASSET_URLS`, `REALM_RACERS_BARRIER_ASSET_URLS`), and a
+  boot lane of worn kits would pin parsed scenes all session on a map that never
+  clears, for a player who may never race (`tests/realm_racers_boot_cost.test.ts`).
+  The renderer reaches the whole rally presentation
   through `realm_racers_scene.ts` (`renderer.realmRacers`: the tracks, the
   Ground Blast and oil-spray pools, the theme sky, their preparation seam, the
   race's instant feedback and the rally events) and the per-view
