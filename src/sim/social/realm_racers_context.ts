@@ -75,8 +75,13 @@ export function freshRealmRacersMeta(
  * The coordinator runs it after all movement has completed, so same-tick
  * finishes are independent of player insertion order. It draws EXACTLY ONE
  * value per pickup box that changes hands (the weighted effect draw, 22b),
- * plus the one circuit draw a queued race takes when it seats a grid; a tick
- * where nobody takes a box and nobody is seated draws nothing at all.
+ * plus the one circuit draw a queued race takes when it seats a grid (the
+ * queue pop or the online backfill); a tick where nobody takes a box and
+ * nobody is seated draws nothing at all. The house-pilot half adds nothing:
+ * spawning and reaping a pilot (addPlayer, removePlayer) and each pilot's
+ * Ground Blast through castAbility are draw-free, pinned over a whole race
+ * with pilots firing in tests/realm_racers_bots.test.ts. A human's own cast
+ * arrives as a command between ticks, outside this phase and its budget.
  */
 export function updateRealmRacersPhase(sim: Sim): void {
   realmRacersMod.updateRealmRacers(sim.ctx);

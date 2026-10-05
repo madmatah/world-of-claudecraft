@@ -435,6 +435,52 @@ describe('Realm Racers online backfill', () => {
     expect(seatingDraws).toHaveLength(1);
   });
 
+  it('draws one value per box taken over a whole race, and nothing for the house pilots', () => {
+    // The phase's documented budget (updateRealmRacersPhase): one draw per box
+    // that changes hands, all of it inside the rally phase, while the bot half
+    // (each pilot's Ground Blast through castAbility, the reap through
+    // removePlayer) draws nothing. The test world has no ambient spawns, so any
+    // other draw on these ticks would be the race's.
+    let pending = 0;
+    let phaseDraws = 0;
+    let otherDraws = 0;
+    const sim = makeWorld({
+      perfLap: (name) => {
+        if (name === 'realmRacers') phaseDraws += pending;
+        else otherDraws += pending;
+        pending = 0;
+      },
+    });
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.realmRacersPracticeStart('ace', human);
+    readyAllRacers(sim);
+    sim.rng.setObserver(() => {
+      pending++;
+    });
+    let takes = 0;
+    let shots = 0;
+    try {
+      for (let i = 0; i < RACE_TICKS && sim.realmRacers.practices.length > 0; i++) {
+        const phaseBefore = phaseDraws;
+        const events = sim.tick();
+        otherDraws += pending;
+        pending = 0;
+        const taken = events.filter((ev) => ev.type === 'realmRacersPickup').length;
+        takes += taken;
+        shots += events.filter((ev) => ev.type === 'realmRacersGroundBlastFired').length;
+        expect(phaseDraws - phaseBefore, `tick ${sim.tickCount}`).toBe(taken);
+      }
+    } finally {
+      sim.rng.setObserver(null);
+    }
+    expect(sim.realmRacers.practices, 'the race never ended').toEqual([]);
+    expect(botPidsOf(sim), 'the house pilots were never reaped').toEqual([]);
+    expect(shots, 'no house pilot fired').toBeGreaterThan(0);
+    expect(takes, 'no box changed hands').toBeGreaterThan(0);
+    expect(phaseDraws).toBe(takes);
+    expect(otherDraws).toBe(0);
+  });
+
   it('draws nothing when a practice start is refused', () => {
     // `seatWithBots` spawns its house pilots BEFORE the match module can refuse,
     // then despawns them again. Neither spawn nor despawn may draw, or a
