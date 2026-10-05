@@ -12022,6 +12022,7 @@ export const en_XA: EnTranslations = {
       "partyFull": "[Ýóúŕ þáŕţý íš ƒúļļ.]",
       "alreadyInParty": "[{name} íš áļŕéáðý íñ á þáŕţý.]",
       "pendingInvite": "[{name} áļŕéáðý ĥáš á þéñðíñĝ íñʋíţáţíóñ.]",
+      "targetBusy": "[{name} íš ƀúšý ŕíĝĥţ ñóŵ.]",
       "invitationExpired": "[Ţĥé íñʋíţáţíóñ ĥáš éẋþíŕéð.]",
       "targetTooFar": "[Ţáŕĝéţ íš ţóó ƒáŕ áŵáý.]",
       "duelInProgress": "[Á ðúéļ íš áļŕéáðý íñ þŕóĝŕéšš.]",

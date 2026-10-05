@@ -12022,6 +12022,7 @@ export const da_DK: EnTranslations = {
       "partyFull": "Din gruppe er fuld.",
       "alreadyInParty": "{name} er allerede i en gruppe.",
       "pendingInvite": "{name} har allerede en afventende invitation.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "Invitationen er udløbet.",
       "targetTooFar": "Målet er for langt væk.",
       "duelInProgress": "En tvekamp er allerede i gang.",

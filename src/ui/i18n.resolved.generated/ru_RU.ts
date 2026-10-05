@@ -12022,6 +12022,7 @@ export const ru_RU: EnTranslations = {
       "partyFull": "Ваша группа заполнена.",
       "alreadyInParty": "{name} уже в группе.",
       "pendingInvite": "У {name} уже есть ожидающее приглашение.",
+      "targetBusy": "Игрок {name} сейчас занят.",
       "invitationExpired": "Приглашение истекло.",
       "targetTooFar": "Цель слишком далеко.",
       "duelInProgress": "Дуэль уже идет.",

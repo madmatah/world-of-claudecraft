@@ -245,6 +245,8 @@ export function localizeErrorText(text: string, deps: ErrorTextLockoutDeps): str
   if (match) return t('hud.errors.alreadyInParty', { name: match[1] });
   match = /^(.+) already has a pending invitation\.$/.exec(text);
   if (match) return t('hud.errors.pendingInvite', { name: match[1] });
+  match = /^(.+) is busy right now\.$/.exec(text);
+  if (match) return t('hud.errors.targetBusy', { name: match[1] });
   match = /^You must be in (.+)'s party to accept that quest\.$/.exec(text);
   if (match) return t('hudChrome.questShare.notInSharerParty', { name: match[1] });
   match = /^You may keep at most (\d+) goods on the market at once\.$/.exec(text);

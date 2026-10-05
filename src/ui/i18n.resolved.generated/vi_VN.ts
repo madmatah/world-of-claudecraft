@@ -12022,6 +12022,7 @@ export const vi_VN: EnTranslations = {
       "partyFull": "Nhóm của bạn đã đầy.",
       "alreadyInParty": "{name} đã ở trong một nhóm rồi.",
       "pendingInvite": "{name} đã có một lời mời đang chờ xử lý.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "Lời mời đã hết hạn.",
       "targetTooFar": "Mục tiêu ở quá xa.",
       "duelInProgress": "Một trận giao đấu tay đôi đang diễn ra.",

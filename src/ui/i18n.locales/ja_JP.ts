@@ -4170,6 +4170,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hud.errors.partyFull': 'パーティは満員です。',
   'hud.errors.alreadyInParty': '{name}はすでにパーティに入っています。',
   'hud.errors.pendingInvite': '{name}には保留中の招待があります。',
+  'hud.errors.targetBusy': '{name}は現在取り込み中です。',
   'hud.errors.invitationExpired': '招待は期限切れです。',
   'hud.errors.targetTooFar': '対象が遠すぎます。',
   'hud.errors.duelInProgress': 'すでに決闘が進行中です。',

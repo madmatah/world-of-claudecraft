@@ -12022,6 +12022,7 @@ export const en: EnTranslations = {
       "partyFull": "Your party is full.",
       "alreadyInParty": "{name} is already in a party.",
       "pendingInvite": "{name} already has a pending invitation.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "The invitation has expired.",
       "targetTooFar": "Target is too far away.",
       "duelInProgress": "A duel is already in progress.",

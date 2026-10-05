@@ -8612,6 +8612,7 @@ export type TranslationKeyFlat =
   | 'hud.errors.silenced'
   | 'hud.errors.stealthed'
   | 'hud.errors.stunned'
+  | 'hud.errors.targetBusy'
   | 'hud.errors.targetHealthBelow'
   | 'hud.errors.targetMustDodge'
   | 'hud.errors.targetTooFar'

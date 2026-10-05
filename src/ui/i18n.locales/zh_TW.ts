@@ -3994,6 +3994,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hud.errors.partyFull': '你的隊伍已滿。',
   'hud.errors.alreadyInParty': '{name} 已在隊伍中。',
   'hud.errors.pendingInvite': '{name} 已有待處理邀請。',
+  'hud.errors.targetBusy': '{name} 現在正忙。',
   'hud.errors.invitationExpired': '邀請已過期。',
   'hud.errors.targetTooFar': '目標太遠。',
   'hud.errors.duelInProgress': '已有決鬥正在進行。',

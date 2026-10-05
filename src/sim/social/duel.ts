@@ -31,7 +31,10 @@ export function duelRequest(ctx: SimContext, targetPid: number, pid?: number): v
     ctx.error(r.meta.entityId, 'You are busy.');
     return;
   }
-  if (inRealmRacersHeat(ctx, targetPid)) return;
+  if (inRealmRacersHeat(ctx, targetPid)) {
+    ctx.error(r.meta.entityId, `${target.name} is busy right now.`);
+    return;
+  }
   if (
     ctx.entityInDungeon(r.e, 'nythraxis_boss_arena') ||
     ctx.entityInDungeon(targetE, 'nythraxis_boss_arena')
@@ -82,7 +85,10 @@ export function duelAccept(ctx: SimContext, pid?: number): void {
     ctx.error(r.meta.entityId, 'You are busy.');
     return;
   }
-  if (inRealmRacersHeat(ctx, invite.fromPid)) return;
+  if (inRealmRacersHeat(ctx, invite.fromPid)) {
+    ctx.error(r.meta.entityId, `${other.name} is busy right now.`);
+    return;
+  }
   const otherE = ctx.entities.get(invite.fromPid);
   if (
     !otherE ||

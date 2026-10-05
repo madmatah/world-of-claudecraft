@@ -12022,6 +12022,7 @@ export const id_ID: EnTranslations = {
       "partyFull": "Kelompokmu sudah penuh.",
       "alreadyInParty": "{name} sudah berada dalam kelompok.",
       "pendingInvite": "{name} sudah memiliki undangan yang tertunda.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "Undangan telah kedaluwarsa.",
       "targetTooFar": "Sasaran terlalu jauh.",
       "duelInProgress": "Duel sudah berlangsung.",

@@ -4138,6 +4138,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hud.errors.partyFull': '파티가 가득 찼습니다.',
   'hud.errors.alreadyInParty': '{name}님은 이미 파티에 있습니다.',
   'hud.errors.pendingInvite': '{name}님에게 이미 대기 중인 초대가 있습니다.',
+  'hud.errors.targetBusy': '{name}님은 지금 바쁩니다.',
   'hud.errors.invitationExpired': '초대가 만료되었습니다.',
   'hud.errors.targetTooFar': '대상이 너무 멉니다.',
   'hud.errors.duelInProgress': '이미 진행 중인 결투가 있습니다.',

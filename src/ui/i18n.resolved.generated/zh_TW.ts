@@ -12022,6 +12022,7 @@ export const zh_TW: EnTranslations = {
       "partyFull": "你的隊伍已滿。",
       "alreadyInParty": "{name} 已在隊伍中。",
       "pendingInvite": "{name} 已有待處理邀請。",
+      "targetBusy": "{name} 現在正忙。",
       "invitationExpired": "邀請已過期。",
       "targetTooFar": "目標太遠。",
       "duelInProgress": "已有決鬥正在進行。",

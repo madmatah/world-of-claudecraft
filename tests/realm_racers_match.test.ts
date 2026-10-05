@@ -575,7 +575,7 @@ describe('The Realm Racers lifecycle', () => {
     expect(liveMatch.finishOrder).toEqual([a, d, c, b]);
   });
 
-  it('refuses a duel challenge from or to a seated racer', () => {
+  it('refuses a duel challenge from or to a seated racer, telling whoever asked', () => {
     // Four machines abreast on one grid are well inside duel range, and so is a
     // bystander at the fence: neither may open a duel on a seated pilot.
     const { sim, pids } = startMatch();
@@ -587,8 +587,12 @@ describe('The Realm Racers lifecycle', () => {
     const bystander = addAt(sim, 'warrior', 'Fence', 0, 0);
     const racer = entity(sim, b);
     teleport(sim, bystander, racer.pos.x + 4, racer.pos.z);
+    sim.drainEvents();
     sim.duelRequest(b, bystander);
     expect(sim.ctx.duelInvites.has(b)).toBe(false);
+    // The challenger hears why nothing happened, by the seated pilot's name.
+    const busy = { type: 'error', text: 'Briar is busy right now.', pid: bystander };
+    expect(sim.drainEvents()).toContainEqual(busy);
     // A challenge issued before the seat cannot be accepted from it either.
     sim.ctx.duelInvites.set(a, { fromPid: bystander, expires: sim.ctx.time + 30 });
     sim.drainEvents();
@@ -596,6 +600,13 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.ctx.duels.size).toBe(0);
     expect(sim.ctx.duelInvites.has(a)).toBe(false);
     expect(sim.drainEvents()).toContainEqual({ type: 'error', text: 'You are busy.', pid: a });
+    // Nor accepted by its target once the challenger is seated, and the target
+    // hears why the same way.
+    sim.ctx.duelInvites.set(bystander, { fromPid: b, expires: sim.ctx.time + 30 });
+    sim.duelAccept(bystander);
+    expect(sim.ctx.duels.size).toBe(0);
+    expect(sim.ctx.duelInvites.has(bystander)).toBe(false);
+    expect(sim.drainEvents()).toContainEqual(busy);
   });
 
   it('treats a disconnect exactly like a forfeit, without ending the race', () => {

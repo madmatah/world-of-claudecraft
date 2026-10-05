@@ -12022,6 +12022,7 @@ export const cs_CZ: EnTranslations = {
       "partyFull": "Tvoje skupina je plná.",
       "alreadyInParty": "{name} už je ve skupině.",
       "pendingInvite": "{name} už má čekající pozvánku.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "Pozvánka vypršela.",
       "targetTooFar": "Cíl je příliš daleko.",
       "duelInProgress": "Duel už probíhá.",

@@ -4218,6 +4218,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hud.errors.partyFull': 'Ваша группа заполнена.',
   'hud.errors.alreadyInParty': '{name} уже в группе.',
   'hud.errors.pendingInvite': 'У {name} уже есть ожидающее приглашение.',
+  'hud.errors.targetBusy': 'Игрок {name} сейчас занят.',
   'hud.errors.invitationExpired': 'Приглашение истекло.',
   'hud.errors.targetTooFar': 'Цель слишком далеко.',
   'hud.errors.duelInProgress': 'Дуэль уже идет.',

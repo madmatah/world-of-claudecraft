@@ -12022,6 +12022,7 @@ export const it_IT: EnTranslations = {
       "partyFull": "Il tuo gruppo è pieno.",
       "alreadyInParty": "{name} è già in un gruppo.",
       "pendingInvite": "{name} ha già un invito in sospeso.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "L'invito è scaduto.",
       "targetTooFar": "Il bersaglio è troppo lontano.",
       "duelInProgress": "Un duello è già in corso.",

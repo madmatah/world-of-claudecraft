@@ -73,6 +73,18 @@ describe('localizeErrorText', () => {
     expect(out).toBe(t('hudChrome.chatQuota.limitReached', { seconds: formatDuration(3) }));
   });
 
+  it('localizes the refusal of a duel at a seated racer through its key', async () => {
+    // A non-Latin locale is the discriminator: raw English coming back means
+    // the arm fell through. The line is the one src/sim/social/duel.ts emits.
+    await ensureLocaleLoaded('zh_CN');
+    setLanguage('zh_CN');
+    const input = 'Briar is busy right now.';
+    const out = localizeErrorText(input, deps());
+    expect(out).not.toBe(input);
+    expect(out).toBe(t('hud.errors.targetBusy', { name: 'Briar' }));
+    expect(out).toContain('Briar');
+  });
+
   it('enriches a raid lockout with the live countdown from the deps bag', () => {
     const withLock = deps([{ id: 'nythraxis_boss_arena', msRemaining: 90_000 }]);
 

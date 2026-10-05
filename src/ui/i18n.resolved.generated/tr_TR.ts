@@ -12022,6 +12022,7 @@ export const tr_TR: EnTranslations = {
       "partyFull": "Grubun dolu.",
       "alreadyInParty": "{name} zaten bir grupta.",
       "pendingInvite": "{name} oyuncusunun zaten bekleyen bir daveti var.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "Davetin süresi doldu.",
       "targetTooFar": "Hedef çok uzakta.",
       "duelInProgress": "Zaten devam eden bir düello var.",

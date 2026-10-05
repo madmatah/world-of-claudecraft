@@ -12022,6 +12022,7 @@ export const nl_NL: EnTranslations = {
       "partyFull": "Je groep is vol.",
       "alreadyInParty": "{name} zit al in een groep.",
       "pendingInvite": "{name} heeft al een openstaande uitnodiging.",
+      "targetBusy": "{name} is busy right now.",
       "invitationExpired": "De uitnodiging is verlopen.",
       "targetTooFar": "Het doelwit is te ver weg.",
       "duelInProgress": "Er is al een duel aan de gang.",

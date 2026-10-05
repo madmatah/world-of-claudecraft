@@ -12022,6 +12022,7 @@ export const ja_JP: EnTranslations = {
       "partyFull": "パーティは満員です。",
       "alreadyInParty": "{name}はすでにパーティに入っています。",
       "pendingInvite": "{name}には保留中の招待があります。",
+      "targetBusy": "{name}は現在取り込み中です。",
       "invitationExpired": "招待は期限切れです。",
       "targetTooFar": "対象が遠すぎます。",
       "duelInProgress": "すでに決闘が進行中です。",

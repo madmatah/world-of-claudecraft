@@ -566,6 +566,10 @@ const hudStringsEn = {
       partyFull: 'Your party is full.',
       alreadyInParty: '{name} is already in a party.',
       pendingInvite: '{name} already has a pending invitation.',
+      // A duel challenge or acceptance aimed at a pilot seated in a Realm
+      // Racers heat (social/duel.ts). Wordy, M16: the five non-Latin fills
+      // land in this same change.
+      targetBusy: '{name} is busy right now.',
       invitationExpired: 'The invitation has expired.',
       targetTooFar: 'Target is too far away.',
       duelInProgress: 'A duel is already in progress.',
