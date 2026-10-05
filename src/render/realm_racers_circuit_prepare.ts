@@ -236,6 +236,10 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
   buildWallMs: number | null = null;
   private buildCpu = 0;
   private coverGone = false;
+  /** Whether the last run's upload frame (or first visible draw) happened
+   *  under its cover; a run whose cover ended first leaves a new lobby on this
+   *  circuit its readiness to run again. */
+  private uploadedCovered = false;
 
   /**
    * `view` is the pool's lazy view, which this client builds first, or a view
@@ -277,6 +281,10 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     return this.gated;
   }
 
+  rerunDue(): boolean {
+    return !this.uploadedCovered;
+  }
+
   /** Linked and its sky ready: the upload frame left needs a presented frame,
    *  which a blocking arrival's world-draw hold would otherwise wait out. */
   arrivalReady(): boolean {
@@ -296,6 +304,13 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
     gate: (target: THREE.Object3D) => Promise<unknown>,
     uncovered: Promise<void>,
   ): Promise<boolean> {
+    // A later run (a new lobby on this circuit) starts its steps over; the
+    // build it already ran is kept (`build` returns at once for a finished job).
+    this.gated = false;
+    this.drawn = false;
+    this.skyReady = false;
+    this.coverGone = false;
+    this.uploadedCovered = false;
     let released = false;
     const lifted = uncovered.then(() => {
       released = true;
@@ -329,7 +344,8 @@ export class RealmRacersCircuitPrepare implements RealmRacersPrepareClient {
       const drawn = lazy ? lazy.uploadFrame().then(TRUE) : this.view.drawnOnce().then(TRUE);
       // The cover ended first: the upload frame is withdrawn, never drawn in
       // the open (an unculled, shadowless frame of the whole circuit).
-      if (!(await Promise.race([drawn, lifted]))) lazy?.cancelUploadFrame();
+      if (await Promise.race([drawn, lifted])) this.uploadedCovered = true;
+      else lazy?.cancelUploadFrame();
     }
     this.drawn = true;
     const skyOk = await Promise.race([sky, lifted]);

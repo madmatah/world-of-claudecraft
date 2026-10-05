@@ -60,8 +60,13 @@ export interface RealmRacersDeps {
   writers: PainterHostWriters;
   /** This machine's race preparation, read from the HUD's current renderer so
    *  a graphics rebuild hands over the new seam. Asked only in the lobby, with
-   *  the drawn circuit, whose own preparation the readout must include. */
-  prepareProgress(out: RealmRacersPrepareProgress, circuitId: string): RealmRacersPrepareProgress;
+   *  the drawn circuit, whose own preparation the readout must include, and
+   *  the match, so a new lobby never reads the last one's verdict. */
+  prepareProgress(
+    out: RealmRacersPrepareProgress,
+    circuitId: string,
+    matchId: number,
+  ): RealmRacersPrepareProgress;
   /** A lost connection, which takes the lobby curtain down at once; the
    *  reconnect overlay's readout by default. */
   connectionDropped?(): boolean;
@@ -173,7 +178,7 @@ export class RealmRacersUi {
 
   private preparedFor(match: RealmRacersInfo['match']): RealmRacersPrepareProgress {
     return match?.phase === 'loading'
-      ? this.deps.prepareProgress(this.prepared, match.circuitId)
+      ? this.deps.prepareProgress(this.prepared, match.circuitId, match.id)
       : NOT_PREPARED;
   }
 

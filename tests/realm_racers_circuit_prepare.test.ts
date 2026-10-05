@@ -100,7 +100,9 @@ import { GFX_TIER_RANK, type GfxSettings, type GfxTier } from '../src/render/gfx
 import { markProgramReady } from '../src/render/linked_program_readiness';
 import {
   buildRealmRacersCommonRoot,
+  IMMEDIATE_BUILD_HOST,
   prepareRealmRacersCircuits,
+  type RealmRacersBuildHost,
   RealmRacersCircuitPrepare,
   realmRacersCircuitClients,
 } from '../src/render/realm_racers_circuit_prepare';
@@ -1265,8 +1267,8 @@ const CIRCUIT = REALM_RACERS_CIRCUIT_LIST[1];
 const LANE = realmRacersLaneOrigin(laneOf(CIRCUIT));
 const TOWN = { x: 0, z: 0 };
 
-function loading(phase = 'loading') {
-  return { queued: false, match: { practice: false, circuitId: CIRCUIT.id, phase } };
+function loading(phase = 'loading', id = 7) {
+  return { queued: false, match: { practice: false, circuitId: CIRCUIT.id, phase, id } };
 }
 
 function seamWithCircuit() {
@@ -1485,6 +1487,138 @@ describe('the seam asks for the drawn circuit', () => {
     expect(realmRacersRevealHeld('preparing', false)).toBe(false);
     expect(realmRacersRevealHeld('proven', true)).toBe(false);
     expect(realmRacersRevealHeld('unproven', true)).toBe(false);
+  });
+});
+
+/** A circuit client whose every run settles when the test says so, and which
+ *  says whether its verdict carries to a new lobby. */
+function rerunnableClient(circuitId: string) {
+  const runs: ((ok: boolean) => void)[] = [];
+  const root = probeGroup();
+  const flags = { rerunDue: false };
+  const client: RealmRacersPrepareClient = {
+    prepareId: realmRacersCircuitPrepareId(circuitId),
+    built: false,
+    prepare: () => root,
+    units: () => ({ done: 1, total: 4 }),
+    run: () =>
+      new Promise<boolean>((resolve) => {
+        runs.push(resolve);
+      }),
+    rerunDue: () => flags.rerunDue,
+  };
+  return { client, runs, root, flags };
+}
+
+describe('a new lobby on a circuit already prepared', () => {
+  it('runs its readiness again when the last verdict will not carry, and only then', async () => {
+    const host = fakeHost();
+    const { client, runs, root, flags } = rerunnableClient(CIRCUIT.id);
+    const seam = new RealmRacersPrepare();
+    seam.useCircuits({ circuitClient: (id) => (id === CIRCUIT.id ? client : null) });
+    const out = { done: 0, total: 0, settled: false };
+    seam.frame(host, loading('loading', 7), LANE.x, LANE.z);
+    expect(runs).toHaveLength(1);
+    runs[0](false);
+    await flush();
+    expect(seam.stateOf(client.prepareId)).toBe('unproven');
+    // The same lobby again (a reconnect into it) owes nothing new.
+    for (let i = 0; i < 3; i++) seam.frame(host, loading('loading', 7), LANE.x, LANE.z);
+    expect(runs).toHaveLength(1);
+    expect(seam.progress(out, CIRCUIT.id, 7).settled).toBe(true);
+    // The race runs and ends; a NEW lobby on the same circuit. Read before the
+    // renderer's frame (the HUD's order), it is already unsettled, so no ready
+    // can go out on the stale verdict.
+    seam.frame(host, loading('racing', 7), LANE.x, LANE.z);
+    seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
+    expect(seam.progress(out, CIRCUIT.id, 8)).toEqual({ done: 1, total: 4, settled: false });
+    seam.frame(host, loading('loading', 8), LANE.x, LANE.z);
+    expect(runs).toHaveLength(2);
+    expect(seam.stateOf(client.prepareId)).toBe('preparing');
+    expect(seam.progress(out, CIRCUIT.id, 8).settled).toBe(false);
+    host.settle(root);
+    runs[1](true);
+    await flush();
+    expect(seam.stateOf(client.prepareId)).toBe('proven');
+    // Proven and its cover held: the next lobby is genuinely ready at once.
+    seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
+    expect(seam.progress(out, CIRCUIT.id, 9).settled).toBe(true);
+    seam.frame(host, loading('loading', 9), LANE.x, LANE.z);
+    expect(runs).toHaveLength(2);
+    // Proven, but its cover ended before its upload frame drew: run again.
+    flags.rerunDue = true;
+    seam.frame(host, { queued: false, match: null }, LANE.x, LANE.z);
+    expect(seam.progress(out, CIRCUIT.id, 10).settled).toBe(false);
+    seam.frame(host, loading('loading', 10), LANE.x, LANE.z);
+    expect(runs).toHaveLength(3);
+  });
+
+  it('carries no verdict from a run whose cover ended first, and re-runs without rebuilding', async () => {
+    const { view, lane, markDrawn } = probeView();
+    lane.on = true;
+    const sky = fakeSky();
+    sky.finish(true);
+    const client = new RealmRacersCircuitPrepare(view, sky.sky);
+    const { gate, calls } = fakeGate();
+    // Run one: the cover ends (a lost connection drops the lobby curtain)
+    // before the view was ever drawn under it.
+    const first = cover();
+    let verdict: boolean | null = null;
+    void client.run(gate, first.uncovered).then((ok) => {
+      verdict = ok;
+    });
+    await flush();
+    calls[0].resolve();
+    await flush();
+    first.end();
+    client.coverEnded();
+    await flush();
+    expect(verdict).not.toBeNull();
+    expect(client.rerunDue()).toBe(true);
+    // Run two, under the next lobby's cover: everything after the build again
+    // (the gate, the draw, the sky), and every step counted again.
+    const second = cover();
+    verdict = null;
+    void client.run(gate, second.uncovered).then((ok) => {
+      verdict = ok;
+    });
+    expect(client.units().done).toBeLessThan(client.units().total);
+    await flush();
+    expect(calls).toHaveLength(2);
+    calls[1].resolve();
+    await flush();
+    expect(verdict).toBeNull();
+    markDrawn();
+    await flush();
+    expect(verdict).toBe(true);
+    expect(client.rerunDue()).toBe(false);
+    expect(sky.asked).toEqual(['vale', 'vale']);
+  });
+
+  it('never runs a build piece twice for a circuit already built', async () => {
+    const tracks = track.buildRealmRacersTracks();
+    const view = tracks.circuits[REALM_RACERS_CIRCUIT_LIST.indexOf(CIRCUIT)];
+    const recorded: string[] = [];
+    const host: RealmRacersBuildHost = {
+      ...IMMEDIATE_BUILD_HOST,
+      record: (kind) => {
+        recorded.push(kind);
+      },
+    };
+    const sky = fakeSky();
+    sky.finish(true);
+    const client = new RealmRacersCircuitPrepare(view, sky.sky, host);
+    const linked = (): Promise<void> => Promise.resolve();
+    // A run whose cover is already gone: built, gated, no upload frame.
+    await client.run(linked, Promise.resolve());
+    const pieces = recorded.length;
+    expect(pieces).toBeGreaterThan(3);
+    expect(view.built).toBe(true);
+    expect(client.rerunDue()).toBe(true);
+    void client.run(linked, NEVER);
+    await flush();
+    expect(recorded).toHaveLength(pieces);
+    expect(view.built).toBe(true);
   });
 });
 

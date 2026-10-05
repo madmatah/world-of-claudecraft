@@ -140,8 +140,11 @@ function harness() {
   // Hud's production wiring reads `this.renderer.realmRacers.prepare.progress`;
   // a test swaps the source the way replaceRenderer swaps the renderer.
   const source = {
-    progress: (out: { done: number; total: number; settled: boolean }, _circuitId?: string) =>
-      Object.assign(out, prepared),
+    progress: (
+      out: { done: number; total: number; settled: boolean },
+      _circuitId?: string,
+      _matchId?: number,
+    ) => Object.assign(out, prepared),
   };
   const clock = { now: 0 };
   const link = { dropped: false };
@@ -169,7 +172,7 @@ function harness() {
     showBanner,
     clearPickupSplash,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
-    prepareProgress: (out, circuitId) => source.progress(out, circuitId),
+    prepareProgress: (out, circuitId, matchId) => source.progress(out, circuitId, matchId),
     connectionDropped: () => link.dropped,
     now: () => clock.now,
     // The real cover, as the HUD parts wire it, so the depth tests read it.
@@ -1229,6 +1232,12 @@ describe('Realm Racers loading lobby ready', () => {
     h.info.match = lobby(15, [2, 3, 4]);
     h.frame();
     expect(progress).toHaveBeenCalled();
+    // ...for the lobby's own circuit and match, so a new lobby on a circuit
+    // already prepared never reads the last lobby's verdict.
+    const lobbyMatch = h.info.match as NonNullable<typeof h.info.match>;
+    for (const call of progress.mock.calls) {
+      expect(call.slice(1)).toEqual([lobbyMatch.circuitId, lobbyMatch.id]);
+    }
   });
 });
 

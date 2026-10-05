@@ -51,6 +51,14 @@
 // names the drawn circuit, so a circuit client this seam has not asked for yet
 // still counts as an unsettled unit whatever order the HUD and the renderer
 // run in.
+//
+// A circuit is asked once per renderer, but a verdict does not always carry to
+// the NEXT lobby on it: a run whose cover ended first (a lost connection, the
+// failsafe, the cap) never drew its upload frame under it, and an unproven one
+// proved nothing. A new lobby (a new match id) on such a circuit runs its client
+// again, which keeps the build and redoes the gate, the upload frame and the sky
+// under the new lobby's cover (`rerunDue`). The lobby names its match too, so a
+// read that lands before the renderer's frame already counts it unsettled.
 
 import type * as THREE from 'three';
 import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
@@ -69,6 +77,7 @@ import {
   realmRacersBuildNow,
   realmRacersPrepareCircuit,
   realmRacersPrepareHolds,
+  realmRacersPrepareSettledState,
   realmRacersRevealHeld,
   takeRealmRacersPrepare,
 } from './realm_racers_prepare_core';
@@ -113,6 +122,11 @@ export interface RealmRacersPrepareClient {
   coverEnded?(): void;
   /** Builds only for the gate (stand-ins), so without one it builds nothing. */
   readonly gateOnly?: boolean;
+  /** True when a settled verdict does not carry to a NEW lobby on this
+   *  client's circuit: its last run's cover ended before its upload frame drew
+   *  under it. The seam then runs it again for that lobby (an unproven verdict
+   *  is run again whatever this says). */
+  rerunDue?(): boolean;
 }
 
 /** Where the seam gets the client of a circuit once that circuit is known;
@@ -132,7 +146,7 @@ export interface RealmRacersPrepareHost {
 /** The slice of `IWorld.realmRacersInfo` the trigger reads. */
 export interface RealmRacersPrepareViewer {
   queued: boolean;
-  match: { practice: boolean; circuitId?: string; phase?: string } | null;
+  match: { practice: boolean; circuitId?: string; phase?: string; id?: number } | null;
 }
 
 export { rallyArrivalLifts } from './realm_racers_prepare_core';
@@ -172,6 +186,10 @@ export class RealmRacersPrepare {
   private loadingCircuit: string | null = null;
   private lobbyCircuit: string | null = null;
   private lobbyCoverSeen = false;
+  /** The match id of the last lobby a frame saw: a NEW lobby on a circuit
+   *  already prepared runs its readiness again when the verdict will not carry
+   *  (`rerunDue`). A circuit is otherwise prepared once per renderer. */
+  private lastLobbyId: number | null = null;
 
   constructor(clients: readonly RealmRacersPrepareClient[] = []) {
     for (const client of clients) this.addClient(client);
@@ -223,10 +241,19 @@ export class RealmRacersPrepare {
   progress(
     out: RealmRacersPrepareProgress,
     circuitId: string | null = null,
+    matchId: number | null = null,
   ): RealmRacersPrepareProgress {
     beginRealmRacersPrepareTally(out, this.latch.reason !== null);
+    // A lobby this seam's frame has not seen yet (the HUD reads first) whose
+    // circuit will run again counts as not started, so no ready goes out on
+    // the last lobby's verdict.
+    const rerun =
+      circuitId !== null && matchId !== null && matchId !== this.lastLobbyId
+        ? this.rerunClient(circuitId)
+        : null;
     for (const client of this.clients.values()) {
-      addRealmRacersPrepareTally(out, this.stateOf(client.prepareId), client.units?.() ?? null);
+      const state = client === rerun ? 'idle' : this.stateOf(client.prepareId);
+      addRealmRacersPrepareTally(out, state, client.units?.() ?? null);
     }
     if (circuitId !== null && !this.askedCircuits.has(circuitId)) {
       if (this.circuits?.circuitClient(circuitId)) addRealmRacersPrepareTally(out, 'idle', null);
@@ -260,6 +287,12 @@ export class RealmRacersPrepare {
   frame(host: RealmRacersPrepareHost, viewer: RealmRacersPrepareViewer, x: number, z: number) {
     const match = viewer.match;
     this.noteLobby(match?.phase === 'loading' ? (match.circuitId ?? null) : null);
+    const lobbyId = match?.phase === 'loading' ? (match.id ?? null) : null;
+    if (lobbyId !== null && lobbyId !== this.lastLobbyId) {
+      this.lastLobbyId = lobbyId;
+      const rerun = match?.circuitId ? this.rerunClient(match.circuitId) : null;
+      if (rerun && this.host) this.start(this.host, rerun);
+    }
     const inBand = isAtRealmRacersXZ(x, z);
     const underfoot = inBand ? (realmRacersLaneAt(x, z)?.circuit.id ?? null) : null;
     this.viewerMatch = match;
@@ -332,6 +365,18 @@ export class RealmRacersPrepare {
     this.uncoverWaits.delete(id);
     this.clients.get(id)?.coverEnded?.();
     release();
+  }
+
+  /** The circuit's client when it has settled on a verdict that will not
+   *  carry to a new lobby: unproven, or its cover ended before its upload frame
+   *  drew. Null when it has no client, is still running, or is ready as is. */
+  private rerunClient(circuitId: string): RealmRacersPrepareClient | null {
+    const id = this.circuitClientIds.get(circuitId);
+    const client = id === undefined ? undefined : this.clients.get(id);
+    if (!client) return null;
+    const state = this.stateOf(client.prepareId);
+    if (!realmRacersPrepareSettledState(state)) return null;
+    return state === 'unproven' || client.rerunDue?.() === true ? client : null;
   }
 
   private anyClientBuilt(): boolean {

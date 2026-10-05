@@ -41,8 +41,9 @@ down (the race strip rules in `src/styles/components.css`, the touch twin in
     this machine's preparation (`RealmRacersPrepare.progress`, read by Hud from its
     CURRENT renderer through the read-only `renderer.realmRacers.prepare` slice, so a
     graphics rebuild hands over the new seam; one read per frame is shared by the ready
-    send and the paint, and it names the drawn circuit so that circuit's own preparation
-    counts before the renderer has asked for it): prepared units over
+    send and the paint, and it names the drawn circuit and the match so that circuit's own
+    preparation counts before the renderer has asked for it, and a new lobby on a circuit
+    already prepared never reads the last lobby's verdict): prepared units over
     units, never 100 before every producer has its verdict. The `sig` is the match, the
     circuit and the grid shape; the container and its pilot slots are reused across frames.
   - `stepRealmRacersLobbyFailsafe` is the client bound: each newly received, changed

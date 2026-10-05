@@ -472,7 +472,8 @@ describe('race preparation seam (renderer wiring)', () => {
     expect(frameAt).toBeGreaterThan(0);
     expect(tracksAt).toBeGreaterThan(frameAt);
     expect(occurrences(scene, 'this.track.update(')).toBe(1);
-    // It names the drawn circuit, so a circuit client not asked yet still counts.
+    // It names the drawn circuit, so a circuit client not asked yet still counts,
+    // and the match, so a new lobby never reads the last lobby's verdict.
     const hud = stripComments(
       readFileSync(
         new URL('../src/ui/hud/realm_racers/realm_racers_hud_parts.ts', import.meta.url),
@@ -480,9 +481,7 @@ describe('race preparation seam (renderer wiring)', () => {
       ),
     );
     expect(
-      hud.split(
-        'prepareProgress: (out, circuitId) => h.renderer.realmRacers.prepare.progress(out, circuitId),',
-      ).length - 1,
+      hud.split('h.renderer.realmRacers.prepare.progress(out, circuitId, matchId),').length - 1,
     ).toBe(1);
   });
 });

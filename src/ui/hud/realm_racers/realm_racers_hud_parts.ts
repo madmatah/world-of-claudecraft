@@ -27,6 +27,7 @@ interface RealmRacersPartsHost {
         progress(
           out: RealmRacersPrepareProgress,
           circuitId: string | null,
+          matchId: number | null,
         ): RealmRacersPrepareProgress;
       };
     };
@@ -82,7 +83,8 @@ export function realmRacersUiDeps(hud: object): RealmRacersDeps {
     // The race UI owns the match-end edge; the splash it clears is this class's.
     clearPickupSplash: () => h.realmRacersSplash.clear(),
     writers: h.writerFacet,
-    prepareProgress: (out, circuitId) => h.renderer.realmRacers.prepare.progress(out, circuitId),
+    prepareProgress: (out, circuitId, matchId) =>
+      h.renderer.realmRacers.prepare.progress(out, circuitId, matchId),
     // The lobby curtain's arrival-cover depth: the render-side cover reaches
     // the painter through this seam rather than a default import of its own.
     setArrivalCover,
