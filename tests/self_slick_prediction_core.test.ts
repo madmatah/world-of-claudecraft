@@ -250,6 +250,24 @@ describe('SelfSlickPredictor', () => {
   });
 });
 
+describe('against a server older than the oil prediction', () => {
+  /** What an older server's readout carries: patches with no `endsAt`. */
+  const oldPatch = (): RealmRacersSlickInfo => {
+    const { endsAt: _endsAt, ...rest } = patch();
+    return rest as RealmRacersSlickInfo;
+  };
+
+  it('predicts no oil at all: no standing from the acknowledgement, no step', () => {
+    const recon = { gripLeft: 0, contactId: null, contactLeft: 0 };
+    expect(acknowledgedSlickState(recon, match([oldPatch()]), 1)).toBeNull();
+    const b = body();
+    new SelfSlickPredictor().step(b, match([oldPatch()]));
+    expect(b.slick).toBeNull();
+    expect(b.drive?.slip).toBe(0);
+    expect(b.drive?.slipCap).toBe(1);
+  });
+});
+
 describe('the acknowledged standing', () => {
   it('takes the oil back off every shipped surface exactly', () => {
     const drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
@@ -260,6 +278,17 @@ describe('the acknowledged standing', () => {
         expect(unoiledGrip(drive.gripMult)).toBe(base);
       }
     }
+  });
+
+  it('never reads a grip above the road out of an acknowledgement the oil did not touch', () => {
+    // A recovery that skipped the surface pass: the window says oil, the
+    // grip is still the road's. Dividing the oil back out would inflate it.
+    expect(unoiledGrip(1)).toBeNull();
+    expect(
+      acknowledgedSlickState({ gripLeft: 12, contactId: null, contactLeft: 0 }, match([]), 1)
+        ?.baseGrip,
+    ).toBeNull();
+    expect(unoiledGrip(REALM_RACERS_SLICK_GRIP)).toBe(1);
   });
 
   it('is null outside a running race or without a standing', () => {

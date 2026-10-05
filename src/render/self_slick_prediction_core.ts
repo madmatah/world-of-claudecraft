@@ -67,9 +67,13 @@ export interface SlickPredictionBody {
   slick?: SlickPredictionState | null;
 }
 
-/** The viewer's own race is running: the only phase the oil can bite in. */
+/** The viewer's own race is running, on a server that sends what the oil is
+ *  predicted from (an older one's patches carry no `endsAt`, and its `rdv` no
+ *  standing): only then is the oil predicted at all. */
 function racing(match: SlickPredictionMatch | null | undefined): match is SlickPredictionMatch {
-  return match?.phase === 'racing';
+  if (match?.phase !== 'racing') return false;
+  for (const slick of match.slicks) if (!Number.isFinite(slick.endsAt)) return false;
+  return true;
 }
 
 /**
@@ -80,6 +84,9 @@ function racing(match: SlickPredictionMatch | null | undefined): match is SlickP
  */
 export function unoiledGrip(gripMult: number): number | null {
   const base = gripMult / REALM_RACERS_SLICK_GRIP;
+  // Above the road's grip it was never oiled: a recovery that skipped the
+  // surface pass left the window open over a clean grip.
+  if (base > 1) return null;
   return base * REALM_RACERS_SLICK_GRIP === gripMult ? base : null;
 }
 
