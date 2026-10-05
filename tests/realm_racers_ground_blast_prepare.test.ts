@@ -168,6 +168,61 @@ describe('Ground Blast pool preparation', () => {
     expect(blasts.inFlight).toBe(0);
   });
 
+  it('releases every resource on teardown even when one release throws, then reports it', () => {
+    /** The dispose calls one teardown makes, counted on the prototypes, so the
+     *  shared materials no mesh wears (each slot draws a clone) count too. */
+    const countTeardown = (blasts: Blasts, before?: () => void) => {
+      const material = vi.spyOn(THREE.Material.prototype, 'dispose');
+      const geometry = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+      const instanced = vi.spyOn(THREE.InstancedMesh.prototype, 'dispose');
+      let error: unknown = null;
+      try {
+        before?.();
+        blasts.dispose();
+      } catch (thrown) {
+        error = thrown;
+      }
+      const counts = {
+        material: material.mock.calls.length,
+        geometry: geometry.mock.calls.length,
+        instanced: instanced.mock.calls.length,
+        error,
+      };
+      material.mockRestore();
+      geometry.mockRestore();
+      instanced.mockRestore();
+      return counts;
+    };
+    const clean = new RealmRacersGroundBlastVisuals();
+    clean.prepare();
+    const whole = countTeardown(clean);
+    expect(whole.error).toBeNull();
+    expect(whole.material).toBeGreaterThan(8);
+    expect(whole.geometry).toBeGreaterThanOrEqual(8);
+    expect(whole.instanced).toBe(6);
+
+    const blasts = new RealmRacersGroundBlastVisuals();
+    const root = blasts.prepare();
+    const marker = root.getObjectByName('marker0') as THREE.Mesh;
+    const boom = new Error('driver lost');
+    (marker.material as THREE.Material).dispose = () => {
+      throw boom;
+    };
+    const faulty = countTeardown(blasts);
+    // The one release that threw is reported once everything else was given
+    // back: every other material, every geometry, every trail buffer.
+    expect(faulty.error).toBeInstanceOf(AggregateError);
+    expect((faulty.error as AggregateError).errors).toEqual([boom]);
+    expect(faulty.material).toBe(whole.material - 1);
+    expect(faulty.geometry).toBe(whole.geometry);
+    expect(faulty.instanced).toBe(whole.instanced);
+    expect(blasts.group.children).toHaveLength(0);
+    expect(blasts.inFlight).toBe(0);
+    // Torn down for good: a later call is a no-op, not a second release.
+    const again = countTeardown(blasts);
+    expect(again).toEqual({ material: 0, geometry: 0, instanced: 0, error: null });
+  });
+
   it('puts the landing marker on the encounter band over its countdown fill', () => {
     const blasts = new RealmRacersGroundBlastVisuals();
     const root = blasts.prepare();

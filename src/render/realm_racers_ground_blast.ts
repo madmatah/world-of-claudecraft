@@ -634,19 +634,29 @@ export class RealmRacersGroundBlastVisuals {
 
   /** Terminal release on renderer teardown: every geometry and material this
    *  pool minted, the per-slot clones included. The marker texture belongs to
-   *  the shared texture cache and stays. */
+   *  the shared texture cache and stays. Each release is attempted on its own,
+   *  so one that throws never strands the rest, and what threw is rethrown at
+   *  the end; the pool is torn down for good either way. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    const errors: unknown[] = [];
+    const release = (resource: { dispose(): void }): void => {
+      try {
+        resource.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+    };
     for (const slot of this.slots) {
-      slot.trail.dispose();
+      release(slot.trail);
       for (const mesh of [slot.marker, slot.core, slot.column]) {
-        (mesh.material as THREE.Material).dispose();
+        release(mesh.material as THREE.Material);
       }
     }
     for (const burst of this.bursts) {
-      (burst.flash.material as THREE.Material).dispose();
-      (burst.wave.material as THREE.Material).dispose();
+      release(burst.flash.material as THREE.Material);
+      release(burst.wave.material as THREE.Material);
     }
     const kit = this.kit;
     this.kit = null;
@@ -661,7 +671,7 @@ export class RealmRacersGroundBlastVisuals {
         kit.waveGeometry,
         kit.flashGeometry,
       ]) {
-        geometry.dispose();
+        release(geometry);
       }
       for (const material of [
         kit.projectileMaterial,
@@ -673,12 +683,13 @@ export class RealmRacersGroundBlastVisuals {
         kit.waveMaterial,
         kit.flashMaterial,
       ]) {
-        material.dispose();
+        release(material);
       }
     }
     this.slots.length = 0;
     this.bursts.length = 0;
     this.group.clear();
+    if (errors.length > 0) throw new AggregateError(errors, 'Ground Blast pool disposal failed');
   }
 
   /** Live shells, for tests and for anything that needs to know whether the sky
