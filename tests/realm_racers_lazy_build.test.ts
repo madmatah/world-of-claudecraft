@@ -793,6 +793,45 @@ describe('the upload frame is withdrawn on the frame its cover ends', () => {
   });
 });
 
+describe('a re-asked upload frame', () => {
+  it('resolves only on a render of its own, never on the last frame that drew one', async () => {
+    const tracks = track.buildRealmRacersTracks();
+    const view = viewOf(tracks);
+    view.build().finish();
+    const draw = (): void =>
+      view.group.traverseVisible((object) => {
+        if ((object as THREE.Mesh).isMesh) {
+          object.onAfterRender(...([] as unknown as Parameters<THREE.Object3D['onAfterRender']>));
+        }
+      });
+    let first = false;
+    void view.uploadFrame().then(() => {
+      first = true;
+    });
+    tracks.update(LANE.x, LANE.z, 0, null);
+    draw();
+    tracks.update(LANE.x, LANE.z, 1, null);
+    await flush();
+    expect(first).toBe(true);
+    // A later run (a new lobby on the same circuit) withdraws and asks again.
+    view.cancelUploadFrame();
+    let second = false;
+    void view.uploadFrame().then(() => {
+      second = true;
+    });
+    tracks.update(LANE.x, LANE.z, 2, null);
+    // Updated again with no render between: the earlier frame's draw is not
+    // this frame's.
+    tracks.update(LANE.x, LANE.z, 3, null);
+    await flush();
+    expect(second).toBe(false);
+    draw();
+    tracks.update(LANE.x, LANE.z, 4, null);
+    await flush();
+    expect(second).toBe(true);
+  });
+});
+
 describe('the admission budget sees the build as two kinds', () => {
   it('adds at most two queue label kinds over a full race: the queue join, the lobby, the countdown', async () => {
     const seam = new RealmRacersPrepare();

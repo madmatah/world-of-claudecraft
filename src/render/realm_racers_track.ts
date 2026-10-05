@@ -1450,6 +1450,7 @@ function authoredTrackView(
       // than returning the withdrawn one's promise, which would never resolve.
       markUploaded = null;
       uploadAsked = null;
+      uploadDrawn = false;
       if (unculled) restoreAfterUploadFrame(unculled);
       unculled = null;
     },
@@ -1494,6 +1495,8 @@ function authoredTrackView(
       group.visible = mine && !reveal.held(circuit.id);
       shownLastUpdate = group.visible;
       if (markUploaded && !unculled && group.visible) {
+        // A draw of an earlier upload frame is not this one's.
+        uploadDrawn = false;
         unculled = prepareUploadFrame(group, noteUploadDrawn);
       }
       if (!lane || !mine) {
