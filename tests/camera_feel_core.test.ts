@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import {
   addCameraShake,
@@ -17,7 +16,6 @@ import {
   stepLandingDetector,
   underwaterCameraCeiling,
 } from '../src/render/camera_feel_core';
-import { Renderer } from '../src/render/renderer';
 import { RUN_SPEED } from '../src/sim/types';
 
 it('keeps the submerged chase eye under water, with no ceiling on dry or non-finite water', () => {
@@ -140,32 +138,6 @@ describe('positional shake channel', () => {
     stepCameraFeel(s, 0, 0, 1 / 60, false, REALM_RACERS_CAMERA_FEEL_PROFILE);
     cameraShakeOffsetInto(s, out);
     expect(out).toEqual({ x: 0, y: 0, z: 0 });
-  });
-});
-
-describe("the renderer's editor camera", () => {
-  it('still decays a shake: the free camera skips the chase path, not the feel step', () => {
-    // The shake's decay lives in the feel step; the editor branch returning
-    // before it left a shake taken there offsetting the camera forever.
-    const renderer = Object.create(Renderer.prototype) as unknown as {
-      camera: THREE.PerspectiveCamera;
-      cameraLookAt: THREE.Vector3;
-      editorCam: { pos: THREE.Vector3; target: THREE.Vector3 };
-      camFeel: ReturnType<typeof createCameraFeel>;
-      reduceMotionSetting: boolean;
-      reduceMotionMql: null;
-      updateCamera(selfPos: THREE.Vector3, dt: number): void;
-    };
-    renderer.camera = new THREE.PerspectiveCamera();
-    renderer.cameraLookAt = new THREE.Vector3();
-    renderer.editorCam = { pos: new THREE.Vector3(0, 10, 0), target: new THREE.Vector3(5, 0, 5) };
-    renderer.camFeel = createCameraFeel();
-    renderer.reduceMotionSetting = false;
-    renderer.reduceMotionMql = null;
-    addCameraShake(renderer.camFeel, 1);
-    for (let i = 0; i < 120; i++) renderer.updateCamera(new THREE.Vector3(), 1 / 60);
-    expect(renderer.camFeel.shakeTrauma).toBe(0);
-    expect(renderer.camera.position.toArray()).toEqual([0, 10, 0]);
   });
 });
 

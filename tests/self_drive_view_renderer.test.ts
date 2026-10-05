@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/game/audio', () => ({ audio: {} }));
@@ -13,6 +14,7 @@ vi.mock('../src/render/textures', async (importOriginal) => {
   };
 });
 
+import { addCameraShake, createCameraFeel } from '../src/render/camera_feel_core';
 import { RealmRacersScene, SLICK_DROP_MEAN_TICK_WAIT_SEC } from '../src/render/realm_racers_scene';
 import { Renderer } from '../src/render/renderer';
 import type { ReconciledDrive } from '../src/render/self_drive_view_core';
@@ -238,5 +240,31 @@ describe('renderer self-kart reads go through the drive view', () => {
         'realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
       ),
     ).toBe(1);
+  });
+});
+
+describe("the renderer's editor camera", () => {
+  it('still decays a shake: the free camera skips the chase path, not the feel step', () => {
+    // The shake's decay lives in the feel step; the editor branch returning
+    // before it left a shake taken there offsetting the camera forever.
+    const renderer = Object.create(Renderer.prototype) as unknown as {
+      camera: THREE.PerspectiveCamera;
+      cameraLookAt: THREE.Vector3;
+      editorCam: { pos: THREE.Vector3; target: THREE.Vector3 };
+      camFeel: ReturnType<typeof createCameraFeel>;
+      reduceMotionSetting: boolean;
+      reduceMotionMql: null;
+      updateCamera(selfPos: THREE.Vector3, dt: number): void;
+    };
+    renderer.camera = new THREE.PerspectiveCamera();
+    renderer.cameraLookAt = new THREE.Vector3();
+    renderer.editorCam = { pos: new THREE.Vector3(0, 10, 0), target: new THREE.Vector3(5, 0, 5) };
+    renderer.camFeel = createCameraFeel();
+    renderer.reduceMotionSetting = false;
+    renderer.reduceMotionMql = null;
+    addCameraShake(renderer.camFeel, 1);
+    for (let i = 0; i < 120; i++) renderer.updateCamera(new THREE.Vector3(), 1 / 60);
+    expect(renderer.camFeel.shakeTrauma).toBe(0);
+    expect(renderer.camera.position.toArray()).toEqual([0, 10, 0]);
   });
 });
