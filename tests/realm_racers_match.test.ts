@@ -1773,6 +1773,97 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(meta.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
   });
 
+  /** Runs the field home in the order given, through the real per-tick
+   *  crediting and the race-end deed call. A pilot in `crossed` already took
+   *  the line and starts from where it stands. */
+  function finishField(sim: Sim, order: number[], crossed: readonly number[] = []): void {
+    for (const pid of order) {
+      const drive = required(entity(sim, pid).drive, `drive ${pid}`);
+      drive.speed = 0;
+      drive.slip = 0;
+      drive.yawRate = 0;
+    }
+    order.forEach((pid, i) => {
+      if (i > 0) sim.tickCount++;
+      if (!crossed.includes(pid)) crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    });
+    expect(match(sim).phase).toBe('finished');
+  }
+
+  function expectCleanRace(sim: Sim, expected: readonly (readonly [number, boolean])[]): void {
+    for (const [pid, clean] of expected) {
+      const meta = required(sim.players.get(pid), `player ${pid}`);
+      expect(meta.deedsEarned.has('pvp_rr_clean_race'), `pid ${pid}`).toBe(clean);
+    }
+  }
+
+  it('withholds clean_race for a real rival bump alone, never for the clean finishers', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    // a and b take the line and trade a real announced bump down the road,
+    // well clear of c and d still parked on the grid.
+    crossStart(sim, a);
+    crossStart(sim, b);
+    advanceArc(sim, a, 20);
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const progressB = required(match(sim).progress.get(b), `progress ${b}`);
+    placeAtS(sim, b, progressA.lastS, 1.2);
+    progressB.lastS = progressA.lastS;
+    progressB.trackIndex = progressA.trackIndex;
+    const sample = realmRacersTrack(RACE_CIRCUIT).pointAt(progressA.lastS);
+    const closing = REALM_RACERS_BUMP_EVENT_MIN_IMPACT + 5;
+    for (const [pid, slip] of [
+      [a, closing / 2],
+      [b, -closing / 2],
+    ] as const) {
+      const racer = entity(sim, pid);
+      racer.facing = Math.atan2(sample.tx, sample.tz);
+      const drive = required(racer.drive, `drive ${pid}`);
+      drive.speed = 20;
+      drive.slip = slip;
+    }
+    sim.tickCount++;
+    updateRealmRacers(sim.ctx);
+    expect(progressA.hadRivalContact).toBe(true);
+    expect(progressA.hadOffTrackContact).toBe(false);
+    finishField(sim, [a, c, d, b], [a, b]);
+    expect(required(match(sim).progress.get(a), `progress ${a}`).finishedTick).not.toBeNull();
+    expectCleanRace(sim, [
+      [a, false],
+      [b, false],
+      [c, true],
+      [d, true],
+    ]);
+  });
+
+  it('withholds clean_race for a real off-track excursion alone, never for the clean finishers', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    // Out into the garden and straight back at the same arc, so the referee
+    // has nothing to return and only the excursion itself is under test.
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const garden = rallyGardenEdgeOffsetAt(RACE_CIRCUIT, progressA.lastS) + 6;
+    placeAtS(sim, a, progressA.lastS, garden);
+    updateRealmRacers(sim.ctx);
+    expect(progressA.hadOffTrackContact).toBe(true);
+    placeAtS(sim, a, progressA.lastS);
+    updateRealmRacers(sim.ctx);
+    expect(progressA.hadRivalContact).toBe(false);
+    finishField(sim, [a, b, c, d]);
+    expect(progressA.finishedTick).not.toBeNull();
+    expectCleanRace(sim, [
+      [a, false],
+      [b, true],
+      [c, true],
+      [d, true],
+    ]);
+  });
+
   it('keeps a clean run after the finish line: wandering off the road during the chase window does not spoil it', () => {
     const { sim, pids } = startMatch();
     const [a, b, c, d] = pids;
