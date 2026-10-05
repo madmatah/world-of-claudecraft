@@ -105,3 +105,56 @@ describe('a rival Ground Blast leaves the drawn nose', () => {
     expect([shot.x, shot.z]).toEqual([30, 5]);
   });
 });
+
+describe("the local pilot's own report", () => {
+  /** The scene with a ready, predicted kart at the origin facing +z. */
+  function predicted() {
+    const h = harness();
+    const launchOwn = vi.fn(() => true);
+    (h.scene as unknown as { groundBlasts: unknown }).groundBlasts = { fire: h.fire, launchOwn };
+    const host = (h.scene as unknown as { host: Record<string, unknown> }).host;
+    host.selfRender = {
+      active: true,
+      ready: true,
+      position: { x: 0, y: 0, z: 0 },
+      drive: { steersHeading: true, facing: 0 },
+      reconciledLeadMs: 80,
+    };
+    host.sim = { playerId: SELF, player: { id: SELF, pos: { x: 0, z: 0 }, facing: 0 } };
+    return h;
+  }
+
+  const ownFired = (
+    targetX: number,
+    targetZ: number,
+  ): Parameters<RealmRacersScene['onEvent']>[0] => ({
+    type: 'realmRacersGroundBlastFired',
+    sourceId: SELF,
+    x: 0,
+    z: 2,
+    targetX,
+    targetZ,
+    flightSeconds: 0.6,
+  });
+
+  it('suppresses the echo of the shot it reported, at the press', () => {
+    const { scene, burst } = predicted();
+    scene.predictOwnGroundBlastFire({ x: 0, z: 30 });
+    expect(burst).toHaveBeenCalledTimes(1);
+    scene.onEvent(ownFired(0.5, 30.5));
+    expect(burst).toHaveBeenCalledTimes(1);
+  });
+
+  it('still plays a real shot that followed a refused one inside the window', () => {
+    const { scene, burst } = predicted();
+    scene.predictOwnGroundBlastFire({ x: 0, z: 30 });
+    expect(burst).toHaveBeenCalledTimes(1);
+    // The server refused that one. A second press inside the window plays no
+    // local report (one in flight), and its Fired event lands elsewhere: it
+    // plays rather than being swallowed by the stale mark.
+    scene.predictOwnGroundBlastFire({ x: 20, z: 50 });
+    expect(burst).toHaveBeenCalledTimes(1);
+    scene.onEvent(ownFired(20, 50));
+    expect(burst).toHaveBeenCalledTimes(2);
+  });
+});

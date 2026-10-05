@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../sim/content/vehicles';
-import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
+import { GROUND_BLAST_RADIUS, resolveGroundBlastAim } from '../sim/realm_racers_ground_blast';
 import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
 import type { BiomeId, Entity, SimEvent } from '../sim/types';
 import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
@@ -154,6 +154,8 @@ export class RealmRacersScene {
   // Latch deduplicating the own Fired event's muzzle cue against the locally
   // played one (own_shot_feedback_core).
   private readonly ownShotFeedback = createOwnShotFeedback();
+  private readonly ownShotTarget = { x: 0, z: 0 };
+  private readonly firedTarget = { x: 0, z: 0 };
   // Per-rival latch for the local bump bang (own_bump_feedback_core).
   private readonly ownBumpFeedback = createOwnBumpFeedback();
   private readonly selfAimPoseOut: RealmRacersAimPose = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
@@ -341,7 +343,12 @@ export class RealmRacersScene {
       targetZ: z,
       flightSeconds: 0,
     });
-    markOwnShotFeedback(this.ownShotFeedback, performance.now());
+    // The mark carries the shot's target, clamped from the drawn pose as the
+    // server will clamp it from its own, so only that shot's echo is muted.
+    const aim = resolveGroundBlastAim({ x: px, z: pz, facing }, point);
+    this.ownShotTarget.x = aim.x;
+    this.ownShotTarget.z = aim.z;
+    markOwnShotFeedback(this.ownShotFeedback, performance.now(), this.ownShotTarget);
   }
 
   /**
@@ -469,11 +476,14 @@ export class RealmRacersScene {
         // The local pilot's own muzzle flash and report already played at the
         // press (predictOwnGroundBlastFire): replaying them reads as a double
         // shot. The arc and the marker are not duplicated locally.
+        this.firedTarget.x = ev.targetX;
+        this.firedTarget.z = ev.targetZ;
         if (
           !consumeOwnShotFeedback(
             this.ownShotFeedback,
             ev.sourceId === h.sim.playerId,
             performance.now(),
+            this.firedTarget,
           )
         ) {
           h.vfx.burst(this.fxAt.set(shot.x, shot.y, shot.z), 'arcane', 14, 0.65);
