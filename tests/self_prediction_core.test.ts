@@ -320,8 +320,6 @@ interface DriveScenario {
   /** A server outcome written in the rally pass of tick `ct` (after the
    *  movement pass and updateAuras). */
   outcome?: (ct: number, server: MotionState) => void;
-  /** The server's movement pass skips the kernel on this tick. */
-  locked?: (ct: number) => boolean;
   facing?: number;
   input?: (ct: number) => MoveInput;
 }
@@ -347,7 +345,7 @@ function runDrive(scenario: DriveScenario): DriveRun {
     if (ct < 0) continue;
     server.prevPos = { ...server.pos };
     if (!server.drive) server.facing = FRAME_FACING;
-    if (!scenario.locked?.(ct)) stepPlayerMotion(kernelDeps, server as Entity, input(ct));
+    stepPlayerMotion(kernelDeps, server as Entity, input(ct));
     tickAuras(server);
     scenario.outcome?.(ct, server);
     trail.push(copyMotionState(server));
@@ -718,78 +716,6 @@ describe('self prediction core: a seated driver', () => {
     expect(head.facing).toBe(0.5);
   });
 
-  it('never steps a locked tick: a race lock replays exactly at its start and at its release', () => {
-    const FROM = 40;
-    const UNTIL = 60;
-    const lockedAt = (ct: number) => ct >= FROM && ct < UNTIL;
-    const run = runDrive({
-      ticks: 100,
-      locked: lockedAt,
-      outcome: (ct, server) => {
-        (server.drive as VehicleDrive).controlsLocked = lockedAt(ct);
-      },
-    });
-    expectAllReconciled(run, 100);
-    // One replay per release is expected: the acked controlsLocked says the
-    // acked tick was held, so the client holds the next one too, while the
-    // server's gate has already opened on it (the release lags one tick).
-    expect(replayedTicks(run)).toEqual([FROM, UNTIL]);
-    const held = run.server.filter((_, ct) => lockedAt(ct));
-    for (const body of held) expect(body.pos).toEqual(held[0].pos);
-  });
-
-  it('holds a locked or server-held frame where it stands', () => {
-    const step = createDeckAwareStep(createClientPlayerMotionDeps(SEED), () => 0);
-    const locked = seatedPilot();
-    (locked.drive as VehicleDrive).controlsLocked = true;
-    (locked.drive as VehicleDrive).speed = 20;
-    const ring = new PredictionRing();
-    const a = predictTick(
-      ring,
-      locked,
-      { ct: 0, mi: driveMi({ forward: true }), facing: null },
-      step,
-    );
-    expect(a.pos).toEqual(locked.pos);
-    expect(a.drive).toEqual(locked.drive);
-
-    const moving = seatedPilot();
-    (moving.drive as VehicleDrive).speed = 20;
-    const b = predictTick(
-      ring,
-      moving,
-      { ct: 1, mi: driveMi({ forward: true }), facing: null, held: true },
-      step,
-    );
-    expect(b.pos).toEqual(moving.pos);
-    expect(ring.head?.held).toBe(true);
-    const c = predictTick(ring, b, { ct: 2, mi: driveMi({ forward: true }), facing: null }, step);
-    expect(c.pos).not.toEqual(moving.pos);
-  });
-
-  it('keeps a held frame held when a correction replays it', () => {
-    const step = createDeckAwareStep(createClientPlayerMotionDeps(SEED), () => 0);
-    const ring = new PredictionRing();
-    const start = seatedPilot();
-    (start.drive as VehicleDrive).speed = 20;
-    let predicted = predictTick(
-      ring,
-      start,
-      { ct: 0, mi: driveMi({ forward: true }), facing: null },
-      step,
-    );
-    predicted = predictTick(
-      ring,
-      predicted,
-      { ct: 1, mi: driveMi({ forward: true }), facing: null, held: true },
-      step,
-    );
-    const ack = acknowledgement(ring.find(0)?.pose as MotionState);
-    ack.x += 0.5;
-    expect(reconcile(ring, 0, ack, 0, 0, step).mode).toBe('replayed');
-    expect(ring.find(1)?.pose.pos.x).toBe(ack.x);
-  });
-
   it('reports a yaw residual for a spin, and none once the replay has converged', () => {
     const EVENT = 20;
     const scenario = {
@@ -959,14 +885,6 @@ describe('self prediction core: a runner keeps its old shape', () => {
       [...Object.keys(state()), 'deck'].sort(),
     );
     expect(ring.find(1)?.pose.facing).toBe(0.75);
-  });
-
-  it('writes a held runner frame facing without stepping it, as the server does', () => {
-    const ring = new PredictionRing();
-    const held = predictTick(ring, state(), { ...frame(0, 1.2), held: true }, step);
-    expect(held.facing).toBe(1.2);
-    expect(held.pos).toEqual(state().pos);
-    expect(held.prevPos).toEqual(state().pos);
   });
 
   it('still matches a runner on position alone', () => {

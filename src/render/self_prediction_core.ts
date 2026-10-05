@@ -26,9 +26,6 @@ export interface PredictionFrame {
   ct: number;
   mi: MoveInput;
   facing: number | null;
-  /** The server holds the body this tick (its override is active): the
-   *  kernel does not run. */
-  held?: boolean;
 }
 
 /** The predicted body. `deck` set (a route index) means the pose is kept in
@@ -68,7 +65,6 @@ export interface PredictionEntry {
   ct: number;
   mi: MoveInput;
   facing: number | null;
-  held?: boolean;
   pose: MotionState;
 }
 
@@ -93,7 +89,7 @@ export function copyMotionState(state: MotionState): MotionState {
 }
 
 function entryFrame(entry: PredictionEntry): PredictionFrame {
-  return { ct: entry.ct, mi: entry.mi, facing: entry.facing, held: entry.held };
+  return { ct: entry.ct, mi: entry.mi, facing: entry.facing };
 }
 
 function stepFrom(state: MotionState, frame: PredictionFrame, stepFn: PredictionStep): MotionState {
@@ -103,10 +99,8 @@ function stepFrom(state: MotionState, frame: PredictionFrame, stepFn: Prediction
   next.prevPos.z = next.pos.z;
   const drive = next.drive ?? null;
   if (drive) next.prevFacing = next.facing;
-  // the server writes a runner's streamed facing even on a tick it holds
+  // the server writes a runner's streamed facing, never a driver's
   if (frame.facing !== null && !drive) next.facing = frame.facing;
-  // the server's movement pass returns before the kernel on a race lock
-  if (frame.held === true || drive?.controlsLocked === true) return next;
   stepFn(next, frame);
   return next;
 }
@@ -221,14 +215,12 @@ export class PredictionRing {
 
   push(entry: PredictionEntry): void {
     if (this.anchorCt === null) this.anchorCt = entry.ct;
-    const stored: PredictionEntry = {
+    this.entries.push({
       ct: entry.ct,
       mi: { ...entry.mi },
       facing: entry.facing,
       pose: copyMotionState(entry.pose),
-    };
-    if (entry.held) stored.held = true;
-    this.entries.push(stored);
+    });
     if (this.entries.length > this.capacity) this.entries.shift();
   }
 
@@ -254,13 +246,7 @@ export function predictTick(
   stepFn: PredictionStep,
 ): MotionState {
   const predicted = stepFrom(state, frame, stepFn);
-  ring.push({
-    ct: frame.ct,
-    mi: frame.mi,
-    facing: frame.facing,
-    held: frame.held,
-    pose: predicted,
-  });
+  ring.push({ ct: frame.ct, mi: frame.mi, facing: frame.facing, pose: predicted });
   return predicted;
 }
 
