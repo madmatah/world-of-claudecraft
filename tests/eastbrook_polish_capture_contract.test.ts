@@ -724,7 +724,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
   // Re-minted at the release/v0.45.0 merge into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  'e721c18a183a17ffaac4780c14663b00f25cf41ec5003fa12042e2186f95c934';
+  // Re-minted for the editor camera's shake decay (renderer leaf). No capture was retaken.
+  '14f641bef0fc653444264b3f5b1a0e0aae0c203e3a1259ae95dca194c68845d4';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

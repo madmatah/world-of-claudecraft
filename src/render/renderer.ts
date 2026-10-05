@@ -12172,10 +12172,10 @@ export class Renderer {
   }
 
   private updateCamera(selfPos: THREE.Vector3, dt: number): void {
-    // Map-editor free camera: use the editor pose verbatim and skip the entire
-    // player-chase path. Every camera-relative cull in sync() then
-    // runs off this free camera with no other change.
+    // Map-editor free camera: the editor pose verbatim, no player-chase path (every
+    // camera-relative cull in sync() runs off it); the feel still steps so a shake decays.
     if (this.editorCam) {
+      stepCameraFeelForDriving(this.camFeel, 0, 0, dt, !this.reducedMotion(), false);
       this.camera.position.copy(this.editorCam.pos);
       this.cameraLookAt.copy(this.editorCam.target);
       if (Math.abs(this.camera.fov - CAMERA_BASE_FOV) > 0.01) {

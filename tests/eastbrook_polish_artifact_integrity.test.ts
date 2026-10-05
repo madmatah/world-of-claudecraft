@@ -1418,7 +1418,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
   // Re-minted at the release/v0.45.0 merge into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  '2e92fc18b90e6cec1eea0a8c22a5bcaabeb7d714b814e236732a3ddd27dfe634';
+  // Re-minted for the editor camera's shake decay (renderer leaf). No capture was retaken.
+  '33e2c509b127df6811cc9798c77ae7cb6dae7eb1ed471e5521af291e52fc8490';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the release/v0.44.0 base merges into PR 4193 (Buried Hoards), the second after PR 3847 landed. No capture was retaken.
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
@@ -1465,7 +1466,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
   // Re-minted at the release/v0.45.0 merge into feature/realm-racers
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  'e721c18a183a17ffaac4780c14663b00f25cf41ec5003fa12042e2186f95c934';
+  // Re-minted for the editor camera's shake decay (renderer leaf). No capture was retaken.
+  '14f641bef0fc653444264b3f5b1a0e0aae0c203e3a1259ae95dca194c68845d4';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2871,7 +2873,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // re-swept evidence. No capture was retaken.
       // Release/v0.45.0 merge into feature/realm-racers: recomputed LAST over the
       // re-swept evidence. No capture was retaken.
-    ).toBe('7d4b7d4a9ba20710402872a476e0565de6c00b63d557534bdfc7de1c30e471c9');
+      // Re-minted for the editor camera's shake decay.
+    ).toBe('faa3fe253c76cb924bc363054369f785a5d3b043272afc79f381b99401887dcf');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {
