@@ -15,11 +15,13 @@ import { fillReconciledDrive, type ReconciledDrive } from './self_drive_view_cor
 import {
   copyMotionState,
   type MotionState,
+  type PredictionFrame,
   type PredictionPose,
   PredictionRing,
   type PredictionStep,
   predictTick,
   reconcile,
+  SELF_PREDICTION_RING_CAPACITY,
 } from './self_prediction_core';
 import type { ReconciledSelfPrediction } from './self_render_position_core';
 
@@ -148,6 +150,9 @@ function refreshMirroredMotionState(state: MotionState, self: Entity): void {
 export class MovementPredictionPipeline {
   private readonly wireGlue = new MovementWireGlue();
   private readonly ring = new PredictionRing();
+  /** Every frame sent, kept across a suspend or a stand-down (the ring is
+   *  not): a re-seed replays the ones the server has yet to consume. */
+  private readonly sentFrames: PredictionFrame[] = [];
   private readonly stepFn: PredictionStep;
   private wire: SelfPredictionWire | null = null;
   private self: Entity | null = null;
@@ -267,6 +272,7 @@ export class MovementPredictionPipeline {
       );
       wire.netPipeline().noteReconcileOutcome(result.mode);
       this.lastAckClientTick = wire.reconAckClientTick;
+      this.dropSentThrough(wire.reconAckClientTick);
       if (result.mode === 'stale' || result.mode === 'suspend') {
         this.suspendAtCurrentWireState();
         return null;
@@ -309,13 +315,53 @@ export class MovementPredictionPipeline {
   }
 
   private predictFrame(frame: InputTickFrame): void {
+    this.recordSentFrame(frame);
     if (!this.canPredict() || !this.wire || !this.self) return;
     if (this.reseedAfterDriverStandDown) this.adoptWireStateAfterDriverStandDown();
     if (frame.ct <= this.lastPredictedClientTick) this.resetPrediction();
-    if (!this.predicted) this.predicted = motionState(this.self, this.wire);
-    refreshMirroredMotionState(this.predicted, this.self);
-    this.predicted = predictTick(this.ring, this.predicted, frame, this.stepFn);
+    if (!this.predicted) this.seedAtAcknowledgement(this.self, this.wire, frame.ct);
+    const predicted = this.predicted as MotionState;
+    refreshMirroredMotionState(predicted, this.self);
+    this.predicted = predictTick(this.ring, predicted, frame, this.stepFn);
     this.lastPredictedClientTick = frame.ct;
+  }
+
+  /**
+   * Seed the prediction at the acknowledged pose. A seated driver also replays
+   * the frames sent after it, ahead of `beforeCt`: the server consumes every
+   * one of them whatever the client did meanwhile, so the head stands exactly
+   * as many ticks over the ack as the frames it stepped (the tick offset the
+   * rivals are projected by), and the next acknowledgement matches instead of
+   * replaying a head left those ticks short, 8 yd or more at race speed. A
+   * runner keeps the open-loop resume (docs/design/movement-reconciliation.md):
+   * its catch-up is a glide of a yard or two.
+   */
+  private seedAtAcknowledgement(self: Entity, wire: SelfPredictionWire, beforeCt: number): void {
+    let state = motionState(self, wire);
+    const ack = wire.reconAckClientTick;
+    if (ack >= 0 && state.drive) {
+      for (const sent of this.sentFrames) {
+        if (sent.ct <= ack || sent.ct >= beforeCt) continue;
+        refreshMirroredMotionState(state, self);
+        state = predictTick(this.ring, state, sent, this.stepFn);
+        this.lastPredictedClientTick = sent.ct;
+      }
+    }
+    this.predicted = state;
+  }
+
+  private recordSentFrame(frame: InputTickFrame): void {
+    const sent = this.sentFrames;
+    // a client tick regression (a renegotiated sampler) restarts the history
+    while (sent.length > 0 && sent[sent.length - 1].ct >= frame.ct) sent.pop();
+    sent.push({ ct: frame.ct, mi: { ...frame.mi }, facing: frame.facing });
+    if (sent.length > SELF_PREDICTION_RING_CAPACITY) sent.shift();
+  }
+
+  private dropSentThrough(ct: number): void {
+    let count = 0;
+    while (count < this.sentFrames.length && this.sentFrames[count].ct <= ct) count++;
+    if (count > 0) this.sentFrames.splice(0, count);
   }
 
   private canPredict(): boolean {
@@ -357,6 +403,7 @@ export class MovementPredictionPipeline {
 
   reset(): void {
     this.resetPrediction();
+    this.sentFrames.length = 0;
     this.reseedAfterDriverStandDown = false;
     this.lastEpoch = null;
     this.lastAckClientTick = -1;

@@ -649,6 +649,43 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     expect(wire.reconcileOutcomes).toEqual(['replayed', 'match']);
   });
 
+  it('replays the frames still in flight when it re-seeds after a suspend', () => {
+    // A suspend drops the ring, but the frames sent after the acknowledged tick
+    // are still on their way to the server, which will consume every one of
+    // them. Seeding open-loop at the acked pose skipped them: the head sat that
+    // many ticks short (a pop at the first correction at speed) while the tick
+    // offset still counted them (rivals projected too deep).
+    const { pipeline, wire } = seatedDriver({ speed: 50 });
+    const twin = serverTwin(wire);
+    for (let ct = 0; ct < 10; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
+    expect(pipeline.display()).not.toBeNull();
+
+    // A shove the server resolved after tick 5 bumps the epoch.
+    for (let ct = 0; ct <= 5; ct++) stepTwin(twin, THROTTLE);
+    (twin.drive as VehicleDrive).spin = 1.2;
+    acknowledge(wire, twin, 5);
+    wire.reconOverrideEpoch = 1;
+    expect(pipeline.display()).toBeNull();
+    expect(wire.reconcileOutcomes).toEqual(['suspend']);
+
+    drivePredictionFrame(pipeline, 10, THROTTLE);
+    for (let ct = 6; ct <= 10; ct++) stepTwin(twin, THROTTLE);
+    const head = internals(pipeline).predicted as MotionState;
+    expect(head.pos).toEqual(twin.pos);
+    expect(head.drive).toEqual(twin.drive);
+    expect(internals(pipeline).ring.oldestClientTick).toBe(6);
+    // The offset counts exactly the ticks the head stands over the ack.
+    expect(pipeline.display()?.tickOffset).toBe(5);
+
+    // The server's next acknowledgement matches: no correction to glide.
+    const at7 = serverTwin(wire);
+    for (let ct = 6; ct <= 7; ct++) stepTwin(at7, THROTTLE);
+    acknowledge(wire, at7, 7);
+    const shown = pipeline.display();
+    expect(wire.reconcileOutcomes).toEqual(['suspend', 'match']);
+    expect(shown?.residual).toBeNull();
+  });
+
   it('borrows the newest mirrored auras on every predicted frame', () => {
     const { pipeline, self } = seatedDriver({ speed: 12 });
     self.auras = [];

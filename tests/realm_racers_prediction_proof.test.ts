@@ -1509,7 +1509,9 @@ interface DuelRun {
 
 /** The rear ram of the rival-frames suite with both pilots on the brain
  *  reading their OWN predicted kart: B leads, A leaves the grid 0.4 s later
- *  and runs into B when B lifts to 40 pct pace at 3 s. */
+ *  and runs into B when B lifts to 40 pct pace at 3 s. The race runs to 7.2 s
+ *  so the convergence window after the last contact holds more than 20
+ *  acknowledgements at every RTT. */
 function runDuelRam(rttA: number, rttB: number): DuelRun {
   const d = createRacerDuelHarness({
     latencyA: link(rttA, 10, 1337),
@@ -1554,7 +1556,7 @@ function runDuelRam(rttA: number, rttB: number): DuelRun {
     a.autopilot({ observe: 'predicted' });
     d.advanceToRaceMs(3000);
     b.autopilot({ observe: 'predicted', speedScale: 0.4 });
-    d.advanceToRaceMs(7000);
+    d.advanceToRaceMs(7200);
     phase = 'end';
     a.autopilot(null);
     b.autopilot(null);
@@ -1567,7 +1569,7 @@ function runDuelRam(rttA: number, rttB: number): DuelRun {
   }
 }
 
-/** Residual ceiling after the ram, yd: measured 1.63 worst (the 200 ms
+/** Residual ceiling after the ram, yd: measured 1.45 worst (the 200 ms
  *  rammer), rounded up with margin. */
 const DUEL_RESIDUAL_XZ = 2;
 const DUEL_RESIDUAL_YAW = 0.6;
