@@ -24,6 +24,7 @@ import { isPersistentEngineAura } from '../persistent_aura';
 import { SICKNESS_AURA_IDS } from '../resurrection';
 import type { SimContext } from '../sim_context';
 import { type Aura, CAST_COMPLETE_EPS, type Entity, type ResourceType, TICK_RATE } from '../types';
+import { isPersistentPaladinAura } from './party';
 
 export interface RealmRacersStrippedAuras {
   /** The tick the seat took them off. */
@@ -114,6 +115,23 @@ export function realmRacersAurasAt(
 }
 
 /**
+ * A party paladin's aura (devotion_ward, retribution_aura) is permanent but tied
+ * to the party relationship: social/party.ts strips it from both sides when
+ * either leaves, and the paladin's own death, drop or replacement takes the
+ * source copy. None of that can reach a copy the seat had already taken off the
+ * pilot, so the return asks the same questions itself: the source is still in
+ * the world, alive, in the pilot's party, and still wearing its own copy.
+ * Every other aura is owed back unconditionally.
+ */
+function stillOwed(ctx: SimContext, e: Entity, aura: Aura): boolean {
+  if (aura.sourceId === e.id || !isPersistentPaladinAura(aura)) return true;
+  const source = ctx.entities.get(aura.sourceId);
+  if (!source || source.dead) return false;
+  if (!ctx.partyOf(e.id)?.members.includes(source.id)) return false;
+  return source.auras.some((own) => own.id === aura.id && own.sourceId === source.id);
+}
+
+/**
  * Put the stripped auras back on a returning pilot, after the return's clean
  * slate and BEFORE the arena pools: the pools clamp hp and resource to the
  * maxima, and those have to be the buffed ones the pilot walked in with.
@@ -127,7 +145,7 @@ export function restoreRealmRacersStrippedAuras(
     snapshot,
     ctx.tickCount,
     (aura) => aura.kind === 'gloomtithe' && preservesGloomtithe(ctx, e.id),
-  );
+  ).filter((aura) => stillOwed(ctx, e, aura));
   if (back.length === 0) return;
   e.auras.push(...back);
   e.stealthed = e.auras.some((aura) => aura.kind === 'stealth');

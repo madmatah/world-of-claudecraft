@@ -221,6 +221,65 @@ describe('Realm Racers hands the stripped auras back on the return', () => {
   });
 });
 
+describe("a party paladin's aura comes back only while its source still owes it", () => {
+  /** A warrior pilot partied with a paladin whose Devotion Ward rides on both. */
+  function partied(): { sim: Sim; pilot: number; paladin: number } {
+    const sim = makeWorld();
+    const pilot = addAt(sim, 'warrior', 'Pilot');
+    const paladin = addAt(sim, 'paladin', 'Warden', 4, -40);
+    sim.partyInvite(pilot, paladin);
+    sim.partyAccept(pilot);
+    expect(sim.ctx.partyOf(pilot)?.members).toContain(paladin);
+    const ward = (sourceId: number) =>
+      aura('devotion_ward', 'buff_dr', Number.POSITIVE_INFINITY, {
+        permanent: true,
+        value: 0.05,
+        sourceId,
+        school: 'holy',
+      });
+    body(sim, paladin).auras.push(ward(paladin));
+    body(sim, pilot).auras.push(ward(paladin));
+    return { sim, pilot, paladin };
+  }
+
+  function raceAndReturn(sim: Sim, pilot: number, during: () => void): void {
+    expect(startRealmRacersPractice(sim, 'rookie', pilot)).toBe(true);
+    expect(find(body(sim, pilot), 'devotion_ward')).toBeUndefined();
+    for (let i = 0; i < 20; i++) sim.tick();
+    during();
+    sim.realmRacersForfeit(pilot);
+    tickUntilHome(sim, pilot);
+  }
+
+  it('returns while the paladin is still in the party and still wearing it', () => {
+    const { sim, pilot, paladin } = partied();
+    raceAndReturn(sim, pilot, () => {});
+    expect(find(body(sim, pilot), 'devotion_ward')?.sourceId).toBe(paladin);
+  });
+
+  it('stays gone when the paladin left the party during the race', () => {
+    const { sim, pilot, paladin } = partied();
+    raceAndReturn(sim, pilot, () => sim.partyLeave(paladin));
+    expect(sim.ctx.partyOf(pilot)).toBeNull();
+    expect(find(body(sim, pilot), 'devotion_ward')).toBeUndefined();
+  });
+
+  it('stays gone when the paladin dropped the aura during the race', () => {
+    const { sim, pilot, paladin } = partied();
+    raceAndReturn(sim, pilot, () => {
+      const p = body(sim, paladin);
+      p.auras = p.auras.filter((a) => a.id !== 'devotion_ward');
+    });
+    expect(find(body(sim, pilot), 'devotion_ward')).toBeUndefined();
+  });
+
+  it('stays gone when the paladin left the world during the race', () => {
+    const { sim, pilot, paladin } = partied();
+    raceAndReturn(sim, pilot, () => sim.removePlayer(paladin));
+    expect(find(body(sim, pilot), 'devotion_ward')).toBeUndefined();
+  });
+});
+
 describe('a restored periodic aura keeps its original tick schedule', () => {
   it('a HoT ticks exactly the beats its seat-time schedule had left after the return', () => {
     const sim = makeWorld();

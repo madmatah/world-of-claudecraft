@@ -39,7 +39,7 @@ const PERSISTENT_PALADIN_PARTY_AURA_IDS: ReadonlySet<string> = new Set([
   'devotion_ward',
   'retribution_aura',
 ]);
-function isPersistentPaladinAura(aura: Aura): boolean {
+export function isPersistentPaladinAura(aura: Aura): boolean {
   return aura.permanent === true && PERSISTENT_PALADIN_PARTY_AURA_IDS.has(aura.id);
 }
 
