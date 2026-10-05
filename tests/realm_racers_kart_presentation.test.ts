@@ -40,14 +40,21 @@ describe('the kart presentation', () => {
     expect(running.vehicleAudioActive).toBe(false);
   });
 
+  /** A host whose viewer is entity 1, drawing `predicted` as its kart. */
+  const viewerHost = (predicted: ReturnType<typeof createVehicleDrive> | null = null) => ({
+    reducedMotion: () => false,
+    sim: { playerId: 1 },
+    selfRender: { drive: { state: predicted } },
+  });
+
   it('leans a driving rider on top of the terrain tilt, and only a driving one', () => {
-    const host = { reducedMotion: () => false };
+    const host = viewerHost();
     const drive = createVehicleDrive('rally_loaner');
     drive.slip = 6;
     const v = { ...realmRacersKart.createViewState(), groundTilt: { pitch: 0.01, roll: 0.02 } };
     const visual = { setGroundTilt: vi.fn() };
     for (let i = 0; i < 30; i++)
-      realmRacersKart.leanRider(host, v, visual, { drive }, true, 1 / 60);
+      realmRacersKart.leanRider(host, v, visual, { id: 2, drive }, true, 1 / 60);
     const [pitch, roll] = visual.setGroundTilt.mock.calls.at(-1) as [number, number];
     expect(roll).toBeCloseTo(0.02 + v.vehicleLean.roll, 12);
     expect(pitch).toBeCloseTo(0.01 + v.vehicleLean.pitch, 12);
@@ -57,19 +64,65 @@ describe('the kart presentation', () => {
       ...realmRacersKart.createViewState(),
       groundTilt: { pitch: 0.01, roll: 0.02 },
     };
-    realmRacersKart.leanRider(host, walker, visual, { drive: null }, true, 1 / 60);
+    realmRacersKart.leanRider(host, walker, visual, { id: 2, drive: null }, true, 1 / 60);
     expect(visual.setGroundTilt).toHaveBeenLastCalledWith(0.01, 0.02);
     // Reduced motion keeps a driving machine level.
     const still = { ...realmRacersKart.createViewState(), groundTilt: { pitch: 0, roll: 0 } };
     realmRacersKart.leanRider(
-      { reducedMotion: () => true },
+      { ...viewerHost(), reducedMotion: () => true },
       still,
       visual,
-      { drive },
+      { id: 2, drive },
       true,
       1 / 60,
     );
     expect(still.vehicleLean.roll).toBe(0);
+  });
+
+  it("leans and voices the viewer's own kart off its drive view, a rival off its mirror", () => {
+    // The viewer's mirror is the acked snapshot, a round trip behind and
+    // stepping at 20 Hz; the drive view is the predicted kart it is drawn as.
+    const predicted = createVehicleDrive('rally_loaner');
+    predicted.speed = 40;
+    predicted.slip = 6;
+    const mirror = createVehicleDrive('rally_loaner');
+    const visual = { setGroundTilt: vi.fn() };
+    const self = { ...realmRacersKart.createViewState(), groundTilt: { pitch: 0, roll: 0 } };
+    const rival = { ...realmRacersKart.createViewState(), groundTilt: { pitch: 0, roll: 0 } };
+    for (let i = 0; i < 30; i++) {
+      realmRacersKart.leanRider(
+        viewerHost(predicted),
+        self,
+        visual,
+        { id: 1, drive: mirror },
+        true,
+        1 / 60,
+      );
+      realmRacersKart.leanRider(
+        viewerHost(predicted),
+        rival,
+        visual,
+        { id: 2, drive: mirror },
+        true,
+        1 / 60,
+      );
+    }
+    expect(self.vehicleLean.roll).not.toBe(0);
+    expect(rival.vehicleLean.roll).toBe(0);
+
+    const sink = { realmRacersEvent: vi.fn(), vehicle: vi.fn(), stopVehicle: vi.fn() };
+    const host = { ...viewerHost(predicted), audioSink: sink };
+    const fresh = () => ({ ...realmRacersKart.createViewState() });
+    realmRacersKart.syncVehicleAudio(host, { id: 1, drive: mirror }, fresh(), true, 0, 0, 0);
+    realmRacersKart.syncVehicleAudio(host, { id: 2, drive: mirror }, fresh(), true, 0, 0, 0);
+    const [selfCall, rivalCall] = sink.vehicle.mock.calls;
+    // (id, self, x, y, z, speedFraction, effort, slip, offRoad)
+    expect(selfCall[1]).toBe(true);
+    expect(selfCall[7]).toBe(6);
+    expect(selfCall[5]).toBeGreaterThan(0.5);
+    expect(rivalCall[1]).toBe(false);
+    expect(rivalCall[7]).toBe(0);
+    expect(rivalCall[5]).toBe(0);
   });
 
   it('tilts only a shown, driving machine', () => {

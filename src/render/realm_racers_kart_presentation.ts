@@ -11,7 +11,7 @@
 
 import type * as THREE from 'three';
 import { vehicleProfile } from '../sim/content/vehicles';
-import type { Entity } from '../sim/types';
+import type { Entity, VehicleDrive } from '../sim/types';
 import {
   playRealmRacersScrapeAudio,
   type RealmRacersRuntimeAudioSink,
@@ -72,6 +72,12 @@ interface RealmRacersKartHost {
   addShake(amount: number): void;
 }
 
+/** The machine a view's lean and engine read: the viewer's own drive view
+ *  (the predicted kart it is drawn as, else its mirror), a rival's mirror. */
+function kartDrive(h: RealmRacersKartHost, e: Pick<Entity, 'id' | 'drive'>): VehicleDrive | null {
+  return (e.id === h.sim.playerId && h.selfRender.drive.state) || e.drive;
+}
+
 /** A sink swap stops every engine the outgoing sink was running. */
 export function stopVehicleAudio(
   current: RealmRacersRuntimeAudioSink | null,
@@ -102,7 +108,7 @@ export function syncVehicleAudio(
     entity.id,
     entity.id === h.sim.playerId,
     view.vehicleAudioActive,
-    entity.drive,
+    kartDrive(h, entity),
     audible,
     x,
     y,
@@ -118,19 +124,20 @@ export function leanRider(
   host: object,
   v: TiltedView,
   visual: GroundTilted,
-  e: Pick<Entity, 'drive'>,
+  e: Pick<Entity, 'id' | 'drive'>,
   settled: boolean,
   dt: number,
 ): void {
   const h = host as RealmRacersKartHost;
-  const profile = e.drive ? vehicleProfile(e.drive.profileKey) : null;
+  const drive = kartDrive(h, e);
+  const profile = drive ? vehicleProfile(drive.profileKey) : null;
   stepVehicleLean(
     v.vehicleLean,
-    e.drive?.speed ?? 0,
-    e.drive?.slip ?? 0,
+    drive?.speed ?? 0,
+    drive?.slip ?? 0,
     profile?.maxSlip ?? 1,
     dt,
-    !!e.drive && settled && !h.reducedMotion(),
+    !!drive && settled && !h.reducedMotion(),
   );
   visual.setGroundTilt(
     v.groundTilt.pitch + v.vehicleLean.pitch,

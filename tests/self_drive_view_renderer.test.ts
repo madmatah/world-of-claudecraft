@@ -213,6 +213,8 @@ describe('renderer self-kart reads go through the drive view', () => {
       ['renderer', 'let velZ = p.drive ? this.selfRender.drive.velocityZ : 0;'],
       // drift smoke, surface dust, scrape sparks
       ['kart', 'const kart = (isSelf && h.selfRender.drive.state) || e.drive;'],
+      // the rider lean and the engine mix
+      ['kart', 'return (e.id === h.sim.playerId && h.selfRender.drive.state) || e.drive;'],
       ['kart', 'h.vfx.vehicleDriftSmoke(v.group.position, facing, kart.slip, dt);'],
       ['kart', 'h.vfx.vehicleSurfaceDust(v.group.position, facing, kart.speed, dt);'],
       ['kart', 'if (kart.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {'],
@@ -221,7 +223,7 @@ describe('renderer self-kart reads go through the drive view', () => {
     for (const [where, needle] of consumers) expect(count(where, needle), needle).toBe(1);
     expect(count('renderer', 'this.selfRender.drive.')).toBe(6);
     expect(count('scene', 'h.selfRender.drive.')).toBe(8);
-    expect(count('kart', 'h.selfRender.drive.')).toBe(1);
+    expect(count('kart', 'h.selfRender.drive.')).toBe(2);
     // The two rally modules read it on the renderer's own frame: the rival
     // step before the body is placed, the road effects after the mount pass.
     expect(

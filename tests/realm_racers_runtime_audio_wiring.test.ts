@@ -79,6 +79,8 @@ interface RendererHarness {
   };
   spawnAoeRing: ReturnType<typeof vi.fn>;
   sim: { playerId: number };
+  /** The viewer's drive view: no predicted kart here, so the mirror voices it. */
+  selfRender: { drive: { state: VehicleDrive | null } };
   triggerHit: ReturnType<typeof vi.fn>;
   addShake: ReturnType<typeof vi.fn>;
   punchFov: ReturnType<typeof vi.fn>;
@@ -98,6 +100,7 @@ function rendererHarness(): RendererHarness {
   };
   renderer.spawnAoeRing = vi.fn();
   renderer.sim = { playerId: 1 };
+  renderer.selfRender = { drive: { state: null } };
   renderer.triggerHit = vi.fn();
   renderer.addShake = vi.fn();
   renderer.punchFov = vi.fn();
