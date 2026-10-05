@@ -289,3 +289,42 @@ describe('the common preparation of the circuit lamps (rallyCommon)', () => {
     expect(poolsUnder(commonLampRoot())).toEqual([]);
   });
 });
+
+describe('an authored dark hour on the Lambert tier', () => {
+  it('drives the lamps through uniforms and a prepared visibility flip, never a program change', () => {
+    // On the tier with no night field the circuit's lamps are lit by their
+    // emissive and the glow pool. Dusk and dawn on that tier must stay uniform
+    // writes (and the pool's visibility, whose program the common client
+    // links): a define, a material swap or a needsUpdate would relink live.
+    installFixture('evergarden_flower');
+    vi.stubGlobal('document', {});
+    expect(hasNightLightField()).toBe(false);
+    const view = buildRealmRacersLamps('rally:hour', [lamp(10, 0), lamp(-10, 0)]);
+    if (!view) throw new Error('the lamps did not build');
+    const materials = new Set<THREE.Material>();
+    view.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) materials.add(mesh.material as THREE.Material);
+    });
+    const pools = poolsUnder(view.group);
+    expect(pools).toHaveLength(1);
+    expect(materials.size).toBeGreaterThan(1);
+    const before = [...materials].map((material) => ({
+      material,
+      signature: materialProgramSignature(material),
+      version: material.version,
+    }));
+    for (const glow of [0.8, 0, 0.4, 0, 1]) updateRealmRacersLampGlow(glow, glow * 3);
+    expect(pools[0].visible).toBe(true);
+    updateRealmRacersLampGlow(0, 9);
+    expect(pools[0].visible).toBe(false);
+    for (const { material, signature, version } of before) {
+      expect(materialProgramSignature(material), material.name).toBe(signature);
+      expect(material.version, material.name).toBe(version);
+    }
+    view.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) expect(materials.has(mesh.material as THREE.Material)).toBe(true);
+    });
+  });
+});
