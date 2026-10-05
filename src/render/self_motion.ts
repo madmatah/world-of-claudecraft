@@ -81,7 +81,7 @@ import {
   type PlayerMotionDeps,
   stepPlayerMotion,
 } from '../sim/player_motion';
-import { DT, type Entity, type MoveInput, RUN_SPEED, type SimEvent } from '../sim/types';
+import { DT, type Entity, type MoveInput, RUN_SPEED } from '../sim/types';
 import type { DelveRunInfo } from '../world_api/delves';
 import type { RiftFloorView } from '../world_api/dungeons';
 import { resolvedRiftFloorPlan, riftLiftFor } from './self_motion_rift_lift';
@@ -210,18 +210,6 @@ export function displaySpeedBudget(e: Entity): number {
  */
 export function selfMotionAllowedAt(posX: number, riftFloor: RiftFloorView | null): boolean {
   return !isRiftPos(posX) || riftFloor !== null;
-}
-
-export function hasAuthoritativeSelfPositionDiscontinuity(
-  events: readonly SimEvent[],
-  playerId: number,
-): boolean {
-  return events.some(
-    (event) =>
-      event.type === 'unstuck' &&
-      event.phase === 'completed' &&
-      (event.pid === undefined || event.pid === playerId),
-  );
 }
 
 export const SELF_RENDER_SMOOTH_RATE = 30;

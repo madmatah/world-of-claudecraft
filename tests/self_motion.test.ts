@@ -1383,8 +1383,8 @@ describe('rift prediction (issue #3479)', () => {
   // from the overworld start to the rift band.
   //
   // Deliberately NOT authoritativeDiscontinuity: that flag is reserved for a
-  // completed /unstuck recovery (hasAuthoritativeSelfPositionDiscontinuity),
-  // a narrower signal than "any large teleport". A rift entry is an ordinary
+  // completed /unstuck recovery or a rally reset (ClientWorld's self-position
+  // discontinuity latch), a narrower signal than "any large teleport". A rift entry is an ordinary
   // large jump, caught the same way any other one is: step()'s own anchor
   // check (the module header's "any gap over the renderer's 6 yd snap rule
   // resets outright") sees the collapsed mirror disagree with the predictor's
