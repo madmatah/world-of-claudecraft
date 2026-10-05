@@ -1,7 +1,7 @@
 // The one clock-seconds formatter (src/ui/clock_seconds_core.ts): both arms
 // (padded under a minutes token, bare in the final minute), the Intl routing
-// (no ASCII padStart anywhere in the clock family), and the three consumers
-// that used to hand-build the pad.
+// (no ASCII padStart anywhere in the clock family), and the consumers that
+// used to hand-build the pad.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,6 +14,9 @@ const CONSUMERS = [
   'src/ui/hud/professions/harvest_journal_window.ts',
   'src/ui/gather_node_tooltip_controller.ts',
   'src/ui/dungeon_finder_window.ts',
+  // The Realm Racers race strip's elapsed clock and the podium's race times.
+  'src/ui/realm_racers_strip_painter.ts',
+  'src/ui/realm_racers_podium_painter.ts',
 ];
 
 afterEach(() => setLanguage('en'));
@@ -51,7 +54,7 @@ describe('clockSeconds', () => {
   });
 });
 
-describe('the three clock sites consume it (no hand-built pad left)', () => {
+describe('the clock sites consume it (no hand-built pad left)', () => {
   it.each(CONSUMERS)('%s imports clockSeconds and spells no padStart', (file) => {
     const src = stripComments(readFileSync(join(process.cwd(), file), 'utf8'));
     expect(src).toMatch(/import \{ clockSeconds \} from '(\.\.\/)*(\.\/)?clock_seconds_core';/);

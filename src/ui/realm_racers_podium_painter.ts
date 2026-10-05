@@ -11,6 +11,7 @@
 // player-supplied value (the names) is written with `setText`, which sets
 // textContent. There is no HTML path for a name to take.
 
+import { clockSeconds } from './clock_seconds_core';
 import { formatNumber, t } from './i18n';
 import { iconDataUrl } from './icons';
 import type { PainterHostWriters } from './painter_host';
@@ -160,7 +161,7 @@ function timeLabel(entry: RealmRacersPodiumEntry, totalLaps: number): string {
   const tenths = Math.floor((entry.finishSeconds * 10) % 10);
   return t('hudChrome.rally.podiumTime', {
     minutes: num(minutes),
-    seconds: String(seconds).padStart(2, '0'),
+    seconds: clockSeconds(seconds, true),
     tenths: num(tenths),
   });
 }

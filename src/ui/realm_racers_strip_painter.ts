@@ -12,6 +12,7 @@
 // are written once per rebuild (the lobby curtain's pattern): a rebuild, which
 // a new race and a language switch both force, re-resolves every cell.
 
+import { clockSeconds } from './clock_seconds_core';
 import { esc } from './esc';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
@@ -241,7 +242,7 @@ export class RealmRacersStrip {
         this.timeEl,
         t('hudChrome.rally.time', {
           minutes: num(minutes),
-          seconds: String(seconds).padStart(2, '0'),
+          seconds: clockSeconds(seconds, true),
         }),
       );
     }
