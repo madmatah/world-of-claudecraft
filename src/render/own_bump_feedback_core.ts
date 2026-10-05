@@ -29,12 +29,20 @@ export const LOCAL_BUMP_THROTTLE_MS = 600;
 export const LOCAL_BUMP_SUPPRESS_MS = 1200;
 
 export interface OwnBumpFeedbackState {
-  /** Per-rival wall-clock stamp of the last locally played bang. */
+  /** Per-rival wall-clock stamp of the last locally played bang: the throttle. */
   firedAtMs: Map<number, number>;
+  /** The same stamp while its bang still waits for the server's echo. */
+  pendingAtMs: Map<number, number>;
 }
 
 export function createOwnBumpFeedback(): OwnBumpFeedbackState {
-  return { firedAtMs: new Map() };
+  return { firedAtMs: new Map(), pendingAtMs: new Map() };
+}
+
+const STAMP_LIFETIME_MS = Math.max(LOCAL_BUMP_THROTTLE_MS, LOCAL_BUMP_SUPPRESS_MS);
+
+function forgetStale(stamps: Map<number, number>, nowMs: number): void {
+  for (const [rivalId, at] of stamps) if (nowMs - at > STAMP_LIFETIME_MS) stamps.delete(rivalId);
 }
 
 /**
@@ -89,24 +97,28 @@ export function shouldPlayLocalBump(
 }
 
 export function markLocalBump(s: OwnBumpFeedbackState, rivalId: number, nowMs: number): void {
+  forgetStale(s.firedAtMs, nowMs);
+  forgetStale(s.pendingAtMs, nowMs);
   s.firedAtMs.set(rivalId, nowMs);
+  s.pendingAtMs.set(rivalId, nowMs);
 }
 
 /**
  * Should this arriving bump event skip its cosmetics? True EXACTLY ONCE per
- * locally played bang, while it is fresh: the stamp is consumed, so a second
- * authoritative bump against the same rival inside the window (the server
- * throttles at half a second, under this window) plays normally instead of
- * being swallowed. Consuming also re-arms the local side for a new bang,
- * which is what a genuinely new contact deserves.
+ * locally played bang, while it is fresh: the pending stamp is consumed, so a
+ * second authoritative bump against the same rival inside the window (the
+ * server throttles at half a second, under this window) plays normally
+ * instead of being swallowed. The throttle stamp stays: the echo lands while
+ * the drawn hulls may still overlap, and re-arming there banged one contact
+ * twice.
  */
 export function consumeLocalBumpSuppression(
   s: OwnBumpFeedbackState,
   rivalId: number,
   nowMs: number,
 ): boolean {
-  const last = s.firedAtMs.get(rivalId);
+  const last = s.pendingAtMs.get(rivalId);
   if (last === undefined) return false;
-  s.firedAtMs.delete(rivalId);
+  s.pendingAtMs.delete(rivalId);
   return nowMs - last <= LOCAL_BUMP_SUPPRESS_MS;
 }

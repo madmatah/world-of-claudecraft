@@ -59,8 +59,29 @@ describe('own bump feedback', () => {
     // Stale stamp: the authoritative event plays normally (and is cleared).
     markLocalBump(s, 7, 2000);
     expect(consumeLocalBumpSuppression(s, 7, 2000 + LOCAL_BUMP_SUPPRESS_MS + 1)).toBe(false);
-    // Consuming re-arms the local side: a fresh bang may play at once.
+    // Past the throttle a fresh bang may play.
     expect(shouldPlayLocalBump(s, 7, 2000 + LOCAL_BUMP_SUPPRESS_MS + 2)).toBe(true);
+  });
+
+  it('keeps the throttle through the echo, so one contact never bangs twice', () => {
+    // The echo lands well inside the throttle while the drawn hulls may still
+    // overlap: consuming it must not re-arm a second bang for the same touch.
+    const s = createOwnBumpFeedback();
+    markLocalBump(s, 7, 1000);
+    expect(consumeLocalBumpSuppression(s, 7, 1150)).toBe(true);
+    expect(shouldPlayLocalBump(s, 7, 1160)).toBe(false);
+    expect(shouldPlayLocalBump(s, 7, 1000 + LOCAL_BUMP_THROTTLE_MS + 1)).toBe(true);
+  });
+
+  it('forgets every stamp past both windows, so the latch never grows with the rivals met', () => {
+    const s = createOwnBumpFeedback();
+    for (let rival = 1; rival <= 40; rival++) markLocalBump(s, rival, 1000);
+    const later = 1000 + Math.max(LOCAL_BUMP_THROTTLE_MS, LOCAL_BUMP_SUPPRESS_MS) + 1;
+    markLocalBump(s, 99, later);
+    expect(s.firedAtMs.size).toBe(1);
+    expect(s.pendingAtMs.size).toBe(1);
+    expect(shouldPlayLocalBump(s, 5, later)).toBe(true);
+    expect(consumeLocalBumpSuppression(s, 5, later)).toBe(false);
   });
 
   it('arms a local bang only for a predicted drive against a racing rival, never a ghost', () => {
