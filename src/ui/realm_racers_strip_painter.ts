@@ -1,0 +1,285 @@
+// The Realm Racers race strip: the in-race readout (circuit pill, placing,
+// lap, time, speed, the ward / wrong-way / track-limit / phase lines and the
+// reset and forfeit controls) plus the off-screen announcer that speaks the
+// drawn circuit. The pure core (realm_racers_view.ts `buildRealmRacersHudView`)
+// decides what it says; this paints it.
+//
+// Hot: `RealmRacersUi` calls it every painted frame. The text-free skeleton is
+// rebuilt in ONE innerHTML write per signature (once per race phase), the root
+// and the announcer take their attributes once at ensure, and every per-frame
+// write rides the PainterHost elided writers.
+
+import { esc } from './esc';
+import { formatNumber, t } from './i18n';
+import type { PainterHostWriters } from './painter_host';
+import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
+import type { RealmRacersHudView } from './realm_racers_view';
+
+const num = (value: number): string => formatNumber(value, { maximumFractionDigits: 0 });
+
+/**
+ * How long the strip's forfeit control stays armed after the first press. A race
+ * is driven at speed with a thumb on a small target, so ending one takes two
+ * presses inside this window; the arm lapses back to the idle label on its own.
+ * Presentation-only state: it never reaches the sim.
+ */
+const FORFEIT_ARM_MS = 3000;
+
+export interface RealmRacersStripDeps {
+  layer(): HTMLElement | null;
+  writers: PainterHostWriters;
+  /** The reset control: put the pilot back on the road. */
+  reset(): void;
+  /** The forfeit control's confirmed second press: end the race. */
+  forfeit(): void;
+}
+
+export class RealmRacersStrip {
+  private lastHudSig = '';
+  private hudRoot: HTMLElement | null = null;
+  /** The off-screen live region that SPEAKS the drawn circuit. Kept outside the
+   *  strip's rebuilt subtree so a rebuild cannot re-announce. */
+  private announceEl: HTMLElement | null = null;
+  /** The drawn circuit's localized name, resolved once per strip rebuild rather
+   *  than per frame. Safe to cache against the language: the strip's signature
+   *  starts with the match id, and `relocalize()` clears it, so a language flip
+   *  re-resolves through the same path a new race does. */
+  private circuitName: string | null = null;
+  private lapEl: HTMLElement | null = null;
+  private positionEl: HTMLElement | null = null;
+  private timeEl: HTMLElement | null = null;
+  private speedEl: HTMLElement | null = null;
+  private wardEl: HTMLElement | null = null;
+  private wrongWayEl: HTMLElement | null = null;
+  private limitsEl: HTMLElement | null = null;
+  private phaseEl: HTMLElement | null = null;
+  private resetEl: HTMLElement | null = null;
+  private forfeitEl: HTMLElement | null = null;
+  private forfeitArmedUntil = 0;
+
+  constructor(private readonly deps: RealmRacersStripDeps) {}
+
+  /** Rebuild from the current locale on the next update. */
+  relocalize(): void {
+    this.lastHudSig = '';
+  }
+
+  update(view: RealmRacersHudView): void {
+    const w = this.deps.writers;
+    if (!view.active) {
+      if (this.hudRoot) w.setDisplay(this.hudRoot, 'none');
+      this.forfeitArmedUntil = 0;
+      // Reset the announcement with the strip, so back-to-back races on the
+      // SAME circuit are each announced rather than elided into silence by the
+      // second one writing what is already there.
+      this.circuitName = null;
+      if (this.announceEl) w.setText(this.announceEl, '');
+      return;
+    }
+    const root = this.ensureHud();
+    if (!root) return;
+    w.setDisplay(root, 'block');
+    if (view.sig !== this.lastHudSig) {
+      this.lastHudSig = view.sig;
+      this.forfeitArmedUntil = 0;
+      // Competition DRAWS its circuit the moment the grid fills, so the pill at
+      // the head of the strip carries the circuit's name for the whole race
+      // instead of the minigame's: nobody chose this circuit, the player has to
+      // be told which one they got before the flag drops, and "Realm Racers" is
+      // not news to someone already sitting on the grid. It falls back to the
+      // minigame title for a circuit nothing names (a dev draft), because the
+      // pill can never be empty.
+      //
+      // Resolved BEFORE the skeleton is built: both the pill and the announcer
+      // below read it, and they must not be able to disagree.
+      this.circuitName = realmRacersCircuitName(view.circuitId);
+      root.innerHTML =
+        `<div class="rallyhud-top">` +
+        `<span class="rallyhud-title">${esc(this.circuitName ?? t('hudChrome.rally.title'))}</span></div>` +
+        `<div class="rallyhud-stats"><span class="rallyhud-position"></span>` +
+        `<span class="rallyhud-lap"></span><span class="rallyhud-time"></span>` +
+        `<span class="rallyhud-speed"></span></div>` +
+        `<div class="rallyhud-actions">` +
+        (view.canReset
+          ? `<button type="button" class="rallyhud-reset" data-rally-hud-reset${view.resetLocked ? ' disabled' : ''}></button>`
+          : '') +
+        (view.canForfeit
+          ? `<button type="button" class="rallyhud-forfeit" data-rally-hud-forfeit></button>`
+          : '') +
+        `</div>` +
+        `<div class="rallyhud-ward" role="status" aria-live="polite"></div>` +
+        `<div class="rallyhud-wrong-way" role="alert" aria-live="assertive"></div>` +
+        `<div class="rallyhud-limits" role="status" aria-live="polite"></div>` +
+        `<div class="rallyhud-phase" aria-live="polite"></div>`;
+      this.positionEl = root.querySelector('.rallyhud-position');
+      this.lapEl = root.querySelector('.rallyhud-lap');
+      this.timeEl = root.querySelector('.rallyhud-time');
+      this.speedEl = root.querySelector('.rallyhud-speed');
+      this.wardEl = root.querySelector('.rallyhud-ward');
+      this.wrongWayEl = root.querySelector('.rallyhud-wrong-way');
+      this.limitsEl = root.querySelector('.rallyhud-limits');
+      this.phaseEl = root.querySelector('.rallyhud-phase');
+      this.resetEl = root.querySelector('.rallyhud-reset');
+      this.forfeitEl = root.querySelector('.rallyhud-forfeit');
+      this.resetEl?.addEventListener('click', () => this.deps.reset());
+      this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
+    }
+    // The pill is a VISUAL swap, and a swapped label is not an announcement: a
+    // screen-reader user would otherwise first learn the circuit at the podium,
+    // after the race. The announcer is an off-screen live region that lives
+    // OUTSIDE the strip's rebuilt subtree, so the countdown-to-racing rebuild
+    // cannot re-announce, and the write is elided, so it speaks exactly once per
+    // race. Cleared when the strip goes down, so the next race announces even
+    // when the draw lands on the same circuit.
+    const announcer = this.ensureAnnouncer();
+    if (announcer) w.setText(announcer, this.circuitName ?? '');
+    if (this.positionEl)
+      w.setText(
+        this.positionEl,
+        t('hudChrome.rally.position', {
+          position: num(view.position),
+          total: num(view.gridSize),
+        }),
+      );
+    if (this.lapEl)
+      w.setText(
+        this.lapEl,
+        t('hudChrome.rally.lap', { lap: num(view.lap), total: num(view.totalLaps) }),
+      );
+    if (this.timeEl) {
+      const minutes = Math.floor(view.elapsed / 60);
+      const seconds = Math.floor(view.elapsed % 60);
+      w.setText(
+        this.timeEl,
+        t('hudChrome.rally.time', {
+          minutes: num(minutes),
+          seconds: String(seconds).padStart(2, '0'),
+        }),
+      );
+    }
+    if (this.speedEl)
+      w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(view.speed) }));
+    if (this.wardEl) {
+      // Written even while hidden, so a locale flip lands on the text. Visibility
+      // rides setStyleProp, whose own (element, 'display') slot keeps the two
+      // writes eliding independently (the same shape the limits line below uses).
+      w.setText(
+        this.wardEl,
+        view.wardIn > 0
+          ? t('hudChrome.rally.wardHeldFor', { seconds: num(view.wardIn) })
+          : t('hudChrome.rally.wardHeld'),
+      );
+      w.setStyleProp(this.wardEl, 'display', view.warded ? 'block' : 'none');
+    }
+    if (this.wrongWayEl) {
+      w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
+      w.setStyleProp(this.wrongWayEl, 'display', view.wrongWay ? 'block' : 'none');
+    }
+    if (this.limitsEl) {
+      // The text is written even while the line is hidden, so a locale flip
+      // lands on it; visibility rides its own setStyleProp slot.
+      w.setText(
+        this.limitsEl,
+        view.trackLimit === 'cutReturned'
+          ? t('hudChrome.rally.cutReturned')
+          : t('hudChrome.rally.offTrack', { seconds: num(view.offTrackIn) }),
+      );
+      w.setStyleProp(this.limitsEl, 'display', view.trackLimit === 'none' ? 'none' : 'block');
+    }
+    if (this.resetEl) {
+      w.setText(this.resetEl, t('hudChrome.rally.reset'));
+      w.setAttr(this.resetEl, 'disabled', view.resetLocked ? '' : null);
+    }
+    if (this.phaseEl) {
+      const phase =
+        view.phase === 'loading' || view.phase === 'countdown'
+          ? view.countdown > 0
+            ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
+            : ''
+          : view.phase === 'finished'
+            ? // The podium carries the result headline and the return
+              // countdown once the RACE is over, so this line stands down
+              // rather than saying the same thing twice. A pilot who merely
+              // quit still gets it here: there is no ceremony for them, and
+              // neither is there for a void race.
+              view.voided
+              ? t('hudChrome.rally.voidReturn', { seconds: num(view.returnIn) })
+              : view.decided
+                ? ''
+                : view.result === 'won'
+                  ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
+                  : view.result === 'draw'
+                    ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
+                    : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
+            : // The winner is home and this pilot is not: they are racing a
+              // clock now, and it says so rather than cutting them off unwarned.
+              view.chaseIn > 0
+              ? t('hudChrome.rally.chase', { seconds: num(view.chaseIn) })
+              : view.lap === view.totalLaps
+                ? t('hudChrome.rally.finalLap')
+                : t('hudChrome.rally.go');
+      w.setText(this.phaseEl, phase);
+    }
+    if (this.forfeitEl) {
+      const armed = this.forfeitArmedUntil > Date.now();
+      w.setText(
+        this.forfeitEl,
+        armed ? t('hudChrome.rally.forfeitConfirm') : t('hudChrome.rally.forfeit'),
+      );
+      w.toggleClass(this.forfeitEl, 'armed', armed);
+    }
+  }
+
+  // Two-step: the first press arms, a second press inside the window forfeits,
+  // and a press after it lapses re-arms instead of ending the race.
+  private pressForfeit(): void {
+    const now = Date.now();
+    if (this.forfeitArmedUntil > now) {
+      this.forfeitArmedUntil = 0;
+      this.deps.forfeit();
+      return;
+    }
+    this.forfeitArmedUntil = now + FORFEIT_ARM_MS;
+  }
+
+  /**
+   * The circuit announcer: an off-screen `role="status"` region on the HUD
+   * layer, NOT inside the strip.
+   *
+   * Two reasons it is its own node rather than an `aria-live` on the pill.
+   * The strip's skeleton is rebuilt whenever its signature moves (the reset
+   * control appears at GO, the forfeit control goes at the flag), and a live
+   * region replaced wholesale re-announces its content; and the pill is a
+   * truncating one-line label, whose visible text is not necessarily the whole
+   * name. This speaks the name once, in full.
+   *
+   * `.visually-hidden` is the shared utility the rest of the HUD announces
+   * through (`claudium_window`, `party_frame_row`, `market_window`).
+   */
+  private ensureAnnouncer(): HTMLElement | null {
+    if (this.announceEl) return this.announceEl;
+    const layer = this.deps.layer();
+    if (!layer) return null;
+    const el = document.createElement('div');
+    el.className = 'visually-hidden';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.dataset.rallyCircuitAnnounce = '';
+    layer.appendChild(el);
+    this.announceEl = el;
+    return el;
+  }
+
+  private ensureHud(): HTMLElement | null {
+    if (this.hudRoot) return this.hudRoot;
+    const layer = this.deps.layer();
+    if (!layer) return null;
+    const root = document.createElement('div');
+    root.id = 'realm-racers-hud';
+    root.setAttribute('role', 'status');
+    root.setAttribute('aria-live', 'off');
+    layer.appendChild(root);
+    this.hudRoot = root;
+    return root;
+  }
+}

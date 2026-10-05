@@ -1133,7 +1133,7 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     surface: 'window',
     guard: {
       kind: 'module',
-      module: 'realm_racers.ts',
+      module: 'realm_racers_window.ts',
       // One signature covers BOTH of the window's screens: the front screen's
       // world-derived view and the practice setup screen's painter-derived one
       // resolve to `sig` before the check, so stepping between them repaints
@@ -1978,7 +1978,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
         'deeds_window.ts: if (sig === this.lastSig) return;',
         'dungeon_finder_proposal_popup.ts: if (view.sig !== this.lastSig) {',
         'dungeon_finder_window.ts: if (sig === this.lastSig) {',
-        'realm_racers.ts: if (sig === this.lastWindowSig) return;',
+        'realm_racers_window.ts: if (sig === this.lastWindowSig) return;',
         'hud/battleground/battleground_proposal_popup.ts: if (view.sig !== this.lastSig) {',
         'hud/cosmetics/cosmetics_window.ts: const sig = cosmeticsSig(this.snapshot()); if (sig === this.lastSig) return;',
         'hud.ts: if (craftCastActivitySig(session) !== this.lastCraftingCastSig) {',
@@ -2042,7 +2042,6 @@ describe('Hud.update() drives exactly the registered set, on the registered band
       'meters.ts',
       'mount_race_controls.ts',
       'mount_race_strip.ts',
-      'realm_racers.ts',
     ]);
   });
 });

@@ -746,6 +746,17 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 2 },
     reflowAllow: {},
   },
+  // The Realm Racers race strip rebuilds its text-free skeleton in ONE innerHTML
+  // write per structural sig (once per race phase); the strip root takes its two
+  // ARIA attributes once at ensureHud() and the off-screen circuit announcer its
+  // class, two ARIA attributes and its data marker once at ensureAnnouncer().
+  // Every per-frame write (placing, lap, time, speed, the status lines, the
+  // reset control's disabled state, the forfeit arm) is facet-routed.
+  {
+    file: 'realm_racers_strip_painter.ts',
+    allow: { '.innerHTML': 1, '.setAttribute': 4, '.className': 1, '.dataset': 1 },
+    reflowAllow: {},
+  },
   // The Realm Racers lobby curtain (hud/realm_racers/) rebuilds its text-free
   // skeleton in ONE innerHTML write per structural sig (once per lobby) and takes
   // its dialog role once at ensureRoot(); every name, status, count,

@@ -22,7 +22,10 @@ on-demand build. Pinned by `tests/realm_racers_race_warm.test.ts`, offline and o
 The curtain a race opens under while every pilot's machine prepares the circuit
 (the sim's `loading` phase, `src/sim/social/realm_racers_loading.ts`, read through
 `IWorld.realmRacersInfo`), behind the `index.ts` barrel. `src/ui/realm_racers.ts`
-(`RealmRacersUi`) composes it; the rest of the rally HUD still lives flat in `src/ui/`.
+(`RealmRacersUi`) composes it; the rest of the rally HUD still lives flat in `src/ui/`:
+`RealmRacersUi` is a thin composer (match edges, banner, countdown cue, ready send) over
+the cold window (`realm_racers_window.ts`, both screens), the hot race strip
+(`realm_racers_strip_painter.ts`, in `HOT_PAINTERS`), the standings panel and the podium.
 `RealmRacersUi` also marks body with `RALLY_RACE_ON_CLASS` while the viewer's own match
 exists (the race strip is up, lobby included), through the elided writer: the plain
 banners ride the band above the strip and the new-adventurer card and its arrow stand

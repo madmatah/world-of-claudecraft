@@ -462,10 +462,19 @@ const ANSWERED: readonly AnsweredSurface[] = [
     why: 'the view core signature (queue state, role counts and party ids) joined with the open pane name',
   },
   {
-    file: 'realm_racers.ts',
-    memos: ['lastCountdown', 'lastHudSig', 'lastWindowSig'],
+    file: 'realm_racers_window.ts',
+    memos: ['lastWindowSig'],
+    // Same arm, one hop: RealmRacersUi composes the window and its relocalize()
+    // forwards, like the panels below.
     answer: 'this.realmRacersUi.relocalize',
-    why: 'the queue state, race phase, lap and result that gate the localized Rally window and race-strip rebuilds',
+    why: 'the queue state, race phase and result that gate the localized Rally window rebuild, forwarded by the Rally composer that owns it',
+  },
+  {
+    file: 'realm_racers_strip_painter.ts',
+    memos: ['lastHudSig'],
+    // Same arm, one hop, like the window.
+    answer: 'this.realmRacersUi.relocalize',
+    why: 'the race phase and controls that gate the localized race-strip skeleton, forwarded by the Rally composer that owns it',
   },
   {
     file: 'realm_racers_standings_painter.ts',
