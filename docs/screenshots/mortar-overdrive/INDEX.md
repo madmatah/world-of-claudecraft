@@ -45,11 +45,9 @@ Each is the grid flyover at the start, with the circuit title, at the circuit's 
 - `circuit-palmreach-high-desktop.jpg`: Palmreach Lagoon Run. Desktop, high.
 - `circuit-drakelands-low-desktop.jpg`: Drakelands Rampart Run on the same flyover frame at the lowest preset, for the tier-fairness comparison with the high shot (same track limits, grid, rivals and HUD). Desktop, lowest.
 
-## Shared surfaces over the race strip (before and after)
+## Over the race strip
 
-"Before" is this branch before the fix, on the Palmreach Lagoon Run with ace pilots (dev race), desktop 1600x900 (the preset was not recorded at capture).
+Palmreach Lagoon Run with ace pilots (dev race), desktop 1600x900.
 
-- `windows-over-strip-before-desktop.png`: the character and bags windows drawn under the race strip and standings.
-- `windows-over-strip-after-desktop.png`: the same windows now drawn over the strip.
-- `zone-map-before-desktop.png`: the minimap label read The Drakelands and the map window framed The Proving Shore during a Palmreach race.
-- `zone-map-after-desktop.png`: both now name The Palmreach.
+- `windows-over-strip-after-desktop.png`: the character and bags windows draw over the race strip and standings.
+- `zone-map-after-desktop.png`: during a Palmreach race the minimap label and the map window both name The Palmreach.
