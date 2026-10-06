@@ -11,6 +11,9 @@ palette-quantized to keep the files small.
 - `window-setup-desktop.png`: the practice setup view (circuit note, rival tier choice, controls, Start the Race). Desktop, lowest.
 - `side-menu-desktop.png`: the side menu with the Mortar Overdrive entry (flag icon, Shift+R) under the pointer. Desktop, lowest.
 - `window-mobile.png`: the window front view on a phone, scrolled to the queue and Practice buttons. Mobile landscape, lowest.
+- `queue-card-desktop.png`: the start card while queued alone online (staged on the offline client with the backfill on): the countdown and bar to the house pilots, the grid with the viewer and three open seats, the solo no-win note, Start now, then Leave the Queue and Practice. Desktop, lowest.
+- `queue-card-busy-desktop.png`: the start card while another public race holds the lane: the busy line instead of a clock, Start now refused (greyed, still focusable). Desktop, lowest.
+- `queue-card-mobile.png`: the start card on a phone, which opens on the card while queued (the pitch and the primer stand down). Mobile landscape, lowest.
 - `window-setup-mobile.png`: the practice setup view on a phone (rival tiers and controls). Mobile landscape, lowest.
 - `more-menu-mobile.png`: the touch More panel with the "Overdrive" entry. Mobile landscape, lowest.
 

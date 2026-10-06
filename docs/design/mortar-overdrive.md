@@ -83,7 +83,8 @@ it every tick.
 The window's start card (`src/ui/hud/mortar_overdrive/queue_card_view.ts` and
 `queue_card_painter.ts`) shows it: the grid with each open seat as a house pilot's, a
 countdown and a bar emptying toward the backfill, the solo note when the viewer is the only
-human queued (a win then banks nothing, see Rewards), and Start now. The countdown runs on the
+human queued (a win then banks nothing, see Rewards), the viewer's place when they are past
+that grid (they race the next one), and Start now. The countdown runs on the
 client clock from each new reading, so it ticks down smoothly whatever the snapshot cadence.
 While the lane is busy the card says so, shows no clock and Start now is refused with that
 line as its stated reason.
