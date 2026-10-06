@@ -6,6 +6,15 @@ never the barrel.
 
 - Composer and window: `composer.ts` (`MortarOverdriveUi`), `race_window.ts` (the cold
   window, both screens) over the pure `race_view.ts` (window, setup and strip view model).
+- Queue start card: `queue_card_view.ts` (pure, in `UI_PURE_CORES`: the grid the queue head
+  takes, the solo note, and the live countdown stepped on the client clock from each new
+  reading of `MortarOverdriveInfo.start`) and `queue_card_painter.ts` (`MortarOverdriveQueueCard`,
+  composed by the window: its markup rides the window's own innerHTML pass behind the card
+  signature, the countdown, bar, status line and Start now's refused state ride the elided
+  writers every frame; the clock is a `timer`, the status line the one polite live region,
+  and a refused Start now stays focusable through `aria-disabled`). Styles: the queue card
+  rules in the window section of `src/styles/components.css` (its grid rows share the lobby's
+  pilot-row rules), the touch collapse of the hero while queued in `src/styles/hud.mobile.css`.
 - Race strip, standings, podium: `strip_painter.ts` (hot, in `HOT_PAINTERS`),
   `standings_painter.ts` + `standings_view.ts`, `podium_painter.ts` + `podium_view.ts`,
   `result_notice_view.ts`, `ready_core.ts` (the lobby ready send).

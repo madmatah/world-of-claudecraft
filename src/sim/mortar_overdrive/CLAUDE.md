@@ -26,7 +26,7 @@ world, the server and the headless env, like the rest of `src/sim/`. Authored da
   sends ready or the cap runs out). `seat.ts`: `inMortarOverdriveHeat`, an import-free
   leaf so the battleground, World PvP and duel modules can ask it without a cycle.
 - `busy.ts`: the activities a seat must never pull a player out of. `bots.ts`: the house
-  pilots (practice and the dev race), driven by `driver.ts`.
+  pilots (practice, the online backfill, Start now and the dev race), driven by `driver.ts`.
 - `auras.ts`: the auras the seat wipe strips (`snapshotMortarOverdriveStrippedAuras`),
   handed back on every return aged by the time away (`restoreMortarOverdriveStrippedAuras`;
   a party paladin aura only while its source still owes it), plus the druid pools parked
@@ -50,8 +50,10 @@ world, the server and the headless env, like the rest of `src/sim/`. Authored da
   rule: a win counts only against a human rival seated at the GO who finished or completed
   a lap), `ghost.ts` (the recovery ghost), `ground_blast.ts` (where a shot
   lands and what it does), `driver.ts` (the bot's driving brain), `readout_clock.ts`
-  (the per-tick half of the readout the server ships as `moc`), `zone.ts` (which world
-  zone a circuit belongs to).
+  (the per-tick half of the readout the server ships as `moc`, and the queue start's
+  absolute-deadline wire form), `backfill.ts` (when house pilots fill a short queue: the
+  wait, the tier, the deadline the backfill seats on and the queue start readout counted
+  down to it), `zone.ts` (which world zone a circuit belongs to).
 
 ## Seams
 - Render and UI read the race only through `IWorld` (`src/world_api/mortar_overdrive.ts`,

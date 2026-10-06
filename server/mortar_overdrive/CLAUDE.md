@@ -10,11 +10,12 @@ readouts and the drive record. The race itself runs in the shared `Sim`
 
 ## File map
 - `commands.ts`: the race command-case bodies behind one case group in
-  `server/game.ts` (`dispatchMortarOverdriveCommand`), plus the moderation exit
-  (`leaveMortarOverdriveForModeration`).
+  `server/game.ts` (`dispatchMortarOverdriveCommand`: join, leave, forfeit, reset, practice,
+  ready, start now), plus the moderation exit (`leaveMortarOverdriveForModeration`).
 - `self_wire.ts`: the race keys of the snapshot self record, beside the quest and bank
   self-key leaves: `mo`, `moc` (per tick while seated in a live heat), `mot`, and the
-  wireRev-gated `mokit`. The idle `mo` is built once per pass for every idle viewer
+  wireRev-gated `mokit`. A queued viewer's start rides `mo` as its absolute deadline tick
+  (`mortarOverdriveStillToWire`), so the countdown never resends it. The idle `mo` is built once per pass for every idle viewer
   (`mortarOverdriveIdleReadout`, a realm readout memo).
 - `drive_wire.ts`: `driveWire`, the live vehicle state of the seated racers of a live
   race and nobody else.

@@ -14,7 +14,9 @@ offline.
 - `self_wire.ts`: the self-record readouts: `mo` (queue, heat and standings), `moc`
   (the heat's per-tick clocks and speed, folded back into the same readout), `mot`
   (the trackside lane the viewer stands on), and the race kit mirror `mokit` with the
-  known list it resolves. An absent key keeps the prior mirror.
+  known list it resolves. An absent key keeps the prior mirror. A queued viewer's start
+  arrives as an absolute deadline tick; the mirror keeps it and refreshes the ticks left
+  against every snapshot's `tick` (`applyMortarOverdriveSelfWire`).
 - `drive_wire.ts`: `decodeDriveWire`, the vehicle state of a driving entity (`drv`);
   absent means on foot.
 

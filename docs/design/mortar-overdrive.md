@@ -46,11 +46,51 @@ seated (`tryMatch`). A queued race draws its circuit from the competition pool w
 ### Backfill
 
 Backfill is online only: it runs when `cfg.mortarOverdriveBackfill` is set, which
-`server/sim_boot_config.ts` does and the offline world does not (offline, Practice covers solo
-play). When no public race is running, the queue is not empty but short of a full grid, and
-the oldest waiter at its head has waited `MORTAR_OVERDRIVE_BACKFILL_TICKS`, `maybeBackfill`
+`server/sim_boot_config.ts` does and the offline world does not. When no public race is
+running, the queue is not empty but short of a full grid, and the oldest waiter at its head
+has waited `MORTAR_OVERDRIVE_BACKFILL_TICKS`, `maybeBackfill`
 (`src/sim/mortar_overdrive/bots.ts`) spawns house pilots at `MORTAR_OVERDRIVE_BACKFILL_TIER`
-into the empty seats and seats the grid on the circuit's public lane.
+into the empty seats and seats the grid on the circuit's public lane. The deadline is one pure
+function, `mortarOverdriveBackfillAt` (`src/sim/mortar_overdrive/backfill.ts`, beside both
+constants): the backfill seats on it and the queue readout counts down to it, so the two
+cannot drift.
+
+### Start now
+
+Start now is the backfill on demand (`IWorld.startMortarOverdriveNow`, the
+`mortar_overdrive_start_now` command, `startMortarOverdriveNow` in `bots.ts`). Any queued pilot
+may send it, online and offline: it seats the queue head, up to a grid in queue order, on the
+public lane with house pilots at `MORTAR_OVERDRIVE_BACKFILL_TIER` in the open seats, through the
+backfill's own seat, so a pilot fifth in line starts the race for the four ahead of them. It is
+refused silently when the sender is not queued or cannot race (the seat's one eligibility
+test), and while a public race holds the lane; a sender in combat is refused with the
+in-combat error, like the queue join. A waiter who stopped being eligible since the tick's
+prune is left out rather than sinking the start. Like any queued seat it draws the competition
+circuit with one `ctx.rng` draw, here from a command between ticks, as Practice's seat runs.
+
+### The queue readout and the start card
+
+While queued, `MortarOverdriveInfo.start` (absent otherwise, so an idle readout pays nothing)
+carries the queue head as named seats with the viewer marked, `laneBusy` (a public race holds
+the lane), `backfill` (house pilots come on their own here) and `startsInTicks`, the ticks
+until the backfill, exact at the readout's tick and null where nothing fills the grid on its
+own or the lane is busy. On the wire `mo` carries the absolute deadline tick (`startsAt`)
+instead, because ticks left move every tick and `mo` is sent only on change
+(`mortarOverdriveStillToWire` / `mortarOverdriveStillFromWire` in `readout_clock.ts`); the
+client mirror turns it back against every snapshot's `tick`, the way the offline Sim rebuilds
+it every tick.
+
+The window's start card (`src/ui/hud/mortar_overdrive/queue_card_view.ts` and
+`queue_card_painter.ts`) shows it: the grid with each open seat as a house pilot's, a
+countdown and a bar emptying toward the backfill, the solo note when the viewer is the only
+human queued (a win then banks nothing, see Rewards), and Start now. The countdown runs on the
+client clock from each new reading, so it ticks down smoothly whatever the snapshot cadence.
+While the lane is busy the card says so, shows no clock and Start now is refused with that
+line as its stated reason.
+
+Offline there is no backfill and nobody else can join, so the card shows no clock and says the
+race starts on Start now; joining the queue offline is therefore always worth it (it is the
+offline way onto a competition circuit), and the join button is never disabled.
 
 House pilots are real players added with `{ bot: true }` and marked in
 `MortarOverdriveState.bots`. They hold the same controls a human holds, written into
@@ -59,8 +99,6 @@ they run through the same vehicle kernel, collision and surface penalties. Their
 draw no rng.
 One rule reaps them: a house pilot seated in no live race is despawned on that tick.
 
-The window reports `queueViable` false when neither backfill nor enough connected players
-can ever fill a grid.
 
 ### Loading lobby
 
@@ -183,7 +221,7 @@ Practice (`startMortarOverdrivePractice`, the `mortar_overdrive_practice` comman
 In a rated heat a human winner's `mortarOverdriveWins` goes up by one if at least one other human raced it
 (`src/sim/mortar_overdrive/credit.ts`): seated on the roster the race records when its phase
 turns to racing (`seatedAtGo`), then finished or completed at least lap 1. The deed hooks run for
-every human on the grid. A solo queuer backfilled against
+every human on the grid. A solo queuer backfilled (or started with Start now) against
 house pilots races a rated heat for the finish deeds and the flying laps, but banks no win and no
 win deed.
 
@@ -411,7 +449,7 @@ named module, never inline in the match body:
 | `src/sim/vehicle_motion.ts` | `MAX_VEHICLE_SPIN` and the driving model the profile feeds |
 | `src/sim/mortar_overdrive/race.ts` | `MORTAR_OVERDRIVE_VERGE_BAND`, `MORTAR_OVERDRIVE_GARDEN_BAND`, `MORTAR_OVERDRIVE_COUNTDOWN_TICKS`, `MORTAR_OVERDRIVE_CHASE_TICKS`, `MORTAR_OVERDRIVE_RETURN_TICKS`, `MORTAR_OVERDRIVE_RESET_LOCK_TICKS`, `MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS`, `MORTAR_OVERDRIVE_STUCK_TICKS`, `MORTAR_OVERDRIVE_STUCK_SPEED`, `MORTAR_OVERDRIVE_WARD_AURA_SECONDS`, `MORTAR_OVERDRIVE_DEAD_HEAT_YARDS`, `MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT` |
 | `src/sim/mortar_overdrive/loading.ts` | `MORTAR_OVERDRIVE_LOADING_MAX_TICKS` |
-| `src/sim/mortar_overdrive/bots.ts` | `MORTAR_OVERDRIVE_BACKFILL_TICKS`, `MORTAR_OVERDRIVE_BACKFILL_TIER` |
+| `src/sim/mortar_overdrive/backfill.ts` | `MORTAR_OVERDRIVE_BACKFILL_TICKS`, `MORTAR_OVERDRIVE_BACKFILL_TIER` |
 | `src/sim/mortar_overdrive/driver.ts` | `mortarOverdriveDriverProfile`: the house-pilot tiers |
 | `src/sim/mortar_overdrive/layout.ts` | `MORTAR_OVERDRIVE_GRID_SIZE`, `MORTAR_OVERDRIVE_VERGE_MARGIN`, `MORTAR_OVERDRIVE_RUNOFF_WIDTH`, `MORTAR_OVERDRIVE_GATE_SPACING`, `MORTAR_OVERDRIVE_MIN_HALF_WIDTH` |
 | `src/sim/mortar_overdrive/track_limits.ts` | `MORTAR_OVERDRIVE_OFF_ROAD_EXCHANGE_RATE`, `MORTAR_OVERDRIVE_CUT_TOLERANCE_YD`, `MORTAR_OVERDRIVE_LOITER_TICKS`, `MORTAR_OVERDRIVE_LOITER_WARN_TICKS`, `MORTAR_OVERDRIVE_CUT_LOCK_TICKS` |
