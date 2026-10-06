@@ -214,15 +214,22 @@ export function startMortarOverdriveDevRace(
 }
 
 /**
- * The queue head a fill seats, in queue order: the first waiters free to sit
- * now, less any the seat would refuse. Between ticks (Start now arrives as a
- * command) a waiter can have stopped being eligible since the tick's prune, and
- * one refusal would sink the whole grid's start.
+ * The queue head a fill seats, in queue order, at most a grid: the waiters free
+ * to sit now (out of combat) whom the seat would accept. Eligibility is asked
+ * BEFORE the grid is capped: between ticks (Start now arrives as a command) a
+ * waiter can have stopped being eligible since the tick's prune, and that stale
+ * entry must neither sink the start nor cost an eligible pilot behind it the
+ * seat.
  */
 function fillableWaiters(sim: Sim): number[] {
-  return mortarOverdriveSeatableWaiters(sim.ctx).filter((pid) =>
-    mortarOverdriveEligible(sim.ctx, pid),
-  );
+  const waiters: number[] = [];
+  for (const pid of sim.mortarOverdrive.queue) {
+    if (waiters.length === MORTAR_OVERDRIVE_GRID_SIZE) break;
+    if (!mortarOverdriveInCombat(sim.ctx, pid) && mortarOverdriveEligible(sim.ctx, pid)) {
+      waiters.push(pid);
+    }
+  }
+  return waiters;
 }
 
 /** Online: a queue whose oldest waiter has been there long enough gets house

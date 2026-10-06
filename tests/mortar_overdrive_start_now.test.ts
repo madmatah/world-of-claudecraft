@@ -223,6 +223,22 @@ describe('Mortar Overdrive Start now: who the grid goes to', () => {
     expect(sim.mortarOverdrive.match?.pids).not.toContain(head);
     expect(sim.mortarOverdrive.queue.indexOf(head)).toBe(0);
   });
+
+  it('never lets a stale ineligible pilot at the head cost an eligible one their seat', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const pids = ['Aster', 'Briar', 'Cass', 'Dell', 'Eryn'].map((name, i) =>
+      addAt(sim, 'warrior', name, -5 + i * 4, -40),
+    );
+    // All five join between ticks, so no queue pop has seated four of them,
+    // and the head dies before any prune has run.
+    for (const pid of pids) sim.mortarOverdriveQueueJoin(pid);
+    const head = sim.entities.get(pids[0] as number);
+    if (!head) throw new Error('missing pilot');
+    head.dead = true;
+    expect(startMortarOverdriveNow(sim, pids[4] as number)).toBe(true);
+    // The four eligible pilots behind the head take the whole grid.
+    expect(sim.mortarOverdrive.match?.pids.slice(0, 4)).toEqual(pids.slice(1));
+  });
 });
 
 describe('Mortar Overdrive queue start readout', () => {
