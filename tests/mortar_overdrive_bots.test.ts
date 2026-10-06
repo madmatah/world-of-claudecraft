@@ -460,9 +460,11 @@ describe('Mortar Overdrive online backfill', () => {
   });
 
   it('costs the shared stream exactly one draw, on the tick it seats the grid', () => {
-    // The backfill is the ONLY path that draws a circuit in production: a
-    // practice start takes the practice circuit outright and `/dev overdrive` is
-    // told its circuit, so both skip the draw. Everything else about the Mortar Overdrive
+    // The backfill draws a circuit in production, and so does Start now (the
+    // same fill on demand, from a command between ticks, pinned in
+    // tests/mortar_overdrive_start_now.test.ts): a practice start takes the
+    // practice circuit outright and `/dev overdrive` is told its circuit, so
+    // both skip the draw. Everything else about the Mortar Overdrive
     // is deterministic with zero rng, which is what makes the count readable
     // here: the whole tick's draw cost is this one draw.
     const sim = makeWorld({ mortarOverdriveBackfill: true });

@@ -157,6 +157,74 @@ describe('Mortar Overdrive Start now', () => {
   });
 });
 
+/** The shared-stream values `act` draws, in order. */
+function drawsOf(sim: Sim, act: () => void): number[] {
+  const seen: number[] = [];
+  sim.rng.setObserver((value) => seen.push(value));
+  try {
+    act();
+  } finally {
+    sim.rng.setObserver(null);
+  }
+  return seen;
+}
+
+describe('Mortar Overdrive Start now: shared-stream cost', () => {
+  it('draws exactly one value, the competition circuit, when it seats a grid', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const aster = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.mortarOverdriveQueueJoin(aster);
+    sim.tick();
+    const draws = drawsOf(sim, () => {
+      expect(startMortarOverdriveNow(sim, aster)).toBe(true);
+    });
+    expect(draws).toHaveLength(1);
+  });
+
+  it('draws nothing on every refusal: not queued, lane busy, in combat, dead', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const stranger = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect(drawsOf(sim, () => startMortarOverdriveNow(sim, stranger))).toEqual([]);
+
+    const fighter = addAt(sim, 'mage', 'Briar', 9, -40);
+    sim.mortarOverdriveQueueJoin(fighter);
+    fighting(sim, fighter);
+    expect(drawsOf(sim, () => startMortarOverdriveNow(sim, fighter))).toEqual([]);
+
+    const fallen = addAt(sim, 'rogue', 'Cass', 13, -40);
+    sim.mortarOverdriveQueueJoin(fallen);
+    const e = sim.entities.get(fallen);
+    if (!e) throw new Error('missing pilot');
+    e.dead = true;
+    expect(drawsOf(sim, () => startMortarOverdriveNow(sim, fallen))).toEqual([]);
+
+    const racer = addAt(sim, 'priest', 'Dell', 17, -40);
+    sim.mortarOverdriveQueueJoin(racer);
+    sim.mortarOverdrive.queue = [racer];
+    expect(startMortarOverdriveNow(sim, racer)).toBe(true);
+    const waiter = addAt(sim, 'warrior', 'Eryn', 21, -40);
+    sim.mortarOverdriveQueueJoin(waiter);
+    expect(drawsOf(sim, () => startMortarOverdriveNow(sim, waiter))).toEqual([]);
+    expect(sim.mortarOverdrive.queue).toContain(waiter);
+  });
+});
+
+describe('Mortar Overdrive Start now: who the grid goes to', () => {
+  it('passes over a head pilot in combat, who keeps their place, and seats the presser', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const head = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const presser = addAt(sim, 'mage', 'Briar', 9, -40);
+    sim.mortarOverdriveQueueJoin(head);
+    sim.mortarOverdriveQueueJoin(presser);
+    sim.tick();
+    fighting(sim, head);
+    expect(startMortarOverdriveNow(sim, presser)).toBe(true);
+    expect(sim.mortarOverdrive.match?.pids).toContain(presser);
+    expect(sim.mortarOverdrive.match?.pids).not.toContain(head);
+    expect(sim.mortarOverdrive.queue.indexOf(head)).toBe(0);
+  });
+});
+
 describe('Mortar Overdrive queue start readout', () => {
   it('is absent for a viewer who is not queued', () => {
     const sim = makeWorld({ mortarOverdriveBackfill: true });
