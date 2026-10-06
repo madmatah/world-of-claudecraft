@@ -2460,10 +2460,27 @@ export const hudChromeStrings = {
     // both, so a centred stats row never shifts when the state flips.
     forfeitConfirm: 'Confirm forfeit',
     waiting: '{count} pilots waiting for a grid.',
-    // Shown instead of the waiting line where the queue can never seat a race
-    // (the offline world): the join button beside it is disabled.
-    queueNeedsRealm: 'Queued races need other pilots on a live realm. Take a practice lap instead.',
-    queued: 'Queue position {position} of {count}. Your machine is being readied.',
+    // The start card the window shows while you are queued: who takes the
+    // grid, when house pilots fill the open seats, and a Start now that fills
+    // them at once for everyone queued. The countdown is whole seconds.
+    queueCardTitle: 'In the queue',
+    queueCardStartsIn: 'Starting in {seconds}s',
+    // The countdown ran out and the grid is being seated.
+    queueCardStarting: 'Starting the race',
+    queueCardOpenSeat: 'Open seat: a house pilot takes it',
+    // Only when you are the one human queued: the win credit rule needs a
+    // human rival who raced the heat.
+    queueCardSolo: 'Against house pilots alone, a win does not count.',
+    // One public race runs at a time; the queue starts after it, and Start now
+    // is refused until then (this line is its stated reason).
+    queueCardBusy: 'The track is busy: starting after the current race.',
+    // Offline, where nobody else can join and house pilots never come on
+    // their own: the race starts when the player presses Start now.
+    queueCardManual:
+      'Nobody else can join on this world, so the race starts when you press Start now.',
+    queueCardStartNow: 'Start now',
+    queueCardStartNowHint:
+      'Starts the race for everyone in the queue, with house pilots in the open seats.',
     // Every race is a full grid, so the window reports where you sit in the
     // field rather than naming one rival.
     racingAgainst: 'Your race is underway. You are running {position} of {total}.',

@@ -126,9 +126,9 @@ function harness() {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
-    queueViable: true,
   };
   const forfeitMortarOverdrive = vi.fn();
+  const startMortarOverdriveNow = vi.fn();
   const resetMortarOverdrivePosition = vi.fn();
   const startMortarOverdrivePractice = vi.fn();
   const readyMortarOverdrive = vi.fn();
@@ -157,6 +157,7 @@ function harness() {
     resetMortarOverdrivePosition,
     startMortarOverdrivePractice,
     readyMortarOverdrive,
+    startMortarOverdriveNow,
   } as unknown as IWorld;
   const noop = (): void => {};
   const ui = new MortarOverdriveUi({
@@ -199,6 +200,7 @@ function harness() {
     clearPickupSplash,
     startMortarOverdrivePractice,
     readyMortarOverdrive,
+    startMortarOverdriveNow,
     forfeitButton,
     touch,
     prepared,
@@ -404,25 +406,13 @@ describe('Mortar Overdrive practice setup screen', () => {
     expect(practiceButton(h.root)?.disabled).toBe(true);
   });
 
-  it('disables the join button where the queue can never seat a race', () => {
-    // The offline world: no bot backfill and one human, so the queue would
-    // hold the player forever. The button stays visible but disabled, the
-    // status line says why, and practice stays the live path onto the circuit.
+  it('keeps the join button live everywhere, offline included', () => {
+    // Start now seats a queued race with house pilots on any world, so the
+    // queue can always end in a race and the join is never disabled.
     const h = harness();
-    h.info.queueViable = false;
     h.ui.toggle();
     const join = h.root.querySelector<HTMLButtonElement>('[data-mortar-overdrive-join]');
-    expect(join).not.toBeNull();
-    expect(join?.disabled).toBe(true);
-    expect(h.root.textContent).toContain(t('hudChrome.mortarOverdrive.queueNeedsRealm'));
-    expect(practiceButton(h.root)?.disabled).toBe(false);
-    // Viability rides the window signature, so an online mirror flipping it
-    // back repaints the button enabled without anything else moving.
-    h.info.queueViable = true;
-    h.ui.update();
-    expect(h.root.querySelector<HTMLButtonElement>('[data-mortar-overdrive-join]')?.disabled).toBe(
-      false,
-    );
+    expect(join?.disabled).toBe(false);
   });
 
   it('marks body while a race is on, from the grid to the result, and clears it after', () => {
@@ -722,6 +712,133 @@ describe('Mortar Overdrive practice setup screen', () => {
     // A class, not `display`: the stylesheet fades and slides it out, which a
     // display flip would cut off outright.
     expect(panel.classList.contains('shown')).toBe(false);
+  });
+});
+
+describe('Mortar Overdrive queue start card', () => {
+  const card = (root: HTMLElement): HTMLElement | null =>
+    root.querySelector('.mortar-overdrive-start');
+  const clockText = (root: HTMLElement): string =>
+    root.querySelector('[data-mo-start-clock]')?.textContent ?? '';
+  const startNow = (root: HTMLElement): HTMLButtonElement | null =>
+    root.querySelector('[data-mortar-overdrive-start-now]');
+  const queue = (
+    h: ReturnType<typeof harness>,
+    start: NonNullable<MortarOverdriveInfo['start']>,
+  ): void => {
+    h.info.queued = true;
+    h.info.queuePosition = 1;
+    h.info.queueSize = start.seats.length;
+    h.info.start = start;
+  };
+
+  it('replaces the queue status line with the card, and counts down on the client clock', () => {
+    const h = harness();
+    queue(h, {
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: 30 * 20,
+      laneBusy: false,
+      backfill: true,
+    });
+    h.ui.toggle();
+    const section = card(h.root);
+    expect(section).not.toBeNull();
+    expect(h.root.querySelector('.mortar-overdrive-status')).toBeNull();
+    expect(section?.textContent).toContain(t('hudChrome.mortarOverdrive.queueCardTitle'));
+    expect(clockText(h.root)).toBe(
+      t('hudChrome.mortarOverdrive.queueCardStartsIn', { seconds: '30' }),
+    );
+    // The viewer's seat is marked, the other three are open for house pilots.
+    const seats = [...h.root.querySelectorAll('.mortar-overdrive-start-seat')];
+    expect(seats).toHaveLength(4);
+    expect(seats[0]?.textContent).toContain('Aster');
+    expect(seats[0]?.textContent).toContain(t('hudChrome.mortarOverdrive.standingsYou'));
+    expect(h.root.querySelectorAll('.mortar-overdrive-start-seat.open')).toHaveLength(3);
+    expect(section?.textContent).toContain(t('hudChrome.mortarOverdrive.queueCardSolo'));
+    // The mirror holds still between readouts; the client clock carries the
+    // count, through elided writes on the same card, never a rebuild.
+    h.clock.now += 1000;
+    h.ui.update();
+    expect(card(h.root)).toBe(section);
+    expect(clockText(h.root)).toBe(
+      t('hudChrome.mortarOverdrive.queueCardStartsIn', { seconds: '29' }),
+    );
+    // The clock is a timer and the bar decorative: no second-by-second
+    // announcement anywhere in the card.
+    expect(h.root.querySelector('[data-mo-start-clock]')?.getAttribute('role')).toBe('timer');
+    expect(h.root.querySelector('[data-mo-start-bar]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(section?.querySelectorAll('[aria-live]')).toHaveLength(0);
+    expect(section?.querySelectorAll('[role="status"]')).toHaveLength(1);
+    // Leave, the divider and Practice stay below the card.
+    expect(h.root.querySelector('[data-mortar-overdrive-leave]')).not.toBeNull();
+    expect(h.root.querySelector('.mortar-overdrive-or')).not.toBeNull();
+    startNow(h.root)?.click();
+    expect(h.startMortarOverdriveNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the solo note once a second human is queued', () => {
+    const h = harness();
+    queue(h, {
+      seats: [
+        { name: 'Briar', you: false },
+        { name: 'Aster', you: true },
+      ],
+      startsInTicks: 400,
+      laneBusy: false,
+      backfill: true,
+    });
+    h.ui.toggle();
+    expect(card(h.root)?.textContent).not.toContain(t('hudChrome.mortarOverdrive.queueCardSolo'));
+    expect(h.root.querySelectorAll('.mortar-overdrive-start-seat.open')).toHaveLength(2);
+    expect(h.root.querySelector('.mortar-overdrive-start-seat.me')?.textContent).toContain('Aster');
+  });
+
+  it('says the track is busy, hides the clock and refuses Start now with that reason', () => {
+    const h = harness();
+    queue(h, {
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: null,
+      laneBusy: true,
+      backfill: true,
+    });
+    h.ui.toggle();
+    const note = h.root.querySelector('[data-mo-start-note]') as HTMLElement;
+    expect(note.textContent).toBe(t('hudChrome.mortarOverdrive.queueCardBusy'));
+    expect(h.root.querySelector('[data-mo-start-clock]')?.classList.contains('is-off')).toBe(true);
+    const button = startNow(h.root) as HTMLButtonElement;
+    // Still a focusable button, refused with a reason assistive tech can read.
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toContain(note.id);
+    button.click();
+    expect(h.startMortarOverdriveNow).not.toHaveBeenCalled();
+    // The lane frees: the same button comes back on and the count appears.
+    h.info.start = {
+      ...(h.info.start as NonNullable<MortarOverdriveInfo['start']>),
+      laneBusy: false,
+      startsInTicks: 0,
+    };
+    h.ui.update();
+    expect(startNow(h.root)).toBe(button);
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    expect(note.textContent).toBe('');
+    expect(clockText(h.root)).toBe(t('hudChrome.mortarOverdrive.queueCardStarting'));
+  });
+
+  it('offline, where nobody else comes, says Start now is the way and shows no clock', () => {
+    const h = harness();
+    queue(h, {
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: null,
+      laneBusy: false,
+      backfill: false,
+    });
+    h.ui.toggle();
+    expect(h.root.querySelector('[data-mo-start-note]')?.textContent).toBe(
+      t('hudChrome.mortarOverdrive.queueCardManual'),
+    );
+    expect(h.root.querySelector('[data-mo-start-bar]')?.classList.contains('is-off')).toBe(true);
+    expect(startNow(h.root)?.getAttribute('aria-disabled')).toBeNull();
   });
 });
 

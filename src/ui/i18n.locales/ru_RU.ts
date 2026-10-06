@@ -15733,9 +15733,18 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.forfeit': 'Сойти с гонки',
   'hudChrome.mortarOverdrive.forfeitConfirm': 'Подтвердить',
   'hudChrome.mortarOverdrive.waiting': 'Пилотов в ожидании стартовой решётки: {count}.',
-  'hudChrome.mortarOverdrive.queueNeedsRealm':
-    'Для гонок из очереди нужны другие пилоты на сетевом сервере. Вместо этого пройдите тренировочный круг.',
-  'hudChrome.mortarOverdrive.queued': 'Позиция в очереди: {position} из {count}. Ваш танк готовят.',
+  'hudChrome.mortarOverdrive.queueCardTitle': 'В очереди',
+  'hudChrome.mortarOverdrive.queueCardStartsIn': 'Старт через {seconds} с',
+  'hudChrome.mortarOverdrive.queueCardStarting': 'Гонка начинается',
+  'hudChrome.mortarOverdrive.queueCardOpenSeat': 'Свободное место: его займёт пилот Общества',
+  'hudChrome.mortarOverdrive.queueCardSolo':
+    'В гонке только с пилотами Общества победа не засчитывается.',
+  'hudChrome.mortarOverdrive.queueCardBusy': 'Трасса занята: старт после текущей гонки.',
+  'hudChrome.mortarOverdrive.queueCardManual':
+    'В этот мир больше никто не может войти, поэтому гонка начнётся, когда вы нажмёте «Начать сейчас».',
+  'hudChrome.mortarOverdrive.queueCardStartNow': 'Начать сейчас',
+  'hudChrome.mortarOverdrive.queueCardStartNowHint':
+    'Запускает гонку для всех в очереди, свободные места займут пилоты Общества.',
   'hudChrome.mortarOverdrive.racingAgainst': 'Гонка началась. Вы идёте {position} из {total}.',
   'hudChrome.mortarOverdrive.practice': 'Тренировка',
   'hudChrome.mortarOverdrive.practiceIntro':

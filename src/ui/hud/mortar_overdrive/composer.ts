@@ -104,7 +104,7 @@ export class MortarOverdriveUi {
 
   constructor(private readonly deps: MortarOverdriveDeps) {
     this.raceWarm = deps.raceWarm ? new MortarOverdriveRaceWarm(deps.raceWarm) : null;
-    this.window = new MortarOverdriveWindow(deps);
+    this.window = new MortarOverdriveWindow({ ...deps, now: () => this.now() });
     this.strip = new MortarOverdriveStrip({
       layer: () => deps.layer(),
       writers: deps.writers,

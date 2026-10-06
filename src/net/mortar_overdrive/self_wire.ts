@@ -50,7 +50,6 @@ export function idleMortarOverdriveInfo(): MortarOverdriveInfo {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
-    queueViable: true,
   };
 }
 

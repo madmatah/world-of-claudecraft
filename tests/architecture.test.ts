@@ -642,6 +642,7 @@ const UI_PURE_CORES = [
   'src/ui/hud/mortar_overdrive/ready_core.ts',
   'src/ui/hud/mortar_overdrive/result_notice_view.ts',
   'src/ui/hud/mortar_overdrive/lobby_view.ts',
+  'src/ui/hud/mortar_overdrive/queue_card_view.ts',
   'src/ui/leaderboard_view.ts',
   'src/ui/guild_leaderboard_view.ts',
   // The signpost guild board's roster drill-in core (the board itself reuses

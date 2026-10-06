@@ -27,7 +27,6 @@ function info(over: Partial<MortarOverdriveInfo> = {}): MortarOverdriveInfo {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
-    queueViable: true,
     ...over,
   };
 }
@@ -191,12 +190,29 @@ describe('Mortar Overdrive pure views', () => {
       kind: 'idle',
       queueSize: 0,
       practiceAvailable: true,
-      queueViable: true,
-      sig: 'idle|0|open|q',
+      sig: 'idle|0|open',
     });
-    expect(
-      buildMortarOverdriveWindowView(info({ queued: true, queuePosition: 2, queueSize: 3 })),
-    ).toMatchObject({ kind: 'queued', position: 2, queueSize: 3 });
+    const queued = buildMortarOverdriveWindowView(
+      info({
+        queued: true,
+        queuePosition: 2,
+        queueSize: 2,
+        start: {
+          seats: [
+            { name: 'Briar', you: false },
+            { name: 'Aster', you: true },
+          ],
+          startsInTicks: 100,
+          laneBusy: false,
+          backfill: true,
+        },
+      }),
+    );
+    expect(queued.kind).toBe('queued');
+    if (queued.kind === 'queued') {
+      expect(queued.card.seats.map((seat) => seat.name)).toEqual(['Briar', 'Aster', null, null]);
+      expect(queued.card.solo).toBe(false);
+    }
   });
 
   it('derives the HUD lap total from the shared snapshot, not a hard-coded race length', () => {
@@ -284,15 +300,6 @@ describe('Mortar Overdrive pure views', () => {
     expect(
       buildMortarOverdriveWindowView(info({ ...queued, practiceAvailable: false })).sig,
     ).not.toBe(buildMortarOverdriveWindowView(info({ ...queued })).sig);
-  });
-
-  it('carries queue viability into the idle window and its signature', () => {
-    // Offline the queue can never seat a race: the window disables the join
-    // button off this flag, so the flip has to repaint the window on its own.
-    const unviable = buildMortarOverdriveWindowView(info({ queueViable: false }));
-    expect(unviable.kind).toBe('idle');
-    if (unviable.kind === 'idle') expect(unviable.queueViable).toBe(false);
-    expect(unviable.sig).not.toBe(buildMortarOverdriveWindowView(info()).sig);
   });
 
   it('keeps a finished result visible through the return countdown', () => {

@@ -32,7 +32,6 @@ function info(
     queueSize: 0,
     match,
     practiceAvailable: false,
-    queueViable: true,
   };
 }
 

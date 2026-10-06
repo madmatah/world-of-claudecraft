@@ -15470,9 +15470,19 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.forfeit': 'レースを棄権',
   'hudChrome.mortarOverdrive.forfeitConfirm': '棄権を確認',
   'hudChrome.mortarOverdrive.waiting': '{count}人のパイロットがグリッドを待っています。',
-  'hudChrome.mortarOverdrive.queueNeedsRealm':
-    'キューでのレースにはオンラインサーバーの他のパイロットが必要です。代わりに練習走行をお試しください。',
-  'hudChrome.mortarOverdrive.queued': '待機位置 {position}/{count}。戦車を準備しています。',
+  'hudChrome.mortarOverdrive.queueCardTitle': '待機列に参加中',
+  'hudChrome.mortarOverdrive.queueCardStartsIn': '{seconds}秒後にスタート',
+  'hudChrome.mortarOverdrive.queueCardStarting': 'レースを開始します',
+  'hudChrome.mortarOverdrive.queueCardOpenSeat': '空き枠：協会のハウスパイロットが入ります',
+  'hudChrome.mortarOverdrive.queueCardSolo':
+    'ハウスパイロットだけが相手のレースでは、勝利は記録されません。',
+  'hudChrome.mortarOverdrive.queueCardBusy':
+    'コースは使用中です：現在のレースが終わり次第スタートします。',
+  'hudChrome.mortarOverdrive.queueCardManual':
+    'このワールドには他の誰も参加できないため、「今すぐスタート」を押すとレースが始まります。',
+  'hudChrome.mortarOverdrive.queueCardStartNow': '今すぐスタート',
+  'hudChrome.mortarOverdrive.queueCardStartNowHint':
+    '待機列の全員でレースを始めます。空き枠にはハウスパイロットが入ります。',
   'hudChrome.mortarOverdrive.racingAgainst':
     'レースが始まりました。現在{total}台中{position}位です。',
   'hudChrome.mortarOverdrive.practice': '練習',

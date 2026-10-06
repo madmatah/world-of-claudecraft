@@ -3346,11 +3346,6 @@ export function mortarOverdriveInfoFor(ctx: SimContext, pid: number): MortarOver
     // `>= 0`, never truthiness: lane 0 is a real private copy the moment the
     // practice circuit stops serving competition and loses its public lane.
     practiceAvailable: match === null && mortarOverdriveFreePracticeSlot(ctx) >= 0,
-    // The queue can seat a race when house pilots backfill it (the online
-    // server always enables that) or enough humans are connected to fill a
-    // grid without them. Offline neither holds, and a queue that can never
-    // fill is an affordance that lies.
-    queueViable: ctx.cfg.mortarOverdriveBackfill || ctx.players.size >= MORTAR_OVERDRIVE_GRID_SIZE,
   };
 }
 

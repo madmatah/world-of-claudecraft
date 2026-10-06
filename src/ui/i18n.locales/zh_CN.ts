@@ -14740,9 +14740,17 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.forfeit': '退出比赛',
   'hudChrome.mortarOverdrive.forfeitConfirm': '确认退出',
   'hudChrome.mortarOverdrive.waiting': '{count} 名车手正在等待发车格。',
-  'hudChrome.mortarOverdrive.queueNeedsRealm':
-    '排位赛需要在线服务器上的其他车手。请先跑一圈练习赛。',
-  'hudChrome.mortarOverdrive.queued': '队列位置 {position}/{count}。正在准备你的坦克。',
+  'hudChrome.mortarOverdrive.queueCardTitle': '排队中',
+  'hudChrome.mortarOverdrive.queueCardStartsIn': '{seconds} 秒后开始',
+  'hudChrome.mortarOverdrive.queueCardStarting': '比赛即将开始',
+  'hudChrome.mortarOverdrive.queueCardOpenSeat': '空位：由协会的陪练车手补上',
+  'hudChrome.mortarOverdrive.queueCardSolo': '只与陪练车手比赛时，胜利不计入战绩。',
+  'hudChrome.mortarOverdrive.queueCardBusy': '赛道正在使用中：本场比赛结束后开始。',
+  'hudChrome.mortarOverdrive.queueCardManual':
+    '这个世界里没有其他人能加入，所以比赛会在你按下“立即开始”时开始。',
+  'hudChrome.mortarOverdrive.queueCardStartNow': '立即开始',
+  'hudChrome.mortarOverdrive.queueCardStartNowHint':
+    '为队列中的所有人开始比赛，空位由陪练车手补上。',
   'hudChrome.mortarOverdrive.racingAgainst': '你的比赛已经开始。你目前排名 {position}/{total}。',
   'hudChrome.mortarOverdrive.practice': '试车',
   'hudChrome.mortarOverdrive.practiceIntro':

@@ -15427,9 +15427,18 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.forfeit': '경기 포기',
   'hudChrome.mortarOverdrive.forfeitConfirm': '포기 확인',
   'hudChrome.mortarOverdrive.waiting': '조종사 {count}명이 출발 그리드를 기다리고 있습니다.',
-  'hudChrome.mortarOverdrive.queueNeedsRealm':
-    '대기열 경주에는 온라인 서버의 다른 조종사가 필요합니다. 대신 연습 주행을 해 보세요.',
-  'hudChrome.mortarOverdrive.queued': '대기 순번 {position}/{count}. 전차를 준비하고 있습니다.',
+  'hudChrome.mortarOverdrive.queueCardTitle': '대기열 참가 중',
+  'hudChrome.mortarOverdrive.queueCardStartsIn': '{seconds}초 후 시작',
+  'hudChrome.mortarOverdrive.queueCardStarting': '레이스를 시작합니다',
+  'hudChrome.mortarOverdrive.queueCardOpenSeat': '빈자리: 협회 소속 파일럿이 채웁니다',
+  'hudChrome.mortarOverdrive.queueCardSolo':
+    '협회 소속 파일럿만 상대하면 승리가 기록되지 않습니다.',
+  'hudChrome.mortarOverdrive.queueCardBusy': '트랙 사용 중: 현재 레이스가 끝나면 시작합니다.',
+  'hudChrome.mortarOverdrive.queueCardManual':
+    '이 세계에는 다른 누구도 참가할 수 없으므로, "지금 시작"을 누르면 레이스가 시작됩니다.',
+  'hudChrome.mortarOverdrive.queueCardStartNow': '지금 시작',
+  'hudChrome.mortarOverdrive.queueCardStartNowHint':
+    '대기열의 모든 사람과 레이스를 시작하며, 빈자리는 협회 소속 파일럿이 채웁니다.',
   'hudChrome.mortarOverdrive.racingAgainst':
     '경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
   'hudChrome.mortarOverdrive.practice': '연습',

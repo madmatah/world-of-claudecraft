@@ -8,8 +8,10 @@ import type { IWorld, MortarOverdriveDriverTier } from '../../../world_api';
 import { markDialogRoot } from '../../dialog_root';
 import { esc } from '../../esc';
 import { formatNumber, type TranslationKey, t } from '../../i18n';
+import type { PainterHostWriters } from '../../painter_host';
 import { svgIcon } from '../../ui_icons';
 import { mortarOverdriveCircuitName } from './circuit_i18n';
+import { MortarOverdriveQueueCard } from './queue_card_painter';
 import {
   buildMortarOverdriveSetupView,
   buildMortarOverdriveWindowView,
@@ -76,6 +78,10 @@ export interface MortarOverdriveWindowDeps {
   controlKeys(action: MortarOverdriveControlAction): readonly string[];
   /** True on the touch HUD, where naming keys would be nonsense. */
   isTouchHud(): boolean;
+  /** The elided writers the queue card's live countdown rides. */
+  writers: PainterHostWriters;
+  /** The client clock the queue card counts down on. */
+  now(): number;
 }
 
 export class MortarOverdriveWindow {
@@ -90,7 +96,12 @@ export class MortarOverdriveWindow {
   private setupOpen = false;
   private setupTier: MortarOverdriveDriverTier = MORTAR_OVERDRIVE_DEFAULT_PRACTICE_TIER;
 
-  constructor(private readonly deps: MortarOverdriveWindowDeps) {}
+  /** The start card the front screen shows while the viewer is queued. */
+  private readonly queueCard: MortarOverdriveQueueCard;
+
+  constructor(private readonly deps: MortarOverdriveWindowDeps) {
+    this.queueCard = new MortarOverdriveQueueCard(deps.writers);
+  }
 
   get isOpen(): boolean {
     return this.deps.root().style.display === 'block';
@@ -154,13 +165,25 @@ export class MortarOverdriveWindow {
           this.deps.isTouchHud(),
         );
     const sig = view ? view.sig : (setup as MortarOverdriveSetupView).sig;
+    // The queue card's countdown is live outside the signature: stepped and
+    // painted through the elided writers every frame the card is up.
+    const queued = view?.kind === 'queued';
+    if (queued) {
+      this.queueCard.step(info.start, this.deps.now());
+      this.queueCard.paint();
+    }
     if (sig === this.lastWindowSig) return;
     this.lastWindowSig = sig;
     const root = this.deps.root();
     root.innerHTML = view
       ? this.windowHtml(view)
       : this.setupHtml(setup as MortarOverdriveSetupView);
+    if (queued) this.queueCard.bind(root);
+    else this.queueCard.reset();
     root.querySelector('[data-close]')?.addEventListener('click', () => this.close());
+    root.querySelector('[data-mortar-overdrive-start-now]')?.addEventListener('click', () => {
+      if (this.queueCard.canStart) this.deps.world().startMortarOverdriveNow();
+    });
     root.querySelector('[data-mortar-overdrive-join]')?.addEventListener('click', () => {
       this.deps.world().joinMortarOverdriveQueue();
     });
@@ -309,20 +332,13 @@ export class MortarOverdriveWindow {
       `<span>${esc(t('hudChrome.mortarOverdrive.howToPlay'))}</span></div>`;
     let action = '';
     if (view.kind === 'idle') {
-      // A queue that can never seat a race (the offline world) keeps its button
-      // visible but disabled, with one line saying why and where to race
-      // instead: hiding it would read as a missing feature, and an enabled
-      // button would hold the player in a wait that cannot end.
-      const status = view.queueViable
-        ? `<div class="mortar-overdrive-status">${esc(t('hudChrome.mortarOverdrive.waiting', { count: num(view.queueSize) }))}</div>`
-        : `<div class="mortar-overdrive-status">${esc(t('hudChrome.mortarOverdrive.queueNeedsRealm'))}</div>`;
       action =
-        status +
-        `<button type="button" class="btn btn-primary mortar-overdrive-cta" data-mortar-overdrive-join${view.queueViable ? '' : ' disabled'}>${esc(t('hudChrome.mortarOverdrive.join'))}</button>` +
+        `<div class="mortar-overdrive-status">${esc(t('hudChrome.mortarOverdrive.waiting', { count: num(view.queueSize) }))}</div>` +
+        `<button type="button" class="btn btn-primary mortar-overdrive-cta" data-mortar-overdrive-join>${esc(t('hudChrome.mortarOverdrive.join'))}</button>` +
         this.practiceButtonHtml(view.practiceAvailable);
     } else if (view.kind === 'queued') {
       action =
-        `<div class="mortar-overdrive-status queued">${esc(t('hudChrome.mortarOverdrive.queued', { position: num(view.position), count: num(view.queueSize) }))}</div>` +
+        this.queueCard.html(view.card) +
         `<button type="button" class="btn mortar-overdrive-cta leave" data-mortar-overdrive-leave>${esc(t('hudChrome.mortarOverdrive.leave'))}</button>` +
         this.practiceButtonHtml(view.practiceAvailable);
     } else {
@@ -346,6 +362,11 @@ export class MortarOverdriveWindow {
           ? ''
           : `<button type="button" class="btn mortar-overdrive-cta leave" data-mortar-overdrive-forfeit>${esc(t('hudChrome.mortarOverdrive.forfeit'))}</button>`);
     }
-    return `${header}<div class="mortar-overdrive-body">${rules}${action}</div>`;
+    // Queued, the body says so: the touch sheet then stands the pitch and the
+    // primer down, so the card is what a phone opens on rather than a scroll
+    // below the fold.
+    const body =
+      view.kind === 'queued' ? 'mortar-overdrive-body is-queued' : 'mortar-overdrive-body';
+    return `${header}<div class="${body}">${rules}${action}</div>`;
   }
 }

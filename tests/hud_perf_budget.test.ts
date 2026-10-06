@@ -765,6 +765,15 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 1 },
     reflowAllow: {},
   },
+  // The Mortar Overdrive queue card makes no raw write at all: its markup rides
+  // the race window's own innerHTML pass (once per card signature), and the
+  // per-frame countdown, bar width, status line and Start now's refused state
+  // are all facet-routed, the clock text resolved only when its second moves.
+  {
+    file: 'hud/mortar_overdrive/queue_card_painter.ts',
+    allow: {},
+    reflowAllow: {},
+  },
   // reliquary_tracker is the same painter contract on the same budget: ONE
   // constructor innerHTML write for the whole skeleton, every refresh write
   // facet-routed (the fill-flash class rides toggleClass), and the three

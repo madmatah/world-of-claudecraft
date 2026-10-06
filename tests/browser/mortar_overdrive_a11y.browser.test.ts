@@ -5,12 +5,14 @@
 // strip container is no status region over its own controls.
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { MortarOverdriveQueueCard } from '../../src/ui/hud/mortar_overdrive/queue_card_painter';
+import { buildMortarOverdriveQueueCardView } from '../../src/ui/hud/mortar_overdrive/queue_card_view';
 import type { MortarOverdriveHudView } from '../../src/ui/hud/mortar_overdrive/race_view';
 import { MortarOverdriveStandingsPanel } from '../../src/ui/hud/mortar_overdrive/standings_painter';
 import { buildMortarOverdriveStandingsView } from '../../src/ui/hud/mortar_overdrive/standings_view';
 import { MortarOverdriveStrip } from '../../src/ui/hud/mortar_overdrive/strip_painter';
 import { makeWriterFacet } from '../../src/ui/painter_host';
-import type { MortarOverdriveMatchInfo } from '../../src/world_api';
+import type { MortarOverdriveMatchInfo, MortarOverdriveQueueStart } from '../../src/world_api';
 import { axeSeriousViolations, cleanup, formatViolations } from './_harness';
 
 afterEach(cleanup);
@@ -108,5 +110,53 @@ describe('Mortar Overdrive in-race HUD accessibility', () => {
     expect(violations, formatViolations(violations)).toEqual([]);
     expect(list.getAttribute('role')).toBeNull();
     expect(layer.querySelector('#mortar-overdrive-hud')?.getAttribute('role')).toBeNull();
+  });
+});
+
+describe('Mortar Overdrive queue card accessibility', () => {
+  const paintCard = (start: MortarOverdriveQueueStart): HTMLElement => {
+    const root = document.createElement('div');
+    root.id = 'mortar-overdrive-window';
+    root.className = 'window ui-window';
+    root.style.display = 'block';
+    document.body.appendChild(root);
+    const noop = (): void => {};
+    const card = new MortarOverdriveQueueCard(
+      makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
+    );
+    card.step(start, 0);
+    root.innerHTML = `<div class="mortar-overdrive-body is-queued">${card.html(buildMortarOverdriveQueueCardView(start))}</div>`;
+    card.bind(root);
+    return root;
+  };
+
+  it('has no serious or critical axe violations while counting down', async () => {
+    const root = paintCard({
+      seats: [
+        { name: 'Briar', you: false },
+        { name: 'Aster', you: true },
+      ],
+      startsInTicks: 600,
+      laneBusy: false,
+      backfill: true,
+    });
+    const violations = await axeSeriousViolations(root);
+    expect(violations, formatViolations(violations)).toEqual([]);
+    expect(root.querySelector('[role="timer"]')).not.toBeNull();
+  });
+
+  it('keeps a refused Start now focusable, with its reason, and passes axe', async () => {
+    const root = paintCard({
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: null,
+      laneBusy: true,
+      backfill: true,
+    });
+    const button = root.querySelector('[data-mortar-overdrive-start-now]') as HTMLButtonElement;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    const violations = await axeSeriousViolations(root);
+    expect(violations, formatViolations(violations)).toEqual([]);
   });
 });

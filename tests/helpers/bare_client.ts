@@ -129,7 +129,6 @@ export function bareClient(pid: number, overrides: BareClientOverrides = {}): Cl
     queueSize: 0,
     match: null,
     practiceAvailable: true,
-    queueViable: true,
   };
   c.mortarOverdriveTrackside = null;
   c.mortarOverdriveKit = null;

@@ -8,6 +8,10 @@ import type {
   MortarOverdrivePhase,
   MortarOverdriveResult,
 } from '../../../world_api';
+import {
+  buildMortarOverdriveQueueCardView,
+  type MortarOverdriveQueueCardView,
+} from './queue_card_view';
 
 /**
  * The difficulty tiers the practice setup offers, hardest last. Spelled here
@@ -105,17 +109,14 @@ export type MortarOverdriveWindowView =
       kind: 'idle';
       queueSize: number;
       practiceAvailable: boolean;
-      /** False where the queue can never seat a race (the offline world): the
-       *  join button is disabled and the window points at Practice instead. */
-      queueViable: boolean;
       sig: string;
     }
   | {
       kind: 'queued';
-      position: number;
-      queueSize: number;
+      /** The start card: the grid the queue head takes and the solo note. Its
+       *  countdown is live, painted outside this signature. */
+      card: MortarOverdriveQueueCardView;
       practiceAvailable: boolean;
-      queueViable: boolean;
       sig: string;
     }
   | {
@@ -245,23 +246,20 @@ export function buildMortarOverdriveWindowView(
     };
   }
   const open = info.practiceAvailable;
-  const viable = info.queueViable;
   if (info.queued) {
+    const card = buildMortarOverdriveQueueCardView(info.start);
     return {
       kind: 'queued',
-      position: info.queuePosition,
-      queueSize: info.queueSize,
+      card,
       practiceAvailable: open,
-      queueViable: viable,
-      sig: `queued|${info.queuePosition}|${info.queueSize}|${open ? 'open' : 'full'}|${viable ? 'q' : 'nq'}`,
+      sig: `queued|${open ? 'open' : 'full'}|${card.sig}`,
     };
   }
   return {
     kind: 'idle',
     queueSize: info.queueSize,
     practiceAvailable: open,
-    queueViable: viable,
-    sig: `idle|${info.queueSize}|${open ? 'open' : 'full'}|${viable ? 'q' : 'nq'}`,
+    sig: `idle|${info.queueSize}|${open ? 'open' : 'full'}`,
   };
 }
 
