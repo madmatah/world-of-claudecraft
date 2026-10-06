@@ -8,6 +8,7 @@ import {
   LOCAL_BUMP_THROTTLE_MS,
   localBumpArmed,
   markLocalBump,
+  seenTouchClosing,
   shouldPlayLocalBump,
 } from '../src/render/own_bump_feedback_core';
 import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
@@ -24,6 +25,16 @@ const row = (pid: number, out: 'finished' | 'retired' | null = null) => ({
   pid,
   finished: out === 'finished',
   retired: out === 'retired',
+});
+
+describe('seenTouchClosing', () => {
+  it('is the closing speed only while the drawn hulls overlap', () => {
+    // Rival 3 yd ahead up +z, self 10 yd/s faster: closing at 10 yd/s.
+    expect(seenTouchClosing(0, 3, 3.4, 0, 10)).toBe(10);
+    expect(seenTouchClosing(0, 3.4, 3.4, 0, 10)).toBe(0);
+    expect(seenTouchClosing(0, 3, 3.4, 0, -10)).toBe(0);
+    expect(seenTouchClosing(3, 0, 3.4, 4, 0)).toBe(4);
+  });
 });
 
 describe('own bump feedback', () => {

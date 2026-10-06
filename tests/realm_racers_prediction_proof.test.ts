@@ -102,11 +102,15 @@ import { rallyPickupRollFor } from './helpers/realm_racers_rng';
 //     match rate                       1.000    1.000    1.000
 //     replays / suspends in race       0 / 1    0 / 1    0 / 1
 //     lap distance (yd, 16 s)          600      600      598
-//   onset / expiry replays, every RTT: shell 2 / 1 (landing 0), oil 2 / 1,
+//   onset / expiry replays, every RTT: shell 2 / 1 (landing 0), oil the
+//   client hears of only after crossing it 1 / 0, oil it sees coming 0 / 0,
 //   nitro 1 / 1, shove 1, verge 1 / 1, garden deepen 1 / relax 1.
-//   Shell and oil cost TWO at onset: the hit writes the pop or the throw in its
-//   own tick, but the grip loss only lands at the next tick's surface pass, so
-//   the acknowledgement of the tick after the hit is a second surprise.
+//   The shell costs TWO at onset: the hit writes the pop in its own tick, but
+//   the grip loss only lands at the next tick's surface pass, so the
+//   acknowledgement of the tick after the hit is a second surprise. The oil is
+//   PREDICTED (src/render/self_slick_prediction_core.ts): a patch the client
+//   already mirrors bites the predicted kart on the server's tick, and one it
+//   hears of late costs the one replay that brings the grip window with it.
 //
 // Engine note: the match is exact IEEE equality between the client's kernel
 // and the server's. V8 (Chrome, Edge, Electron, Node) runs the same Math
@@ -255,8 +259,14 @@ function suspendsOf(watch: PilotWatch, phase?: Phase): OutcomeNote[] {
   );
 }
 
-/** The accounting every predicted racing run must pass. */
-function expectEveryReplayExplained(watch: PilotWatch, from: number, to: number): void {
+/** The accounting every predicted racing run must pass. `predicted` names the
+ *  transition ticks the client computes itself (the oil's grip window). */
+function expectEveryReplayExplained(
+  watch: PilotWatch,
+  from: number,
+  to: number,
+  predicted: readonly number[] = [],
+): void {
   // The pipeline reconciles once per frame, so the watch's one note per
   // frame never folds two outcomes into one.
   expect(watch.maxReconcilesPerFrame).toBeLessThanOrEqual(1);
@@ -264,11 +274,12 @@ function expectEveryReplayExplained(watch: PilotWatch, from: number, to: number)
   expect(account.unexplained.map((r) => [r.fromTick, r.toTick])).toEqual([]);
   // One surprise, one replay: the replay adopts what the surprise changed.
   expect(max([...account.perTransition.values()])).toBeLessThanOrEqual(1);
-  // A multiplier change is always a surprise (the client never computes the
-  // surface), so each explains exactly one replay, unless nothing was
-  // predicted across it (a race lock or a suspend stood the prediction down).
+  // A multiplier change is a surprise (the client computes no surface but the
+  // oil's), so each explains exactly one replay, unless nothing was predicted
+  // across it (a race lock or a suspend stood the prediction down).
   const covered = racingReconciles(watch);
   for (const tick of multiplierTicks(watch, from, to)) {
+    if (predicted.includes(tick)) continue;
     if (!covered.some((r) => r.fromTick <= tick && r.toTick >= tick)) continue;
     expect({ tick, replays: account.perTransition.get(tick) ?? 0 }).toEqual({ tick, replays: 1 });
   }
@@ -326,6 +337,7 @@ interface HeadRow {
 
 interface SoloContext {
   rh: RacerHarness;
+  rttMs: number;
   watch: PilotWatch;
   match: RealmRacersMatch;
   tick: number;
@@ -456,6 +468,7 @@ function runSolo(opts: SoloOptions): SoloRun {
     };
     const context = (tick: number): SoloContext => ({
       rh,
+      rttMs: opts.rttMs,
       watch,
       match,
       tick,
@@ -638,9 +651,45 @@ function landShell(ctx: SoloContext): void {
   });
 }
 
-/** A house pilot's oil on the local machine's line, a few yards ahead. */
+/** A house pilot's oil on the local machine's line, a few yards ahead: the
+ *  client hears of it after its predicted kart has already crossed it. */
 function layOil(ctx: SoloContext): void {
-  const at = aheadOf(ctx, 0.1);
+  placeOil(ctx, aheadOf(ctx, 0.1));
+}
+
+/** How far ahead along its own line `oilAhead` lays the patch, server ticks. */
+const OIL_AHEAD_TICKS = 30;
+
+/**
+ * A house pilot's oil laid well ahead, exactly where the local machine will be
+ * `OIL_AHEAD_TICKS` later: the clean lap at the same RTT (the same run up to
+ * the crossing, every run is deterministic) says where that is. The client
+ * knows the patch long before its predicted kart gets there.
+ */
+function layOilAhead(ctx: SoloContext): void {
+  placeOil(ctx, cleanPoseAhead(ctx));
+}
+
+/** The same patch, drying up two ticks before the machine gets there: the
+ *  prediction must not bite on oil the server has already swept away. */
+function layOilThatDries(ctx: SoloContext): void {
+  placeOil(ctx, cleanPoseAhead(ctx), ctx.tick + OIL_AHEAD_TICKS - 2);
+}
+
+function cleanPoseAhead(ctx: SoloContext): { x: number; z: number } {
+  const clean = solos.get(`clean:${ctx.rttMs}`);
+  const target = clean?.rows.find(
+    (row) => row.tick - clean.goTick === EFFECT_AT_TICK + OIL_AHEAD_TICKS,
+  );
+  if (!clean || !target) throw new Error('no clean lap to lay the oil ahead from');
+  return target;
+}
+
+function placeOil(
+  ctx: SoloContext,
+  at: { x: number; z: number },
+  expiresTick = ctx.tick + REALM_RACERS_SLICK_LIFETIME_TICKS,
+): void {
   const local = realmRacersToCanonical(ctx.match, at.x, at.z);
   ctx.match.slicks.push({
     id: ctx.match.nextSlickId++,
@@ -648,7 +697,7 @@ function layOil(ctx: SoloContext): void {
     z: local.z,
     ownerPid: housePilot(ctx),
     ownerClear: true,
-    expiresTick: ctx.tick + REALM_RACERS_SLICK_LIFETIME_TICKS,
+    expiresTick,
   });
 }
 
@@ -683,11 +732,21 @@ function holdLane(ctx: SoloContext, pastEdgeYd: number | null): void {
 const EFFECT_AT_TICK = 80;
 const EFFECT_RACE_MS = 10000;
 
-type EffectName = 'shell' | 'oil' | 'nitro' | 'shove' | 'verge' | 'garden';
+type EffectName =
+  | 'shell'
+  | 'oil'
+  | 'oilAhead'
+  | 'oilDries'
+  | 'nitro'
+  | 'shove'
+  | 'verge'
+  | 'garden';
 
 const EFFECTS: Record<EffectName, Partial<SoloOptions>> = {
   shell: { atRaceTick: { [EFFECT_AT_TICK]: landShell } },
   oil: { atRaceTick: { [EFFECT_AT_TICK]: layOil } },
+  oilAhead: { atRaceTick: { [EFFECT_AT_TICK]: layOilAhead } },
+  oilDries: { atRaceTick: { [EFFECT_AT_TICK]: layOilThatDries } },
   shove: { atRaceTick: { [EFFECT_AT_TICK]: shoveNow } },
   // The first box of the lap draws the nitro (the scripted roll), and the
   // pilot spends it through the real cast over its own uplink.
@@ -717,6 +776,7 @@ const EFFECTS: Record<EffectName, Partial<SoloOptions>> = {
 };
 
 function effectRun(effect: EffectName, rttMs: Rtt): SoloRun {
+  if (effect === 'oilAhead' || effect === 'oilDries') cleanLap(rttMs);
   return solo(`effect:${effect}:${rttMs}`, { rttMs, raceMs: EFFECT_RACE_MS, ...EFFECTS[effect] });
 }
 
@@ -734,10 +794,23 @@ const RESIDUAL_BOUNDS: Record<EffectName | 'starve', Record<Rtt, { xz: number; y
     120: { xz: 3.3, yaw: 0.59 },
     200: { xz: 5.1, yaw: 0.88 },
   },
+  // Before the oil was predicted: 1.7 / 2.6 / 4.3 yd (3 replays a crossing).
   oil: {
-    60: { xz: 1.7, yaw: 0.0056 },
-    120: { xz: 2.6, yaw: 0.0078 },
-    200: { xz: 4.3, yaw: 0.029 },
+    60: { xz: 0.52, yaw: 0.0028 },
+    120: { xz: 1.1, yaw: 0.005 },
+    200: { xz: 3, yaw: 0.015 },
+  },
+  // The band edges the thrown machine crosses: the crossing itself replays
+  // nothing (it measured 0.74 / 2.2 / 3.6 yd before the oil was predicted).
+  oilAhead: {
+    60: { xz: 0.088, yaw: 0.0006 },
+    120: { xz: 0.15, yaw: 0.0012 },
+    200: { xz: 0.42, yaw: 0.0047 },
+  },
+  oilDries: {
+    60: { xz: 0, yaw: 0 },
+    120: { xz: 0, yaw: 0 },
+    200: { xz: 0, yaw: 0 },
   },
   nitro: {
     60: { xz: 0.74, yaw: 0.011 },
@@ -840,6 +913,17 @@ function markOf(run: SoloRun, name: string): number {
   return at;
 }
 
+/** The oil's grip-window edges the client predicts: the bite itself too when
+ *  the patch was mirrored before the predicted kart reached it. */
+function predictedOilTicks(effect: EffectName, run: SoloRun): number[] {
+  const bite = run.marks.slicked;
+  if (bite === undefined) return [];
+  const off = bite + REALM_RACERS_SLICK_GRIP_TICKS;
+  if (effect === 'oilAhead') return [bite, bite + 1, off];
+  if (effect === 'oil') return [bite + 1, off];
+  return [];
+}
+
 describe.each(RTTS)('server outcomes the client cannot predict (%i ms RTT)', (rttMs) => {
   it.each(Object.keys(EFFECTS) as EffectName[])(
     '%s: every replay sits on a transition, one at most each, the residual bounded',
@@ -847,9 +931,16 @@ describe.each(RTTS)('server outcomes the client cannot predict (%i ms RTT)', (rt
       const run = effectRun(effect, rttMs);
       expectPredictedRace(run.watch);
       expectGoAndEndSuspendsOnly(run.watch);
-      expectEveryReplayExplained(run.watch, run.goTick, run.goTick + EFFECT_RACE_MS / 50);
+      expectEveryReplayExplained(
+        run.watch,
+        run.goTick,
+        run.goTick + EFFECT_RACE_MS / 50,
+        predictedOilTicks(effect, run),
+      );
       const account = accountReplays(run.watch);
-      expect(account.replays.length).toBeGreaterThan(0);
+      if (effect !== 'oilAhead' && effect !== 'oilDries') {
+        expect(account.replays.length).toBeGreaterThan(0);
+      }
       const bound = RESIDUAL_BOUNDS[effect][rttMs];
       expect(max(account.xz)).toBeLessThanOrEqual(bound.xz);
       expect(max(account.yaw)).toBeLessThanOrEqual(bound.yaw);
@@ -896,26 +987,57 @@ describe.each(RTTS)('server outcomes the client cannot predict (%i ms RTT)', (rt
     expect(account.replays).toHaveLength(3 + split.bandEdgeOnly.length);
   });
 
-  it('oil: two replays as it bites, one as the grip comes back', () => {
+  it('oil heard of after the crossing: one replay as it bites, none after', () => {
     const run = effectRun('oil', rttMs);
     const account = accountReplays(run.watch);
     const bite = markOf(run, 'slicked');
     expect(markOf(run, 'oilOn')).toBe(bite);
-    // The throw and the raised slide ceiling in the bite's tick, the grip
-    // loss one surface pass later.
+    // The throw and the raised slide ceiling in the bite's tick: the patch
+    // reached the client after its predicted kart had driven over it.
     expect(replaysAt(account, bite)).toBe(1);
     expect(run.watch.transitionFields.get(bite)).toContain('slipCap');
-    expect(replaysAt(account, bite + 1)).toBe(1);
-    expect(replaysAt(account, bite, bite + 1)).toBe(2);
+    // That replay adopts the grip window, so the grip loss one surface pass
+    // later and the grip coming back are both predicted.
     expect(run.watch.transitionFields.get(bite + 1)).toContain('gripMult');
     const off = markOf(run, 'oilOff');
     expect(off).toBe(bite + REALM_RACERS_SLICK_GRIP_TICKS);
-    expect(replaysAt(account, off)).toBe(1);
-    // Three for the oil itself, the rest on band edges (measured four).
+    expect(replaysAt(account, bite, bite + 1)).toBe(replaysAt(account, bite));
+    expect(replaysAt(account, off)).toBe(0);
+    // One for the oil itself, the rest on band edges (measured four).
     const split = splitEffectReplays(run, account, [bite, bite + 1, off]);
-    expect(split.effect).toHaveLength(3);
+    expect(split.effect).toHaveLength(1);
     expect(split.other).toEqual([]);
-    expect(account.replays).toHaveLength(3 + split.bandEdgeOnly.length);
+    expect(account.replays).toHaveLength(1 + split.bandEdgeOnly.length);
+  });
+
+  it('oil it sees coming: the predicted kart slides on the server tick, no replay', () => {
+    const run = effectRun('oilAhead', rttMs);
+    const account = accountReplays(run.watch);
+    const bite = markOf(run, 'slicked');
+    expect(markOf(run, 'oilOn')).toBe(bite);
+    const off = markOf(run, 'oilOff');
+    expect(off).toBe(bite + REALM_RACERS_SLICK_GRIP_TICKS);
+    // The bite, the grip loss and the grip coming back were all surprises once
+    // (three replays a crossing); now none is.
+    const split = splitEffectReplays(run, account, [bite, bite + 1, off]);
+    expect(split.effect).toEqual([]);
+    expect(split.other).toEqual([]);
+    expect(account.replays).toHaveLength(split.bandEdgeOnly.length);
+    // The first prediction of the bite's client tick already carried the
+    // throw: the drawn kart slid when the server's did, not a round trip on.
+    const row = run.rows.find((r) => r.tick === bite);
+    const head = row ? run.heads.get(row.ct) : undefined;
+    expect(row?.drive?.slipCap).toBeGreaterThan(1);
+    expect(head?.slip).toBe(row?.drive?.slip);
+    expect(head?.x).toBe(row?.x);
+    expect(head?.z).toBe(row?.z);
+  });
+
+  it('oil that dries up before the machine gets there: no bite, no replay', () => {
+    const run = effectRun('oilDries', rttMs);
+    expect(run.marks.slicked).toBeUndefined();
+    expect(run.marks.oilOn).toBeUndefined();
+    expect(accountReplays(run.watch).replays).toEqual([]);
   });
 
   it('nitro: one replay at the burst, one as it runs out', () => {

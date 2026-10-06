@@ -166,8 +166,21 @@ as part of the replayed state:
 - Replay: `MotionState` carries the drive (`src/render/self_prediction_core.ts`);
   the match compares the drive, the vertical state and the airborne flag as
   well as the pose, and a mismatch adopts them with the snapshot's auras. Kernel
-  inputs stay the per-tick flags; pickups, contacts, blasts, oil and nitro are
-  server outcomes that arrive through the replay, never predicted.
+  inputs stay the per-tick flags; pickups, contacts, blasts and nitro are
+  server outcomes that arrive through the replay, never predicted. A rival
+  contact is DRAWN from the seen touch (a display-only shift of the drawn
+  pose, `src/render/realm_racers_contact_kick_core.ts`, retired on the
+  acknowledgement that can carry the server's contact): an exception to the
+  "the drawn pose reflects only input on the wire" rule, named for the
+  maintainer (`docs/prd/realm-racers-contact-lag-compensation.md`).
+- Oil: the one outcome predicted locally, because it is a pure function of
+  state the client already mirrors (the patches and their expiry on the match
+  readout, the race clock, the pilot's standing with the oil on `rdv` as
+  `og`/`oc`/`ou`). `src/render/self_slick_prediction_core.ts` runs the race's
+  own crossing and bite code (`src/sim/realm_racers_slick_contact.ts`) after the
+  kernel on each predicted tick, and the match compares the standing in ticks
+  left. A patch the client hears of after crossing it costs the one replay that
+  brings the grip window with it (`tests/realm_racers_prediction_proof.test.ts`).
 - Epoch: while a pilot drives, the override epoch sizes a legal step by the
   machine (`vehicleStepCeilingYd`) instead of run speed, ignores move-speed
   changes (surface bands are auras), and carries an active `raceLocked` bit for

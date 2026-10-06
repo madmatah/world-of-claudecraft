@@ -1,3 +1,4 @@
+import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
 import type { Entity, FerryDeckMirror, VehicleDrive } from '../sim/types';
 import { parseDriveRecon, restingDriveRecon } from './drive_recon_wire';
 import { QuestWorldWireState } from './quest_world_wire_state';
@@ -22,6 +23,8 @@ export class ReconWireState extends QuestWorldWireState {
   reconDrive: VehicleDrive | null = null;
   reconVy = 0;
   reconOnGround = true;
+  /** The acknowledged standing with the oil, beside `reconDrive`. */
+  reconSlick: RallySlickRecon | null = null;
   /** The last well-formed `rdv` drive (or a resting one while no good row has
    *  landed yet), for PRESENTATION only: the mirror keeps drawing the machine
    *  across a malformed row. Never a replay input. */
@@ -41,6 +44,7 @@ export class ReconWireState extends QuestWorldWireState {
     this.reconDrive = null;
     this.reconVy = 0;
     this.reconOnGround = true;
+    this.reconSlick = null;
     this.reconDriveShown = null;
   }
 }
@@ -108,6 +112,7 @@ export function applyReconSelfWire(
   target.reconDrive = drive ? drive.drive : null;
   target.reconVy = drive ? drive.vy : 0;
   target.reconOnGround = drive ? drive.onGround : true;
+  target.reconSlick = drive ? drive.slick : null;
   // A malformed `rdv` leaves no drive to stand a driver down on (the rounded
   // `drv` is not sent beside it), so it stands the prediction down itself.
   if (self.rdv !== undefined && !drive) target.reconOverrideActive = true;

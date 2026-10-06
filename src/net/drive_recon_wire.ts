@@ -5,6 +5,7 @@
 // it would replay wrong. DOM-free and ClientWorld-free.
 
 import { DEFAULT_VEHICLE_PROFILE_KEY, VEHICLE_PROFILES } from '../sim/content/vehicles';
+import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
 import type { VehicleDrive } from '../sim/types';
 import { createVehicleDrive } from '../sim/vehicle_motion';
 
@@ -12,6 +13,8 @@ export interface DriveRecon {
   drive: VehicleDrive;
   vy: number;
   onGround: boolean;
+  /** The pilot's standing with the oil (`og`/`oc`/`ou`), all zero or none at rest. */
+  slick: RallySlickRecon;
 }
 
 function finite(value: unknown): value is number {
@@ -21,6 +24,12 @@ function finite(value: unknown): value is number {
 function sparse(value: unknown, fallback: number): number | null {
   if (value === undefined) return fallback;
   return finite(value) ? value : null;
+}
+
+/** A sparse tick count or patch id: absent, or a positive safe integer. */
+function sparseCount(value: unknown): number | null {
+  if (value === undefined) return 0;
+  return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : null;
 }
 
 export function parseDriveRecon(rdv: unknown): DriveRecon | null {
@@ -53,6 +62,11 @@ export function parseDriveRecon(rdv: unknown): DriveRecon | null {
   const airborne = w.air === 1;
   if (w.air !== undefined && !airborne) return null;
   if (airborne ? !finite(w.vy) : w.vy !== undefined) return null;
+  const gripLeft = sparseCount(w.og);
+  const contactId = sparseCount(w.oc);
+  const contactLeft = sparseCount(w.ou);
+  if (gripLeft === null || contactId === null || contactLeft === null) return null;
+  if (w.oc === undefined && w.ou !== undefined) return null;
   return {
     drive: {
       profileKey: k,
@@ -71,6 +85,7 @@ export function parseDriveRecon(rdv: unknown): DriveRecon | null {
     },
     vy: airborne ? (w.vy as number) : 0,
     onGround: !airborne,
+    slick: { gripLeft, contactId: w.oc === undefined ? null : contactId, contactLeft },
   };
 }
 

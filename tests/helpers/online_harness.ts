@@ -86,6 +86,7 @@ import {
   createSelfRenderPositionState,
   displayedAimPose,
   noteSelfIdentity,
+  type SelfRenderPositionState,
   type SelfRenderPrediction,
 } from '../../src/render/self_render_position_core';
 import { delveMotionState } from '../../src/sim/delves/geometry';
@@ -284,6 +285,9 @@ export interface ClientFrameInfo {
   predictorActive: boolean;
   /** The events this frame drained off the client. */
   events: readonly SimEvent[];
+  /** The self display state renderer.sync keeps, AFTER this frame's update:
+   *  what a renderer frame hook (the race scene's) reads and may write. */
+  selfRender: SelfRenderPositionState;
 }
 
 export type ClientFrameHook = (frame: ClientFrameInfo) => void;
@@ -803,6 +807,7 @@ function createClientRig(params: ClientRigParams): ClientRig {
         aimPose: aim,
         predictorActive: selfRender.active,
         events,
+        selfRender,
       };
       for (const hook of [...frameHooks]) hook(info);
     }

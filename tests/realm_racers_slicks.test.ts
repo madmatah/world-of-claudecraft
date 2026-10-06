@@ -41,6 +41,7 @@ import {
   REALM_RACERS_WARD_AURA,
   REALM_RACERS_WARD_AURA_SECONDS,
   realmRacersForfeit,
+  realmRacersSlickReconFor,
   realmRacersSpendPickupEffect,
   realmRacersStartMatch,
   realmRacersToWorld,
@@ -439,6 +440,41 @@ describe('oil slicks, in a race', () => {
     while (sim.tickCount <= rivalProgress.slickGripUntilTick) sim.tick();
     sim.tick();
     expect(rivalDrive.gripMult).toBe(1);
+  });
+
+  it("reports a racer's standing with the oil for their own drive recon, in ticks left", () => {
+    const { sim, pids } = racingGrid();
+    const [dropper, rival] = pids;
+    expect(realmRacersSlickReconFor(sim.ctx, rival)).toEqual({
+      gripLeft: 0,
+      contactId: null,
+      contactLeft: 0,
+    });
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const point = track.pointAt(track.length * 0.25);
+    const slick = dropSlickAt(sim, dropper, point.x, point.z);
+    standAt(sim, rival, slick.x, slick.z);
+    sim.tick();
+    expect(realmRacersSlickReconFor(sim.ctx, rival)).toEqual({
+      gripLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      contactId: slick.id,
+      contactLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+    });
+    standOnCenterline(sim, rival, track.length * 0.5);
+    for (let i = 0; i < 5; i++) sim.tick();
+    expect(realmRacersSlickReconFor(sim.ctx, rival)).toEqual({
+      gripLeft: REALM_RACERS_SLICK_GRIP_TICKS - 5,
+      contactId: slick.id,
+      contactLeft: REALM_RACERS_SLICK_GRIP_TICKS - 5,
+    });
+    // Once its patch is gone, a remembered crossing reads as none.
+    match(sim).slicks.length = 0;
+    expect(realmRacersSlickReconFor(sim.ctx, rival)?.contactId).toBeNull();
+    expect(realmRacersSlickReconFor(sim.ctx, rival)?.contactLeft).toBe(0);
+    // Outside a racing heat there is no standing at all.
+    expect(realmRacersSlickReconFor(sim.ctx, Math.max(...pids) + 1000)).toBeNull();
+    match(sim).phase = 'finished';
+    expect(realmRacersSlickReconFor(sim.ctx, rival)).toBeNull();
   });
 
   it('slides a rival who crosses it, without touching the wheel, and says so', () => {

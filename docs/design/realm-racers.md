@@ -384,8 +384,11 @@ while the pilot is locked (`realmRacersMovementLockedAt`: any phase but `racing`
 pilot, a recovery lock), and sizes a driver's legal step by the machine
 (`vehicleStepCeilingYd`). Rivals are projected through the vehicle kernel from their wire `drv`
 into the local kart's time frame (`remoteRacerHorizon`,
-`src/render/remote_vehicle_display_core.ts`). Contact, Ground Blast hits, oil, nitro and pickups
-are server outcomes that reach the client through the reconcile replay; none is predicted.
+`src/render/remote_vehicle_display_core.ts`). Contact, Ground Blast hits, nitro and pickups are
+server outcomes that reach the client through the reconcile replay; none is predicted. Oil is:
+the slide is a pure function of the mirrored patches, the race clock and the pilot's `og`/`oc`/`ou`
+standing on `rdv`, so the prediction runs the race's own crossing code on it
+(`src/render/self_slick_prediction_core.ts`).
 Contact is the same-tick swept test on every host with no forward window
 (`resolveVehicleContactSwept` from `tickContacts`), measured and decided in
 `docs/prd/realm-racers-contact-lag-compensation.md`. Every seated pilot of a match is pinned in

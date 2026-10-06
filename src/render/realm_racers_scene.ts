@@ -13,22 +13,22 @@
 
 import * as THREE from 'three';
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
-import { vehicleProfile } from '../sim/content/vehicles';
+import { DEFAULT_VEHICLE_PROFILE_KEY, vehicleProfile } from '../sim/content/vehicles';
 import { GROUND_BLAST_RADIUS, resolveGroundBlastAim } from '../sim/realm_racers_ground_blast';
 import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
 import type { BiomeId, Entity, SimEvent } from '../sim/types';
-import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
+import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
 import type { IWorld } from '../world_api';
 import type { RealmRacersInfo } from '../world_api/realm_racers';
 import type { FramedPose } from './deck_frame';
 import { GFX } from './gfx';
 import {
-  bumpClosingSpeed,
   consumeLocalBumpSuppression,
   createOwnBumpFeedback,
   LOCAL_BUMP_MIN_CLOSING,
   localBumpArmed,
   markLocalBump,
+  seenTouchClosing,
   shouldPlayLocalBump,
 } from './own_bump_feedback_core';
 import {
@@ -44,6 +44,12 @@ import {
   prepareRealmRacersCircuits,
   type RealmRacersBuildHost,
 } from './realm_racers_circuit_prepare';
+import {
+  type ContactKickPose,
+  contactKickRivalShift,
+  foldContactKickHandoff,
+  startContactKickAt,
+} from './realm_racers_contact_kick_core';
 import { RealmRacersFieldCues } from './realm_racers_field_cues';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { RealmRacersPrepare, type RealmRacersPrepareHost } from './realm_racers_prepare';
@@ -64,9 +70,11 @@ import {
   startRemoteRacerHops,
   stepRemoteRacerView,
 } from './remote_vehicle_display_core';
+import { contactKickRequested } from './render_dev_flags';
 import { setRenderCategory } from './renderer_diagnostics';
 import {
   displayedAimPose,
+  type ReconciledSelfPrediction,
   type SelfRenderPositionState,
   type SelfRenderPrediction,
 } from './self_render_position_core';
@@ -158,6 +166,15 @@ export class RealmRacersScene {
   private readonly firedTarget = { x: 0, z: 0 };
   // Per-rival latch for the local bump bang (own_bump_feedback_core).
   private readonly ownBumpFeedback = createOwnBumpFeedback();
+  private readonly kickShift = { x: 0, z: 0 };
+  private readonly kickRestDrive = createVehicleDrive(DEFAULT_VEHICLE_PROFILE_KEY);
+  private readonly kickSelf: ContactKickPose = { x: 0, z: 0, facing: 0, drive: this.kickRestDrive };
+  private readonly kickRival: ContactKickPose = {
+    x: 0,
+    z: 0,
+    facing: 0,
+    drive: this.kickRestDrive,
+  };
   private readonly selfAimPoseOut: RealmRacersAimPose = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
   /** Where an event's burst or puff lands: the particle pools copy it. */
   private readonly fxAt = new THREE.Vector3();
@@ -404,9 +421,17 @@ export class RealmRacersScene {
     selfPos: { readonly x: number; readonly z: number },
   ): void {
     const h = this.host as RealmRacersSceneHost;
+    // The bump drawn at the seen touch (realm_racers_contact_kick_core.ts):
+    // the self display steps and retires it; a retired one folds in here.
+    const kick = h.selfRender.contactKick;
+    if (!isSelf) foldContactKickHandoff(kick, e.id, v.remoteVehicle);
     if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt, p.netUpdatedAt)) {
-      const x = v.remoteVehicle.x;
-      const z = v.remoteVehicle.z;
+      const shift = this.kickShift;
+      shift.x = 0;
+      shift.z = 0;
+      contactKickRivalShift(kick, e.id, shift);
+      const x = v.remoteVehicle.x + shift.x;
+      const z = v.remoteVehicle.z + shift.z;
       pose.y = remoteRacerDisplayY(
         v.remoteVehicle,
         pose.x,
@@ -442,27 +467,58 @@ export class RealmRacersScene {
         const reach =
           vehicleProfile(e.drive.profileKey).bodyRadius +
           vehicleProfile(p.drive.profileKey).bodyRadius;
-        const dx = x - selfPos.x;
-        const dz = z - selfPos.z;
-        if (dx * dx + dz * dz < reach * reach) {
-          const closing = bumpClosingSpeed(
-            dx,
-            dz,
-            h.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),
-            h.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),
-          );
-          if (
-            closing >= LOCAL_BUMP_MIN_CLOSING &&
-            shouldPlayLocalBump(this.ownBumpFeedback, e.id, now)
-          ) {
-            markLocalBump(this.ownBumpFeedback, e.id, now);
-            this.playBumpFeedback((selfPos.x + x) / 2, (selfPos.z + z) / 2, closing, p.id, e.id);
-          }
+        const closing = seenTouchClosing(
+          x - selfPos.x,
+          z - selfPos.z,
+          reach,
+          h.selfRender.drive.velocityX - vehicleVelocityX(e.drive, facing),
+          h.selfRender.drive.velocityZ - vehicleVelocityZ(e.drive, facing),
+        );
+        if (
+          closing >= LOCAL_BUMP_MIN_CLOSING &&
+          shouldPlayLocalBump(this.ownBumpFeedback, e.id, now)
+        ) {
+          markLocalBump(this.ownBumpFeedback, e.id, now);
+          this.playBumpFeedback((selfPos.x + x) / 2, (selfPos.z + z) / 2, closing, p.id, e.id);
+          if (contactKickRequested()) this.startKick(selfMotion, p, selfPos, e, x, z, facing);
         }
       }
     } else if (v.remoteVehicle.active) {
       resetRemoteVehicleDisplay(v.remoteVehicle);
     }
+  }
+
+  /** Draw the bump the bang just announced: the sim's resolver on the drawn
+   *  pair, the self's predicted machine against the rival's drawn one. */
+  private startKick(
+    selfMotion: SelfRenderPrediction | null,
+    p: Entity,
+    selfPos: { readonly x: number; readonly z: number },
+    e: Entity,
+    x: number,
+    z: number,
+    facing: number,
+  ): void {
+    const h = this.host as RealmRacersSceneHost;
+    const reconciled = selfMotion as Partial<ReconciledSelfPrediction> | null;
+    const selfDrive = reconciled?.drive?.state ?? p.drive;
+    const ack = reconciled?.ackTick;
+    const lead = reconciled?.tickOffset;
+    if (!selfDrive || !e.drive || ack == null || lead == null) return;
+    const self = this.kickSelf;
+    self.x = selfPos.x;
+    self.z = selfPos.z;
+    self.facing = h.selfRender.drive.facing;
+    self.drive = selfDrive;
+    const rival = this.kickRival;
+    rival.x = x;
+    rival.z = z;
+    rival.facing = facing;
+    rival.drive = e.drive;
+    startContactKickAt(h.selfRender.contactKick, self, rival, e.id, ack, lead);
+    // Hold no live drive past the start (a despawned rival's included).
+    self.drive = this.kickRestDrive;
+    rival.drive = this.kickRestDrive;
   }
 
   /** The rally sim events, presented. */

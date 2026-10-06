@@ -91,10 +91,68 @@ the contact for each pilot against the rival rewound to that pilot's view time.
   latency input.
 - Verdict: not needed while rivals are drawn in the local kart's frame.
 
-### Display-only contact impulse
+## The bump drawn at the seen touch (shipped, a drawn-pose model change)
 
-Play the bump on the screen at the drawn touch, before the server confirms it,
-so the reaction does not wait a round trip. It reverses the "we never predict a
-bump" rule, and a false positive (a rival steering away at the last moment)
-bounces the rival and then snaps it back. Parked: to be tried behind a flag
-after the flag-on playtest, and kept only if such mispredictions are rare.
+Play the bump on the screen at the drawn touch, before the server's contact
+reaches it, so the reaction does not wait a round trip. This reverses the
+earlier "we never predict a bump" rule for what is DRAWN (outcomes stay the
+server's), so it is a change to the drawn-pose model of
+`docs/design/movement-reconciliation.md` and `src/net/CLAUDE.md`, named for
+the maintainer.
+
+When the local bump bang fires (the drawn hulls meet with a real closing
+speed, `own_bump_feedback_core.ts`), the sim's own resolver
+(`resolveVehicleContact`) run on copies of the two drawn machines gives each
+one's velocity change, capped at 24 yd/s; both are drawn moving by it, the
+shift capped at 3 yd, half the rival projection's snap distance, so folding it
+in does not by itself snap a rival (`src/render/realm_racers_contact_kick_core.ts`,
+one kick at a time, started in
+`src/render/realm_racers_scene.ts`). The self shift is its own term of the
+self display's drawn pose (`self_render_position_core.ts` steps it before it
+draws, so it is exact at any frame rate); the rival's is added to its drawn
+pose. The kick retires on the acknowledgement that can carry the server's
+contact (the first replay after the touch frame's acknowledgement, early
+contacts included, or the touch tick plus two with none), never on the bump
+event, so a contact under the event
+threshold or inside its throttle cannot be drawn twice: the shift is handed to
+the glides that carry the authoritative correction (the self handoff offset,
+the rival's drawn pose), where the replayed contact cancels it, and a touch the
+server never had glides back out. Nothing reaches the prediction, the mirror or
+the wire, and every pose a command is aimed from (the Ground Blast aim clamp,
+the own shot and oil cues) reads the pose WITHOUT the shift
+(`displayedAimPose`). `?contactkick=0` turns it off (A/B arm).
+
+Measured on the two-human duel harness, the same race with the kick off and
+on (scripted side jinks, brake checks and close passes; two link seeds;
+contacts are server bumps a screen drew a touch for; error is a drawn machine
+against the server at the instant the local kart is drawn, 150 ms before to
+600 ms after the contact; yards):
+
+| RTT / jitter (60 fps) | Self error mean, off to on | Self error max, off to on | Rival error mean, off to on | False touches (share of drawn touches) |
+|---|---|---|---|---|
+| 60 ms / 10 ms | 0.10 to 0.07 | 0.98 to 0.98 | 0.14 to 0.12 | 4 pct |
+| 60 ms / 30 ms | 0.25 to 0.18 | 2.13 to 1.56 | 0.25 to 0.19 | 0 pct |
+| 120 ms / 10 ms | 0.21 to 0.13 | 1.58 to 1.59 | 0.33 to 0.24 | 0 pct |
+| 120 ms / 30 ms | 0.56 to 0.46 | 3.26 to 2.48 | 0.68 to 0.57 | 9 pct |
+| 200 ms / 10 ms | 0.91 to 0.77 | 3.20 to 3.05 | 1.02 to 0.84 | 4 pct |
+| 200 ms / 30 ms | 0.99 to 0.87 | 4.54 to 4.47 | 1.04 to 0.98 | 2 pct |
+
+| Frame rate (120 ms / 10 ms) | Self error mean, off to on | Self error max, off to on | False touches |
+|---|---|---|---|
+| 20 fps | 0.28 to 0.13 | 2.18 to 1.42 | 6 pct |
+| 30 fps | 0.17 to 0.09 | 1.41 to 0.65 | 12 pct |
+| 60 fps | 0.21 to 0.13 | 1.58 to 1.59 | 0 pct |
+| 144 fps | 0.18 to 0.10 | 1.81 to 1.06 | 0 pct |
+
+The false touches are near misses that stay within 0.2 yd of the reach, and
+grazes under the bump threshold; one costs up to 2.3 yd at 200 ms (under the
+3 yd cap), gliding back out. The drawn bump starts a median 80 to 230 ms
+before the server's contact reaches the screen. The bump is drawn as the
+velocity step it is, so the largest frame-to-frame change of the drawn self
+over a contact is up to about 0.25 yd sharper than with the late correction
+alone. The pins are `tests/realm_racers_contact_kick.test.ts` (prediction,
+mirror and race unchanged frame for frame; the start before the server's
+contact; the error against the late correction alone, by a margin, at every
+RTT and frame rate; drawn identically with and without a bump event; an
+under-threshold contact not drawn twice; an unconfirmed touch capped and
+handed back) and `tests/realm_racers_contact_kick_core.test.ts`.

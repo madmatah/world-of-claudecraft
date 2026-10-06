@@ -300,8 +300,21 @@ failure, kept as stable English that `main.ts` re-localizes.
   `MovementPredictionPipeline.predictDrivers` (`src/render/self_prediction.ts`)
   is on by default; `?drivepredict=0` (`src/render/render_dev_flags.ts`) is
   the A/B opt-out that draws the kart from the interpolated mirror instead.
-  main.ts never sets it. Contacts, blasts, oil, nitro and pickups stay server
+  main.ts never sets it. Contacts, blasts, nitro and pickups stay server
   outcomes that arrive through the reconcile replay; they are never predicted.
+  The oil is the one exception: its grip loss and throw are a pure function of
+  mirrored state (the readout's patches, the race clock, `rdv`'s `og`/`oc`/`ou`),
+  so the prediction runs the race's own code for it
+  (`src/render/self_slick_prediction_core.ts`). A rival contact stays a server
+  outcome, but its DRAWING starts at the seen touch, which is an exception to
+  constraints (b) and (c) of the local-player prediction bullet above and a change to this model taken for the
+  maintainer's review: `src/render/realm_racers_contact_kick_core.ts` draws the
+  sim resolver's velocity change on the drawn pair as its own term of the drawn
+  pose (never of the prediction, the mirror, the wire, or the pose a command is
+  aimed from), capped, and hands it to the glide on the first replay after the
+  touch frame's acknowledgement, or the touch tick plus two with none (never on the bump event). `?contactkick=0` turns
+  it off. Measured and pinned in
+  `docs/prd/realm-racers-contact-lag-compensation.md`.
   Proofs: `tests/realm_racers_prediction_proof.test.ts`,
   `tests/realm_racers_v2_prediction.test.ts`,
   `tests/realm_racers_drive_recon_online.test.ts`, and for rivals drawn in the

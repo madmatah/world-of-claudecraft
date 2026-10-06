@@ -18,6 +18,7 @@ vi.mock('../src/render/realm_racers_audio', () => ({
 }));
 
 import { playRealmRacersEventAudio } from '../src/render/realm_racers_audio';
+import { createContactKick } from '../src/render/realm_racers_contact_kick_core';
 import { RealmRacersScene } from '../src/render/realm_racers_scene';
 import {
   createRemoteVehicleDisplay,
@@ -119,6 +120,7 @@ describe("the local pilot's own report", () => {
       position: { x: 0, y: 0, z: 0 },
       drive: { steersHeading: true, facing: 0 },
       reconciledLeadMs: 80,
+      contactKick: createContactKick(),
     };
     host.sim = { playerId: SELF, player: { id: SELF, pos: { x: 0, z: 0 }, facing: 0 } };
     return h;

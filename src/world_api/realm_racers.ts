@@ -50,6 +50,13 @@ export interface RealmRacersSlickInfo {
   id: number;
   x: number;
   z: number;
+  /** The race tick (ticks since GO) the patch is gone on. Fixed for its whole
+   *  life, so it costs the delta-gated readout nothing per tick; the online
+   *  own-kart prediction reads it to stop a replayed tick crossing dried oil. */
+  endsAt: number;
+  /** The pilot who dropped it, present only while that pilot is still immune
+   *  (they have not driven out of it yet). */
+  immunePid?: number;
 }
 
 /**

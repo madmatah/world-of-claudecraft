@@ -8,6 +8,15 @@ import { vehicleProfile } from '../sim/content/vehicles';
 import { auraSpeedMult, moveSpeedMult } from '../sim/player_motion';
 import { DT, type Entity, RUN_SPEED } from '../sim/types';
 import {
+  ageContactKickHandoff,
+  type ContactKick,
+  contactKickDue,
+  createContactKick,
+  growContactKick,
+  resetContactKick,
+  retireContactKick,
+} from './realm_racers_contact_kick_core';
+import {
   createSelfDriveView,
   driveViewFromMirror,
   driveViewFromReconciled,
@@ -146,9 +155,9 @@ function targetJumpedTeleport(
   return (
     state.ready &&
     isTeleportGap(
-      state.position.x - state.offset.x - tx,
+      state.position.x - state.offset.x - state.contactKick.selfX - tx,
       state.position.y - state.offset.y - ty,
-      state.position.z - state.offset.z - tz,
+      state.position.z - state.offset.z - state.contactKick.selfZ - tz,
       limitSq,
     )
   );
@@ -185,6 +194,9 @@ export interface ReconciledSelfPrediction {
   /** The interpolation alpha `position` was drawn at between the head's
    *  previous tick and the head, set with `tickOffset`. */
   tickAlpha?: number | null;
+  /** The acknowledged client tick, set with `tickOffset`: the drawn contact
+   *  bump retires on it (realm_racers_contact_kick_core.ts). */
+  ackTick?: number | null;
 }
 
 export type SelfRenderPrediction = SelfMotionFrame | ReconciledSelfPrediction;
@@ -227,6 +239,10 @@ export interface SelfRenderPositionState {
   /** `selfFrameLeadMs` of the frame the v2 prediction drew last, null on a v1
    *  frame, on the fallback, and whenever the frame carries no tick offset. */
   reconciledLeadMs: number | null;
+  /** The bump drawn at a seen touch: its self shift is a term of `position`
+   *  (never of the pose a command is aimed from), stepped here before the
+   *  frame draws. The race scene starts it. */
+  contactKick: ContactKick;
 }
 
 export function createSelfRenderPositionState(
@@ -241,6 +257,7 @@ export function createSelfRenderPositionState(
     predictor: null,
     drive: createSelfDriveView(),
     reconciledLeadMs: null,
+    contactKick: createContactKick(),
   };
 }
 
@@ -271,9 +288,10 @@ export function displayedAimPose<T extends { pos: Vec3Like; facing: number }>(
   out: T,
 ): T | null {
   if (!state.active || !state.ready) return null;
-  out.pos.x = state.position.x;
+  // Without the drawn contact bump: a command is never aimed from a guess.
+  out.pos.x = state.position.x - state.contactKick.selfX;
   out.pos.y = state.position.y;
-  out.pos.z = state.position.z;
+  out.pos.z = state.position.z - state.contactKick.selfZ;
   out.facing = state.drive.steersHeading ? state.drive.facing : mirrorFacing;
   return out;
 }
@@ -295,7 +313,41 @@ export function noteSelfIdentity(state: SelfRenderPositionState, selfId: number)
   state.offset.z = 0;
   Object.assign(state.drive, createSelfDriveView());
   state.reconciledLeadMs = null;
+  resetContactKick(state.contactKick);
   return true;
+}
+
+/**
+ * The drawn contact bump, one frame, before the pose is drawn: a teleport
+ * retires it with the self shift dropped (the pose snaps) and the rival's
+ * handed on; the acknowledgement that can carry the server's contact, or a
+ * frame with none to wait for, hands the self shift to the handoff offset,
+ * where a replayed bump cancels it; until then it grows by this frame's time
+ * step.
+ */
+function stepSelfContactKick(
+  state: SelfRenderPositionState,
+  snap: boolean,
+  ackTick: number | null,
+  replayed: boolean,
+  dt: number,
+): void {
+  const kick = state.contactKick;
+  ageContactKickHandoff(kick);
+  if (kick.rivalId === -1) return;
+  if (snap) {
+    // The self pose adopts the server's outright; the rival glides on.
+    retireContactKick(kick);
+    return;
+  }
+  // No acknowledgement to wait for (off the kart, or a wire reset): hand over.
+  if (ackTick === null || contactKickDue(kick, ackTick, replayed)) {
+    state.offset.x += kick.selfX;
+    state.offset.z += kick.selfZ;
+    retireContactKick(kick);
+    return;
+  }
+  growContactKick(kick, dt);
 }
 
 export function updateSelfRenderPosition(
@@ -356,6 +408,7 @@ export function updateSelfRenderPosition(
           state.offset.z += residual.z;
         }
       }
+      stepSelfContactKick(state, snap, reconciled.ackTick ?? null, residual !== null, dt);
       decayOffset(state.offset, dt);
       state.reconciledLeadMs =
         reconciled.kind === 'reconciled' ? selfFrameLeadMs(selfMotion) : null;
@@ -374,9 +427,9 @@ export function updateSelfRenderPosition(
           handoffDecayShare(dt),
         );
       }
-      state.position.x = predicted.x + state.offset.x;
+      state.position.x = predicted.x + state.offset.x + state.contactKick.selfX;
       state.position.y = predicted.y + state.offset.y;
-      state.position.z = predicted.z + state.offset.z;
+      state.position.z = predicted.z + state.offset.z + state.contactKick.selfZ;
       state.ready = true;
       state.active = true;
       return state.position;
@@ -396,6 +449,10 @@ export function updateSelfRenderPosition(
   const discontinuity =
     authoritativeDiscontinuity || targetJumpedTeleport(state, px, py, pz, teleportLimitSq);
   driveViewFromMirror(state.drive, p, alpha, state.predictor, discontinuity, handoffDecayShare(dt));
+  // Stood down: the capture below takes the drawn pose, shift and all, after
+  // the teleport test read last frame's shift.
+  ageContactKickHandoff(state.contactKick);
+  retireContactKick(state.contactKick);
   if (discontinuity) {
     clearOffset(state.offset);
   } else if (state.ready && predictorWasActive) {

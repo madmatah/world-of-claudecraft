@@ -40,11 +40,25 @@
 
 import type { ClientWorld } from '../../src/net/online';
 import {
+  createOwnBumpFeedback,
+  LOCAL_BUMP_MIN_CLOSING,
+  localBumpArmed,
+  markLocalBump,
+  seenTouchClosing,
+  shouldPlayLocalBump,
+} from '../../src/render/own_bump_feedback_core';
+import {
+  contactKickRivalShift,
+  foldContactKickHandoff,
+  startContactKickAt,
+} from '../../src/render/realm_racers_contact_kick_core';
+import {
   createRemoteVehicleDisplay,
   remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
   stepRemoteRacerView,
 } from '../../src/render/remote_vehicle_display_core';
+import type { ReconciledSelfPrediction } from '../../src/render/self_render_position_core';
 import { REALM_RACERS_PRACTICE_CIRCUIT } from '../../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../../src/sim/data';
@@ -576,6 +590,10 @@ export interface RacerDuelOptions {
   housePilots?: 'parked' | 'driving';
   /** Predict both seated pilots on wire v2 (the pipeline flag). */
   predictDrivers?: boolean;
+  /** Draw the bump at the seen touch on both screens, exactly as the race
+   *  scene does (realm_racers_scene.ts; realm_racers_contact_kick_core.ts):
+   *  on by default, false records the screens without it. */
+  contactKick?: boolean;
 }
 
 export interface RacerDuelHarness {
@@ -747,6 +765,9 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     // or not.
     const rivalDisplay = createRemoteVehicleDisplay();
     const pilotBrain = createAutopilotDriver(self, currentMatch);
+    const kickOn = opts.contactKick ?? true;
+    const ownBump = createOwnBumpFeedback();
+    const shift = { x: 0, z: 0 };
 
     self.onFrame((frame: ClientFrameInfo) => {
       // renderer.sync's remote racing branch, through the same step it calls
@@ -756,6 +777,10 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       // renderer.sync hands the step the local player's newest arrival too.
       const selfArrivedAt = client.entities.get(client.playerId)?.netUpdatedAt;
       let projected = false;
+      // The race scene's projectRival: the self display steps and retires the
+      // drawn bump (self_render_position_core.ts); a retired one folds in here.
+      const kick = frame.selfRender.contactKick;
+      foldContactKickHandoff(kick, rivalPid, rivalDisplay);
       if (e)
         projected = stepRemoteRacerView(
           rivalDisplay,
@@ -766,6 +791,14 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
           selfArrivedAt,
         );
       else if (rivalDisplay.active) resetRemoteVehicleDisplay(rivalDisplay);
+      shift.x = 0;
+      shift.z = 0;
+      if (projected && e?.drive) {
+        contactKickRivalShift(kick, rivalPid, shift);
+        if (kickOn) {
+          drawKickAtTouch(frame, client, e, rivalDisplay.x + shift.x, rivalDisplay.z + shift.z);
+        }
+      }
       const ageMs =
         projected && e?.netUpdatedAt !== undefined
           ? remoteRacerProjectionAgeMs(frame.nowMs, e.netUpdatedAt, frame.selfMotion, selfArrivedAt)
@@ -776,8 +809,8 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
           selfX: frame.drawn.x,
           selfZ: frame.drawn.z,
           selfPredicted: frame.predictorActive,
-          rivalX: projected ? rivalDisplay.x : null,
-          rivalZ: projected ? rivalDisplay.z : null,
+          rivalX: projected ? rivalDisplay.x + shift.x : null,
+          rivalZ: projected ? rivalDisplay.z + shift.z : null,
           rivalFacing: projected ? rivalDisplay.facing : null,
           rivalAgeMs: ageMs,
           rivalMirrorX: e ? e.pos.x : null,
@@ -787,6 +820,51 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       }
       pilotBrain.step();
     });
+
+    /** The race scene's local bump bang gate and the kick it starts. */
+    function drawKickAtTouch(
+      frame: ClientFrameInfo,
+      c: ClientWorld,
+      e: Entity,
+      x: number,
+      z: number,
+    ): void {
+      const p = c.entities.get(c.playerId);
+      const rivalDrive = e.drive;
+      if (!p?.drive || !rivalDrive) return;
+      if (!localBumpArmed(frame.selfRender.drive.source, c.realmRacersInfo.match, e, p)) return;
+      const reach =
+        vehicleProfile(rivalDrive.profileKey).bodyRadius +
+        vehicleProfile(p.drive.profileKey).bodyRadius;
+      const facing = rivalDisplay.facing;
+      const closing = seenTouchClosing(
+        x - frame.drawn.x,
+        z - frame.drawn.z,
+        reach,
+        frame.selfRender.drive.velocityX - vehicleVelocityX(rivalDrive, facing),
+        frame.selfRender.drive.velocityZ - vehicleVelocityZ(rivalDrive, facing),
+      );
+      if (closing < LOCAL_BUMP_MIN_CLOSING) return;
+      if (!shouldPlayLocalBump(ownBump, e.id, frame.nowMs)) return;
+      markLocalBump(ownBump, e.id, frame.nowMs);
+      const reconciled = frame.selfMotion as Partial<ReconciledSelfPrediction> | null;
+      const ack = reconciled?.ackTick;
+      const lead = reconciled?.tickOffset;
+      if (ack == null || lead == null) return;
+      startContactKickAt(
+        frame.selfRender.contactKick,
+        {
+          x: frame.drawn.x,
+          z: frame.drawn.z,
+          facing: frame.selfRender.drive.facing,
+          drive: reconciled?.drive?.state ?? p.drive,
+        },
+        { x, z, facing, drive: rivalDrive },
+        e.id,
+        ack,
+        lead,
+      );
+    }
 
     return {
       name,
