@@ -3,7 +3,10 @@
 // calls each emitter at its own spot so the self JSON keeps its key order.
 import { mortarOverdriveHeldEffectOf } from '../../src/sim/content/mortar_overdrive/kit';
 import type { MortarOverdriveHeldEffect } from '../../src/sim/mortar_overdrive';
-import { mortarOverdriveSeatedOrQueued } from '../../src/sim/mortar_overdrive/race';
+import {
+  mortarOverdriveSeatedOrQueued,
+  mortarOverdriveTracksideFor,
+} from '../../src/sim/mortar_overdrive/race';
 import { splitMortarOverdriveInfo } from '../../src/sim/mortar_overdrive/readout_clock';
 import type { PlayerMeta, Sim } from '../../src/sim/sim';
 import type { MortarOverdriveInfo } from '../../src/world_api/mortar_overdrive';
@@ -15,10 +18,7 @@ import {
 
 type EmitSelfKey = (key: string, value: unknown) => void;
 
-type MortarOverdriveSelfSim = Pick<
-  Sim,
-  'ctx' | 'tickCount' | 'mortarOverdriveInfoFor' | 'mortarOverdriveTracksideFor'
->;
+type MortarOverdriveSelfSim = Pick<Sim, 'ctx' | 'tickCount' | 'mortarOverdriveInfoFor'>;
 
 /** One idle-readout memo per Sim (server-host state, keyed by the Sim so two
  *  realms in one process never share a build). */
@@ -63,7 +63,7 @@ export function emitMortarOverdriveSelfKeys(
   // kernel runs), and the slick/box arrays are bounded by the circuit's own
   // pickup and slick counts and built once per match per tick, so a stand
   // full of watchers serializes one build.
-  maybe('mot', sim.mortarOverdriveTracksideFor(pid));
+  maybe('mot', mortarOverdriveTracksideFor(sim.ctx, pid));
 }
 
 /** The per-viewer `mo` and `moc` of a queued or seated viewer. */

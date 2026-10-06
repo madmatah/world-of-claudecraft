@@ -169,6 +169,7 @@ describe('Mortar Overdrive online parity', () => {
     ClientWorld.prototype.resetMortarOverdrivePosition.call(probe as never);
     ClientWorld.prototype.startMortarOverdrivePractice.call(probe as never, 'ace');
     ClientWorld.prototype.readyMortarOverdrive.call(probe as never);
+    ClientWorld.prototype.startMortarOverdriveNow.call(probe as never);
     expect(cmd.mock.calls).toEqual([
       [{ cmd: 'mortar_overdrive_join' }],
       [{ cmd: 'mortar_overdrive_leave' }],
@@ -176,7 +177,30 @@ describe('Mortar Overdrive online parity', () => {
       [{ cmd: 'mortar_overdrive_reset' }],
       [{ cmd: 'mortar_overdrive_practice', tier: 'ace' }],
       [{ cmd: 'mortar_overdrive_ready' }],
+      [{ cmd: 'mortar_overdrive_start_now' }],
     ]);
+  });
+
+  it('starts the queue online on Start now, for every queued pilot, and only from a queued one', () => {
+    const server = new GameServer();
+    const clients = [fakeClient(), fakeClient(), fakeClient()];
+    const [aster, briar, idle] = ['Aster', 'Briar', 'Cass'].map((name, i) =>
+      join(server, clients[i] as FakeClient, i + 1, name),
+    ) as [ClientSession, ClientSession, ClientSession];
+    command(server, aster, 'mortar_overdrive_join');
+    command(server, briar, 'mortar_overdrive_join');
+    advance(server);
+    // A pilot who is not queued cannot start anybody's race.
+    command(server, idle, 'mortar_overdrive_start_now');
+    advance(server);
+    expect(server.sim.mortarOverdrive.match).toBeNull();
+    expect(server.sim.mortarOverdrive.bots.size).toBe(0);
+    command(server, briar, 'mortar_overdrive_start_now');
+    const match = server.sim.mortarOverdrive.match;
+    expect(match?.pids.slice(0, 2)).toEqual([aster.pid, briar.pid]);
+    expect(match?.practice).toBeNull();
+    expect(server.sim.mortarOverdrive.bots.size).toBe(MORTAR_OVERDRIVE_GRID_SIZE - 2);
+    expect(server.sim.mortarOverdrive.queue).toEqual([]);
   });
 
   it('seats a Practice race against a house pilot online, and rejects a bogus tier', () => {
@@ -880,10 +904,9 @@ describe('Mortar Overdrive server wire siblings', () => {
         throw new Error('a queued viewer builds its own readout');
       },
       {
-        ctx: { mortarOverdrive: { queue: [7], match: null, practices: [] } },
+        ctx: { mortarOverdrive: { queue: [7], match: null, practices: [] }, entities: new Map() },
         tickCount: 1,
         mortarOverdriveInfoFor: () => idle,
-        mortarOverdriveTracksideFor: () => null,
       } as never,
       7,
     );

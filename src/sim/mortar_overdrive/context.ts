@@ -17,7 +17,7 @@ export type {
   MortarOverdriveLaneView,
 } from '../../world_api/mortar_overdrive';
 export type { MortarOverdriveCircuit } from '../content/mortar_overdrive/circuits';
-export { startMortarOverdrivePractice } from './bots';
+export { startMortarOverdriveNow, startMortarOverdrivePractice } from './bots';
 export {
   type MortarOverdriveDraftRegistration,
   mortarOverdriveRegisterDraftCircuit,

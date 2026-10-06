@@ -7,7 +7,8 @@
 //     the same sim runs on the server.
 //   - Backfill: online, a short queue whose oldest waiter has been there past
 //     MORTAR_OVERDRIVE_BACKFILL_TICKS is topped up to a full grid with house pilots
-//     rather than waiting for rivals who may never come.
+//     rather than waiting for rivals who may never come. Start now is the same
+//     fill on demand: any queued pilot may take it, online and offline.
 //
 // Both are driven INSIDE the sim tick (Sim.updateMortarOverdrive calls
 // updateMortarOverdriveBots right after the match module), so the offline button
@@ -36,8 +37,9 @@ import {
 import { vehicleProfile } from '../content/vehicles';
 import { auraSpeedMult } from '../player_motion';
 import type { Sim } from '../sim';
-import { emptyMoveInput, TICK_RATE } from '../types';
+import { emptyMoveInput } from '../types';
 import { vehicleTopSpeedFor, vehicleVelocityX, vehicleVelocityZ } from '../vehicle_motion';
+import { MORTAR_OVERDRIVE_BACKFILL_TIER, mortarOverdriveBackfillAt } from './backfill';
 import {
   driveMortarOverdrive,
   type MortarOverdriveDriverBlast,
@@ -59,19 +61,6 @@ import {
   mortarOverdriveToWorld,
 } from './race';
 import { mortarOverdriveTrack } from './spline';
-
-/**
- * How long the oldest waiter in the queue sits before the Society sends house
- * pilots out to fill the grid. Long enough that four humans who all walked up
- * still get a real race, short enough that the minigame is never a dead end:
- * measured on the OLDEST waiter, so a lone queuer gets a race in 45 s and a
- * queue of three never waits on a fourth human forever.
- */
-export const MORTAR_OVERDRIVE_BACKFILL_TICKS = 45 * TICK_RATE;
-
-/** The tier the online backfill sends. The middle one: a lone queuer asked for
- *  a race, not for a lesson, and never chose a difficulty. */
-export const MORTAR_OVERDRIVE_BACKFILL_TIER: MortarOverdriveDriverTier = 'driver';
 
 /** A lore name nobody in the world is already using. */
 function nextBotName(sim: Sim): string {
@@ -224,6 +213,18 @@ export function startMortarOverdriveDevRace(
   return seatWithBots(sim, [id], tier, -1, circuitId);
 }
 
+/**
+ * The queue head a fill seats, in queue order: the first waiters free to sit
+ * now, less any the seat would refuse. Between ticks (Start now arrives as a
+ * command) a waiter can have stopped being eligible since the tick's prune, and
+ * one refusal would sink the whole grid's start.
+ */
+function fillableWaiters(sim: Sim): number[] {
+  return mortarOverdriveSeatableWaiters(sim.ctx).filter((pid) =>
+    mortarOverdriveEligible(sim.ctx, pid),
+  );
+}
+
 /** Online: a queue whose oldest waiter has been there long enough gets house
  *  pilots in every seat no human turned up for. */
 function maybeBackfill(sim: Sim): void {
@@ -231,23 +232,43 @@ function maybeBackfill(sim: Sim): void {
   const mortarOverdrive = sim.mortarOverdrive;
   if (mortarOverdrive.match) return;
   // The waiters free to sit now, in queue order: one still in a fight keeps
-  // their place and holds nobody else (the seat would refuse them).
+  // their place and holds nobody else (the seat would refuse them). No
+  // deadline for nobody, or for a full grid, which the match module seats
+  // without any help from here.
   const waiting = mortarOverdriveSeatableWaiters(sim.ctx);
-  // Nobody free to race, or a full grid of them, which is the match module's
-  // business: it seats four humans without any help from here.
-  if (waiting.length === 0 || waiting.length >= MORTAR_OVERDRIVE_GRID_SIZE) return;
-  // The clock is the OLDEST waiter's. Anyone who joined behind them is racing
-  // sooner than their own 45 s, which is the right way round: nobody at the head
-  // of the queue is ever made to wait longer because the queue grew.
-  let oldest = sim.tickCount;
-  for (const pid of waiting) {
-    const joinedAt = mortarOverdrive.queuedAtTick.get(pid);
-    if (joinedAt !== undefined && joinedAt < oldest) oldest = joinedAt;
-  }
-  if (sim.tickCount - oldest < MORTAR_OVERDRIVE_BACKFILL_TICKS) return;
+  const at = mortarOverdriveBackfillAt(waiting, mortarOverdrive.queuedAtTick, sim.tickCount);
+  if (at === null || sim.tickCount < at) return;
   // The PUBLIC circuit: these players queued for a real race and are getting
   // one, just with house pilots in the seats nobody claimed.
-  seatWithBots(sim, waiting, MORTAR_OVERDRIVE_BACKFILL_TIER, -1);
+  seatWithBots(sim, fillableWaiters(sim), MORTAR_OVERDRIVE_BACKFILL_TIER, -1);
+}
+
+/**
+ * Start now: the backfill on demand. Any queued pilot may press it, and it
+ * seats the queue head (up to a grid, in queue order) on the public lane with
+ * house pilots at the backfill tier in the open seats, through the backfill's
+ * own seat, offline and online alike. The presser need not be in that head: a
+ * pilot fifth in line starts the race for the four ahead of them.
+ *
+ * Refused silently when the sender is not queued, cannot race, or the one
+ * public lane is already racing (the window says so and disables the
+ * control). Combat is the one refusal it voices, as the queue join does. A
+ * start draws the competition circuit, the one rng draw a queued race takes at
+ * its seat, here from a command between ticks as Practice's own seat runs.
+ */
+export function startMortarOverdriveNow(sim: Sim, pid?: number): boolean {
+  const resolved = sim.ctx.resolve(pid);
+  if (!resolved) return false;
+  const id = resolved.meta.entityId;
+  if (!sim.mortarOverdrive.queue.includes(id)) return false;
+  if (sim.mortarOverdrive.match) return false;
+  if (mortarOverdriveInCombat(sim.ctx, id)) {
+    sim.ctx.error(id, "You can't do that while in combat.");
+    return false;
+  }
+  if (!mortarOverdriveEligible(sim.ctx, id)) return false;
+  const waiting = fillableWaiters(sim);
+  return waiting.length > 0 && seatWithBots(sim, waiting, MORTAR_OVERDRIVE_BACKFILL_TIER, -1);
 }
 
 /** The rival a bot shoots at and races: the nearest other racer still running,

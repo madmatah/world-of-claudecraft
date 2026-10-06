@@ -2,7 +2,8 @@
 // server/game.ts (the bank_wire.ts seam: game.ts sits at a zero-margin monolith
 // ceiling, so new dispatch surface lands in a sibling). Shape checks only; the
 // Sim re-validates every rule (for Practice: a free circuit copy and a sender
-// able to race; for ready: a seated pilot of a race still loading) and refuses
+// able to race; for ready: a seated pilot of a race still loading; for Start
+// now: a queued sender able to race and a free public lane) and refuses
 // silently, like the queue join.
 import { isMortarOverdriveDriverTier } from '../../src/sim/mortar_overdrive/driver';
 import { mortarOverdriveReady } from '../../src/sim/mortar_overdrive/race';
@@ -15,7 +16,8 @@ export type MortarOverdriveCommandName =
   | 'mortar_overdrive_forfeit'
   | 'mortar_overdrive_reset'
   | 'mortar_overdrive_practice'
-  | 'mortar_overdrive_ready';
+  | 'mortar_overdrive_ready'
+  | 'mortar_overdrive_start_now';
 
 export type MortarOverdriveCommandSim = Pick<
   Sim,
@@ -25,6 +27,7 @@ export type MortarOverdriveCommandSim = Pick<
   | 'mortarOverdriveForfeit'
   | 'mortarOverdriveResetPosition'
   | 'mortarOverdrivePracticeStart'
+  | 'startMortarOverdriveNow'
 >;
 
 export function dispatchMortarOverdriveCommand(
@@ -51,6 +54,9 @@ export function dispatchMortarOverdriveCommand(
       break;
     case 'mortar_overdrive_ready':
       mortarOverdriveReady(sim.ctx, pid);
+      break;
+    case 'mortar_overdrive_start_now':
+      sim.startMortarOverdriveNow(pid);
       break;
   }
 }

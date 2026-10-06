@@ -243,4 +243,10 @@ export interface IWorldMortarOverdrive {
   /** Tell the loading lobby this client has prepared the circuit. Ignored
    *  outside the lobby and for anyone not seated in it. */
   readyMortarOverdrive(): void;
+  /** Start the public race now for every queued pilot (up to a grid, in
+   *  queue order), with house pilots in the open seats, exactly as the
+   *  backfill would. Any queued pilot may press it. Refused silently when the
+   *  viewer is not queued or the public lane is racing; a pilot in combat is
+   *  refused with the in-combat error, like the queue join. */
+  startMortarOverdriveNow(): void;
 }

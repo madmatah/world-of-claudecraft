@@ -62,7 +62,7 @@ import type { ReconciledSelfPrediction } from '../../src/render/self_render_posi
 import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../../src/sim/content/mortar_overdrive/circuits';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../../src/sim/data';
-import { MORTAR_OVERDRIVE_BACKFILL_TICKS } from '../../src/sim/mortar_overdrive/bots';
+import { MORTAR_OVERDRIVE_BACKFILL_TICKS } from '../../src/sim/mortar_overdrive/backfill';
 import {
   driveMortarOverdrive,
   type MortarOverdriveDriverTier,

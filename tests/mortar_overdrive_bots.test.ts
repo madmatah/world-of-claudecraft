@@ -12,7 +12,7 @@ import { MORTAR_OVERDRIVE_BOT_NAMES } from '../src/sim/content/mortar_overdrive/
 import {
   MORTAR_OVERDRIVE_BACKFILL_TICKS,
   MORTAR_OVERDRIVE_BACKFILL_TIER,
-} from '../src/sim/mortar_overdrive/bots';
+} from '../src/sim/mortar_overdrive/backfill';
 import {
   MORTAR_OVERDRIVE_DRIVER_TIERS,
   type MortarOverdriveDriverTier,

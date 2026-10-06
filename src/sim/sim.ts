@@ -9931,12 +9931,8 @@ export class Sim {
     return this.mortarOverdriveInfoFor(this.primaryId);
   }
 
-  mortarOverdriveTracksideFor(pid: number): moMod.MortarOverdriveLaneView | null {
-    return moMod.mortarOverdriveTracksideFor(this.ctx, pid);
-  }
-
   get mortarOverdriveTrackside(): moMod.MortarOverdriveLaneView | null {
-    return this.mortarOverdriveTracksideFor(this.primaryId);
+    return moMod.mortarOverdriveTracksideFor(this.ctx, this.primaryId);
   }
 
   joinMortarOverdriveQueue(): void {
@@ -9965,6 +9961,10 @@ export class Sim {
 
   startMortarOverdrivePractice(tier: moMod.MortarOverdriveDriverTier): void {
     this.mortarOverdrivePracticeStart(tier, this.primaryId);
+  }
+
+  startMortarOverdriveNow(pid?: number): void {
+    moMod.startMortarOverdriveNow(this, pid);
   }
 
   mortarOverdriveRegisterDraftCircuit(

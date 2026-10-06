@@ -972,6 +972,8 @@ export const COMMAND_NAMES = [
   'mortar_overdrive_reset',
   // The loading lobby's "my client has prepared the circuit".
   'mortar_overdrive_ready',
+  // The queue card's Start now: the backfill on demand, for every queued pilot.
+  'mortar_overdrive_start_now',
 ] as const;
 
 // The union both the send path (`online.ts`) and the dispatch switch
@@ -1311,6 +1313,7 @@ export const COMMAND_FACETS = {
   mortar_overdrive_practice: 'IWorldMortarOverdrive',
   mortar_overdrive_reset: 'IWorldMortarOverdrive',
   mortar_overdrive_ready: 'IWorldMortarOverdrive',
+  mortar_overdrive_start_now: 'IWorldMortarOverdrive',
   // IWorldMounts: pick + mount/dismount (snake_case wire strings, by design).
   // The active mount is a self-snapshot read (terse `mnt`, no send, untagged);
   // summoning one is an item use (use_item), not a mount command.

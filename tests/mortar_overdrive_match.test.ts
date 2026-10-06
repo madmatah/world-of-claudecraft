@@ -45,6 +45,7 @@ import {
   mortarOverdriveFireGroundBlast,
   mortarOverdriveStartMatch,
   mortarOverdriveToCanonical,
+  mortarOverdriveTracksideFor,
   mortarOverdriveWarded,
   updateMortarOverdrive,
 } from '../src/sim/mortar_overdrive/race';
@@ -1039,9 +1040,9 @@ describe('The Mortar Overdrive lifecycle', () => {
     live.phase = 'racing';
     const watcher = addAt(sim, 'warrior', 'Evert', -5, -40);
     // In the Evergarden, nowhere near the band: nothing to watch.
-    expect(sim.mortarOverdriveTracksideFor(watcher)).toBeNull();
+    expect(mortarOverdriveTracksideFor(sim.ctx, watcher)).toBeNull();
     // A seated pilot reads their own match, never the trackside view.
-    expect(sim.mortarOverdriveTracksideFor(a)).toBeNull();
+    expect(mortarOverdriveTracksideFor(sim.ctx, a)).toBeNull();
 
     // Walked to the fence of the live race's lane: the lane view, sharing the
     // very arrays the seated pilots' readout built this tick.
@@ -1049,7 +1050,7 @@ describe('The Mortar Overdrive lifecycle', () => {
     const aside = sample.halfWidth + 8;
     const fence = onLane(sim, sample.x - sample.tz * aside, sample.z + sample.tx * aside);
     teleport(sim, watcher, fence.x, fence.z);
-    const trackside = required(sim.mortarOverdriveTracksideFor(watcher), 'trackside view');
+    const trackside = required(mortarOverdriveTracksideFor(sim.ctx, watcher), 'trackside view');
     expect(trackside.circuitId).toBe(live.circuitId);
     expect(trackside.phase).toBe('racing');
     const seated = required(sim.mortarOverdriveInfoFor(a).match, 'seated view');
@@ -1058,22 +1059,7 @@ describe('The Mortar Overdrive lifecycle', () => {
 
     // Back in town: null again.
     teleport(sim, watcher, -5, -40);
-    expect(sim.mortarOverdriveTracksideFor(watcher)).toBeNull();
-  });
-
-  it('reports the queue viable only where it can actually seat a race', () => {
-    // Offline: no bot backfill and one human, so joining would wait forever
-    // and the window disables the affordance off this flag.
-    const solo = makeWorld();
-    const lone = addAt(solo, 'warrior', 'Aster', -5, -40);
-    expect(solo.mortarOverdriveInfoFor(lone).queueViable).toBe(false);
-    // Enough humans fill a grid without bots.
-    const { sim, pids } = makeGrid();
-    expect(sim.mortarOverdriveInfoFor(pids[0]).queueViable).toBe(true);
-    // The online server enables backfill, so one human is enough there.
-    const backfilled = makeWorld({ mortarOverdriveBackfill: true });
-    const hosted = addAt(backfilled, 'warrior', 'Briar', -5, -40);
-    expect(backfilled.mortarOverdriveInfoFor(hosted).queueViable).toBe(true);
+    expect(mortarOverdriveTracksideFor(sim.ctx, watcher)).toBeNull();
   });
 
   it('slows shortcut attempts outside the authored road without damaging the racer', () => {

@@ -7265,6 +7265,7 @@ export class GameServer {
       case 'mortar_overdrive_reset':
       case 'mortar_overdrive_practice':
       case 'mortar_overdrive_ready':
+      case 'mortar_overdrive_start_now':
         moServer.dispatchMortarOverdriveCommand(sim, command, msg, pid);
         break;
 

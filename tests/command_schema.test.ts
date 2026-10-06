@@ -193,8 +193,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // the release/v0.44.0 merge into feature/mortar-overdrive (ours 212/225/13, the
 // release 247/261/14): 252/266/14.
 // The loading lobby's mortar_overdrive_ready adds one on both sides: 253/267/14.
-const EXPECTED_SEND_COUNT = 253;
-const EXPECTED_DISPATCH_COUNT = 267;
+// The queue card's mortar_overdrive_start_now adds one on both sides: 254/268/14.
+const EXPECTED_SEND_COUNT = 254;
+const EXPECTED_DISPATCH_COUNT = 268;
 const EXPECTED_DISPATCH_ONLY_COUNT = 14;
 
 // The chat sub-channel routing switch (server/game.ts `switch

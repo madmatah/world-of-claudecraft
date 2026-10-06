@@ -85,4 +85,9 @@ export abstract class MortarOverdriveWireState extends ReconWireState {
   readyMortarOverdrive(): void {
     this.cmd({ cmd: 'mortar_overdrive_ready' });
   }
+  // Start now: the server re-checks that the sender is queued, able to race and
+  // that the public lane is free before it seats anyone.
+  startMortarOverdriveNow(): void {
+    this.cmd({ cmd: 'mortar_overdrive_start_now' });
+  }
 }
