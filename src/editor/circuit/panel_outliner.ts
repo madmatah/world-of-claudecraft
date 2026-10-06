@@ -15,8 +15,8 @@
 // The panel survives, and a double click on two different children still fires
 // on their common ancestor.
 
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
-import { realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
+import { mortarOverdrivePlacements } from '../../sim/mortar_overdrive/props_resolve';
 import { editorIcon } from './editor_icons';
 import { heading, hintLine, type PanelHost } from './panels';
 import { type DressingSelection, placedPropIndices } from './props_core';
@@ -131,11 +131,11 @@ export class OutlinerPanel {
     this.el.replaceChildren();
     if (!this.host.drawn()) return;
     const record = this.host.record();
-    const placements = realmRacersPlacements(record);
+    const placements = mortarOverdrivePlacements(record);
     const props = record.props ?? [];
     // Hoisted: called per prop it walks the whole list per prop, which is
     // quadratic and allocates an array each time, on a path that runs per frame.
-    const placed = placedPropIndices(props, REALM_RACERS_PROPS);
+    const placed = placedPropIndices(props, MORTAR_OVERDRIVE_PROPS);
 
     this.el.append(heading(`props (${props.length})`));
     if (props.length === 0) this.el.append(this.empty('nothing placed'));

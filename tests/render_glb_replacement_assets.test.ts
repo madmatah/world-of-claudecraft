@@ -40,11 +40,11 @@ import { harborRouteMarkerInternalsForTest } from '../src/render/harbor_route_ma
 import { hoardEntrancePreloadInternalsForTest } from '../src/render/hoard_entrance';
 import { ignivarEnvPropsInternalsForTest } from '../src/render/ignivar_env_props';
 import { mailboxPreloadInternalsForTest } from '../src/render/mailbox';
+import { MORTAR_OVERDRIVE_BARRIER_ASSET_URLS } from '../src/render/mortar_overdrive/barrier_visuals';
+import { MORTAR_OVERDRIVE_THEME_ASSET_URLS } from '../src/render/mortar_overdrive/themes';
+import { mortarOverdriveCircuitKitUrls } from '../src/render/mortar_overdrive/track';
 import { propPreloadInternalsForTest } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
-import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
-import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
-import { realmRacersCircuitKitUrls } from '../src/render/realm_racers_track';
 import { stationsPreloadInternalsForTest } from '../src/render/stations';
 import { transportShipInternalsForTest } from '../src/render/transport_ship';
 import { wickharborHarborInternalsForTest } from '../src/render/wickharbor_harbor';
@@ -54,7 +54,7 @@ import { wispMazeKitPreloadInternalsForTest } from '../src/render/wisp_maze_kit'
 import { wyrmwatchHarborInternalsForTest } from '../src/render/wyrmwatch_harbor';
 import { yumiMazePreloadInternalsForTest } from '../src/render/yumi_maze';
 import { EASTBROOK_GRAND_ARMOURY } from '../src/sim/building_layout';
-import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_CIRCUIT_LIST } from '../src/sim/content/mortar_overdrive/circuits';
 import type { BuildingDef } from '../src/sim/types';
 
 const repoDir = path.join(__dirname, '..');
@@ -785,7 +785,7 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     }
   });
 
-  it('Realm Racers circuit assets', () => {
+  it('Mortar Overdrive circuit assets', () => {
     // EVERY theme's kit AND every barrier kit, not just what a shipped circuit
     // fetches: a record written a zone ahead of its circuit is exactly the one
     // whose url nobody has looked at yet.
@@ -796,20 +796,20 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     // guard's reach in the same edit: nothing else in the runtime tree names
     // them, so a rename or an unmanifested re-export would have shipped a 404
     // barrier with every suite still green.
-    const covered = [...REALM_RACERS_THEME_ASSET_URLS, ...REALM_RACERS_BARRIER_ASSET_URLS];
+    const covered = [...MORTAR_OVERDRIVE_THEME_ASSET_URLS, ...MORTAR_OVERDRIVE_BARRIER_ASSET_URLS];
     for (const url of covered) {
       expectAssetExistsAndManifested(url);
     }
     // ...and what every shipped circuit fetches at its build is inside it, so
     // no circuit can ask for a url outside this guard's reach.
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
-      for (const url of realmRacersCircuitKitUrls(circuit)) {
+    for (const circuit of MORTAR_OVERDRIVE_CIRCUIT_LIST) {
+      for (const url of mortarOverdriveCircuitKitUrls(circuit)) {
         expect(covered, `${circuit.id} ${url}`).toContain(url);
       }
     }
     // Non-vacuity: the barrier half has to be carrying real urls, or the loop
     // above passes over an empty list and says nothing at all.
-    expect(REALM_RACERS_BARRIER_ASSET_URLS.length).toBeGreaterThan(8);
+    expect(MORTAR_OVERDRIVE_BARRIER_ASSET_URLS.length).toBeGreaterThan(8);
   });
 
   it('Old Beacon tower drum assets', () => {

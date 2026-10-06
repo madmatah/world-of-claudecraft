@@ -440,10 +440,10 @@ describe('MusicDirector area file tracks', () => {
   it('gives the race track the mix on the circuit and ducks the procedural score', () => {
     const master = (director as unknown as { master: FakeGain }).master;
     director.update('vale', false);
-    director.setAreaTrack('realm_racers_evergarden');
+    director.setAreaTrack('mortar_overdrive_evergarden');
 
-    const race = areaEls().realm_racers_evergarden;
-    expect(race?.src).toBe(AREA_TRACK_URLS.realm_racers_evergarden);
+    const race = areaEls().mortar_overdrive_evergarden;
+    expect(race?.src).toBe(AREA_TRACK_URLS.mortar_overdrive_evergarden);
     expect(race?.loop).toBe(true);
     expect(race?.play).toHaveBeenCalled();
     expect(master.gain.value).toBe(0);
@@ -455,35 +455,35 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('downloads only the tracks of the place the player is in', () => {
-    director.setAreaTrack('realm_racers_evergarden');
-    expect(Object.keys(areaEls()).sort()).toEqual(['realm_racers_evergarden']);
+    director.setAreaTrack('mortar_overdrive_evergarden');
+    expect(Object.keys(areaEls()).sort()).toEqual(['mortar_overdrive_evergarden']);
 
     // Each circuit track is its own group (AREA_TRACK_GROUP), so arriving at
     // the second one warms it alone and leaves the first one downloaded.
-    director.setAreaTrack('realm_racers_nightbloom');
+    director.setAreaTrack('mortar_overdrive_nightbloom');
     expect(Object.keys(areaEls()).sort()).toEqual([
-      'realm_racers_evergarden',
-      'realm_racers_nightbloom',
+      'mortar_overdrive_evergarden',
+      'mortar_overdrive_nightbloom',
     ]);
-    director.setAreaTrack('realm_racers_drakelands');
+    director.setAreaTrack('mortar_overdrive_drakelands');
     expect(Object.keys(areaEls()).sort()).toEqual([
-      'realm_racers_drakelands',
-      'realm_racers_evergarden',
-      'realm_racers_nightbloom',
+      'mortar_overdrive_drakelands',
+      'mortar_overdrive_evergarden',
+      'mortar_overdrive_nightbloom',
     ]);
-    director.setAreaTrack('realm_racers_palmreach');
+    director.setAreaTrack('mortar_overdrive_palmreach');
     expect(Object.keys(areaEls()).sort()).toEqual([
-      'realm_racers_drakelands',
-      'realm_racers_evergarden',
-      'realm_racers_nightbloom',
-      'realm_racers_palmreach',
+      'mortar_overdrive_drakelands',
+      'mortar_overdrive_evergarden',
+      'mortar_overdrive_nightbloom',
+      'mortar_overdrive_palmreach',
     ]);
   });
 
   it('hands the mix back to the zone streams when the player leaves', () => {
     const master = (director as unknown as { master: FakeGain }).master;
     director.update('vale', false);
-    director.setAreaTrack('realm_racers_evergarden');
+    director.setAreaTrack('mortar_overdrive_evergarden');
     internals(director).streamKeeper();
     internals(director).ctx.currentTime += 5;
     internals(director).streamKeeper();
@@ -493,7 +493,7 @@ describe('MusicDirector area file tracks', () => {
     expect(master.gain.value).toBe(0.5); // STREAM_LEVEL at the default volume
     // the handback revives the zone stream at once, not a keeper tick later
     expect(internals(director).zoneStreams.vale?.el?.paused).toBe(false);
-    const race = areaEls().realm_racers_evergarden;
+    const race = areaEls().mortar_overdrive_evergarden;
     expect(race?.paused).toBe(false); // still fading out, not cut mid-tail
     for (const fn of timeouts) fn();
     expect(race?.paused).toBe(true);
@@ -502,10 +502,10 @@ describe('MusicDirector area file tracks', () => {
   it('never fades two area tracks up at once', () => {
     const gains = areaTrackLayerFor(director).areaGains as unknown as Record<string, FakeGain>;
     for (const track of [
-      'realm_racers_evergarden',
-      'realm_racers_nightbloom',
-      'realm_racers_drakelands',
-      'realm_racers_palmreach',
+      'mortar_overdrive_evergarden',
+      'mortar_overdrive_nightbloom',
+      'mortar_overdrive_drakelands',
+      'mortar_overdrive_palmreach',
       null,
     ] as const) {
       director.setAreaTrack(track);
@@ -515,8 +515,8 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('stops decoding the race track while the mix is silenced, and resumes after', () => {
-    director.setAreaTrack('realm_racers_evergarden');
-    const race = areaEls().realm_racers_evergarden;
+    director.setAreaTrack('mortar_overdrive_evergarden');
+    const race = areaEls().mortar_overdrive_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 42;
     director.setVolume(0);
@@ -530,24 +530,24 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('keeps a re-entry within the fade window playing instead of pausing it', () => {
-    director.setAreaTrack('realm_racers_evergarden');
-    const race = areaEls().realm_racers_evergarden;
+    director.setAreaTrack('mortar_overdrive_evergarden');
+    const race = areaEls().mortar_overdrive_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 31;
     director.setAreaTrack(null);
-    director.setAreaTrack('realm_racers_evergarden');
+    director.setAreaTrack('mortar_overdrive_evergarden');
     for (const fn of timeouts) fn();
     expect(race.paused).toBe(false);
     expect(race.currentTime).toBe(0);
   });
 
   it('preserves the race soundtrack position across idempotent, menu, and enable cycles', () => {
-    director.setAreaTrack('realm_racers_evergarden');
-    const race = areaEls().realm_racers_evergarden;
+    director.setAreaTrack('mortar_overdrive_evergarden');
+    const race = areaEls().mortar_overdrive_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 53;
 
-    director.setAreaTrack('realm_racers_evergarden');
+    director.setAreaTrack('mortar_overdrive_evergarden');
     director.pauseForMenu();
     director.resumeFromMenu();
     director.setEnabled(false);
@@ -557,12 +557,12 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('restarts the race soundtrack from the beginning when a new match is requested', () => {
-    director.setAreaTrack('realm_racers_evergarden');
-    const race = areaEls().realm_racers_evergarden;
+    director.setAreaTrack('mortar_overdrive_evergarden');
+    const race = areaEls().mortar_overdrive_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 67;
 
-    director.setAreaTrack('realm_racers_evergarden', true);
+    director.setAreaTrack('mortar_overdrive_evergarden', true);
 
     expect(race.currentTime).toBe(0);
   });

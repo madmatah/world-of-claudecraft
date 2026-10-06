@@ -19,14 +19,14 @@ vi.mock('../server/db', () => ({
 import { driveReconWire } from '../server/drive_recon_wire';
 import { isUpdateDue } from '../server/entity_update_cadence';
 import { GameServer, wireEntity } from '../server/game';
-import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest';
+import { otherMortarOverdriveParticipantIds } from '../server/mortar_overdrive/interest';
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
 import { VEHICLE_PROFILES } from '../src/sim/content/vehicles';
 import { createPlayer } from '../src/sim/entity';
-import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
-import { REALM_RACERS_SLICK_GRIP_TICKS } from '../src/sim/realm_racers_slicks';
-import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
-import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
+import { MORTAR_OVERDRIVE_GRID_SIZE } from '../src/sim/mortar_overdrive/layout';
+import { MORTAR_OVERDRIVE_LOADING_MAX_TICKS } from '../src/sim/mortar_overdrive/loading';
+import { MORTAR_OVERDRIVE_RETURN_TICKS } from '../src/sim/mortar_overdrive/race';
+import { MORTAR_OVERDRIVE_SLICK_GRIP_TICKS } from '../src/sim/mortar_overdrive/slicks';
 import { type Entity, TICK_RATE } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
@@ -578,13 +578,13 @@ describe('shared interest-candidate gathering', () => {
 
 /** A full four-pilot grid. Most cases below only lean on the first two, but the
  *  whole field is seated because a race is four abreast or it does not start. */
-function startRealmRacersGrid(server: GameServer, idBase: number): CrowdMember[] {
-  const grid = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+function startMortarOverdriveGrid(server: GameServer, idBase: number): CrowdMember[] {
+  const grid = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
     joinAt(server, idBase + i, `Racer${idBase + i}`, i * 4, 0),
   );
-  for (const member of grid) server.sim.realmRacersQueueJoin(member.pid);
+  for (const member of grid) server.sim.mortarOverdriveQueueJoin(member.pid);
   server.sim.tick();
-  expect(server.sim.realmRacers.match?.pids).toEqual(grid.map((member) => member.pid));
+  expect(server.sim.mortarOverdrive.match?.pids).toEqual(grid.map((member) => member.pid));
   return grid;
 }
 
@@ -600,10 +600,10 @@ function requiredEntity(server: GameServer, pid: number): Entity {
   return e;
 }
 
-describe('Realm Racers match-scoped interest', () => {
+describe('Mortar Overdrive match-scoped interest', () => {
   it.each([150, 170])('directly pins both viewers across a %i yd gap', (gap) => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6000 + gap);
+    const [a, b] = startMortarOverdriveGrid(server, 6000 + gap);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_700 + gap, 0);
     requiredEntity(server, a.pid).stealthed = true;
@@ -618,7 +618,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('does not add a hidden distance ceiling to an authoritative match pin', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6300);
+    const [a, b] = startMortarOverdriveGrid(server, 6300);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 114_700, 0);
     refreshGrids(server);
@@ -630,7 +630,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('encodes a nearby targeted rival once across all inclusion paths', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6400);
+    const [a, b] = startMortarOverdriveGrid(server, 6400);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_710, 0);
     requiredEntity(server, a.pid).targetId = b.pid;
@@ -645,7 +645,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('keeps the pin through voluntary-forfeit results and drops it after teardown', () => {
     const server = new GameServer();
-    const grid = startRealmRacersGrid(server, 6500);
+    const grid = startMortarOverdriveGrid(server, 6500);
     const [a, b] = grid;
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_870, 0);
@@ -654,20 +654,20 @@ describe('Realm Racers match-scoped interest', () => {
     // The whole field pulls off, so the race really is decided: one quitter no
     // longer ends it, and the pin has to survive the six-second tableau either
     // way. The quitter's own six seconds run from the tick THEY quit.
-    for (const member of grid) server.sim.realmRacersForfeit(member.pid);
+    for (const member of grid) server.sim.mortarOverdriveForfeit(member.pid);
     (server as any).broadcastSnapshots();
-    expect(server.sim.realmRacers.match?.phase).toBe('finished');
+    expect(server.sim.mortarOverdrive.match?.phase).toBe('finished');
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
 
-    expect(REALM_RACERS_RETURN_TICKS).toBe(120);
+    expect(MORTAR_OVERDRIVE_RETURN_TICKS).toBe(120);
     for (let i = 0; i < 119; i++) server.sim.tick();
     refreshGrids(server);
     (server as any).broadcastSnapshots();
-    expect(server.sim.realmRacers.match?.phase).toBe('finished');
+    expect(server.sim.mortarOverdrive.match?.phase).toBe('finished');
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
 
     server.sim.tick();
-    expect(server.sim.realmRacers.match).toBeNull();
+    expect(server.sim.mortarOverdrive.match).toBeNull();
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_870, 0);
     refreshGrids(server);
@@ -677,26 +677,26 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('keeps three other people racing when one pilot forfeits', () => {
     const server = new GameServer();
-    const grid = startRealmRacersGrid(server, 6520);
+    const grid = startMortarOverdriveGrid(server, 6520);
     const [a, b] = grid;
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_870, 0);
     refreshGrids(server);
 
-    server.sim.realmRacersForfeit(a.pid);
+    server.sim.mortarOverdriveForfeit(a.pid);
     (server as any).broadcastSnapshots();
     // The race is untouched, and the quitter is off it while the pins for the
     // rest of the field stay exactly where they were.
-    expect(server.sim.realmRacers.match?.phase).toBe('loading');
-    expect(server.sim.realmRacersInfoFor(a.pid).match?.result).toBe('forfeit');
-    expect(server.sim.realmRacersInfoFor(b.pid).match?.result).toBeNull();
+    expect(server.sim.mortarOverdrive.match?.phase).toBe('loading');
+    expect(server.sim.mortarOverdriveInfoFor(a.pid).match?.result).toBe('forfeit');
+    expect(server.sim.mortarOverdriveInfoFor(b.pid).match?.result).toBeNull();
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
   });
 
-  it('re-sends the rr readout about once a second through a whole loading lobby', () => {
+  it('re-sends the mo readout about once a second through a whole loading lobby', () => {
     const server = new GameServer();
-    const [a] = startRealmRacersGrid(server, 6530);
-    const match = server.sim.realmRacers.match;
+    const [a] = startMortarOverdriveGrid(server, 6530);
+    const match = server.sim.mortarOverdrive.match;
     if (!match) throw new Error('match missing');
     let resends = 0;
     let rrBytes = 0;
@@ -706,19 +706,19 @@ describe('Realm Racers match-scoped interest', () => {
       lobbyTicks++;
       a.lastFrame = '';
       (server as any).broadcastSnapshots();
-      const rr = a.lastFrame ? JSON.parse(a.lastFrame).self?.rr : undefined;
-      if (rr !== undefined) {
+      const mo = a.lastFrame ? JSON.parse(a.lastFrame).self?.mo : undefined;
+      if (mo !== undefined) {
         resends++;
-        rrBytes += JSON.stringify(rr).length;
-        lobbyBytes = Math.max(lobbyBytes, JSON.stringify(rr.match?.loading ?? null).length);
+        rrBytes += JSON.stringify(mo).length;
+        lobbyBytes = Math.max(lobbyBytes, JSON.stringify(mo.match?.loading ?? null).length);
       }
       server.sim.tick();
     }
     // Nobody sent ready, so the lobby ran to its cap.
-    expect(lobbyTicks).toBe(REALM_RACERS_LOADING_MAX_TICKS);
+    expect(lobbyTicks).toBe(MORTAR_OVERDRIVE_LOADING_MAX_TICKS);
     // One full send, then one per whole second the countdown to the cap moves:
     // never once a tick.
-    expect(resends).toBeLessThanOrEqual(REALM_RACERS_LOADING_MAX_TICKS / TICK_RATE + 1);
+    expect(resends).toBeLessThanOrEqual(MORTAR_OVERDRIVE_LOADING_MAX_TICKS / TICK_RATE + 1);
     expect(lobbyBytes).toBeLessThanOrEqual(64);
     // Measured at 15 sends of about 1.24 KB (a four-row readout): about 1.2 KB/s
     // for the lobby, where a per-tick ticks-left field cost twenty times that.
@@ -727,8 +727,8 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('pins the field during the racing phase', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6550);
-    const match = server.sim.realmRacers.match;
+    const [a, b] = startMortarOverdriveGrid(server, 6550);
+    const match = server.sim.mortarOverdrive.match;
     if (!match) throw new Error('match missing');
     match.phase = 'racing';
     moveMember(server, a, 113_700, 0);
@@ -742,12 +742,12 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('tears down the pin through the server leave path on disconnect', async () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6600);
+    const [a, b] = startMortarOverdriveGrid(server, 6600);
     await server.leave(b.session, 'test disconnect');
     // The race carries on for the other three; only the pin on the pilot who
     // left comes down.
-    expect(server.sim.realmRacers.match?.pids).toContain(b.pid);
-    expect(server.sim.realmRacersInfoFor(b.pid).match).toBeNull();
+    expect(server.sim.mortarOverdrive.match?.pids).toContain(b.pid);
+    expect(server.sim.mortarOverdriveInfoFor(b.pid).match).toBeNull();
     refreshGrids(server);
 
     (server as any).broadcastSnapshots();
@@ -757,7 +757,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('skips a temporarily missing roster entity without failing the broadcast', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersGrid(server, 6650);
+    const [a, b] = startMortarOverdriveGrid(server, 6650);
     const missing = requiredEntity(server, b.pid);
     server.sim.grid.remove(missing);
     server.sim.playerGrid.remove(missing);
@@ -772,10 +772,10 @@ describe('Realm Racers match-scoped interest', () => {
     const a = joinAt(server, 6700, 'PracticeA', 0, 0);
     const b = joinAt(server, 6701, 'PracticeB', 4, 0);
     const stranger = joinAt(server, 6702, 'Stranger', 8, 0);
-    server.sim.realmRacersPracticeStart('rookie', a.pid);
-    server.sim.realmRacersPracticeStart('driver', b.pid);
-    const matchA = server.sim.realmRacers.practices.find((m) => m.pids.includes(a.pid));
-    const matchB = server.sim.realmRacers.practices.find((m) => m.pids.includes(b.pid));
+    server.sim.mortarOverdrivePracticeStart('rookie', a.pid);
+    server.sim.mortarOverdrivePracticeStart('driver', b.pid);
+    const matchA = server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(a.pid));
+    const matchB = server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(b.pid));
     if (!matchA || !matchB) throw new Error('practice matches missing');
     const botA = matchA.pids.find((pid) => pid !== a.pid);
     const botB = matchB.pids.find((pid) => pid !== b.pid);
@@ -797,7 +797,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('inherits the observed racer match without duplicating the observed body', () => {
     const server = new GameServer();
-    const [target, rival] = startRealmRacersGrid(server, 6800);
+    const [target, rival] = startMortarOverdriveGrid(server, 6800);
     const mod = joinAt(server, 6820, 'Moderator', 1000, 1000);
     moveMember(server, target, 113_700, 0);
     moveMember(server, rival, 113_870, 0);
@@ -820,13 +820,13 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('matches the shadow stream, updates moving pins every pass, and preserves bcVisits', () => {
     const server = new GameServer();
-    const grid = startRealmRacersGrid(server, 6900);
+    const grid = startMortarOverdriveGrid(server, 6900);
     const [a, b] = grid;
     for (const member of grid) member.session.timerWireVersion = STABLE_TIMER_WIRE_VERSION;
     // The pair under test out on the instance plane, the rest of the field far
     // enough away that only the match pins reach them. All of it on the race's
     // OWN lane, since the sim ticks here and retires a racer found on any other.
-    const laneZ = server.sim.realmRacers.match?.origin.z ?? 0;
+    const laneZ = server.sim.mortarOverdrive.match?.origin.z ?? 0;
     moveMember(server, a, 113_700, laneZ);
     moveMember(server, b, 113_870, laneZ);
     moveMember(server, grid[2], 113_420, laneZ + 140);
@@ -886,7 +886,7 @@ describe('Realm Racers match-scoped interest', () => {
   it('bounds a four-pilot grid to exactly three full rival records', () => {
     const server = new GameServer();
     const members = [0, 1, 2, 3].map((i) => joinAt(server, 7000 + i, `Grid${i}`, i * 4, 0));
-    const pinnedIds = otherRealmRacersParticipantIds(
+    const pinnedIds = otherMortarOverdriveParticipantIds(
       members.map((member) => member.pid),
       members[0].pid,
     );
@@ -947,17 +947,18 @@ describe('the drive recon (rdv) byte bound', () => {
     // In the oil: a full grip and contact window, and a patch id far past the
     // drops one race can make (patch ids count up from 1 per race).
     const rdv = driveReconWire(e, {
-      gripLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      gripLeft: MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
       contactId: 9999,
-      contactLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      contactLeft: MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
     });
     expect(Object.keys(rdv ?? {})).toHaveLength(18);
     // 12 numbers at 25 characters, the scrape at 23, the keys, the longest
     // profile key, the two flags and the three oil counts. At 20 Hz that caps
     // a seated racer at 8.8 KB/s; a measured race runs at about 2.4 KB/s
-    // (tests/realm_racers_drive_recon_online.test.ts).
+    // (tests/mortar_overdrive_drive_recon_online.test.ts). 433, measured: the longest
+    // profile key is `mo_loaner`, 3 bytes shorter than before the Mortar Overdrive rename.
     const bytes = Buffer.byteLength(`,"rdv":${JSON.stringify(rdv)}`);
-    expect(bytes).toBe(436);
+    expect(bytes).toBe(433);
     expect(bytes * SNAPSHOTS_PER_SECOND).toBeLessThanOrEqual(8800);
   });
 });

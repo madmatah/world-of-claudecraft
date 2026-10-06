@@ -8,7 +8,7 @@
 // drag, a delete or a scale edit do to the record's list.
 //
 // Where the MODULES end up is not decided here and must not be:
-// `src/sim/realm_racers_fences.ts` resolves a fence into runs and joints, the
+// `src/sim/mortar_overdrive/fences.ts` resolves a fence into runs and joints, the
 // game tiles what it returns and the plan draws the same thing. That is the rule
 // the dressing already paid for once, a tool drawing a placement the game did
 // not have.
@@ -19,12 +19,18 @@
 //
 // Pure and DOM-free, deterministic, no rng. Dev tool, so English lives here.
 
-import { REALM_RACERS_BARRIER_KEYS } from '../../sim/content/realm_racers_barriers';
-import type { RallyFence, RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
-import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../../sim/realm_racers_spline';
+import type {
+  MortarOverdriveCircuit,
+  MortarOverdriveFence,
+} from '../../sim/content/mortar_overdrive';
+import { MORTAR_OVERDRIVE_BARRIER_KEYS } from '../../sim/content/mortar_overdrive/barriers';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
+import { mortarOverdriveFencePlacements } from '../../sim/mortar_overdrive/fences';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../../sim/mortar_overdrive/layout';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../../sim/mortar_overdrive/spline';
 
 /** How many barriers a circuit may carry, and how many points one may have.
  *  Ceilings rather than designs: past either, something upstream is wrong. */
@@ -60,16 +66,16 @@ export interface FenceHit {
  */
 export interface FenceDraft {
   kit: string;
-  points: readonly RallyPoint[];
+  points: readonly MortarOverdrivePoint[];
 }
 
 /** Is this a kit the catalog authors? The palette only offers real ones, but a
  *  draft loaded off disk may name anything. */
 export function isBarrierKit(kit: string): boolean {
-  return REALM_RACERS_BARRIER_KEYS.includes(kit);
+  return MORTAR_OVERDRIVE_BARRIER_KEYS.includes(kit);
 }
 
-function distance(a: RallyPoint, b: RallyPoint): number {
+function distance(a: MortarOverdrivePoint, b: MortarOverdrivePoint): number {
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
@@ -79,7 +85,11 @@ function distance(a: RallyPoint, b: RallyPoint): number {
  * occasionally corner, so a tool that could only be grabbed by its points would
  * be a tool that misses most of what it draws.
  */
-function distanceToSegment(p: RallyPoint, a: RallyPoint, b: RallyPoint): number {
+function distanceToSegment(
+  p: MortarOverdrivePoint,
+  a: MortarOverdrivePoint,
+  b: MortarOverdrivePoint,
+): number {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
   const lengthSq = dx * dx + dz * dz;
@@ -98,7 +108,7 @@ function distanceToSegment(p: RallyPoint, a: RallyPoint, b: RallyPoint): number 
  * ungrabbable, which is the one part of a fence an operator most wants to drag.
  */
 export function fenceHitAt(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
   tolerance: number,
@@ -138,7 +148,7 @@ export function fenceHitAt(
  */
 export type FenceDraftStep =
   | { kind: 'point'; draft: FenceDraft }
-  | { kind: 'close'; fence: RallyFence }
+  | { kind: 'close'; fence: MortarOverdriveFence }
   | { kind: 'ignored'; reason: string };
 
 export function fenceDraftClick(
@@ -172,16 +182,16 @@ export function fenceDraftClick(
  * arming a kit and pressing enter: one point is not a run, and a record entry
  * with one point resolves to no geometry at all.
  */
-export function finishFenceDraft(draft: FenceDraft): RallyFence | null {
+export function finishFenceDraft(draft: FenceDraft): MortarOverdriveFence | null {
   if (draft.points.length < 2) return null;
   return { kit: draft.kit, points: [...draft.points] };
 }
 
 /** Add a finished barrier, refusing past the ceiling. */
 export function addFence(
-  fences: readonly RallyFence[],
-  fence: RallyFence,
-): { fences: readonly RallyFence[]; index: number } | null {
+  fences: readonly MortarOverdriveFence[],
+  fence: MortarOverdriveFence,
+): { fences: readonly MortarOverdriveFence[]; index: number } | null {
   if (fences.length >= MAX_FENCES) return null;
   const out = [...fences, fence];
   return { fences: out, index: out.length - 1 };
@@ -191,12 +201,12 @@ export function addFence(
  *  never changes under a move: unlike a pickup row, a barrier has no ordering
  *  rule for a drag to break. */
 export function moveFencePoint(
-  fences: readonly RallyFence[],
+  fences: readonly MortarOverdriveFence[],
   index: number,
   point: number,
   x: number,
   z: number,
-): readonly RallyFence[] {
+): readonly MortarOverdriveFence[] {
   const fence = fences[index];
   if (!fence || point < 0 || point >= fence.points.length) return fences;
   const points = fence.points.map((held, i) => (i === point ? { x, z } : held));
@@ -206,11 +216,11 @@ export function moveFencePoint(
 /** Move a whole barrier by an offset: the arrow nudge, and what `Center circuit`
  *  does to every fence at once. */
 export function moveFence(
-  fences: readonly RallyFence[],
+  fences: readonly MortarOverdriveFence[],
   index: number,
   dx: number,
   dz: number,
-): readonly RallyFence[] {
+): readonly MortarOverdriveFence[] {
   const fence = fences[index];
   if (!fence) return fences;
   const points = fence.points.map((point) => ({ x: point.x + dx, z: point.z + dz }));
@@ -226,10 +236,10 @@ export function moveFence(
  * all on the commonest barrier there is, a single straight run.
  */
 export function removeFencePoint(
-  fences: readonly RallyFence[],
+  fences: readonly MortarOverdriveFence[],
   index: number,
   point: number,
-): readonly RallyFence[] {
+): readonly MortarOverdriveFence[] {
   const fence = fences[index];
   if (!fence) return fences;
   if (fence.points.length <= 2) return fences.filter((_, i) => i !== index);
@@ -237,22 +247,25 @@ export function removeFencePoint(
   return fences.map((held, i) => (i === index ? { ...fence, points } : held));
 }
 
-export function removeFence(fences: readonly RallyFence[], index: number): readonly RallyFence[] {
+export function removeFence(
+  fences: readonly MortarOverdriveFence[],
+  index: number,
+): readonly MortarOverdriveFence[] {
   return fences.filter((_, i) => i !== index);
 }
 
 /** Set one barrier's scale multiplier, clamped. */
 export function setFenceScale(
-  fences: readonly RallyFence[],
+  fences: readonly MortarOverdriveFence[],
   index: number,
   scale: number,
-): readonly RallyFence[] {
+): readonly MortarOverdriveFence[] {
   const fence = fences[index];
   if (!fence) return fences;
   const clamped = Math.min(FENCE_SCALE_MAX, Math.max(FENCE_SCALE_MIN, scale));
   // 1 is the default, and an explicit 1 on the record is noise the export would
   // carry forever.
-  const next: RallyFence = clamped === 1 ? { ...fence } : { ...fence, scale: clamped };
+  const next: MortarOverdriveFence = clamped === 1 ? { ...fence } : { ...fence, scale: clamped };
   if (clamped === 1) delete (next as { scale?: number }).scale;
   return fences.map((held, i) => (i === index ? next : held));
 }
@@ -266,22 +279,22 @@ export function setFenceScale(
  * about to refuse. Sampling here is the same walk at the same spacing.
  */
 export function fenceRunClearOfSurface(
-  circuit: RealmRacersCircuit,
-  a: RallyPoint,
-  b: RallyPoint,
+  circuit: MortarOverdriveCircuit,
+  a: MortarOverdrivePoint,
+  b: MortarOverdrivePoint,
   halfThickness: number,
   sampleYards = 2,
 ): boolean {
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const length = distance(a, b);
   const steps = Math.max(1, Math.ceil(length / Math.max(0.01, sampleYards)));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const x = a.x + (b.x - a.x) * t;
     const z = a.z + (b.z - a.z) * t;
-    const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
+    const projection = track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z);
     const clear = Math.abs(projection.lateral) - halfThickness;
-    if (clear < rallyGardenEdgeOffsetAt(circuit, projection.s)) return false;
+    if (clear < mortarOverdriveGardenEdgeOffsetAt(circuit, projection.s)) return false;
   }
   return true;
 }
@@ -289,8 +302,8 @@ export function fenceRunClearOfSurface(
 /** How many colliders a circuit's barriers cost, for the inspector to report.
  *  One per straight run, which is what makes a long fence cheap and a
  *  many-cornered one worth seeing the number of. */
-export function fenceColliderCount(circuit: RealmRacersCircuit): number {
-  return realmRacersFencePlacements(circuit).fences.reduce(
+export function fenceColliderCount(circuit: MortarOverdriveCircuit): number {
+  return mortarOverdriveFencePlacements(circuit).fences.reduce(
     (total, fence) => total + fence.runs.length,
     0,
   );
@@ -309,19 +322,19 @@ export function fenceColliderCount(circuit: RealmRacersCircuit): number {
  * Track-space props need nothing: they are expressed against the centerline and
  * follow it for free.
  */
-export function centerCircuitOffset(circuit: RealmRacersCircuit): { dx: number; dz: number } {
+export function centerCircuitOffset(circuit: MortarOverdriveCircuit): { dx: number; dz: number } {
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let minZ = Number.POSITIVE_INFINITY;
   let maxZ = Number.NEGATIVE_INFINITY;
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   for (const sample of track.samples) {
     // The ROAD's footprint rather than the centerline's: a lap whose centerline
     // is centred but whose road is wider on one side is not centred, and the
     // garden edge is the one lateral boundary a circuit has.
-    const span = rallyGardenEdgeOffsetAt(circuit, sample.s);
-    const x = sample.x - REALM_RACERS_ORIGIN.x;
-    const z = sample.z - REALM_RACERS_ORIGIN.z;
+    const span = mortarOverdriveGardenEdgeOffsetAt(circuit, sample.s);
+    const x = sample.x - MORTAR_OVERDRIVE_ORIGIN.x;
+    const z = sample.z - MORTAR_OVERDRIVE_ORIGIN.z;
     minX = Math.min(minX, x - span);
     maxX = Math.max(maxX, x + span);
     minZ = Math.min(minZ, z - span);
@@ -341,11 +354,11 @@ export function centerCircuitOffset(circuit: RealmRacersCircuit): { dx: number; 
  * one of every kind and checks all of them moved together.
  */
 export function moveCircuitContent(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   dx: number,
   dz: number,
-): RealmRacersCircuit {
-  const out: RealmRacersCircuit = {
+): MortarOverdriveCircuit {
+  const out: MortarOverdriveCircuit = {
     ...circuit,
     controlPoints: circuit.controlPoints.map((point) => ({ x: point.x + dx, z: point.z + dz })),
   };

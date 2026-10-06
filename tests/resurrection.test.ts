@@ -453,7 +453,7 @@ describe('resurrection: which sim modules wipe through aurasSurvivingCleanSlate'
     // per file. arena.ts: its own seat (startArenaMatch, every arena-family
     // format including Fiesta and Protect Yumi), the match end (endArenaMatch,
     // the undefeated), and the send-home (returnFromArena, everyone still
-    // present). yumi.ts: the match seat. realm_racers.ts: the race seat
+    // present). yumi.ts: the match seat. mortar_overdrive/race.ts: the race seat
     // (standardizeRacer) and the send-home (restoreRacer). (vale_cup.ts carried
     // two, the kit-swap seat and the teardown, until the Vale Cup retired with
     // release/v0.41.0; the row left with the file.) sim.ts: the BODY of the Sim
@@ -468,9 +468,9 @@ describe('resurrection: which sim modules wipe through aurasSurvivingCleanSlate'
       if (n > 0) wrapper.set(f.file, n);
     }
     expect([...wrapper.entries()].sort()).toEqual([
+      ['mortar_overdrive/race.ts', 2],
       ['sim.ts', 1],
       ['social/arena.ts', 3],
-      ['social/realm_racers.ts', 2],
       ['social/yumi.ts', 1],
     ]);
     // The wrapper really is the clean slate and nothing softer: its body is the

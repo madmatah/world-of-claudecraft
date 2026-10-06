@@ -66,13 +66,13 @@ import type { IWorldInventory } from '../src/world_api/inventory';
 import type { IWorldLoot } from '../src/world_api/loot';
 import type { IWorldMail } from '../src/world_api/mail';
 import type { IWorldMarket } from '../src/world_api/market';
+import type { IWorldMortarOverdrive } from '../src/world_api/mortar_overdrive';
 import type { IWorldMounts } from '../src/world_api/mounts';
 import type { IWorldParty } from '../src/world_api/party';
 import type { IWorldPet } from '../src/world_api/pet';
 import type { IWorldProfessions } from '../src/world_api/professions';
 import type { IWorldProgressionXp } from '../src/world_api/progression_xp';
 import type { IWorldQuests } from '../src/world_api/quests';
-import type { IWorldRealmRacers } from '../src/world_api/realm_racers';
 import type { IWorldReliquary } from '../src/world_api/reliquary';
 import type { IWorldSocialGraph } from '../src/world_api/social_graph';
 import type { IWorldTalents } from '../src/world_api/talents';
@@ -333,15 +333,15 @@ export const IWORLD_MEMBERS = [
   { name: 'bgQueueLeave', kind: 'method' },
   { name: 'bgRespond', kind: 'method' },
   { name: 'bgFlagAction', kind: 'method' },
-  // --- The Realm Racers vehicle-racing minigame (IWorldRealmRacers). ---
-  { name: 'realmRacersInfo', kind: 'data' },
-  { name: 'realmRacersTrackside', kind: 'data' },
-  { name: 'joinRealmRacersQueue', kind: 'method' },
-  { name: 'leaveRealmRacersQueue', kind: 'method' },
-  { name: 'forfeitRealmRacers', kind: 'method' },
-  { name: 'resetRealmRacersPosition', kind: 'method' },
-  { name: 'startRealmRacersPractice', kind: 'method' },
-  { name: 'readyRealmRacers', kind: 'method' },
+  // --- The Mortar Overdrive vehicle-racing minigame (IWorldMortarOverdrive). ---
+  { name: 'mortarOverdriveInfo', kind: 'data' },
+  { name: 'mortarOverdriveTrackside', kind: 'data' },
+  { name: 'joinMortarOverdriveQueue', kind: 'method' },
+  { name: 'leaveMortarOverdriveQueue', kind: 'method' },
+  { name: 'forfeitMortarOverdrive', kind: 'method' },
+  { name: 'resetMortarOverdrivePosition', kind: 'method' },
+  { name: 'startMortarOverdrivePractice', kind: 'method' },
+  { name: 'readyMortarOverdrive', kind: 'method' },
   // --- market commands ---
   { name: 'marketSearch', kind: 'method' },
   { name: 'marketSellPriceCheck', kind: 'method' },
@@ -949,9 +949,9 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
     // method) at the fourth release/v0.44.0 base merge: 421/124/297.
     // Plus the release's Buried Hoards and faction reads (factionCurrencies and
     // treasureMap data, the hoardBossCues method): 424/126/298.
-    // Plus the Realm Racers facet (two data reads, five methods) at the
-    // release/v0.44.0 sync into feature/realm-racers, set from a suite run.
-    // Plus the Realm Racers loading lobby's readyRealmRacers (+1 method).
+    // Plus the Mortar Overdrive facet (two data reads, five methods) at the
+    // release/v0.44.0 sync into feature/mortar-overdrive, set from a suite run.
+    // Plus the Mortar Overdrive loading lobby's readyMortarOverdrive (+1 method).
     // Both composed at the release/v0.45.0 merge: 432/128/304.
     expect(IWORLD_MEMBERS.length).toBe(432);
     expect(DATA_MEMBERS.length).toBe(128);
@@ -1120,7 +1120,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'feedPet',
       'ferryView',
       'forfeitCardDuel',
-      'forfeitRealmRacers',
+      'forfeitMortarOverdrive',
       'friendAdd',
       'friendRemove',
       'friendlyTabTarget',
@@ -1169,7 +1169,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'interact',
       'inventory',
       'joinCardDuelQueue',
-      'joinRealmRacersQueue',
+      'joinMortarOverdriveQueue',
       'known',
       'lastCraftResult',
       'lastDisenchantResult',
@@ -1181,7 +1181,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'leaveCardDuelQueue',
       'leaveDelve',
       'leaveDungeon',
-      'leaveRealmRacersQueue',
+      'leaveMortarOverdriveQueue',
       'leaveVehicle',
       'lifetimeHonor',
       'lifetimeXp',
@@ -1213,6 +1213,8 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'marketSellPriceCheck',
       'marketSweep',
       'marketSweepQuote',
+      'mortarOverdriveInfo',
+      'mortarOverdriveTrackside',
       'mountLessonActive',
       'mountRaceCancel',
       'mountRaceStart',
@@ -1262,10 +1264,8 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'raidLockouts',
       'reactiveAbilityWindowRemaining',
       'readyCheckRespond',
-      'readyRealmRacers',
+      'readyMortarOverdrive',
       'realm',
-      'realmRacersInfo',
-      'realmRacersTrackside',
       'rechargeToolEffect',
       'recipeList',
       'releaseEmpoweredAbility',
@@ -1284,7 +1284,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'renown',
       'reportTelemetry',
       'rerollWorldQuest',
-      'resetRealmRacersPosition',
+      'resetMortarOverdrivePosition',
       'resetWorldQuestMatch3',
       'resetWorldQuestPuzzle',
       'resolvedAbility',
@@ -1333,7 +1333,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'spectating',
       'spinDailyReward',
       'startAutoAttack',
-      'startRealmRacersPractice',
+      'startMortarOverdrivePractice',
       'startWorldQuestActivity',
       'stationPlacements',
       'stopAutoAttack',
@@ -1479,6 +1479,8 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'mailUnread',
       'marketCollectPending',
       'marketInfo',
+      'mortarOverdriveInfo',
+      'mortarOverdriveTrackside',
       'moveInput',
       'myFarmPlots',
       'nearbyWorldQuestTraces',
@@ -1492,8 +1494,6 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'questLog',
       'questsDone',
       'realm',
-      'realmRacersInfo',
-      'realmRacersTrackside',
       'recipeList',
       'reliquaryAccountFinds',
       'reliquaryFirstFind',
@@ -1636,7 +1636,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'feedPet',
       'ferryView',
       'forfeitCardDuel',
-      'forfeitRealmRacers',
+      'forfeitMortarOverdrive',
       'friendAdd',
       'friendRemove',
       'friendlyTabTarget',
@@ -1677,13 +1677,13 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'ignoreRemove',
       'interact',
       'joinCardDuelQueue',
-      'joinRealmRacersQueue',
+      'joinMortarOverdriveQueue',
       'leaderboard',
       'learnRiding',
       'leaveCardDuelQueue',
       'leaveDelve',
       'leaveDungeon',
-      'leaveRealmRacersQueue',
+      'leaveMortarOverdriveQueue',
       'leaveVehicle',
       'lockpickAbort',
       'lockpickAction',
@@ -1744,7 +1744,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'raidLockouts',
       'reactiveAbilityWindowRemaining',
       'readyCheckRespond',
-      'readyRealmRacers',
+      'readyMortarOverdrive',
       'rechargeToolEffect',
       'releaseEmpoweredAbility',
       'releaseSpirit',
@@ -1756,7 +1756,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'renamePet',
       'reportTelemetry',
       'rerollWorldQuest',
-      'resetRealmRacersPosition',
+      'resetMortarOverdrivePosition',
       'resetWorldQuestMatch3',
       'resetWorldQuestPuzzle',
       'resolvedAbility',
@@ -1800,7 +1800,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'sortInventory',
       'spinDailyReward',
       'startAutoAttack',
-      'startRealmRacersPractice',
+      'startMortarOverdrivePractice',
       'startWorldQuestActivity',
       'stopAutoAttack',
       'submitLootRoll',
@@ -2369,18 +2369,18 @@ type _ExhaustTelemetry = AssertNever<
   Exclude<keyof IWorldTelemetry, (typeof FACET_TELEMETRY)[number]>
 >;
 
-const FACET_REALM_RACERS = [
-  'realmRacersInfo',
-  'realmRacersTrackside',
-  'joinRealmRacersQueue',
-  'leaveRealmRacersQueue',
-  'forfeitRealmRacers',
-  'resetRealmRacersPosition',
-  'startRealmRacersPractice',
-  'readyRealmRacers',
-] as const satisfies readonly (keyof IWorldRealmRacers)[];
-type _ExhaustRealmRacers = AssertNever<
-  Exclude<keyof IWorldRealmRacers, (typeof FACET_REALM_RACERS)[number]>
+const FACET_MORTAR_OVERDRIVE = [
+  'mortarOverdriveInfo',
+  'mortarOverdriveTrackside',
+  'joinMortarOverdriveQueue',
+  'leaveMortarOverdriveQueue',
+  'forfeitMortarOverdrive',
+  'resetMortarOverdrivePosition',
+  'startMortarOverdrivePractice',
+  'readyMortarOverdrive',
+] as const satisfies readonly (keyof IWorldMortarOverdrive)[];
+type _ExhaustMortarOverdrive = AssertNever<
+  Exclude<keyof IWorldMortarOverdrive, (typeof FACET_MORTAR_OVERDRIVE)[number]>
 >;
 
 const FACET_MOUNTS = [
@@ -2561,7 +2561,7 @@ const FACET_MEMBER_ARRAYS: Readonly<Record<string, readonly string[]>> = {
   dailyRewards: FACET_DAILY_REWARDS,
   telemetry: FACET_TELEMETRY,
   professions: FACET_PROFESSIONS,
-  realmRacers: FACET_REALM_RACERS,
+  mortarOverdrive: FACET_MORTAR_OVERDRIVE,
   mounts: FACET_MOUNTS,
   vehicles: FACET_VEHICLES,
   dungeonFinder: FACET_DUNGEON_FINDER,
@@ -2587,7 +2587,7 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
     // vehicles facet.
     // 35 at the second release/v0.44.0 base merge: plus the release's world_pvp.ts.
     // 36 at the fourth release/v0.44.0 base merge: plus the release's transport.ts.
-    // 37 at the release/v0.44.0 sync into feature/realm-racers: plus realm_racers.ts.
+    // 37 at the release/v0.44.0 sync into feature/mortar-overdrive: plus mortar_overdrive.ts.
     expect(Object.keys(FACET_MEMBER_ARRAYS).length).toBe(37);
   });
 

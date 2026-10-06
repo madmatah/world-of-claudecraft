@@ -14,23 +14,26 @@ import {
   isAbilityLockedByActivity,
 } from '../src/sim/ability_budget';
 import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_WEAPON_CHARGES,
-} from '../src/sim/content/realm_racers';
-import { REALM_RACERS_COUNTDOWN_TICKS, realmRacersMatchOf } from '../src/sim/social/realm_racers';
+  MORTAR_OVERDRIVE_ABILITY_ID,
+  MORTAR_OVERDRIVE_WEAPON_CHARGES,
+} from '../src/sim/content/mortar_overdrive/kit';
+import {
+  MORTAR_OVERDRIVE_COUNTDOWN_TICKS,
+  mortarOverdriveMatchOf,
+} from '../src/sim/mortar_overdrive/race';
 import type { Entity } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import type { ActionBarPlayerInput } from '../src/ui/hud/action_bar/action_bar_view';
-import { addAt, makeWorld, readyAllRacers } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers } from './mortar_overdrive_util';
 
-const WEAPON = REALM_RACERS_ABILITY_ID;
+const WEAPON = MORTAR_OVERDRIVE_ABILITY_ID;
 
 function budget(charges: number, fixed: boolean) {
   return { [WEAPON]: { charges, maxCharges: 3, recharge: 0, rechargeLength: 0, fixed } };
 }
 
 function lockedDrive(controlsLocked: boolean) {
-  return { ...createVehicleDrive('rally_loaner'), controlsLocked };
+  return { ...createVehicleDrive('mo_loaner'), controlsLocked };
 }
 
 describe('ability budget: a spent activity kit', () => {
@@ -112,9 +115,9 @@ describe('ability budget: the two shapes that really call it agree', () => {
   it('answers identically for a REAL seated racer and the narrow bar input, in all three states', () => {
     const sim = makeWorld();
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
-    sim.realmRacersPracticeStart('driver', human);
+    sim.mortarOverdrivePracticeStart('driver', human);
     sim.tick();
-    const race = realmRacersMatchOf(sim.ctx, human);
+    const race = mortarOverdriveMatchOf(sim.ctx, human);
     if (!race) throw new Error('no practice race');
     const racer = sim.entities.get(human);
     if (!racer) throw new Error('no racer entity');
@@ -144,7 +147,7 @@ describe('ability budget: the two shapes that really call it agree', () => {
     // CLEAR: the flag drops and the pilot has the machine and the full budget.
     // One beat past the flip: the tick that turns the phase has already stamped
     // the countdown lock, so the unlock lands on the following pass.
-    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS + 5 && race.phase !== 'racing'; i++) {
+    for (let i = 0; i < MORTAR_OVERDRIVE_COUNTDOWN_TICKS + 5 && race.phase !== 'racing'; i++) {
       sim.tick();
     }
     sim.tick();
@@ -152,7 +155,7 @@ describe('ability budget: the two shapes that really call it agree', () => {
     expect(agreed('racing')).toEqual({ locked: false, spent: false, controls: false });
 
     // SPENT: the whole fixed budget fired off, controls still in hand.
-    for (let shot = 0; shot < REALM_RACERS_WEAPON_CHARGES; shot++) {
+    for (let shot = 0; shot < MORTAR_OVERDRIVE_WEAPON_CHARGES; shot++) {
       racer.cooldowns.delete(WEAPON);
       sim.castAbility(WEAPON, human);
     }

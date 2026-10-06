@@ -2,7 +2,7 @@
 // read by every painter in src/render/textures.ts): a painter run
 // under `withTextureRandomStream` draws from its own sequence and leaves the
 // shared one exactly where it was, so a texture painted at a moment that
-// varies (a Realm Racers circuit built when a pilot commits to it) never
+// varies (a Mortar Overdrive circuit built when a pilot commits to it) never
 // shifts the look of anything painted after it.
 //
 // The painters run against a recording 2D context: every numeric argument of
@@ -83,7 +83,7 @@ describe('a private texture random stream', () => {
 
     const probed = await freshTextures();
     expect(painted(() => probed.macroNoiseTexture())).toEqual(first);
-    const stream = probed.textureRandomStream('realm-racers:circuit:probe');
+    const stream = probed.textureRandomStream('mortar-overdrive:circuit:probe');
     probed.withTextureRandomStream(stream, () => probed.macroNoiseTexture());
     // The paint under the stream did not move the shared sequence: the next
     // shared paint is the one it would have been without it.
@@ -153,14 +153,14 @@ describe('a private texture random stream', () => {
       },
     ];
     const shared = t.flowerTuftTexture(kinds);
-    const stream = t.textureRandomStream('realm-racers:flower');
+    const stream = t.textureRandomStream('mortar-overdrive:flower');
     const scoped = t.flowerTuftTexture(kinds, false, stream);
     expect(scoped).not.toBe(shared);
     // Cached per stream id: a second stream of the same id reads the same card
     // without drawing again.
-    expect(t.flowerTuftTexture(kinds, false, t.textureRandomStream('realm-racers:flower'))).toBe(
-      scoped,
-    );
+    expect(
+      t.flowerTuftTexture(kinds, false, t.textureRandomStream('mortar-overdrive:flower')),
+    ).toBe(scoped);
     expect(t.flowerTuftTexture(kinds)).toBe(shared);
   });
 });

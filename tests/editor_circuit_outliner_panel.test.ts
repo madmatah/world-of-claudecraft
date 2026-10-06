@@ -15,14 +15,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { type OutlinerHost, OutlinerPanel } from '../src/editor/circuit/panel_outliner';
 import type { DressingSelection } from '../src/editor/circuit/props_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RallyProp,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+  type MortarOverdriveProp,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
-const PROPS: RallyProp[] = [
+const PROPS: MortarOverdriveProp[] = [
   { asset: 'bench', at: { x: 12, z: 8 } },
   { asset: 'postLantern', at: { s: 0.3, offset: 11 } },
   // A key the catalog does not author: the resolver SKIPS it, so every row after
@@ -34,7 +34,7 @@ const PROPS: RallyProp[] = [
 
 let drafts = 0;
 
-function mount(overrides: Partial<RealmRacersCircuit> = {}): {
+function mount(overrides: Partial<MortarOverdriveCircuit> = {}): {
   panel: OutlinerPanel;
   host: OutlinerHost;
   selected: { value: DressingSelection | null };
@@ -42,7 +42,7 @@ function mount(overrides: Partial<RealmRacersCircuit> = {}): {
   document.body.innerHTML = '';
   // A fresh id per mount: the resolver memoizes per circuit id, and a fixture
   // sharing the shipped one would evict the record everything else measures.
-  const record: RealmRacersCircuit = {
+  const record: MortarOverdriveCircuit = {
     ...GARDEN,
     id: `draft_outliner_${drafts++}`,
     props: PROPS,
@@ -53,8 +53,8 @@ function mount(overrides: Partial<RealmRacersCircuit> = {}): {
   const selected: { value: DressingSelection | null } = { value: null };
   const host: OutlinerHost = {
     record: () => record,
-    metrics: () => realmRacersCircuitMetrics(record),
-    track: () => realmRacersTrack(record),
+    metrics: () => mortarOverdriveCircuitMetrics(record),
+    track: () => mortarOverdriveTrack(record),
     drawn: () => true,
     mode: () => 'props',
     selection: () => selected.value,

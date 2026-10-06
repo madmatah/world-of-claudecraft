@@ -50,7 +50,7 @@ export const guideStrings = {
     combat: 'Combat',
     talents: 'Talents',
     arena: 'Arena & PvP',
-    realmRacers: 'Realm Racers',
+    mortarOverdrive: 'Mortar Overdrive',
     thornhollow: 'Thornhollow Fields',
     worldPvp: 'World PvP',
     deeds: 'Book of Deeds',
@@ -2368,11 +2368,11 @@ export const guideStrings = {
     rewardsBody:
       "Every finished match pays Honor: more for a win, a consolation for a loss or a draw, plus a small amount for every killing blow you land and every one you help with, so fighting away from the flags is still worth doing. Your first win of each day pays a bonus on top, and the panel tells you while that bonus is still waiting for you. That day is Honor's own, and it rolls over on its own clock rather than with the realm's instance reset. Meeting the same team over and over pays less for the match itself after the first, quickly settling at a floor instead of falling away to nothing, and a forfeited match pays nothing at all. Spend what you earn at either Warfare quartermaster.",
   },
-  // Realm Racers, the vehicle-circuit minigame at the Evergarden (docs/design/realm-racers.md,
-  // and its deeds in docs/design/deeds.md "Realm Racers deeds"). Spoiler-safe: no lap times,
+  // Mortar Overdrive, the vehicle-circuit minigame at the Evergarden (docs/design/mortar-overdrive.md,
+  // and its deeds in docs/design/deeds.md "Mortar Overdrive deeds"). Spoiler-safe: no lap times,
   // damage numbers, or weapon cooldowns, only the shape of the sport.
-  realmRacersPage: {
-    heading: 'Realm Racers',
+  mortarOverdrivePage: {
+    heading: 'Mortar Overdrive',
     intro:
       'The Evergarden Racing Society runs a garden circuit for anyone with the nerve to drive it: four pilots to a grid, one signature weapon, and a hedge-lined track that rewards a clean line as much as a bold one.',
     loreHeading: 'The Evergarden Racing Society',
@@ -2380,7 +2380,7 @@ export const guideStrings = {
       "The Evergarden's head gardeners never meant the service paths between the hedgerows for anything faster than a wheelbarrow, but a groundskeeper with too much time and a loaned mount found otherwise. The Society that grew out of that first dare now marks out a proper circuit, seats a full grid, and drops the flag whenever four pilots are ready to go.",
     howHeading: 'How to play',
     howQueueBody:
-      'Queue for a race from the Realm Racers window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.',
+      'Queue for a race from the Mortar Overdrive window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.',
     howRaceBody:
       'Steer, throttle, and brake with your usual movement keys, and hold the jump control to pull the handbrake and slide through a tight corner. Every pilot carries Ground Blast, a forward shot that unsteadies whoever it catches, so a rival in your way is never quite safe. First across the line after the final lap takes the win, and the whole field is ranked by where each pilot stands when the race is decided.',
     howLimitsBody:
@@ -2399,7 +2399,7 @@ export const guideStrings = {
       'A queued race never runs the practice loop. Instead it draws from a separate pool of longer competition circuits, each one dressed in the theme of the game zone it borrows its ground from, so the venue changes even when the machine does not.',
     rewardsHeading: 'What you race for',
     rewardsBody:
-      'Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: crossing the finish line, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. A win only counts when at least one other player started the heat with you and raced it, finishing or at least completing a lap: beating the house pilots, or a rival who never left the grid, is practice, not a record. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear.',
+      'Mortar Overdrive pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: crossing the finish line, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. A win only counts when at least one other player started the heat with you and raced it, finishing or at least completing a lap: beating the house pilots, or a rival who never left the grid, is practice, not a record. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear.',
   },
 
   // The Factions and Standing page (src/guide/pages/factions.ts). Spoiler-safe: faction

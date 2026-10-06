@@ -6,7 +6,7 @@
 // `src/render/self_motion.ts`, which `main.ts` called on the event batch. It is
 // gone, and this file is why it could go rather than being kept beside this one.
 // The mirror's flag answers strictly more: the same completed `unstuck`, PLUS
-// `realmRacersReset`, and it defers the answer until the snapshot that follows
+// `mortarOverdriveReset`, and it defers the answer until the snapshot that follows
 // the events has actually landed on the mirror. That deferral is the part a
 // batch-reading predicate cannot have, because the two arrive as separate
 // ordered frames and a render frame can fall between them.
@@ -69,8 +69,10 @@ describe('ClientWorld authoritative position-discontinuity latch', () => {
     const { world, wire } = makeWorld();
     wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
 
-    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 1 }] }));
-    expect(world.drainEvents()).toEqual([{ type: 'realmRacersReset', pid: 1 }]);
+    wire.onMessage(
+      JSON.stringify({ t: 'events', list: [{ type: 'mortarOverdriveReset', pid: 1 }] }),
+    );
+    expect(world.drainEvents()).toEqual([{ type: 'mortarOverdriveReset', pid: 1 }]);
     // This is the rAF that can run between the server's event and snapshot frames.
     expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
 
@@ -81,11 +83,15 @@ describe('ClientWorld authoritative position-discontinuity latch', () => {
 
   it('ignores another racer reset and promotes event-plus-snapshot received before rAF', () => {
     const { world, wire } = makeWorld();
-    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 2 }] }));
+    wire.onMessage(
+      JSON.stringify({ t: 'events', list: [{ type: 'mortarOverdriveReset', pid: 2 }] }),
+    );
     wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
     expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
 
-    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 1 }] }));
+    wire.onMessage(
+      JSON.stringify({ t: 'events', list: [{ type: 'mortarOverdriveReset', pid: 1 }] }),
+    );
     wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(4, 0) }));
     expect(world.consumeSelfPositionDiscontinuity()).toBe(true);
   });
@@ -129,7 +135,7 @@ describe('ClientWorld authoritative position-discontinuity latch', () => {
 describe('SelfPositionDiscontinuityLatch', () => {
   it('arms on the viewer or a pid-less event, fires once after the snapshot', () => {
     const latch = new SelfPositionDiscontinuityLatch();
-    latch.noteEvent({ type: 'realmRacersReset', pid: 2 } as unknown as SimEvent, 1);
+    latch.noteEvent({ type: 'mortarOverdriveReset', pid: 2 } as unknown as SimEvent, 1);
     latch.snapshotApplied();
     expect(latch.consume()).toBe(false);
     latch.noteEvent({ type: 'unstuck', phase: 'started' } as unknown as SimEvent, 1);
@@ -140,7 +146,7 @@ describe('SelfPositionDiscontinuityLatch', () => {
     latch.snapshotApplied();
     expect(latch.consume()).toBe(true);
     expect(latch.consume()).toBe(false);
-    latch.noteEvent({ type: 'realmRacersReset', pid: 1 } as unknown as SimEvent, 1);
+    latch.noteEvent({ type: 'mortarOverdriveReset', pid: 1 } as unknown as SimEvent, 1);
     latch.snapshotApplied();
     expect(latch.consume()).toBe(true);
   });

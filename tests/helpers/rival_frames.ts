@@ -19,12 +19,12 @@
 //
 // A suite using this module must mock Postgres itself, hoisted above its own
 // import of this module (copy the factory at the top of
-// tests/realm_racers_v2_prediction.test.ts).
+// tests/mortar_overdrive_v2_prediction.test.ts).
 
-import { REALM_RACERS_ABILITY_ID } from '../../src/sim/content/realm_racers';
+import { MORTAR_OVERDRIVE_ABILITY_ID } from '../../src/sim/content/mortar_overdrive/kit';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
-import { groundBlastFlightSeconds } from '../../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_VEHICLE_KEY } from '../../src/sim/social/realm_racers';
+import { groundBlastFlightSeconds } from '../../src/sim/mortar_overdrive/ground_blast';
+import { MORTAR_OVERDRIVE_VEHICLE_KEY } from '../../src/sim/mortar_overdrive/race';
 import { type SimEvent, TICK_RATE } from '../../src/sim/types';
 import { vehicleVelocityX, vehicleVelocityZ } from '../../src/sim/vehicle_motion';
 import { clampAimToRange } from '../../src/ui/hud/action_bar/ground_aim';
@@ -39,7 +39,7 @@ import {
 } from './racer_harness';
 
 /** Contact reach: the two machines' body radii (the loaner races alone). */
-export const CONTACT_REACH_YD = 2 * vehicleProfile(REALM_RACERS_VEHICLE_KEY).bodyRadius;
+export const CONTACT_REACH_YD = 2 * vehicleProfile(MORTAR_OVERDRIVE_VEHICLE_KEY).bodyRadius;
 /** Link jitter every scenario runs with, ms (seeded). */
 export const LINK_JITTER_MS = 10;
 /** Frames slower than this are left out of the display scores, yd/s: the
@@ -244,7 +244,7 @@ export function scoreViewer(
 }
 
 function isPairBump(ev: SimEvent, a: number, b: number): boolean {
-  if (ev.type !== 'realmRacersBump') return false;
+  if (ev.type !== 'mortarOverdriveBump') return false;
   const bump = ev as SimEvent & { aId: number; bId: number };
   return (bump.aId === a && bump.bId === b) || (bump.aId === b && bump.bId === a);
 }
@@ -396,7 +396,7 @@ export type AimCasterSource = 'drawn' | 'mirror';
 export interface DrawnRivalShot {
   sent: { x: number; z: number } | null;
   hudClamped: boolean;
-  /** 'drawn': renderer.realmRacers.selfAimPose (the predicted display); 'mirror': the
+  /** 'drawn': renderer.mortarOverdrive.selfAimPose (the predicted display); 'mirror': the
    *  mirrored player the HUD falls back to while the display is not predicted. */
   caster: AimCasterSource | null;
   /** The caster the clamp measured from, and the drawn self on that frame. */
@@ -407,7 +407,7 @@ export interface DrawnRivalShot {
 /**
  * Fire the shooter's Ground Blast at its DRAWN rival with a visual lead, on the
  * next frame it draws: the HUD commit path (clampAimToRange from the aim
- * caster, `renderer.realmRacers.selfAimPose ?? sim.player`: the drawn pose while the kart
+ * caster, `renderer.mortarOverdrive.selfAimPose ?? sim.player`: the drawn pose while the kart
  * is predicted, the mirrored self while it is stood down, then
  * castAbilityAt). Returns the aim it sent, filled on that frame.
  */
@@ -439,15 +439,15 @@ export function fireAtDrawnRival(
         vz: vehicleVelocityZ(mirror.drive, f.rivalFacing),
       },
     );
-    // The HUD's rallyAimCaster(): the displayed pose first, the mirror as fallback.
+    // The HUD's mortarOverdriveAimCaster(): the displayed pose first, the mirror as fallback.
     const caster = frame.aimPose ?? shooter.client.player;
-    const clamp = clampAimToRange(caster, lead, 0, REALM_RACERS_ABILITY_ID);
+    const clamp = clampAimToRange(caster, lead, 0, MORTAR_OVERDRIVE_ABILITY_ID);
     out.sent = clamp.point;
     out.hudClamped = clamp.clamped;
     out.caster = frame.aimPose ? 'drawn' : 'mirror';
     out.casterPos = { x: caster.pos.x, z: caster.pos.z };
     out.drawnSelf = { x: f.selfX, z: f.selfZ };
-    shooter.client.castAbilityAt(REALM_RACERS_ABILITY_ID, clamp.point);
+    shooter.client.castAbilityAt(MORTAR_OVERDRIVE_ABILITY_ID, clamp.point);
   });
   return out;
 }
@@ -461,14 +461,14 @@ export function blastOutcome(
   const firedIndex = rec.ticks.findIndex((row) =>
     row.events.some(
       (ev) =>
-        ev.type === 'realmRacersGroundBlastFired' &&
+        ev.type === 'mortarOverdriveGroundBlastFired' &&
         (ev as SimEvent & { sourceId: number }).sourceId === shooterPid,
     ),
   );
   const hitIndex = rec.ticks.findIndex((row) =>
     row.events.some(
       (ev) =>
-        ev.type === 'realmRacersGroundBlastHit' &&
+        ev.type === 'mortarOverdriveGroundBlastHit' &&
         (ev as SimEvent & { sourceId: number }).sourceId === shooterPid,
     ),
   );
@@ -487,10 +487,12 @@ export function blastOutcome(
   if (firedIndex < 0 || hitIndex < 0) return none;
   const firedRow = rec.ticks[firedIndex];
   const fired = firedRow.events.find(
-    (ev) => ev.type === 'realmRacersGroundBlastFired',
+    (ev) => ev.type === 'mortarOverdriveGroundBlastFired',
   ) as SimEvent & { targetX: number; targetZ: number; flightSeconds: number };
   const hitRow = rec.ticks[hitIndex];
-  const hit = hitRow.events.find((ev) => ev.type === 'realmRacersGroundBlastHit') as SimEvent & {
+  const hit = hitRow.events.find(
+    (ev) => ev.type === 'mortarOverdriveGroundBlastHit',
+  ) as SimEvent & {
     targetId: number | null;
     impact: number;
     x: number;
@@ -567,7 +569,7 @@ function firedRowTMs(rec: DuelRecording, shooterPid: number): number | null {
   const row = rec.ticks.find((r) =>
     r.events.some(
       (ev) =>
-        ev.type === 'realmRacersGroundBlastFired' &&
+        ev.type === 'mortarOverdriveGroundBlastFired' &&
         (ev as SimEvent & { sourceId: number }).sourceId === shooterPid,
     ),
   );
@@ -597,10 +599,10 @@ export interface DuelOptions {
    *  on by default): each self is drawn ahead of the server, and each rival in
    *  that self's frame. False: both stood down, the `?drivepredict=0` arm. */
   predictDrivers?: boolean;
-  /** Draw the bump at the seen touch (realm_racers_contact_kick_core.ts). Off
+  /** Draw the bump at the seen touch (mortar_overdrive/contact_kick_core.ts). Off
    *  by default here: these scores measure where the projection puts each
    *  machine, and the drawn bump is measured on its own
-   *  (tests/realm_racers_contact_kick.test.ts). */
+   *  (tests/mortar_overdrive_contact_kick.test.ts). */
   contactKick?: boolean;
 }
 

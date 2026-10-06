@@ -18,8 +18,8 @@ import {
 } from '../src/render/characters/ghost_veil';
 import type { DyeRule } from '../src/render/characters/modular';
 import {
-  RALLY_WARD_ENDING_DIM,
-  RALLY_WARD_ENDING_PULSE_HZ,
+  MORTAR_OVERDRIVE_WARD_ENDING_DIM,
+  MORTAR_OVERDRIVE_WARD_ENDING_PULSE_HZ,
   SPIRIT_VEIL_NEVER_DEFERRED,
   SPIRIT_VEIL_PALETTES,
   SPIRIT_VEIL_POLICY,
@@ -136,7 +136,7 @@ describe('the veil palettes', () => {
         keepColor: 0,
         band: 1,
       },
-      'rally-ward': {
+      'mortar-overdrive-ward': {
         tint: 0xffd35a,
         deep: 0x8a6418,
         rim: 0xfeb50b,
@@ -148,7 +148,7 @@ describe('the veil palettes', () => {
         band: 0.42,
       },
       // the ward's own values: the pulse is what makes it the ending one
-      'rally-ward-ending': {
+      'mortar-overdrive-ward-ending': {
         tint: 0xffd35a,
         deep: 0x8a6418,
         rim: 0xfeb50b,
@@ -159,7 +159,7 @@ describe('the veil palettes', () => {
         keepColor: 1,
         band: 0.42,
       },
-      'rally-ghost': {
+      'mortar-overdrive-ghost': {
         tint: 0xeef3f8,
         deep: 0x9aa6b4,
         rim: 0xf2f7ff,
@@ -184,20 +184,23 @@ describe('the veil palettes', () => {
       'stealth-other': { castsShadow: false, weaponVfx: false },
       moonkin: { castsShadow: true, weaponVfx: true },
       'soul-rend': { castsShadow: false, weaponVfx: true },
-      'rally-ward': { castsShadow: false, weaponVfx: false },
-      'rally-ward-ending': { castsShadow: false, weaponVfx: false },
-      'rally-ghost': { castsShadow: false, weaponVfx: false },
+      'mortar-overdrive-ward': { castsShadow: false, weaponVfx: false },
+      'mortar-overdrive-ward-ending': { castsShadow: false, weaponVfx: false },
+      'mortar-overdrive-ghost': { castsShadow: false, weaponVfx: false },
     });
   });
 
   it('pulses the ending ward, and only it, at the tunable rate and depth', () => {
-    expect(RALLY_WARD_ENDING_PULSE_HZ).toBe(2.5);
-    expect(RALLY_WARD_ENDING_DIM).toBe(0.4);
+    expect(MORTAR_OVERDRIVE_WARD_ENDING_PULSE_HZ).toBe(2.5);
+    expect(MORTAR_OVERDRIVE_WARD_ENDING_DIM).toBe(0.4);
     expect(SPIRIT_VEIL_PULSES).toEqual({
-      'rally-ward-ending': { hz: RALLY_WARD_ENDING_PULSE_HZ, dim: RALLY_WARD_ENDING_DIM },
+      'mortar-overdrive-ward-ending': {
+        hz: MORTAR_OVERDRIVE_WARD_ENDING_PULSE_HZ,
+        dim: MORTAR_OVERDRIVE_WARD_ENDING_DIM,
+      },
     });
     // actionable, so never staged behind the effect gate
-    expect(SPIRIT_VEIL_NEVER_DEFERRED.has('rally-ward-ending')).toBe(true);
+    expect(SPIRIT_VEIL_NEVER_DEFERRED.has('mortar-overdrive-ward-ending')).toBe(true);
   });
 });
 
@@ -218,7 +221,7 @@ describe('the pulse level', () => {
       expect(level).toBeGreaterThanOrEqual(pulse.dim - 1e-12);
       expect(level).toBeLessThanOrEqual(1 + 1e-12);
     }
-    expect(RALLY_WARD_ENDING_DIM).toBeGreaterThan(0);
+    expect(MORTAR_OVERDRIVE_WARD_ENDING_DIM).toBeGreaterThan(0);
   });
 
   it('holds the trough, a still look that differs from the full palette, with motion off', () => {
@@ -382,10 +385,12 @@ describe('a palette is uniform values on the shared programs', () => {
 
   it("reads an ending ward's rim and body off the world clock, on the ward's own uniforms", () => {
     const source = new THREE.MeshStandardMaterial();
-    const ending = compiled(createSpiritVeilMaterial(source, 'rally-ward-ending')).uniforms;
-    const ward = compiled(createSpiritVeilMaterial(source, 'rally-ward')).uniforms;
-    const full = SPIRIT_VEIL_PALETTES['rally-ward-ending'];
-    const pulse = SPIRIT_VEIL_PULSES['rally-ward-ending'];
+    const ending = compiled(
+      createSpiritVeilMaterial(source, 'mortar-overdrive-ward-ending'),
+    ).uniforms;
+    const ward = compiled(createSpiritVeilMaterial(source, 'mortar-overdrive-ward')).uniforms;
+    const full = SPIRIT_VEIL_PALETTES['mortar-overdrive-ward-ending'];
+    const pulse = SPIRIT_VEIL_PULSES['mortar-overdrive-ward-ending'];
     if (!pulse) throw new Error('the ending ward does not pulse');
     const clock = sharedUniforms.uTime.value;
     try {
@@ -395,8 +400,10 @@ describe('a palette is uniform values on the shared programs', () => {
         expect(ending.uVeilRimStrength.value, `${t}`).toBeCloseTo(full.rimStrength * level, 12);
         expect(ending.uVeilOpacity.value, `${t}`).toBeCloseTo(full.opacity * level, 12);
         // the full ward stays still whatever the clock says
-        expect(ward.uVeilRimStrength.value).toBe(SPIRIT_VEIL_PALETTES['rally-ward'].rimStrength);
-        expect(ward.uVeilOpacity.value).toBe(SPIRIT_VEIL_PALETTES['rally-ward'].opacity);
+        expect(ward.uVeilRimStrength.value).toBe(
+          SPIRIT_VEIL_PALETTES['mortar-overdrive-ward'].rimStrength,
+        );
+        expect(ward.uVeilOpacity.value).toBe(SPIRIT_VEIL_PALETTES['mortar-overdrive-ward'].opacity);
       }
       // crest and trough: the full gold, and a dimmer gold that is still there
       sharedUniforms.uTime.value = 0;
@@ -411,7 +418,7 @@ describe('a palette is uniform values on the shared programs', () => {
     expect((ending.uVeilRim.value as THREE.Color).getHex()).toBe(full.rim);
     expect(ending.uVeilKeepColor.value).toBe(full.keepColor);
     const other = compiled(
-      createSpiritVeilMaterial(new THREE.MeshStandardMaterial(), 'rally-ward-ending'),
+      createSpiritVeilMaterial(new THREE.MeshStandardMaterial(), 'mortar-overdrive-ward-ending'),
     );
     expect(other.uniforms.uVeilOpacity).toBe(ending.uVeilOpacity);
     expect(other.uniforms.uVeilRimStrength).toBe(ending.uVeilRimStrength);
@@ -424,17 +431,20 @@ describe('a palette is uniform values on the shared programs', () => {
       setTransparentSort: () => {},
     } as unknown as Parameters<typeof installSpiritVeil>[0];
     const u = compiled(
-      createSpiritVeilMaterial(new THREE.MeshStandardMaterial(), 'rally-ward-ending'),
+      createSpiritVeilMaterial(new THREE.MeshStandardMaterial(), 'mortar-overdrive-ward-ending'),
     ).uniforms;
-    const full = SPIRIT_VEIL_PALETTES['rally-ward-ending'];
+    const full = SPIRIT_VEIL_PALETTES['mortar-overdrive-ward-ending'];
     const clock = sharedUniforms.uTime.value;
     try {
       installSpiritVeil(webgl, () => true);
       for (const t of [0, 0.1, 0.2, 5]) {
         sharedUniforms.uTime.value = t;
-        expect(u.uVeilOpacity.value, `${t}`).toBeCloseTo(full.opacity * RALLY_WARD_ENDING_DIM, 12);
+        expect(u.uVeilOpacity.value, `${t}`).toBeCloseTo(
+          full.opacity * MORTAR_OVERDRIVE_WARD_ENDING_DIM,
+          12,
+        );
         expect(u.uVeilRimStrength.value, `${t}`).toBeCloseTo(
-          full.rimStrength * RALLY_WARD_ENDING_DIM,
+          full.rimStrength * MORTAR_OVERDRIVE_WARD_ENDING_DIM,
           12,
         );
       }

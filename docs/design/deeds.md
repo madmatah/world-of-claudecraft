@@ -302,24 +302,24 @@ account ledger (`src/sim/account_ledger.ts`), and its scope model is fixed:
   shows, degrading to the character's own fills when the read fails. Its
   `deeds.earnedCount` stays character-scoped (the table above).
 
-## Realm Racers deeds
+## Mortar Overdrive deeds
 
-The `pvp_rr_*` family in `src/sim/content/deeds.ts` covers the Realm Racers vehicle race
-(`docs/design/realm-racers.md`). The ids are frozen and appended in this order:
+The `pvp_mortar_overdrive_*` family in `src/sim/content/deeds.ts` covers the Mortar Overdrive vehicle race
+(`docs/design/mortar-overdrive.md`). The ids are frozen and appended in this order:
 
 | Id | Trigger | Earned by |
 |---|---|---|
-| `pvp_rr_first_race` | `manual` | crossing the finish line in a rated heat (never a pilot who quit or was still out when the classification closed) |
-| `pvp_rr_first_win` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need a human rival who raced) |
-| `pvp_rr_wins_10` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need a human rival who raced) |
-| `pvp_rr_wins_25` | `meter` on `rrWins` | the meter reaching the record's `amount` (wins need a human rival who raced); rewards a title |
-| `pvp_rr_fast_lap` | `manual` | a lap of its circuit under that circuit's threshold |
-| `pvp_rr_clean_race` | `manual` | finishing a rated heat without a garden excursion or a counted rival contact |
-| `pvp_rr_comeback` | `manual` | winning a rated heat with a human rival who raced, after being dead last and hit by a Ground Blast |
-| `pvp_rr_rampart_lap` | `manual` | a lap of its circuit under that circuit's threshold |
-| `pvp_rr_lagoon_lap` | `manual` | a lap of its circuit under that circuit's threshold |
+| `pvp_mortar_overdrive_first_race` | `manual` | crossing the finish line in a rated heat (never a pilot who quit or was still out when the classification closed) |
+| `pvp_mortar_overdrive_first_win` | `meter` on `mortarOverdriveWins` | the meter reaching the record's `amount` (wins need a human rival who raced) |
+| `pvp_mortar_overdrive_wins_10` | `meter` on `mortarOverdriveWins` | the meter reaching the record's `amount` (wins need a human rival who raced) |
+| `pvp_mortar_overdrive_wins_25` | `meter` on `mortarOverdriveWins` | the meter reaching the record's `amount` (wins need a human rival who raced); rewards a title |
+| `pvp_mortar_overdrive_fast_lap` | `manual` | a lap of its circuit under that circuit's threshold |
+| `pvp_mortar_overdrive_clean_race` | `manual` | finishing a rated heat without a garden excursion or a counted rival contact |
+| `pvp_mortar_overdrive_comeback` | `manual` | winning a rated heat with a human rival who raced, after being dead last and hit by a Ground Blast |
+| `pvp_mortar_overdrive_rampart_lap` | `manual` | a lap of its circuit under that circuit's threshold |
+| `pvp_mortar_overdrive_lagoon_lap` | `manual` | a lap of its circuit under that circuit's threshold |
 
-**Zero Renown, still in the Book.** Every `pvp_rr_*` deed is authored at Renown 0 and none is a
+**Zero Renown, still in the Book.** Every `pvp_mortar_overdrive_*` deed is authored at Renown 0 and none is a
 Feat, so each counts toward Book completion and never scores on the Renown board. The reason is
 recorded beside the records: a casual, unranked heat that the server backfills with house
 pilots must never score the board, the rule the comment there cites from the Vale Cup and
@@ -327,27 +327,27 @@ Fiesta families (both at Renown 0 today, as retired Feats). The exact zero-Renow
 this family included, is pinned by `tests/deeds_completion.test.ts`.
 
 **Placing-based.** A heat has a whole finishing order, not a win/lose pair, so the family counts
-outcomes along that order and carries no loss counter. The win thresholds read the `rrWins`
-meter: `endMatch` (`src/sim/social/realm_racers.ts`) adds one for a human winner of a rated
-heat who had a human rival who raced (below), then `onRallyRaceEndForDeeds` marks every human on the grid dirty so the meter deeds
-re-check on the next deeds pass (`rrWins` carries no narrow dirty key). The other deeds are
+outcomes along that order and carries no loss counter. The win thresholds read the `mortarOverdriveWins`
+meter: `endMatch` (`src/sim/mortar_overdrive/race.ts`) adds one for a human winner of a rated
+heat who had a human rival who raced (below), then `onMortarOverdriveRaceEndForDeeds` marks every human on the grid dirty so the meter deeds
+re-check on the next deeds pass (`mortarOverdriveWins` carries no narrow dirty key). The other deeds are
 bespoke grants:
 
-- `onRallyRaceEndForDeeds` (`src/sim/deeds.ts`) runs once at race end over a structural entry per
-  pilot (`RallyRaceDeedEntry`): `pvp_rr_first_race` for a finisher, `pvp_rr_clean_race` for a
-  finisher whose run stayed clean, `pvp_rr_comeback` for the winner flagged for a comeback who
+- `onMortarOverdriveRaceEndForDeeds` (`src/sim/deeds.ts`) runs once at race end over a structural entry per
+  pilot (`MortarOverdriveRaceDeedEntry`): `pvp_mortar_overdrive_first_race` for a finisher, `pvp_mortar_overdrive_clean_race` for a
+  finisher whose run stayed clean, `pvp_mortar_overdrive_comeback` for the winner flagged for a comeback who
   had a human rival who raced (`humanRival`).
 - Clean means that, before crossing the line, the pilot never entered the garden band (the verge
   does not count) and never traded a counted bump with a rival: an announced contact at or above
-  `REALM_RACERS_BUMP_EVENT_MIN_IMPACT`, excluding a pair still parting from a recovery ghost
-  (`rallyContactCounts`). The comeback flag needs both halves: on some racing tick the pilot was
+  `MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT`, excluding a pair still parting from a recovery ghost
+  (`mortarOverdriveContactCounts`). The comeback flag needs both halves: on some racing tick the pilot was
   the trailing pilot still driving, and at some point a Ground Blast hit them.
-- `onRallyLapForDeeds` runs from `tickProgress` at every lap wrap, the finishing lap included,
+- `onMortarOverdriveLapForDeeds` runs from `tickProgress` at every lap wrap, the finishing lap included,
   timed on the pilot's own lap clock. It grants the fast-lap deed of the circuit in
-  `RALLY_FAST_LAP_DEEDS` when the lap beats that circuit's threshold; a circuit absent from that
+  `MORTAR_OVERDRIVE_FAST_LAP_DEEDS` when the lap beats that circuit's threshold; a circuit absent from that
   table never grants. The grant lands at the wrap, so it stands if the pilot later quits.
 
-**Titles.** `pvp_rr_wins_25` is the family's only title, and it carries the same-change twin
+**Titles.** `pvp_mortar_overdrive_wins_25` is the family's only title, and it carries the same-change twin
 this file's recipe requires: a slot in `RELIQUARY_HORIZON_TITLES`, the `horizons_titles` page in
 `src/sim/content/reliquary.ts`, pinned by `tests/reliquary_content.test.ts`. No crest art is
 committed for the family yet, so each id rides its category crest through `DEED_ART_PENDING` in
@@ -355,22 +355,22 @@ committed for the family yet, so each id rides its category crest through `DEED_
 
 **Practice and house pilots.** Only a rated heat counts: one seated from the queue on a
 circuit's public lane (`match.practice === null`). Both hooks return at once for a practice
-heat, and `endMatch` gates the `rrWins` increment on the same test. A queued heat that the
+heat, and `endMatch` gates the `mortarOverdriveWins` increment on the same test. A queued heat that the
 server backfilled with house pilots is rated, but a win counts only against people
-(`src/sim/social/realm_racers_credit.ts`): the win and every win deed (`first_win`, `wins_10`,
+(`src/sim/mortar_overdrive/credit.ts`): the win and every win deed (`first_win`, `wins_10`,
 `wins_25`, `comeback`) need at least one OTHER human who raced: on the roster the race records
-on the tick its phase turns to racing (`RealmRacersMatch.seatedAtGo`, so a pilot the countdown
+on the tick its phase turns to racing (`MortarOverdriveMatch.seatedAtGo`, so a pilot the countdown
 lost never started it), and who then finished or completed at least lap 1 (a linkdead or idle
 human never unlocks someone else's win; one who drove a lap and then left still does). A solo
 queuer backfilled against three house pilots keeps the finish deeds (`first_race`,
 `clean_race`) and the flying laps, which are time trials, and banks no win. A house pilot never earns: its entry
-is skipped by `onRallyRaceEndForDeeds`, `onRallyLapForDeeds` returns for it, and its win moves
-no `rrWins`. A heat decided before GO is void and credits nothing: no lap has been run, and
+is skipped by `onMortarOverdriveRaceEndForDeeds`, `onMortarOverdriveLapForDeeds` returns for it, and its win moves
+no `mortarOverdriveWins`. A heat decided before GO is void and credits nothing: no lap has been run, and
 `endMatch` returns before the meter or the race-end hook runs.
 
 Pinned tests: `tests/deeds_sites_pin.test.ts` (each hook and its refusals),
-`tests/realm_racers_match.test.ts` (crediting from a real heat, practice and house-pilot
-refusals, the other-human rule, `rrWins` persistence), `tests/realm_racers_loading_lobby.test.ts`
+`tests/mortar_overdrive_match.test.ts` (crediting from a real heat, practice and house-pilot
+refusals, the other-human rule, `mortarOverdriveWins` persistence), `tests/mortar_overdrive_loading_lobby.test.ts`
 (void heats credit nothing, a walkover after GO banks the win but no crossing), `tests/deeds_content.test.ts` (append order, Renown values,
 meter triggers) and `tests/deeds_completion.test.ts` (the zero-Renown set).
 

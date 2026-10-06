@@ -12359,35 +12359,35 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.keybinds.petTaunt': '펫: 도발',
   'hudChrome.keybinds.petDefensive': '펫: 방어',
   'hudChrome.keybinds.petAggressive': '펫: 공격적',
-  'guide.nav.realmRacers': '렐름 레이서즈',
-  'guide.realmRacersPage.heading': '렐름 레이서즈',
-  'guide.realmRacersPage.intro':
+  'guide.nav.mortarOverdrive': '박격 오버드라이브',
+  'guide.mortarOverdrivePage.heading': '박격 오버드라이브',
+  'guide.mortarOverdrivePage.intro':
     '상록 정원 레이싱 협회는 운전할 배짱만 있다면 누구나 참가할 수 있는 정원 서킷을 운영합니다: 그리드에는 네 명의 파일럿, 하나의 시그니처 무기, 그리고 대담한 라인만큼이나 깔끔한 라인에도 보상을 주는 생울타리로 둘러싸인 트랙이 있습니다.',
-  'guide.realmRacersPage.loreHeading': '상록 정원 레이싱 협회',
-  'guide.realmRacersPage.loreBody':
+  'guide.mortarOverdrivePage.loreHeading': '상록 정원 레이싱 협회',
+  'guide.mortarOverdrivePage.loreBody':
     '상록 정원의 정원장들은 생울타리 사이의 관리용 통로가 손수레보다 빠른 무언가를 위한 것이라고는 생각한 적이 없었지만, 시간이 남아돌고 빌린 탈것을 가진 한 관리인의 생각은 달랐습니다. 그 첫 무모한 도전에서 자라난 협회는 이제 제대로 된 서킷을 그리고, 그리드를 가득 채우며, 네 명의 파일럿이 준비될 때마다 깃발을 내립니다.',
-  'guide.realmRacersPage.howHeading': '플레이 방법',
-  'guide.realmRacersPage.howQueueBody':
-    '세계 어디서든 렐름 레이서즈 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.',
-  'guide.realmRacersPage.howRaceBody':
+  'guide.mortarOverdrivePage.howHeading': '플레이 방법',
+  'guide.mortarOverdrivePage.howQueueBody':
+    '세계 어디서든 박격 오버드라이브 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.',
+  'guide.mortarOverdrivePage.howRaceBody':
     '평소 이동 키로 조향, 가속, 제동을 하고, 점프 키를 누르고 있으면 핸드브레이크로 좁은 코너를 미끄러져 지날 수 있습니다. 모든 파일럿은 그라운드 블래스트를 지니고 있는데, 이는 맞은 상대를 휘청이게 하는 전방 사격이므로 앞을 막는 라이벌은 결코 안전하지 않습니다. 마지막 랩 이후 먼저 결승선을 넘는 쪽이 승리하며, 레이스가 결정되는 순간 각자의 위치로 전체 순위가 매겨집니다.',
-  'guide.realmRacersPage.howLimitsBody':
+  'guide.mortarOverdrivePage.howLimitsBody':
     '트랙 양옆의 정원은 열려 있고 주행할 수 있어서, 넓게 나가거나 밀려나거나 화단을 미끄러져 지나가는 것도 레이스의 일부입니다. 대가는 속도뿐이죠. 다만 그것으로 이득을 봐서는 안 됩니다. 트랙을 벗어나 트랙보다 짧은 라인을 타면 진행위원이 벗어난 지점으로 되돌려 놓고, 정원에 멈춰 선 파일럿도 몇 초 뒤 트랙으로 복귀시킵니다.',
-  'guide.realmRacersPage.howPracticeBody':
+  'guide.mortarOverdrivePage.howPracticeBody':
     '아직 낯선 상대와 겨룰 준비가 되지 않았나요? 연습 주행은 같은 머신, 같은 조작감으로 전용 서킷 사본에서 직접 고른 상대와 달릴 수 있어, 실전 대기열에 서기 전에 라인을 익힐 수 있습니다.',
-  'guide.realmRacersPage.machineHeading': '대여 머신',
-  'guide.realmRacersPage.machineBody':
+  'guide.mortarOverdrivePage.machineHeading': '대여 머신',
+  'guide.mortarOverdrivePage.machineBody':
     '모든 파일럿은 그날 협회의 대여 머신을 몰게 됩니다: 아무도 자신의 탈것을 그리드에 가져오지 않으며, 탈것을 얻지 못해 피트에서 구경만 하는 사람도 없습니다. 이 머신은 익히기 쉽고, 코너의 한계를 찾아내면 실제 무게감이 느껴집니다.',
-  'guide.realmRacersPage.circuitsHeading': '서킷',
-  'guide.realmRacersPage.circuitsPracticeTitle': '상록 정원 훈련장',
-  'guide.realmRacersPage.circuitsPracticeBody':
+  'guide.mortarOverdrivePage.circuitsHeading': '서킷',
+  'guide.mortarOverdrivePage.circuitsPracticeTitle': '상록 정원 훈련장',
+  'guide.mortarOverdrivePage.circuitsPracticeBody':
     '모든 파일럿이 머신을 익히는 서킷: 연습 중인 사람에게만 해당하며 다른 누구에게도 영향을 주지 않는, 더 짧은 정원 순환로입니다.',
-  'guide.realmRacersPage.circuitsCompetitionTitle': '대회 서킷',
-  'guide.realmRacersPage.circuitsCompetitionBody':
+  'guide.mortarOverdrivePage.circuitsCompetitionTitle': '대회 서킷',
+  'guide.mortarOverdrivePage.circuitsCompetitionBody':
     '대기열 레이스는 연습용 순환로를 절대 달리지 않습니다. 대신 더 긴 대회용 서킷들로 이루어진 별도의 풀에서 뽑히며, 각각은 땅을 빌려온 게임 존의 테마로 꾸며져 있어 머신은 그대로여도 무대는 바뀝니다.',
-  'guide.realmRacersPage.rewardsHeading': '무엇을 위해 달리는가',
-  'guide.realmRacersPage.rewardsBody':
-    '렐름 레이서즈는 경험치도 전리품도 주지 않습니다: 이것은 그 자체를 위해, 그리고 그것이 주는 위상을 위해 하는 스포츠입니다. 그래도 등급전 히트에서의 순위는 업적의 서에 반영됩니다: 결승선 통과, 승리, 그리고 더 어려운 운전 업적들이 도전할 의지가 있는 파일럿을 그곳에서 기다립니다. 다만 승리는 적어도 한 명의 다른 플레이어가 함께 출발해 실제로 달렸을 때(결승선을 통과하거나 적어도 한 바퀴를 완주했을 때)만 인정됩니다: 협회 소속 파일럿이나 출발선을 한 번도 떠나지 않은 상대를 이기는 것은 연습일 뿐 기록이 아닙니다. 이 업적들은 명성을 주지 않지만, 충분히 많이 승리하면 달고 다닐 수 있는 장식용 칭호를 얻습니다.',
+  'guide.mortarOverdrivePage.rewardsHeading': '무엇을 위해 달리는가',
+  'guide.mortarOverdrivePage.rewardsBody':
+    '박격 오버드라이브는 경험치도 전리품도 주지 않습니다: 이것은 그 자체를 위해, 그리고 그것이 주는 위상을 위해 하는 스포츠입니다. 그래도 등급전 히트에서의 순위는 업적의 서에 반영됩니다: 결승선 통과, 승리, 그리고 더 어려운 운전 업적들이 도전할 의지가 있는 파일럿을 그곳에서 기다립니다. 다만 승리는 적어도 한 명의 다른 플레이어가 함께 출발해 실제로 달렸을 때(결승선을 통과하거나 적어도 한 바퀴를 완주했을 때)만 인정됩니다: 협회 소속 파일럿이나 출발선을 한 번도 떠나지 않은 상대를 이기는 것은 연습일 뿐 기록이 아닙니다. 이 업적들은 명성을 주지 않지만, 충분히 많이 승리하면 달고 다닐 수 있는 장식용 칭호를 얻습니다.',
   'entities.npcs.chronicler_saul.name': '연대기 기록관 사울',
   'entities.npcs.chronicler_saul.title': '이스트브룩 골짜기 연대기',
   'entities.npcs.chronicler_saul.greeting':
@@ -15408,131 +15408,135 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.auraOverlay.procs.aetherRush': '에테르 쇄도',
   'itemUi.vendor.buyStack': '{count}개 구매',
   'itemUi.vendor.buyStackAria': '{price}에 {item} {count}개 구매',
-  'hudChrome.keybinds.rally': '렐름 레이서즈',
-  'hudChrome.rally.kicker': '상록 정원 레이싱 협회',
-  'hudChrome.rally.title': '렐름 레이서즈',
-  'hudChrome.rally.close': '렐름 레이서즈 창 닫기',
-  'hudChrome.rally.pitch':
+  'hudChrome.keybinds.mortarOverdrive': '박격 오버드라이브',
+  'hudChrome.mortarOverdrive.kicker': '상록 정원 레이싱 협회',
+  'hudChrome.mortarOverdrive.title': '박격 오버드라이브',
+  'hudChrome.mortarOverdrive.close': '박격 오버드라이브 창 닫기',
+  'hudChrome.mortarOverdrive.pitch':
     '강철이 생울타리를 가른다. 라인을 찾고, 슬라이드를 믿으며, 모든 라이벌을 먼지에 남겨라.',
-  'hudChrome.rally.promiseCircuit': '정원 서킷',
-  'hudChrome.rally.promiseSlide': '핸드브레이크 슬라이드',
-  'hudChrome.rally.promiseRival': '실시간 라이벌',
-  'hudChrome.rally.howToPlayTitle': '플레이 방법',
-  'hudChrome.rally.howToPlay':
+  'hudChrome.mortarOverdrive.promiseCircuit': '정원 서킷',
+  'hudChrome.mortarOverdrive.promiseSlide': '핸드브레이크 슬라이드',
+  'hudChrome.mortarOverdrive.promiseRival': '실시간 라이벌',
+  'hudChrome.mortarOverdrive.howToPlayTitle': '플레이 방법',
+  'hudChrome.mortarOverdrive.howToPlay':
     '이동 키로 가속, 제동, 조향을 하고 점프 버튼을 누르고 있으면 핸드브레이크로 좁은 코너를 미끄러져 지날 수 있습니다. 결승선을 먼저 넘는 쪽이 승리합니다.',
-  'hudChrome.rally.orRace': '또는',
-  'hudChrome.rally.handbrake': '핸드브레이크',
-  'hudChrome.rally.join': '경기 대기열 참가',
-  'hudChrome.rally.leave': '대기열 나가기',
-  'hudChrome.rally.forfeit': '경기 포기',
-  'hudChrome.rally.forfeitConfirm': '포기 확인',
-  'hudChrome.rally.waiting': '조종사 {count}명이 출발 그리드를 기다리고 있습니다.',
-  'hudChrome.rally.queueNeedsRealm':
+  'hudChrome.mortarOverdrive.orRace': '또는',
+  'hudChrome.mortarOverdrive.handbrake': '핸드브레이크',
+  'hudChrome.mortarOverdrive.join': '경기 대기열 참가',
+  'hudChrome.mortarOverdrive.leave': '대기열 나가기',
+  'hudChrome.mortarOverdrive.forfeit': '경기 포기',
+  'hudChrome.mortarOverdrive.forfeitConfirm': '포기 확인',
+  'hudChrome.mortarOverdrive.waiting': '조종사 {count}명이 출발 그리드를 기다리고 있습니다.',
+  'hudChrome.mortarOverdrive.queueNeedsRealm':
     '대기열 경주에는 온라인 서버의 다른 조종사가 필요합니다. 대신 연습 주행을 해 보세요.',
-  'hudChrome.rally.queued': '대기 순번 {position}/{count}. 전차를 준비하고 있습니다.',
-  'hudChrome.rally.racingAgainst': '경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
-  'hudChrome.rally.practice': '연습',
-  'hudChrome.rally.practiceIntro':
+  'hudChrome.mortarOverdrive.queued': '대기 순번 {position}/{count}. 전차를 준비하고 있습니다.',
+  'hudChrome.mortarOverdrive.racingAgainst':
+    '경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
+  'hudChrome.mortarOverdrive.practice': '연습',
+  'hudChrome.mortarOverdrive.practiceIntro':
     '온전히 당신만의 서킷입니다. 상대를 고르고 조작을 익힌 뒤, 준비되면 출발하세요.',
-  'hudChrome.rally.practiceUnavailable':
+  'hudChrome.mortarOverdrive.practiceUnavailable':
     '연습 서킷이 모두 사용 중입니다. 몇 분 뒤에 다시 시도해 주세요.',
-  'hudChrome.rally.practiceCircuit':
+  'hudChrome.mortarOverdrive.practiceCircuit':
     '이번 주행은 {circuit}에서 진행됩니다. 모든 파일럿이 기체를 익히는 서킷이며, 정식 경기는 별도의 서킷을 추첨합니다.',
-  'hudChrome.rally.practiceTierLegend': '상대 고르기',
-  'hudChrome.rally.practiceControlsLegend': '조작 방법',
-  'hudChrome.rally.practicePlay': '경기 시작',
-  'hudChrome.rally.practiceBack': '뒤로',
-  'hudChrome.rally.practiceTouchNote':
+  'hudChrome.mortarOverdrive.practiceTierLegend': '상대 고르기',
+  'hudChrome.mortarOverdrive.practiceControlsLegend': '조작 방법',
+  'hudChrome.mortarOverdrive.practicePlay': '경기 시작',
+  'hudChrome.mortarOverdrive.practiceBack': '뒤로',
+  'hudChrome.mortarOverdrive.practiceTouchNote':
     '터치 화면에서는 왼쪽 스틱으로 조향과 주행을 하고, 점프 버튼이 핸드브레이크입니다.',
-  'hudChrome.rally.tierRookie': '루키',
-  'hudChrome.rally.tierDriver': '드라이버',
-  'hudChrome.rally.tierAce': '에이스',
-  'hudChrome.rally.tierRookieHint': '주행선을 익히는 중입니다. 첫 바퀴에도 이길 수 있습니다.',
-  'hudChrome.rally.tierDriverHint': '서킷을 알고 늦게까지 제동합니다. 팽팽한 승부입니다.',
-  'hudChrome.rally.tierAceHint': '모든 정점을 노리고 헤어핀에서는 미끄러집니다. 최선을 다하세요.',
-  'hudChrome.rally.controlThrottle': '가속',
-  'hudChrome.rally.controlThrottleHint':
+  'hudChrome.mortarOverdrive.tierRookie': '루키',
+  'hudChrome.mortarOverdrive.tierDriver': '드라이버',
+  'hudChrome.mortarOverdrive.tierAce': '에이스',
+  'hudChrome.mortarOverdrive.tierRookieHint':
+    '주행선을 익히는 중입니다. 첫 바퀴에도 이길 수 있습니다.',
+  'hudChrome.mortarOverdrive.tierDriverHint': '서킷을 알고 늦게까지 제동합니다. 팽팽한 승부입니다.',
+  'hudChrome.mortarOverdrive.tierAceHint':
+    '모든 정점을 노리고 헤어핀에서는 미끄러집니다. 최선을 다하세요.',
+  'hudChrome.mortarOverdrive.controlThrottle': '가속',
+  'hudChrome.mortarOverdrive.controlThrottleHint':
     '누르고 있으면 가속합니다. 실제 관성이 있어 속도가 서서히 붙습니다.',
-  'hudChrome.rally.controlBrake': '제동과 후진',
-  'hudChrome.rally.controlBrakeHint':
+  'hudChrome.mortarOverdrive.controlBrake': '제동과 후진',
+  'hudChrome.mortarOverdrive.controlBrakeHint':
     '누르고 있으면 감속하고, 멈춘 뒤 다시 누르고 있으면 후진합니다.',
-  'hudChrome.rally.controlSteer': '조향',
-  'hudChrome.rally.controlSteerHint':
+  'hudChrome.mortarOverdrive.controlSteer': '조향',
+  'hudChrome.mortarOverdrive.controlSteerHint':
     '차체 앞을 코너로 향하게 합니다. 중간 속도에서 가장 잘 돕니다.',
-  'hudChrome.rally.controlHandbrake': '핸드브레이크',
-  'hudChrome.rally.controlHandbrakeHint': '일부러 접지력을 끊어 좁은 코너를 미끄러져 통과합니다.',
-  'hudChrome.rally.racingAgainstBot':
+  'hudChrome.mortarOverdrive.controlHandbrake': '핸드브레이크',
+  'hudChrome.mortarOverdrive.controlHandbrakeHint':
+    '일부러 접지력을 끊어 좁은 코너를 미끄러져 통과합니다.',
+  'hudChrome.mortarOverdrive.racingAgainstBot':
     '연습 경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
-  'hudChrome.rally.won': '승리. 상록 정원에 새로운 챔피언이 탄생했습니다.',
-  'hudChrome.rally.lost':
+  'hudChrome.mortarOverdrive.won': '승리. 상록 정원에 새로운 챔피언이 탄생했습니다.',
+  'hudChrome.mortarOverdrive.lost':
     '{total}명 중 {position}위로 완주했습니다. 다음 출발선이 기다리고 있습니다.',
-  'hudChrome.rally.standingsYou': '나',
-  'hudChrome.rally.standingsFinished': '완주',
-  'hudChrome.rally.standingsRetired': '기권',
-  'hudChrome.rally.lobbyReadyCount': '준비 완료 조종사 {ready}/{total}명',
-  'hudChrome.rally.lobbyReady': '준비 완료',
-  'hudChrome.rally.lobbyWaiting': '대기 중',
-  'hudChrome.rally.lobbyPreparing': '서킷 준비 중',
-  'hudChrome.rally.lobbyPrepared': '서킷 준비 완료',
-  'hudChrome.rally.lobbyStartsBy':
+  'hudChrome.mortarOverdrive.standingsYou': '나',
+  'hudChrome.mortarOverdrive.standingsFinished': '완주',
+  'hudChrome.mortarOverdrive.standingsRetired': '기권',
+  'hudChrome.mortarOverdrive.lobbyReadyCount': '준비 완료 조종사 {ready}/{total}명',
+  'hudChrome.mortarOverdrive.lobbyReady': '준비 완료',
+  'hudChrome.mortarOverdrive.lobbyWaiting': '대기 중',
+  'hudChrome.mortarOverdrive.lobbyPreparing': '서킷 준비 중',
+  'hudChrome.mortarOverdrive.lobbyPrepared': '서킷 준비 완료',
+  'hudChrome.mortarOverdrive.lobbyStartsBy':
     '모든 조종사가 준비되면 레이스가 시작됩니다. 늦어도 {time} 후에 시작합니다.',
-  'hudChrome.rally.circuitName_evergarden_practice': '상록 정원 훈련장',
-  'hudChrome.rally.circuitName_evergarden_express_tour': '상록 정원 익스프레스 투어',
-  'hudChrome.rally.circuitName_nightbloom_moonwell_run': '밤꽃 평원 달샘 런',
-  'hudChrome.rally.circuitName_drakelands_rampart_run': '드레이크랜드 성벽 런',
-  'hudChrome.rally.circuitName_palmreach_lagoon_run': '야자 해안 석호 런',
-  'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
-  'hudChrome.rally.draw': '동시 결승. 경기 심판진이 무승부를 선언했습니다.',
-  'hudChrome.rally.position': '순위 {position}/{total}',
-  'hudChrome.rally.lap': '바퀴 {lap}/{total}',
-  'hudChrome.rally.time': '{minutes}:{seconds}',
-  'hudChrome.rally.speed': '속도 {speed}',
-  'hudChrome.rally.wrongWay': '역주행',
-  'hudChrome.rally.offTrack': '트랙으로 복귀: {seconds}',
-  'hudChrome.rally.cutReturned': '지름길. 트랙을 벗어난 지점으로 되돌아갔습니다.',
-  'hudChrome.rally.reset': '트랙으로 복귀',
-  'hudChrome.rally.pickupCharge': '포탄 장전',
-  'hudChrome.rally.pickupNitro': '니트로 준비',
-  'hudChrome.rally.pickupWard': '보호막 발동',
-  'hudChrome.rally.pickupSlick': '기름 준비',
-  'hudChrome.rally.wardHeld': '보호막',
-  'hudChrome.rally.wardBroken': '보호막 파괴',
-  'hudChrome.auraEffect.rallyWard':
+  'hudChrome.mortarOverdrive.circuitName_evergarden_practice': '상록 정원 훈련장',
+  'hudChrome.mortarOverdrive.circuitName_evergarden_express_tour': '상록 정원 익스프레스 투어',
+  'hudChrome.mortarOverdrive.circuitName_nightbloom_moonwell_run': '밤꽃 평원 달샘 런',
+  'hudChrome.mortarOverdrive.circuitName_drakelands_rampart_run': '드레이크랜드 성벽 런',
+  'hudChrome.mortarOverdrive.circuitName_palmreach_lagoon_run': '야자 해안 석호 런',
+  'hudChrome.mortarOverdrive.podiumTime': '{minutes}:{seconds}.{tenths}',
+  'hudChrome.mortarOverdrive.draw': '동시 결승. 경기 심판진이 무승부를 선언했습니다.',
+  'hudChrome.mortarOverdrive.position': '순위 {position}/{total}',
+  'hudChrome.mortarOverdrive.lap': '바퀴 {lap}/{total}',
+  'hudChrome.mortarOverdrive.time': '{minutes}:{seconds}',
+  'hudChrome.mortarOverdrive.speed': '속도 {speed}',
+  'hudChrome.mortarOverdrive.wrongWay': '역주행',
+  'hudChrome.mortarOverdrive.offTrack': '트랙으로 복귀: {seconds}',
+  'hudChrome.mortarOverdrive.cutReturned': '지름길. 트랙을 벗어난 지점으로 되돌아갔습니다.',
+  'hudChrome.mortarOverdrive.reset': '트랙으로 복귀',
+  'hudChrome.mortarOverdrive.pickupCharge': '포탄 장전',
+  'hudChrome.mortarOverdrive.pickupNitro': '니트로 준비',
+  'hudChrome.mortarOverdrive.pickupWard': '보호막 발동',
+  'hudChrome.mortarOverdrive.pickupSlick': '기름 준비',
+  'hudChrome.mortarOverdrive.wardHeld': '보호막',
+  'hudChrome.mortarOverdrive.wardBroken': '보호막 파괴',
+  'hudChrome.auraEffect.mortarOverdriveWard':
     '다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.',
-  'hudChrome.auraEffect.rallyGhost':
+  'hudChrome.auraEffect.mortarOverdriveGhost':
     '트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.',
-  'hudChrome.auraEffect.rallyGroundBlast':
+  'hudChrome.auraEffect.mortarOverdriveGroundBlast':
     '이동 속도를 {pct}% 감소시킵니다. 피격 후 {gripSeconds}초 동안 기체의 접지력이 {gripPct}% 감소합니다.',
-  'hudChrome.auraEffect.rallyOffTrack':
+  'hudChrome.auraEffect.mortarOverdriveOffTrack':
     '이동 속도를 {pct}% 감소시킵니다. 기체의 접지력이 {gripPct}% 감소하고 저항이 도로 위의 {drag}배가 됩니다. 도로로 돌아올 때까지 지속됩니다.',
-  'entities.abilities.rally_nitro.name': '니트로',
-  'entities.abilities.rally_nitro.description':
+  'entities.abilities.mortar_overdrive_nitro.name': '니트로',
+  'entities.abilities.mortar_overdrive_nitro.description':
     '니트로를 태워 즉시 앞으로 {kick}미터/초만큼 가속합니다. {seconds}초 동안 최고 속도가 기체의 기본 상한보다 {speedPct}% 높아집니다.',
-  'entities.abilities.rally_oil_slick.name': '기름막',
-  'entities.abilities.rally_oil_slick.description':
+  'entities.abilities.mortar_overdrive_oil_slick.name': '기름막',
+  'entities.abilities.mortar_overdrive_oil_slick.description':
     '기체 아래에 기름을 쏟습니다. 기름은 {seconds}초 동안 트랙에 남습니다. 그 위로 달려든 경쟁자는 옆으로 밀려나며(빠를수록 더 세게), {gripSeconds}초 동안 접지력을 {gripPct}% 잃습니다. 자신의 기름은 한 번 빠져나오기 전까지는 자신에게 효과가 없습니다. 레이스 보호막이 이를 흡수합니다.',
-  'hudChrome.rally.countdown': '엔진 잠금 중. {seconds}초 뒤 출발',
-  'hudChrome.rally.go': '출발!',
-  'hudChrome.rally.finalLap': '마지막 바퀴',
-  'hudChrome.rally.chase': '{seconds}초 후 종료',
-  'hudChrome.rally.wonReturn': '승리! {seconds}초 뒤 돌아갑니다',
-  'hudChrome.rally.lostReturn': '완주. {seconds}초 뒤 돌아갑니다',
-  'hudChrome.rally.drawReturn': '무승부. {seconds}초 뒤 돌아갑니다',
-  'hudChrome.rally.voidReturn': '경기 무효. {seconds}초 뒤 돌아갑니다',
-  'hudChrome.rally.logQueued': '렐름 레이서즈 대기 순번: {position}.',
-  'hudChrome.rally.logUnqueued': '렐름 레이서즈 대기열에서 나왔습니다.',
-  'hudChrome.rally.bannerLap': '{total}바퀴 중 {lap}바퀴',
-  'hudChrome.rally.bannerWin': '경기에서 승리했습니다!',
-  'hudChrome.rally.bannerLoss': '{name}님이 경기에서 승리했습니다.',
-  'hudChrome.rally.bannerDraw': '경기가 무승부로 끝났습니다.',
-  'hudChrome.rally.logWin': '승리했습니다. 가장 먼저 결승선을 넘었습니다.',
-  'hudChrome.rally.logLoss': '{name}님이 결승선을 먼저 넘었습니다.',
-  'hudChrome.rally.logForfeit': '경기를 포기했습니다. {name}님이 승리합니다.',
-  'hudChrome.rally.bannerForfeit': '경기를 포기했습니다.',
-  'hudChrome.rally.logForfeitRaceOn': '경기를 포기했습니다. 경기는 당신 없이 계속됩니다.',
-  'hudChrome.rally.mobileLabel': '레이서즈',
-  'entities.abilities.rally_ground_blast.name': '그라운드 블래스트',
-  'entities.abilities.rally_ground_blast.description':
+  'hudChrome.mortarOverdrive.countdown': '엔진 잠금 중. {seconds}초 뒤 출발',
+  'hudChrome.mortarOverdrive.go': '출발!',
+  'hudChrome.mortarOverdrive.finalLap': '마지막 바퀴',
+  'hudChrome.mortarOverdrive.chase': '{seconds}초 후 종료',
+  'hudChrome.mortarOverdrive.wonReturn': '승리! {seconds}초 뒤 돌아갑니다',
+  'hudChrome.mortarOverdrive.lostReturn': '완주. {seconds}초 뒤 돌아갑니다',
+  'hudChrome.mortarOverdrive.drawReturn': '무승부. {seconds}초 뒤 돌아갑니다',
+  'hudChrome.mortarOverdrive.voidReturn': '경기 무효. {seconds}초 뒤 돌아갑니다',
+  'hudChrome.mortarOverdrive.logQueued': '박격 오버드라이브 대기 순번: {position}.',
+  'hudChrome.mortarOverdrive.logUnqueued': '박격 오버드라이브 대기열에서 나왔습니다.',
+  'hudChrome.mortarOverdrive.bannerLap': '{total}바퀴 중 {lap}바퀴',
+  'hudChrome.mortarOverdrive.bannerWin': '경기에서 승리했습니다!',
+  'hudChrome.mortarOverdrive.bannerLoss': '{name}님이 경기에서 승리했습니다.',
+  'hudChrome.mortarOverdrive.bannerDraw': '경기가 무승부로 끝났습니다.',
+  'hudChrome.mortarOverdrive.logWin': '승리했습니다. 가장 먼저 결승선을 넘었습니다.',
+  'hudChrome.mortarOverdrive.logLoss': '{name}님이 결승선을 먼저 넘었습니다.',
+  'hudChrome.mortarOverdrive.logForfeit': '경기를 포기했습니다. {name}님이 승리합니다.',
+  'hudChrome.mortarOverdrive.bannerForfeit': '경기를 포기했습니다.',
+  'hudChrome.mortarOverdrive.logForfeitRaceOn': '경기를 포기했습니다. 경기는 당신 없이 계속됩니다.',
+  'hudChrome.mortarOverdrive.mobileLabel': '레이서즈',
+  'entities.abilities.mortar_overdrive_ground_blast.name': '그라운드 블래스트',
+  'entities.abilities.mortar_overdrive_ground_blast.description':
     '전방 최소 {minRange}미터, 기체 정면 기준 {coneDegrees}도 이내의 지면 지점에 포탄을 발사합니다. 포탄은 {minFlight}~{maxFlight}초 뒤에 착탄합니다. 착탄 지점에서 {radius}미터 내의 모든 경쟁자가 공중으로 띄워지며 밀려나는데, {coreRadius}미터 이내에서는 최대 위력이고 가장자리로 갈수록 약해집니다. 또한 {gripSeconds}초 동안 접지력을 {gripPct}% 잃고 {slowSeconds}초 동안 {slowPct}% 느려집니다. 레이스 보호막이 이 공격을 흡수합니다.',
   // Craft Cast System Phase 6 M16 non-Latin fills
   'abilityUi.cast.crafting': '제작',

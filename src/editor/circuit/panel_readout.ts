@@ -7,13 +7,13 @@
 // it). One builder each, so the two can never quote a different number for the
 // same measurement.
 //
-// Every number here is read off `src/sim/realm_racers_circuit_metrics.ts`, the
+// Every number here is read off `src/sim/mortar_overdrive/circuit_metrics.ts`, the
 // same readout a content test runs over every shipped circuit. Nothing is
 // computed in this file.
 
-import type { RealmRacersCircuitProblem } from '../../sim/realm_racers_circuit_metrics';
-import { realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
-import { realmRacersGates } from '../../sim/realm_racers_spline';
+import type { MortarOverdriveCircuitProblem } from '../../sim/mortar_overdrive';
+import { mortarOverdrivePlacements } from '../../sim/mortar_overdrive/props_resolve';
+import { mortarOverdriveGates } from '../../sim/mortar_overdrive/spline';
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { problemDetail, problemHeadline } from './layout_core';
 import {
@@ -34,7 +34,7 @@ function row(table: HTMLTableElement, key: string, value: string, cls = ''): voi
   v.textContent = value;
 }
 
-function problemLine(problem: RealmRacersCircuitProblem): HTMLDivElement {
+function problemLine(problem: MortarOverdriveCircuitProblem): HTMLDivElement {
   const div = document.createElement('div');
   div.className = `problem ${problem.severity}`;
   const label = document.createElement('div');
@@ -103,7 +103,7 @@ export function readoutSection(host: PanelHost, section: ReadoutSection): HTMLEl
         `${Math.min(...halfWidths).toFixed(1)} to ${Math.max(...halfWidths).toFixed(1)} yd`,
       );
       row(table, 'width bands', String(record.widthBands.length));
-      row(table, 'recovery anchors', String(realmRacersGates(record).length));
+      row(table, 'recovery anchors', String(mortarOverdriveGates(record).length));
       // Beside the anchors rather than with the dressing: both are race
       // furniture the ROAD decides the shape of, and the width the operator is
       // painting here is what a row spreads over.
@@ -119,7 +119,7 @@ export function readoutSection(host: PanelHost, section: ReadoutSection): HTMLEl
       row(table, 'scatters', `${record.scatters?.length ?? 0} (${metrics.scatterCount} pieces)`);
       row(table, 'ponds', String(metrics.pondCount));
       row(table, 'water authored', record.basin ? 'yes' : 'no');
-      const unknown = realmRacersPlacements(record).unknownAssets;
+      const unknown = mortarOverdrivePlacements(record).unknownAssets;
       if (unknown.length > 0) row(table, 'unknown keys', unknown.join(', '), 'bad');
       break;
     }
@@ -147,7 +147,7 @@ export function readoutSection(host: PanelHost, section: ReadoutSection): HTMLEl
   return [heading(section), table];
 }
 
-export function problemsBlock(problems: readonly RealmRacersCircuitProblem[]): HTMLElement[] {
+export function problemsBlock(problems: readonly MortarOverdriveCircuitProblem[]): HTMLElement[] {
   const out: HTMLElement[] = [heading('problems')];
   if (problems.length === 0) {
     const clean = document.createElement('div');

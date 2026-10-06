@@ -1,10 +1,10 @@
-<!-- src/editor/circuit/: the Realm Racers circuit editor. Root, src/ and
+<!-- src/editor/circuit/: the Mortar Overdrive circuit editor. Root, src/ and
      src/editor/ CLAUDE.md carry the shared rules; this file covers what is
      specific to drawing a circuit. -->
 
-# src/editor/circuit/ : the Realm Racers circuit editor (`circuit_editor.html`)
+# src/editor/circuit/ : the Mortar Overdrive circuit editor (`circuit_editor.html`)
 
-A DEV tool. It draws a Realm Racers circuit against the live readout that says
+A DEV tool. It draws a Mortar Overdrive circuit against the live readout that says
 whether the sim can drive it, and exports a record to paste. It exists because
 authoring a circuit by hand failed twice on defects a sketch cannot show (a loop
 that crossed itself, a corner tighter than its own road), and the pool is meant
@@ -22,7 +22,7 @@ to grow to one themed circuit per game zone.
   nowhere else. The save arm validates the payload through
   `validateCircuitPayload` before writing, and it writes to
   `tmp/circuit-drafts/<id>.ts` (gitignored scratch), NEVER to
-  `src/sim/content/realm_racers_circuits.ts`: that module is hand-curated and its
+  `src/sim/content/mortar_overdrive/circuits.ts`: that module is hand-curated and its
   comments carry the reasoning behind every number. None of the three read arms
   decides anything in `vite.config.ts`: `draft_endpoints_core.ts` answers them, so
   the id handling is unit-tested (`tests/editor_circuit_draft_endpoints.test.ts`).
@@ -40,27 +40,27 @@ to grow to one themed circuit per game zone.
   carry a separator, since that is the guarantee that has to hold if the check
   upstream is ever loosened.
 
-## Driving a draft: `/dev rallydraft <id> [tier]`
+## Driving a draft: `/dev overdrivedraft <id> [tier]`
 The read endpoint exists so a running dev client can race a draft with no source
 edit and no restart. The command is intercepted in the CLIENT
-(`src/game/realm_racers_draft_dev.ts`, wired in `src/main.ts`) and not in
+(`src/game/mortar_overdrive/draft_dev.ts`, wired in `src/main.ts`) and not in
 `src/sim/dev_commands.ts`, for one reason that decides the shape: **the sim never
 fetches**. The client reads the draft, validates it with the same
 `validateCircuitPayload` the save endpoint runs, and hands the sim a plain record
-(`Sim.realmRacersRegisterDraftCircuit`); the sim's own `/dev rally` then races it,
-because a registered draft resolves through `realmRacersCircuitById` exactly like an
+(`Sim.mortarOverdriveRegisterDraftCircuit`); the sim's own `/dev overdrive` then races it,
+because a registered draft resolves through `mortarOverdriveCircuitById` exactly like an
 authored circuit. Offline dev builds only, and the sim refuses the registration
 outright without `ctx.devCommands`.
 
 ## Where the rules live
-- **The readout is `src/sim/realm_racers_circuit_metrics.ts`, not this
+- **The readout is `src/sim/mortar_overdrive/circuit_metrics.ts`, not this
   directory.** Every metric it computes is a rule the GAME depends on (the
   spline's projection window, the racing-surface envelope, the pond outlines,
-  the collision region, the instance band), and `tests/realm_racers_circuits.test.ts`
+  the collision region, the instance band), and `tests/mortar_overdrive_circuits.test.ts`
   runs it over every shipped circuit. A copy of any of it here would be a rule
   the game does not share.
 - **The curve is the real one.** The editor derives its geometry with
-  `realmRacersTrack()`, the same memoized derivation the sim and the renderer
+  `mortarOverdriveTrack()`, the same memoized derivation the sim and the renderer
   read, so what it draws is what the sim will drive. The memo rebuilds when the
   record behind an id changes, which is what lets a draft redraw on every drag.
 - A closed centripetal Catmull-Rom does NOT pass through the operator's stroke,
@@ -68,7 +68,7 @@ outright without `ctx.devCommands`.
 - **"The enclosure" is TWO objects, and only one of them is authored.** The
   `perimeter` is the WALL: collision slabs, the only thing on a circuit that
   stops a machine. `regionHalfX/Z` is the INSTANCE VOLUME, which collides with
-  nothing and instead answers `realmRacersLaneAt`, and that answer is what
+  nothing and instead answers `mortarOverdriveLaneAt`, and that answer is what
   flattens the ground (`world.ts` `terrainHeight`), switches off the world's
   colliders and mantling (`colliders.ts`), and picks the sky, the theme's art and
   the music. Hence `perimeter_outside_region` is load-bearing in one precise
@@ -101,25 +101,25 @@ outright without `ctx.devCommands`.
   anchors used to be a hand-placed list of lap fractions on the record, and the
   editor had a whole mode for dragging them. They are invisible, they never
   validate a lap, and the only thing they decide is where a reset puts a racer
-  back, so there was nothing to decide: `realmRacersGates` derives them from the
-  curve (one per `REALM_RACERS_GATE_SPACING` yards, each slid to the straightest
+  back, so there was nothing to decide: `mortarOverdriveGates` derives them from the
+  curve (one per `MORTAR_OVERDRIVE_GATE_SPACING` yards, each slid to the straightest
   road nearby). The editor DRAWS them and never edits them.
 - **The dressing is a DOCUMENT on the record, and the tool carries it whole.**
   `props` (each in track-space `{s, offset}` or circuit-local `{x, z}`),
   `scatters` (seeded fills) and `ponds` (placed decorative water) all round-trip
   through `export_core.ts`, and the catalog key is checked against the SIM
-  catalog (`src/sim/content/realm_racers_props.ts`), so the tool cannot bless a
+  catalog (`src/sim/content/mortar_overdrive/props.ts`), so the tool cannot bless a
   piece the game has no footprint for. The reason it is checked at all is the
   field this one replaced: the single `landmark` point was silently DROPPED by
   the validator, so the editor's preview drew an island the raced draft did not
   have. Positions themselves are never computed here:
-  `src/sim/realm_racers_props_resolve.ts` is the one resolver, and the readout
+  `src/sim/mortar_overdrive/props_resolve.ts` is the one resolver, and the readout
   reports what it placed. Props mode DRAWS what that resolver returns and
   nothing it worked out itself, which is why a footprint on the canvas is the
   footprint the collision set holds.
 - **A track-space placement stops where the projection stops being an answer.**
   Placing, and dragging, author track-space only inside
-  `REALM_RACERS_PROJECTION_ENVELOPE`, and only while the hinted projection came
+  `MORTAR_OVERDRIVE_PROJECTION_ENVELOPE`, and only while the hinted projection came
   back from its own local window (`props_core.ts` `stayedNear`). Past either,
   the piece is authored circuit-local at the exact point it was dropped. Both
   arms exist for one shape: the Express Tour runs two stretches eleven yards
@@ -128,7 +128,7 @@ outright without `ctx.devCommands`.
   quarter of a lap away and would follow the wrong road at the next centerline
   edit.
 - **A circuit has ONE lateral boundary, and it is the garden edge.** Road plus
-  verge plus run-off (`rallyGardenEdgeOffsetAt`): where the two slow bands change
+  verge plus run-off (`mortarOverdriveGardenEdgeOffsetAt`): where the two slow bands change
   over, where the border flowers are sown, and the racing surface the dressing
   may not stand on. Everything past it, both sides, is lawn to decorate.
   There were two other offset curves and both are gone. The APRON ran from the
@@ -138,7 +138,7 @@ outright without `ctx.devCommands`.
   The SHORE line (`halfWidth + apron`) was a CONTAINMENT line first (water, two
   hedges, a kneewall), then the curve the water was cut along, painted span by
   span through a stepwise `waterBands` table. Track limits are a referee now
-  (`src/sim/realm_racers_track_limits.ts`) so nothing on either curve stopped
+  (`src/sim/mortar_overdrive/track_limits.ts`) so nothing on either curve stopped
   anyone, and a table of lap fractions still derives the water from the road's
   own shape, which puts a canal down the middle of every circuit.
 - **The library is folded by the THEME, and that is its default category.** A
@@ -200,17 +200,17 @@ outright without `ctx.devCommands`.
   operator meant the roadside. `alt` overrules all of it.
 - **The theme is an ID, and the readout is what judges it.** A circuit names its
   art (`theme`) the same way it names its music: a plain string, offered by the
-  panel as a datalist off `REALM_RACERS_THEME_IDS` and resolved render-side by
-  `src/render/realm_racers_themes.ts`. The save endpoint checks the SHAPE only;
+  panel as a datalist off `MORTAR_OVERDRIVE_THEME_IDS` and resolved render-side by
+  `src/render/mortar_overdrive/themes.ts`. The save endpoint checks the SHAPE only;
   whether a registry authors the id is a metrics error (`unknown_theme`) the
   panel shows live, so a theme being written in the same change can still be
   typed in and previewed. Drawing a draft against a theme no circuit ships is
   the intended way to look at one: set the field, and the 3D preview rebuilds
   through the real track builder wearing it.
 - **The HOUR is authored beside the art, and ABSENT is one of its answers.**
-  `timeOfDay` names one of `REALM_RACERS_TIME_OF_DAY_IDS` and the circuit is
+  `timeOfDay` names one of `MORTAR_OVERDRIVE_TIME_OF_DAY_IDS` and the circuit is
   raced at that hour on every graphics tier, wherever the world's clock happens
-  to be; the phases live render-side (`src/render/realm_racers_daylight_core.ts`)
+  to be; the phases live render-side (`src/render/mortar_overdrive/daylight_core.ts`)
   and the readout names an id nobody authors (`unknown_time_of_day`), the same
   division of labour the theme takes. The empty choice in the picker writes NO
   field, which is the world's own clock and what every circuit did before the
@@ -222,7 +222,7 @@ outright without `ctx.devCommands`.
   collider radius is measured per style) and each theme offers its own zone's
   lamp first in the library. They are ordinary props: armed from the palette,
   snapped to the road edge, judged by the readout. What makes them different is
-  what the draw path does with them (`src/render/realm_racers_lamps.ts`): each
+  what the draw path does with them (`src/render/mortar_overdrive/lamps.ts`): each
   one joins the night light field from its own authored socket, so the track
   brightens because something above it is burning. Nothing derives a row of them
   along the centerline, for the reason the dressing ring was deleted: a spacing
@@ -238,7 +238,7 @@ outright without `ctx.devCommands`.
   author wants. Absent means the rectangle the ground has always been
   (`regionHalf*` plus the overshoot), which is what keeps both shipped circuits
   byte-identical, and outside it is the theme's water, which is decoration and
-  stops nobody. Where the shape ends up is `src/sim/realm_racers_ground.ts`, the
+  stops nobody. Where the shape ends up is `src/sim/mortar_overdrive/ground.ts`, the
   one resolver; the plan draws the SAMPLED curve rather than the record's points,
   because a closed centripetal Catmull-Rom does not pass through the polygon
   between them. `Fit ground` proposes one around the road the way `Fit wall`
@@ -248,7 +248,7 @@ outright without `ctx.devCommands`.
   and that is not a detail: the meadow, the flower beds and the seeded scatters
   are all generated over the perimeter BOX, so an island came ringed by a
   rectangle of grass and flowers standing on the sea. A box is not a shape. Each
-  of them asks `realmRacersOnGround` with the margin its own piece needs (a
+  of them asks `mortarOverdriveOnGround` with the margin its own piece needs (a
   scatter passes its footprint radius: what has to fit on the land is the piece,
   not the point it is centred on), and a circuit that authors no outline pays
   nothing at all for the rule. What an author PLACES by hand stays their own
@@ -269,8 +269,8 @@ outright without `ctx.devCommands`.
   there. Worse, its limit was 160 yards STRICTER than the rectangle the same
   resolver hands a circuit that draws nothing, so it refused shapes smaller than
   the one both shipped circuits wear, and an error refuses the draft outright at
-  `/dev rallydraft`. It is `ground_beyond_water_reach` now, a WARNING at
-  `realmRacersGroundReach` (the one function the default rectangle, the sea and
+  `/dev overdrivedraft`. It is `ground_beyond_water_reach` now, a WARNING at
+  `mortarOverdriveGroundReach` (the one function the default rectangle, the sea and
   the readout all read), naming what actually degrades: the sea is cast outward
   from the island's centroid and collapses along any coast that overran it.
 - **The water is PLACED.** A pond is an entry in the Props palette: drag a box,
@@ -286,7 +286,7 @@ outright without `ctx.devCommands`.
   yards from the road tripped it as surely as one at a corner exit). What is left
   is one problem per kind: nothing may stand on the racing surface. For a POND
   that is an error. For a PROP the severity is the piece's own solidity, decided
-  once in `realmRacersPropStanding` so the ghost and the panel read one answer:
+  once in `mortarOverdrivePropStanding` so the ghost and the panel read one answer:
   an error for anything that stops a machine, a WARNING for anything that does
   not. It was an error either way and refused the shape it could not tell from
   the shape it was written for, since an arch spanning the road to be driven
@@ -333,11 +333,11 @@ arrive without a look at the sheet. A selector nothing hides needs no guard, whi
 is why the rule names the ELEMENT rather than every rule in the file.
 
 ## The 3D preview is the shipped pipeline, not a second drawing
-- It renders the draft through `buildRealmRacersTrack` (`src/render/`), which
+- It renders the draft through `buildMortarOverdriveTrack` (`src/render/`), which
   already takes a plain record, so ground splat, kerbs, water, the perimeter and
   the dressing all appear here exactly as the game draws them, and a later
   theme or dressing pass shows up for free.
-- The builder authors WORLD coordinates around `REALM_RACERS_ORIGIN`. The
+- The builder authors WORLD coordinates around `MORTAR_OVERDRIVE_ORIGIN`. The
   preview subtracts that on the parent group rather than flying the camera out
   to the instance band, so every camera number in the core is circuit-local;
   the ground material reads OBJECT space, which a parent translation leaves
@@ -365,7 +365,7 @@ is why the rule names the ELEMENT rather than every rule in the file.
 - A rebuild is a full group swap on a debounce, never a rebuild inside a
   pointermove: the builder is one call that lands about half a megabyte of
   geometry. Freeing the old group goes through
-  `src/render/realm_racers_track_dispose_core.ts`, which frees what the builder
+  `src/render/mortar_overdrive/track_dispose_core.ts`, which frees what the builder
   MINTS and never what it borrows from a shared cache (every `InstancedMesh` in
   that group draws a cached geometry, so disposing it would take the authored
   circuits down with the draft).
@@ -506,7 +506,7 @@ of course: that is the circuit being edited.
 - **The row ghost's tint is the READOUT's own verdict**, like the dressing
   ghost's. Three things can refuse a row and only two belong to the gesture (off
   the road, too near a neighbour); the third is `pickup_row_off_road`, raised from
-  `realmRacersPickupRowFit` in `src/sim/realm_racers_circuit_metrics.ts`, which
+  `mortarOverdrivePickupRowFit` in `src/sim/mortar_overdrive/circuit_metrics.ts`, which
   measures the resolved boxes' four CORNERS rather than their centres. That is the
   one that catches a row looking central where the road changes width under it,
   and a ghost drawn green over it would be the tool blessing a placement the panel
@@ -614,8 +614,8 @@ of course: that is the circuit being edited.
   PREVIEW goes through the same door (`ghostRowPlacements`), or it would be that
   bug twelve times over.
 - **The ghost's tint is the READOUT's own verdict.** Red comes from
-  `realmRacersPropStanding`, the predicate `prop_blocks_racing_surface` is raised
-  from, extracted in `src/sim/realm_racers_circuit_metrics.ts` so it has one
+  `mortarOverdrivePropStanding`, the predicate `prop_blocks_racing_surface` is raised
+  from, extracted in `src/sim/mortar_overdrive/circuit_metrics.ts` so it has one
   reader. A tint derived from the editor's own arithmetic would be free to say
   green about a placement the panel then refuses, which is the whole thing the
   ghost exists to prevent one step earlier.
@@ -663,13 +663,13 @@ of course: that is the circuit being edited.
 - **The Load dialog lists the drafts on disk.** The dev server could list and
   parse them from the day those endpoints were written and nothing read the list,
   so the only way back into last week's circuit was to remember its id and type it
-  at `/dev rallydraft`. Rows come back NEWEST FIRST from the endpoint and are not
+  at `/dev overdrivedraft`. Rows come back NEWEST FIRST from the endpoint and are not
   re-sorted on the page, because two orderings of one list is how the row an
   operator clicked stops being the row they meant. A disk draft loads under its
   OWN id, unlike a shipped circuit (which is renamed so editing it cannot hand the
   memoized derivation of a live circuit a shape the game did not author): a draft
   is already a draft, and renaming it would leave Save draft writing a SECOND file
-  while `/dev rallydraft <id>` went on racing the one it was opened from. The list
+  while `/dev overdrivedraft <id>` went on racing the one it was opened from. The list
   is re-read on every OPEN, since the directory is scratch space another window, a
   shell, or this page's own Save draft all change under the dialog.
 - **The draft autosaves, and resuming is an OFFER.** The working record goes to
@@ -723,16 +723,16 @@ of course: that is the circuit being edited.
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
 | `library_core.ts` | what the library OFFERS: the category chips (theme first and by default), what a search matches, and what an empty grid says |
-| `pickup_rows_core.ts` | the RACE tool's canvas gestures: which lap fraction a click on the road means (and the unconstrained twin a DRAG follows), which row a click landed on, and what adding, moving, nudging or removing one does to the list, gap band and reorder included. Where the BOXES end up is not decided here: `src/sim/realm_racers_pickups.ts` resolves a row, and the plan draws what it returns |
+| `pickup_rows_core.ts` | the RACE tool's canvas gestures: which lap fraction a click on the road means (and the unconstrained twin a DRAG follows), which row a click landed on, and what adding, moving, nudging or removing one does to the list, gap band and reorder included. Where the BOXES end up is not decided here: `src/sim/mortar_overdrive/pickups.ts` resolves a row, and the plan draws what it returns |
 | `placement_core.ts` | what the GESTURE meant: which snap a drop takes, whether the readout will have it, and what a drag along the road lays down |
 | `thumbnail_core.ts` | where the camera stands to photograph one catalog piece: one pose for every tile, framed on the axis that binds |
 | `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered), the drafts on disk as the Load dialog lists them, and the tile cache |
 | `prop_thumbnails.ts` | the off-screen rig that takes the pictures. Lazily imported; never disposes what it borrowed from a shared cache |
-| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
+| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/mortar_overdrive/props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `enclosure_core.ts` | the TERRAIN tool's gestures on the WALL: which of its eight grips (or its centre) a click landed on, what dragging one writes, and what the centre one slides. Both gestures capture their press (`enclosureGrab`, `circuitMovedFromPress`), which is not symmetry for its own sake: without the grab the box snaps its edge under the pointer on the first move, and without the press-relative move a hundred frames of rounding compound into yards of drift. Both facts the record forces are here rather than in the page: a resize is SYMMETRIC, since one half-extent is both edges, and the box has no position at all, so the centre grip slides the circuit's contents instead. It does not judge the result: `road_outside_perimeter` is the readout's |
 | `envelope_core.ts` | what perimeter WALL fits a road of a given size, clamped to the ceilings (`MAX_PERIMETER_HALF_*`, the instance volume's own less the yard that keeps the wall inside it), plus the ground outline `Fit ground` proposes. A convenience, not a rule: the containment rules themselves are in the metrics core |
-| `fences_core.ts` | the TERRAIN tool's gestures: which barrier (and which of its points) a click landed on, what each click of a drawing run does to the run in progress, what a point drag, a nudge, a delete or a scale edit do to the list, and the offset that centres a circuit in its enclosure plus what has to move with it. It AUTHORS: where the modules end up is `src/sim/realm_racers_fences.ts`, and the plan draws what that resolver returns |
+| `fences_core.ts` | the TERRAIN tool's gestures: which barrier (and which of its points) a click landed on, what each click of a drawing run does to the run in progress, what a point drag, a nudge, a delete or a scale edit do to the list, and the offset that centres a circuit in its enclosure plus what has to move with it. It AUTHORS: where the modules end up is `src/sim/mortar_overdrive/fences.ts`, and the plan draws what that resolver returns |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |
 | `draft_endpoints_core.ts` | what the dev server answers about a saved draft: the list (newest first, with its last write), one parsed draft, and whether a DELETE may go ahead. It is handed a READER and has no writer at all, which is what makes "a GET never writes" structural; the delete arm names an id and the plugin unlinks it |
 | `preview_camera_core.ts` | where the 3D preview's camera stands: the orbit rig's clamps, and the fly-through pose along the racing line |

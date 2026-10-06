@@ -5,7 +5,7 @@
 // (the composed library as modularVariant builds it, stubble decal included, a
 // fixed class rig and a held weapon), for extra uv sets, and through a real
 // CharacterVisual on Low (its live tinted Lambert set, decals, weapon and far
-// mesh), and on the Realm Racers kart, the mount a racer's ward or recovery
+// mesh), and on the Mortar Overdrive kart, the mount a racer's ward or recovery
 // ghost veils with its pilot. The pixel legs prove what the depth pre-pass, the per-rig sort and
 // the decal variant are for: a ghost's inner surfaces never blend twice, a
 // ghost behind a camera-faded wall still shows through it, and a decal's clear
@@ -63,11 +63,11 @@ import { CharacterVisual, type FarBakeGate } from '../../src/render/characters/v
 import { type CompileArmHost, linkColorPrograms } from '../../src/render/compile_arms';
 import { compileTargetPrepared } from '../../src/render/compile_target_readiness';
 import { gfxInternalsForTest, sharedUniforms } from '../../src/render/gfx';
-import { rallyVeilLook } from '../../src/render/ghost_style_core';
+import { mortarOverdriveVeilLook } from '../../src/render/ghost_style_core';
 import { mountVisualSpecFor } from '../../src/render/mount_visuals';
 import { settleProgramVariants } from '../../src/render/program_variant_settle';
 import { spiritVeilFamilyPrewarmEntry } from '../../src/render/spirit_veil_prewarm';
-import { REALM_RACERS_MOUNT_KEY } from '../../src/sim/social/realm_racers';
+import { MORTAR_OVERDRIVE_MOUNT_KEY } from '../../src/sim/mortar_overdrive/race';
 
 const SIZE = 96;
 
@@ -861,7 +861,7 @@ describe('the veil palettes on a real driver', () => {
       await linkFamily(w);
       w.draw();
       const before = w.programs();
-      const pulse = SPIRIT_VEIL_PULSES['rally-ward-ending'];
+      const pulse = SPIRIT_VEIL_PULSES['mortar-overdrive-ward-ending'];
       if (!pulse) throw new Error('the ending ward does not pulse');
       const source = new THREE.MeshStandardMaterial({ map: greyMap(), color: 0x6699cc });
       const clock = sharedUniforms.uTime.value;
@@ -880,20 +880,24 @@ describe('the veil palettes on a real driver', () => {
         installSpiritVeil(w.renderer, () => false);
         const crest = 0;
         const trough = 1 / (2 * pulse.hz);
-        expect(at('rally-ward-ending', crest)).toEqual(at('rally-ward', crest));
-        const dim = at('rally-ward-ending', trough);
-        const full = at('rally-ward', trough);
+        expect(at('mortar-overdrive-ward-ending', crest)).toEqual(
+          at('mortar-overdrive-ward', crest),
+        );
+        const dim = at('mortar-overdrive-ward-ending', trough);
+        const full = at('mortar-overdrive-ward', trough);
         expect(brightness(dim)).toBeLessThan(brightness(full));
         // dimmer, never out: the ward is still plainly drawn at the trough
         expect(brightness(dim)).toBeGreaterThan(brightness(full) * pulse.dim * 0.5);
         // a whole cycle of the pulse links nothing
-        for (let t = 0; t < 1 / pulse.hz; t += 0.05) at('rally-ward-ending', t);
+        for (let t = 0; t < 1 / pulse.hz; t += 0.05) at('mortar-overdrive-ward-ending', t);
         expect(w.programs()).toBe(before);
         // reduced motion holds the trough, still distinct from the full ward
         installSpiritVeil(w.renderer, () => true);
-        expect(at('rally-ward-ending', crest)).toEqual(at('rally-ward-ending', 0.7));
-        expect(brightness(at('rally-ward-ending', crest))).toBeLessThan(
-          brightness(at('rally-ward', crest)),
+        expect(at('mortar-overdrive-ward-ending', crest)).toEqual(
+          at('mortar-overdrive-ward-ending', 0.7),
+        );
+        expect(brightness(at('mortar-overdrive-ward-ending', crest))).toBeLessThan(
+          brightness(at('mortar-overdrive-ward', crest)),
         );
         expect(w.programs()).toBe(before);
       } finally {
@@ -1262,7 +1266,7 @@ describe('an unproven effect swap on a real CharacterVisual', () => {
 });
 
 describe('the racer kart veil on a real CharacterVisual', () => {
-  const kartKey = mountVisualSpecFor(REALM_RACERS_MOUNT_KEY, null)?.visualKey ?? '';
+  const kartKey = mountVisualSpecFor(MORTAR_OVERDRIVE_MOUNT_KEY, null)?.visualKey ?? '';
 
   beforeAll(async () => {
     await assetsReady();
@@ -1314,7 +1318,7 @@ describe('the racer kart veil on a real CharacterVisual', () => {
           // The build frame: the pilot takes the ward, the pending kart stays
           // bare, so the creation gate links the kart's OWN programs.
           const pending = { mountVisual: kart, mountCompilePending: true };
-          syncCharacterVeils(1, racer('rally_ward'), false, 'ward', pilot, pending);
+          syncCharacterVeils(1, racer('mortar_overdrive_ward'), false, 'ward', pilot, pending);
           await linkColorPrograms(w.arms, kart.root, false);
           w.draw();
           const before = w.programs();
@@ -1333,9 +1337,9 @@ describe('the racer kart veil on a real CharacterVisual', () => {
           kart.root.visible = true;
           // The in-race order: the ward, its last seconds, then a recovery ghost.
           for (const state of ['ward', 'ward-ending', 'ghost'] as const) {
-            const palette = rallyVeilLook(state);
+            const palette = mortarOverdriveVeilLook(state);
             if (!palette) throw new Error(`the ${state} wears no veil`);
-            const kind = state === 'ghost' ? 'rally_ghost' : 'rally_ward';
+            const kind = state === 'ghost' ? 'mortar_overdrive_ghost' : 'mortar_overdrive_ward';
             syncCharacterVeils(1, racer(kind), false, state, pilot, presented);
             w.draw();
             w.draw();

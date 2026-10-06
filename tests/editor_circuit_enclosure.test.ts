@@ -26,16 +26,16 @@ import {
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from '../src/editor/circuit/envelope_core';
 import { roundCircuit } from '../src/editor/circuit/export_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-  type RealmRacersPerimeter,
-} from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+  type MortarOverdrivePerimeter,
+} from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-} from '../src/sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+} from '../src/sim/mortar_overdrive/layout';
 
-const WALL: RealmRacersPerimeter = { halfX: 120, halfZ: 90, halfThickness: 0.4, height: 2.2 };
+const WALL: MortarOverdrivePerimeter = { halfX: 120, halfZ: 90, halfThickness: 0.4, height: 2.2 };
 
 const gripOf = (id: EnclosureGrip['id']): EnclosureGrip => {
   const grip = enclosureGrips(WALL.halfX, WALL.halfZ).find((entry) => entry.id === id);
@@ -174,8 +174,8 @@ describe('dragging a wall grip', () => {
     // And the ceiling really is inside the instance volume, which is the rule
     // that ceiling exists for: a wall level with the volume's edge is a machine
     // that leans on it and meets world terrain.
-    expect(huge.halfX).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_X);
-    expect(huge.halfZ).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(huge.halfX).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
+    expect(huge.halfZ).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z);
   });
 
   it('stops at a floor rather than collapsing the box to a dot', () => {
@@ -229,7 +229,7 @@ describe('dragging a wall grip', () => {
 
 describe('sliding the circuit inside its wall', () => {
   const PRESS = { x: 40, z: -20 };
-  const island: RealmRacersCircuit = {
+  const island: MortarOverdriveCircuit = {
     ...GARDEN,
     id: 'enclosure_move',
     groundOutline: [

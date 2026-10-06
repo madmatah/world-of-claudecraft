@@ -16,7 +16,7 @@
 //
 // Pure and DOM-free: the page hands in the raw string and the clock.
 
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
 import { DRAFT_ID_RE } from './draft_endpoints_core';
 import { validateCircuitPayload } from './export_core';
 
@@ -29,7 +29,7 @@ const DRAFT_VERSION = 1;
 export const DRAFT_SAVE_DEBOUNCE_MS = 1000;
 
 export interface StoredDraft {
-  record: RealmRacersCircuit;
+  record: MortarOverdriveCircuit;
   /** Whether the operator had drawn anything, which is the one piece of page
    *  state a record cannot carry: a blank canvas keeps a valid placeholder
    *  underneath, and resuming into it would show a circuit nobody drew. */
@@ -37,7 +37,11 @@ export interface StoredDraft {
   savedAtMs: number;
 }
 
-export function serializeDraft(record: RealmRacersCircuit, drawn: boolean, nowMs: number): string {
+export function serializeDraft(
+  record: MortarOverdriveCircuit,
+  drawn: boolean,
+  nowMs: number,
+): string {
   return JSON.stringify({ version: DRAFT_VERSION, record, drawn, savedAtMs: nowMs });
 }
 

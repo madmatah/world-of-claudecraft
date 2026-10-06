@@ -77,7 +77,7 @@ export type UiIconName =
   | 'cards'
   | 'trash'
   | 'mount'
-  | 'rally'
+  | 'mortarOverdrive'
   | 'crafting'
   | 'professions'
   | 'makers-mark'
@@ -238,9 +238,9 @@ const ICONS: Record<UiIconName, string> = {
   // matching the bar glyph weight
   mount:
     '<path d="M120 140 A176 176 0 1 0 392 140 L340 188 A104 104 0 1 1 172 188 Z"/><path d="M96 108h84v36H96zM332 108h84v36h-84z"/>',
-  // hand-authored chequered flag on a pole (the Realm Racers window), so its
+  // hand-authored chequered flag on a pole (the Mortar Overdrive window), so its
   // launcher never shares the horseshoe the Cosmetics launcher carries
-  rally:
+  mortarOverdrive:
     '<path d="M120 56h26v400h-26z"/><path fill-rule="evenodd" d="M146 72h272v204H146zM158 84v180h248V84z"/><path d="M146 72h68v68h-68zM282 72h68v68h-68zM214 140h68v68h-68zM350 140h68v68h-68zM146 208h68v68h-68zM282 208h68v68h-68z"/>',
   // hand-authored playing card (the Card Duel minigame): a solid card body
   // with a hollowed diamond pip so the glyph reads as "a card" at

@@ -21,9 +21,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { THUMBNAIL_STORAGE_KEY } from '../src/editor/circuit/draft_store_core';
 import { LIBRARY_ALL_CATEGORY } from '../src/editor/circuit/library_core';
 import { type LibraryHost, LibraryPanel } from '../src/editor/circuit/panel_library';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 const html = readFileSync(resolve(import.meta.dirname, '../circuit_editor.html'), 'utf8');
 const body = html.slice(html.indexOf('<body>') + '<body>'.length, html.indexOf('</body>'));
@@ -34,8 +34,8 @@ function mount(): { panel: LibraryPanel; host: LibraryHost } {
   document.body.innerHTML = body;
   const host: LibraryHost = {
     record: () => GARDEN,
-    metrics: () => realmRacersCircuitMetrics(GARDEN),
-    track: () => realmRacersTrack(GARDEN),
+    metrics: () => mortarOverdriveCircuitMetrics(GARDEN),
+    track: () => mortarOverdriveTrack(GARDEN),
     drawn: () => true,
     mode: () => 'props',
     selection: () => null,

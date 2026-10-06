@@ -14,9 +14,11 @@
 // `props_core.ts`) or from the sim's own readout. Dev tool, so English lives
 // here (no `t()`).
 
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import type { RealmRacersCircuitMetrics } from '../../sim/realm_racers_circuit_metrics';
-import type { RallyTrackModel } from '../../sim/realm_racers_spline';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
+import type {
+  MortarOverdriveCircuitMetrics,
+  MortarOverdriveTrackModel,
+} from '../../sim/mortar_overdrive';
 import type { RailModeId } from './layout_core';
 import type { DressingSelection } from './props_core';
 import type { MessageTone } from './shell';
@@ -29,17 +31,17 @@ import type { MessageTone } from './shell';
  * one at construction would go on editing a circuit nobody is looking at.
  */
 export interface PanelHost {
-  record(): RealmRacersCircuit;
-  metrics(): RealmRacersCircuitMetrics;
-  track(): RallyTrackModel;
+  record(): MortarOverdriveCircuit;
+  metrics(): MortarOverdriveCircuitMetrics;
+  track(): MortarOverdriveTrackModel;
   /** Whether there is a circuit at all, or only the blank canvas placeholder. */
   drawn(): boolean;
   mode(): RailModeId;
   selection(): DressingSelection | null;
   /** A whole-record edit, already rounded and re-derived by the page. */
-  commit(next: RealmRacersCircuit): void;
+  commit(next: MortarOverdriveCircuit): void;
   /** One dressing list replaced, with the basin kept in step. */
-  commitDressing(next: Partial<RealmRacersCircuit>): void;
+  commitDressing(next: Partial<MortarOverdriveCircuit>): void;
   setStatus(text: string, tone?: MessageTone): void;
 }
 

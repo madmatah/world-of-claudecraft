@@ -7,8 +7,8 @@ import {
   cameraShakeOffsetInto,
   createCameraFeel,
   DEFAULT_CAMERA_FEEL_PROFILE,
+  MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE,
   punchCameraFov,
-  REALM_RACERS_CAMERA_FEEL_PROFILE,
   resolveCameraFov,
   SPEED_FOV_MAX,
   stepCameraFeel,
@@ -79,43 +79,46 @@ describe('resolveCameraFov (the player-configured FOV slider)', () => {
     expect(resolveCameraFov(55, s)).toBe(50);
   });
 
-  it('uses a stronger unsaturated speed curve for the rally profile', () => {
+  it('uses a stronger unsaturated speed curve for the Mortar Overdrive profile', () => {
     const normal = createCameraFeel();
-    const rally = createCameraFeel();
+    const mortarOverdrive = createCameraFeel();
     for (let i = 0; i < 300; i++) {
       stepCameraFeel(normal, 0, 26, 1 / 60);
-      stepCameraFeel(rally, 0, 26, 1 / 60, true, REALM_RACERS_CAMERA_FEEL_PROFILE);
+      stepCameraFeel(mortarOverdrive, 0, 26, 1 / 60, true, MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE);
     }
-    expect(cameraFovOffset(rally, REALM_RACERS_CAMERA_FEEL_PROFILE)).toBeGreaterThan(
+    expect(cameraFovOffset(mortarOverdrive, MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE)).toBeGreaterThan(
       cameraFovOffset(normal),
     );
-    expect(rally.speedKick).toBeCloseTo(8.24, 1);
-    expect(REALM_RACERS_CAMERA_FEEL_PROFILE.speedFovMax).toBe(14);
+    expect(mortarOverdrive.speedKick).toBeCloseTo(8.24, 1);
+    expect(MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE.speedFovMax).toBe(14);
     expect(DEFAULT_CAMERA_FEEL_PROFILE.speedFovMax).toBe(SPEED_FOV_MAX);
   });
 
-  it('caps the rally speed widening at fourteen degrees', () => {
-    const rally = createCameraFeel();
+  it('caps the Mortar Overdrive speed widening at fourteen degrees', () => {
+    const mortarOverdrive = createCameraFeel();
     for (let i = 0; i < 300; i++)
-      stepCameraFeel(rally, 0, 80, 1 / 60, true, REALM_RACERS_CAMERA_FEEL_PROFILE);
-    expect(cameraFovOffset(rally, REALM_RACERS_CAMERA_FEEL_PROFILE)).toBeCloseTo(14, 3);
+      stepCameraFeel(mortarOverdrive, 0, 80, 1 / 60, true, MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE);
+    expect(cameraFovOffset(mortarOverdrive, MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE)).toBeCloseTo(
+      14,
+      3,
+    );
   });
 
-  it('selects and carries the rally profile through stepping and FOV projection', () => {
+  it('selects and carries the Mortar Overdrive profile through stepping and FOV projection', () => {
     const normalProfile = cameraFeelProfileForDriving(false);
-    const rallyProfile = cameraFeelProfileForDriving(true);
+    const mortarOverdriveProfile = cameraFeelProfileForDriving(true);
     expect(normalProfile).toBe(DEFAULT_CAMERA_FEEL_PROFILE);
-    expect(rallyProfile).toBe(REALM_RACERS_CAMERA_FEEL_PROFILE);
+    expect(mortarOverdriveProfile).toBe(MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE);
     const normal = createCameraFeel();
-    const rally = createCameraFeel();
+    const mortarOverdrive = createCameraFeel();
     let normalFov = 0;
-    let rallyFov = 0;
+    let mortarOverdriveFov = 0;
     for (let i = 0; i < 300; i++) {
       normalFov = stepCameraFeelForDriving(normal, 0, 26, 1 / 60, true, false);
-      rallyFov = stepCameraFeelForDriving(rally, 0, 26, 1 / 60, true, true);
+      mortarOverdriveFov = stepCameraFeelForDriving(mortarOverdrive, 0, 26, 1 / 60, true, true);
     }
-    expect(rallyFov).toBeGreaterThan(normalFov);
-    expect(cameraFeelFovTarget(65, rallyFov)).toBeCloseTo(65 + rallyFov, 5);
+    expect(mortarOverdriveFov).toBeGreaterThan(normalFov);
+    expect(cameraFeelFovTarget(65, mortarOverdriveFov)).toBeCloseTo(65 + mortarOverdriveFov, 5);
     expect(cameraFeelFovTarget(98, 14)).toBe(100);
   });
 });
@@ -135,7 +138,7 @@ describe('positional shake channel', () => {
     expect(out).toEqual({ x: 0, y: 0, z: 0 });
 
     addCameraShake(s, 0.8);
-    stepCameraFeel(s, 0, 0, 1 / 60, false, REALM_RACERS_CAMERA_FEEL_PROFILE);
+    stepCameraFeel(s, 0, 0, 1 / 60, false, MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE);
     cameraShakeOffsetInto(s, out);
     expect(out).toEqual({ x: 0, y: 0, z: 0 });
   });

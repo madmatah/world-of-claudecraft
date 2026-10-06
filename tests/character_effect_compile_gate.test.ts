@@ -562,11 +562,11 @@ describe('a transparent character effect swaps in only once its programs are lin
   });
 
   it('commits a racer veil at once, like Soul Rend, where a class or spirit look stages', async () => {
-    const { rallyVeilLook } = await import('../src/render/ghost_style_core');
+    const { mortarOverdriveVeilLook } = await import('../src/render/ghost_style_core');
     const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const state of ['ward', 'ward-ending', 'ghost'] as const) {
-      const look = rallyVeilLook(state);
+      const look = mortarOverdriveVeilLook(state);
       if (!look) throw new Error(`the ${state} wears no veil`);
       const visual = await makeVisual();
       const gateCalls: GateCall[] = [];
@@ -592,13 +592,17 @@ describe('a transparent character effect swaps in only once its programs are lin
 
   for (const tier of ['standard', 'low'] as const) {
     it(`wears a racer veil on the baked far mesh too, so a distant ghost or ward still reads, ${tier}`, async () => {
-      const { rallyVeilLook } = await import('../src/render/ghost_style_core');
+      const { mortarOverdriveVeilLook } = await import('../src/render/ghost_style_core');
       const { spiritVeilPaletteOf } = await import('../src/render/characters/ghost_veil');
       for (const state of ['ghost', 'ward', 'ward-ending'] as const) {
-        const look = rallyVeilLook(state);
+        const look = mortarOverdriveVeilLook(state);
         if (!look) throw new Error(`the ${state} wears no veil`);
         expect(look).toBe(
-          state === 'ward' ? 'rally-ward' : state === 'ghost' ? 'rally-ghost' : 'rally-ward-ending',
+          state === 'ward'
+            ? 'mortar-overdrive-ward'
+            : state === 'ghost'
+              ? 'mortar-overdrive-ghost'
+              : 'mortar-overdrive-ward-ending',
         );
         const visual = await makeVisual(tier);
         const gateCalls: GateCall[] = [];

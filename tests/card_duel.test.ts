@@ -49,7 +49,7 @@ function makeCtx(
     entities,
     cardDuelQueue: [] as number[],
     cardDuels: new Map(),
-    realmRacers: { bots: new Map<number, string>() },
+    mortarOverdrive: { bots: new Map<number, string>() },
     bumpDeedStat,
     error,
     emit,
@@ -103,7 +103,7 @@ describe('card_duel', () => {
       entities,
       cardDuelQueue: [] as number[],
       cardDuels: new Map(),
-      realmRacers: { bots: new Map<number, string>() },
+      mortarOverdrive: { bots: new Map<number, string>() },
       bumpDeedStat: vi.fn(),
       error,
       emit: vi.fn(),
@@ -517,11 +517,11 @@ describe('card_duel', () => {
   it('cardMinigameAvailable ignores every bot family (offline bot matches must not fake availability)', () => {
     // One arm per family, so a family added to the sim and forgotten here
     // cannot pass by riding another family's exclusion.
-    for (const family of ['fiesta', 'rally'] as const) {
+    for (const family of ['fiesta', 'mortarOverdrive'] as const) {
       const { ctx, error } = makeCtx();
       const other = ctx.players.get(2) as unknown as { isFiestaBot?: boolean };
       if (family === 'fiesta') other.isFiestaBot = true;
-      if (family === 'rally') ctx.realmRacers.bots.set(2, 'driver');
+      if (family === 'mortarOverdrive') ctx.mortarOverdrive.bots.set(2, 'driver');
       // Marking pid 3 with a DIFFERENT family each time would let the arm pass
       // on the other exclusion, so 3 is always a fiesta bot and 2 is the one
       // under test.

@@ -30,15 +30,15 @@ import {
   PREVIEW_PAN_LIMIT,
   PREVIEW_REBUILD_DEBOUNCE_MS,
 } from '../src/editor/circuit/preview_camera_core';
-import { REALM_RACERS_CAMERA_BOOM_PROFILE } from '../src/render/camera_boom_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE } from '../src/render/camera_boom_core';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/mortar_overdrive/circuits';
 import { VEHICLE_PROFILES } from '../src/sim/content/vehicles';
 import {
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_ORIGIN,
-} from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+  MORTAR_OVERDRIVE_ORIGIN,
+} from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 /** The shipped profile, not a second copy of the arithmetic: a test that
  *  re-derives the chase would pass whatever the page happened to do. */
@@ -111,14 +111,20 @@ describe('preview orbit rig', () => {
   });
 
   it('can frame the widest circuit the band allows in a half-screen panel', () => {
-    // The ceiling exists for exactly this case: `REALM_RACERS_MAX_REGION_HALF_X`
+    // The ceiling exists for exactly this case: `MORTAR_OVERDRIVE_MAX_REGION_HALF_X`
     // yards of circuit read in a panel half as wide as it is tall.
     const state = createPreviewOrbit();
     const fov = (62 * Math.PI) / 180;
-    orbitFrame(state, REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z, fov, 0.5);
+    orbitFrame(
+      state,
+      MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+      MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+      fov,
+      0.5,
+    );
     expect(state.distance).toBeLessThan(PREVIEW_ORBIT_LIMITS.maxDistance);
     expect(state.distance * Math.tan(fov / 2) * 0.5).toBeGreaterThan(
-      REALM_RACERS_MAX_REGION_HALF_X,
+      MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
     );
   });
 
@@ -182,7 +188,7 @@ describe('panning the orbit rig', () => {
     // Only the ceiling side was pinned, and against itself: dropping the limit to
     // 100 would keep every other test green while making the far side of a legal
     // circuit unreachable again.
-    expect(PREVIEW_PAN_LIMIT).toBeGreaterThan(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(PREVIEW_PAN_LIMIT).toBeGreaterThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
   });
 
   it('pans further per pixel the further out the camera is', () => {
@@ -232,9 +238,9 @@ describe('panning the orbit rig', () => {
 });
 
 describe('looking around from the seat', () => {
-  const track = realmRacersTrack(GARDEN);
+  const track = mortarOverdriveTrack(GARDEN);
   const chase = (): ReturnType<typeof flyThroughPoseAt> =>
-    flyThroughPoseAt(track, 120, REALM_RACERS_ORIGIN);
+    flyThroughPoseAt(track, 120, MORTAR_OVERDRIVE_ORIGIN);
 
   it('is the chase pose exactly, until the head turns', () => {
     const look = createFlyLook();
@@ -349,7 +355,7 @@ describe('looking around from the seat', () => {
 });
 
 describe('preview fly-through', () => {
-  const track = realmRacersTrack(GARDEN);
+  const track = mortarOverdriveTrack(GARDEN);
 
   it('wraps s at the start line rather than running off the end of the lap', () => {
     const almost = track.length - 1;
@@ -369,17 +375,17 @@ describe('preview fly-through', () => {
     // neighbours. A fixed yard bound would pass on a pose that snapped by two
     // yards at the seam; what has to hold is that the seam step is an ordinary
     // step, so it is measured against the median of the others.
-    const speed = flySpeedYardsPerSecond('race', VEHICLE_PROFILES.rally_loaner.maxSpeed);
+    const speed = flySpeedYardsPerSecond('race', VEHICLE_PROFILES.mo_loaner.maxSpeed);
     const dt = 1 / 60;
     let s = track.length - speed * dt * 8;
-    let previous = flyThroughPoseAt(track, s, REALM_RACERS_ORIGIN);
+    let previous = flyThroughPoseAt(track, s, MORTAR_OVERDRIVE_ORIGIN);
     const steps: number[] = [];
     let seamStep = -1;
     for (let step = 0; step < 16; step++) {
       const next = advanceFlyThrough(s, speed, dt, track.length);
       const wrapped = next < s;
       s = next;
-      const pose = flyThroughPoseAt(track, s, REALM_RACERS_ORIGIN);
+      const pose = flyThroughPoseAt(track, s, MORTAR_OVERDRIVE_ORIGIN);
       const moved = distance(pose.camera, previous.camera);
       if (wrapped) seamStep = moved;
       else steps.push(moved);
@@ -400,9 +406,9 @@ describe('preview fly-through', () => {
     // parks the camera a hundred thousand yards away.
     const world = track.pointAt(0);
     expect(Math.abs(world.x)).toBeGreaterThan(100_000);
-    const local = circuitLocalSample(world, REALM_RACERS_ORIGIN);
-    expect(local.x).toBeCloseTo(world.x - REALM_RACERS_ORIGIN.x, 6);
-    expect(local.z).toBeCloseTo(world.z - REALM_RACERS_ORIGIN.z, 6);
+    const local = circuitLocalSample(world, MORTAR_OVERDRIVE_ORIGIN);
+    expect(local.x).toBeCloseTo(world.x - MORTAR_OVERDRIVE_ORIGIN.x, 6);
+    expect(local.z).toBeCloseTo(world.z - MORTAR_OVERDRIVE_ORIGIN.z, 6);
     expect(local.tx).toBe(world.tx);
     expect(local.tz).toBe(world.tz);
     // And the pose that follows sits within a boom length of the staged
@@ -422,13 +428,13 @@ describe('preview fly-through', () => {
     expect(pose.target.z).toBeCloseTo(point.z, 6);
   });
 
-  it('takes its chase numbers from the game rally boom profile, not a copy', () => {
+  it('takes its chase numbers from the game Mortar Overdrive boom profile, not a copy', () => {
     // Pinned against the exported profile so a tuning pass on the game moves
     // the preview with it, which is the only reason the profile is a parameter.
     expect(PREVIEW_CHASE_PROFILE.boomDistance).toBe(
-      12 * REALM_RACERS_CAMERA_BOOM_PROFILE.distanceScale,
+      12 * MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE.distanceScale,
     );
-    expect(PREVIEW_CHASE_PROFILE.eyeHeight).toBe(REALM_RACERS_CAMERA_BOOM_PROFILE.eyeHeight);
+    expect(PREVIEW_CHASE_PROFILE.eyeHeight).toBe(MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE.eyeHeight);
     expect(PREVIEW_CHASE_PROFILE.boomDistance).toBeGreaterThan(12);
     expect(PREVIEW_CHASE_PROFILE.lookAhead).toBeGreaterThan(PREVIEW_CHASE_PROFILE.boomDistance);
   });
@@ -437,17 +443,20 @@ describe('preview fly-through', () => {
     // The composed call is what preview3d uses, so the conversion cannot be
     // skipped by a caller: sampling and posing separately is what shipped the
     // 113 700 yard bug. Applied once, never twice.
-    const posed = flyThroughPoseAt(track, 0, REALM_RACERS_ORIGIN);
-    const byHand = flyThroughPose(circuitLocalSample(track.pointAt(0), REALM_RACERS_ORIGIN), CHASE);
+    const posed = flyThroughPoseAt(track, 0, MORTAR_OVERDRIVE_ORIGIN);
+    const byHand = flyThroughPose(
+      circuitLocalSample(track.pointAt(0), MORTAR_OVERDRIVE_ORIGIN),
+      CHASE,
+    );
     expect(posed).toEqual(byHand);
     // The stage carries exactly the offset the conversion removes, so adding it
     // back lands on the world sample the spline authored.
     const world = track.pointAt(0);
-    expect(posed.target.x + REALM_RACERS_ORIGIN.x).toBeCloseTo(
+    expect(posed.target.x + MORTAR_OVERDRIVE_ORIGIN.x).toBeCloseTo(
       world.x + world.tx * CHASE.lookAhead,
       6,
     );
-    expect(posed.target.z + REALM_RACERS_ORIGIN.z).toBeCloseTo(
+    expect(posed.target.z + MORTAR_OVERDRIVE_ORIGIN.z).toBeCloseTo(
       world.z + world.tz * CHASE.lookAhead,
       6,
     );
@@ -463,22 +472,22 @@ describe('preview fly-through', () => {
     expect(PREVIEW_REBUILD_DEBOUNCE_MS).toBeLessThanOrEqual(400);
   });
 
-  it('derives its lift and stand-off from the rally boom profile', () => {
+  it('derives its lift and stand-off from the Mortar Overdrive boom profile', () => {
     const point = { x: 0, z: 0, tx: 0, tz: 1 };
     const pose = flyThroughPose(point, CHASE);
     expect(pose.camera.y).toBeCloseTo(
-      CHASE.boomDistance * Math.sin(CHASE.pitch) + REALM_RACERS_CAMERA_BOOM_PROFILE.eyeHeight,
+      CHASE.boomDistance * Math.sin(CHASE.pitch) + MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE.eyeHeight,
       6,
     );
     expect(pose.camera.z).toBeCloseTo(-CHASE.boomDistance * Math.cos(CHASE.pitch), 6);
-    // A tuning pass that stretches the game's rally boom stretches the preview
+    // A tuning pass that stretches the game's Mortar Overdrive boom stretches the preview
     // with it, which is the whole reason the profile is a parameter.
     const stretched = flyThroughPose(point, { ...CHASE, boomDistance: CHASE.boomDistance * 2 });
     expect(stretched.camera.z).toBeLessThan(pose.camera.z);
   });
 
   it('offers a race pace under the machine top speed and a slower scenic one', () => {
-    const top = VEHICLE_PROFILES.rally_loaner.maxSpeed;
+    const top = VEHICLE_PROFILES.mo_loaner.maxSpeed;
     const race = flySpeedYardsPerSecond('race', top);
     const scenic = flySpeedYardsPerSecond('scenic', top);
     expect(race).toBeGreaterThan(scenic);

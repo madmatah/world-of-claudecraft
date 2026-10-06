@@ -23,7 +23,7 @@ their own CLAUDE.md: `sim/` (+ `sim/content/`, `sim/professions/`, `sim/physics/
   (desktop shell), and the tracked `public/wallet-return.html` closes the loop. Spec:
   `docs/prd/woc/wallet-link.md`.
 - `music_editor.html` is a dev-only tool that writes `src/game/music_overrides.generated.ts`.
-- `circuit_editor.html` loads `src/editor/circuit/main.ts`: the dev-only Realm Racers
+- `circuit_editor.html` loads `src/editor/circuit/main.ts`: the dev-only Mortar Overdrive
   circuit editor. Like the music editor it is absent from `input` in `vite.config.ts`,
   so no production build emits it; see `src/editor/circuit/CLAUDE.md`.
 
@@ -58,8 +58,8 @@ lets the same `sim/` run offline, on the server, and headless.
   A leaf qualifies only while it stays pure: no DOM, no `IWorld`, no mutable UI state.
 - `render/`, `ui/`, `game/` -> **never `editor/`** (the dev-only editor layer is composed
   OVER the game client, so the arrow points editor -> game). ONE dev edge is sanctioned:
-  `game/realm_racers_draft_dev.ts` imports `editor/circuit/export_core`
-  (`validateCircuitPayload`), so `/dev rallydraft` seats a draft only if the editor's save
+  `game/mortar_overdrive/draft_dev.ts` imports `editor/circuit/export_core`
+  (`validateCircuitPayload`), so `/dev overdrivedraft` seats a draft only if the editor's save
   endpoint would accept it. `export_core` is pure (no DOM) and the path runs behind
   `import.meta.env.DEV` (`tryDevChatHooks`), so a production build drops it. Moving the
   validator into `sim/` would carry the editor's own limits (`fences_core`,

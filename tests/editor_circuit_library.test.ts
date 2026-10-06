@@ -18,12 +18,12 @@ import {
   librarySearchPlaceholder,
 } from '../src/editor/circuit/library_core';
 import { propPalette } from '../src/editor/circuit/props_core';
-import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import { MORTAR_OVERDRIVE_PROPS } from '../src/sim/content/mortar_overdrive/props';
 
 /** The garden's own vocabulary, a real theme's list rather than a made-up one:
  *  the category is only worth anything if it matches what a theme really holds. */
 const GARDEN = ['oak', 'bench', 'postLantern', 'fountain'] as const;
-const entries = () => propPalette(REALM_RACERS_PROPS, GARDEN);
+const entries = () => propPalette(MORTAR_OVERDRIVE_PROPS, GARDEN);
 
 describe('the library categories', () => {
   it('opens on the theme, and the theme chip wears the theme id', () => {
@@ -51,7 +51,7 @@ describe('the library categories', () => {
     // A theme with an empty vocabulary is exactly what the operator needs to
     // SEE; a chip that vanished when it mattered most would read as the tool
     // having no such feature at all.
-    const categories = libraryCategories(propPalette(REALM_RACERS_PROPS, []), 'frostveil');
+    const categories = libraryCategories(propPalette(MORTAR_OVERDRIVE_PROPS, []), 'frostveil');
     expect(categories[0].id).toBe(LIBRARY_THEME_CATEGORY);
     expect(categories[0].label).toBe('frostveil');
     expect(categories[0].count).toBe(0);
@@ -93,7 +93,7 @@ describe('what the grid shows', () => {
     // means "find me the lantern", not "find me the lantern if this zone owns
     // one". A search that only narrowed the chip would answer nothing while
     // looking like it worked.
-    const notThemed = propPalette(REALM_RACERS_PROPS, ['oak']);
+    const notThemed = propPalette(MORTAR_OVERDRIVE_PROPS, ['oak']);
     const shown = filterLibrary(notThemed, {
       category: LIBRARY_THEME_CATEGORY,
       search: 'bench',

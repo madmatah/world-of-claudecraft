@@ -7,7 +7,7 @@
 // check the readout runs is cheap, so the tool can simply solve it.
 //
 // THE ONE FACT THAT MAKES THIS SOUND: `turnRadius` is a property of the
-// centerline alone (`realm_racers_spline.ts` derives it from the resampled
+// centerline alone (`mortar_overdrive/spline.ts` derives it from the resampled
 // positions and nothing else). Narrowing the road cannot move a corner's
 // radius, so the repair converges in ONE pass with no risk of chasing its own
 // tail. It is monotone in every other direction too: a narrower road pulls the
@@ -22,14 +22,14 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
 import {
-  REALM_RACERS_RADIUS_OVER_WIDTH_WARN,
-  type RealmRacersCircuitProblem,
-  realmRacersCircuitMetrics,
-} from '../../sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_MIN_HALF_WIDTH } from '../../sim/realm_racers_layout';
-import { realmRacersTrack } from '../../sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN,
+  type MortarOverdriveCircuitProblem,
+  mortarOverdriveCircuitMetrics,
+} from '../../sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_MIN_HALF_WIDTH } from '../../sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../../sim/mortar_overdrive/spline';
 
 /**
  * What the repair aims for: a hair over the WARNING threshold, not the floor.
@@ -39,7 +39,7 @@ import { realmRacersTrack } from '../../sim/realm_racers_spline';
  * three percent is the headroom that absorbs the cell grid and the rounding of
  * the emitted numbers.
  */
-const TARGET_RATIO = REALM_RACERS_RADIUS_OVER_WIDTH_WARN * 1.03;
+const TARGET_RATIO = MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN * 1.03;
 
 /**
  * Lap fraction per breakpoint the repair may emit. One percent of the lap is
@@ -55,11 +55,11 @@ export interface WidthFixResult {
   widthBands: { s: number; halfWidth: number }[];
   /**
    * The corners still folding their road afterwards. Always the road floor's
-   * fault: their radius is under `REALM_RACERS_MIN_HALF_WIDTH`, so no legal road
+   * fault: their radius is under `MORTAR_OVERDRIVE_MIN_HALF_WIDTH`, so no legal road
    * is narrow enough and the CURVE has to open up. Taken from the real readout
    * run over the repaired record, never from a second copy of the rule here.
    */
-  remaining: readonly RealmRacersCircuitProblem[];
+  remaining: readonly MortarOverdriveCircuitProblem[];
   /** Yards of lap the repair narrowed. Zero means it left the record alone. */
   narrowedYards: number;
 }
@@ -70,8 +70,8 @@ export interface WidthFixResult {
  * fraction, so a repair cannot widen a chicane the operator tightened on
  * purpose.
  */
-export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
-  const track = realmRacersTrack(circuit);
+export function suggestWidthBands(circuit: MortarOverdriveCircuit): WidthFixResult {
+  const track = mortarOverdriveTrack(circuit);
   const samples = track.samples;
   const cells = Math.max(4, Math.round(1 / CELL));
 
@@ -92,7 +92,7 @@ export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
   if (!constrained) {
     return {
       widthBands: circuit.widthBands.map((band) => ({ ...band })),
-      remaining: realmRacersCircuitMetrics(circuit).problems.filter(
+      remaining: mortarOverdriveCircuitMetrics(circuit).problems.filter(
         (problem) => problem.code === 'corner_folds_road',
       ),
       narrowedYards: 0,
@@ -119,7 +119,7 @@ export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
     const fraction = (k % cells) / cells;
     const authored = track.halfWidthAt(fraction * track.length);
     const need = Math.min(cellNeed[(k - 1 + cells) % cells], cellNeed[k % cells]);
-    return Math.max(REALM_RACERS_MIN_HALF_WIDTH, Math.min(authored, need));
+    return Math.max(MORTAR_OVERDRIVE_MIN_HALF_WIDTH, Math.min(authored, need));
   };
 
   const breakpoints: { s: number; halfWidth: number }[] = [];
@@ -143,7 +143,7 @@ export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
     const need = cellNeed[Math.min(cells - 1, Math.floor(scaled))];
     breakpoints.push({
       s: band.s,
-      halfWidth: round2(Math.max(REALM_RACERS_MIN_HALF_WIDTH, Math.min(band.halfWidth, need))),
+      halfWidth: round2(Math.max(MORTAR_OVERDRIVE_MIN_HALF_WIDTH, Math.min(band.halfWidth, need))),
     });
   }
   breakpoints.sort((a, b) => a.s - b.s);
@@ -163,15 +163,19 @@ export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
   }
 
   // What the readout says about the result, measured rather than predicted.
-  const repaired: RealmRacersCircuit = { ...circuit, id: `${circuit.id}__width_fix`, widthBands };
-  const repairedTrack = realmRacersTrack(repaired);
+  const repaired: MortarOverdriveCircuit = {
+    ...circuit,
+    id: `${circuit.id}__width_fix`,
+    widthBands,
+  };
+  const repairedTrack = mortarOverdriveTrack(repaired);
   let narrowedYards = 0;
   for (let i = 0; i < samples.length; i++) {
     if (repairedTrack.samples[i].halfWidth < samples[i].halfWidth - WIDTH_EPSILON) {
       narrowedYards += track.step;
     }
   }
-  const remaining = realmRacersCircuitMetrics(repaired).problems.filter(
+  const remaining = mortarOverdriveCircuitMetrics(repaired).problems.filter(
     (problem) => problem.code === 'corner_folds_road',
   );
 

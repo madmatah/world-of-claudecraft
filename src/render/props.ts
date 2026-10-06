@@ -330,8 +330,8 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   oakTree: { url: '/models/foliage/oak_4.glb', kit: 'kfol' },
   // The specimen elder: the giant four zone-feature modules already clone by
   // url for their landmark trees (garden_features' Evergarden greatTrees,
-  // realm_flora, haunt_features, jungle_features). Registered HERE so a Realm
-  // Racers circuit can place one through the same registry the manifest and
+  // realm_flora, haunt_features, jungle_features). Registered HERE so a Mortar
+  // Overdrive circuit can place one through the same registry the manifest and
   // preload guards sweep, exactly as the lily raft below is. It was never
   // missing on purpose: it is a foliage SPECIES model, so nothing had ever
   // needed a prop row for it, and only the registry is what a circuit can
@@ -341,7 +341,7 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   // already made).
   greatTree: { url: '/models/foliage/twisted_1.glb', kit: 'kfol' },
   // the fen's lily raft, registered HERE rather than in a second catalog so the
-  // Realm Racers dressing can place it on a pond through the same registry the
+  // Mortar Overdrive dressing can place it on a pond through the same registry the
   // manifest and preload guards already sweep (water_flora.ts scatters the same
   // file over the world's own lakes; loadGltf caches per url, so the two cost
   // one parse between them)
@@ -849,7 +849,7 @@ export function worldPropHasUvCellFix(key: PropKey): boolean {
 /**
  * The world's converted material for one part of the prop `key`, out of the
  * same cache the world's props draw from, for a caller drawing that model's own
- * geometry (a Realm Racers circuit), or null for a part the world strips. A
+ * geometry (a Mortar Overdrive circuit), or null for a part the world strips. A
  * `worldPropSplitsBySurface` key has no such single material.
  */
 export function worldPropMaterial(

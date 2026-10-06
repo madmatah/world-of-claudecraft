@@ -942,7 +942,7 @@ export const METER_DIRTY_KEYS: Record<DeedMeterId, readonly string[]> = {
   clueCasketsOpened: [],
   vcupWins: [],
   vcupGuildWins: [],
-  rrWins: [],
+  mortarOverdriveWins: [],
   bankPurchasedSlots: [],
   bankSocketsUnlocked: [],
   townFocusPoints: [],
@@ -1062,7 +1062,7 @@ const METERS: Record<DeedMeterId, (meta: PlayerMeta) => number> = {
   clueCasketsOpened: (m) => m.clueCasketsOpened ?? 0,
   vcupWins: (m) => m.vcupWins,
   vcupGuildWins: (m) => m.vcupGuildWins,
-  rrWins: (m) => m.rrWins,
+  mortarOverdriveWins: (m) => m.mortarOverdriveWins,
   bankPurchasedSlots: (m) => m.bank.purchasedSlots,
   bankSocketsUnlocked: (m) => m.bank.unlockedSockets,
   townFocusPoints: (m) => {
@@ -2059,7 +2059,7 @@ export function onArenaMatchEndForDeeds(
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Realm Racers sites
+// Mortar Overdrive sites
 // ---------------------------------------------------------------------------
 
 // A fixed lap-time threshold per circuit that carries a flying-lap deed, since
@@ -2068,22 +2068,23 @@ export function onArenaMatchEndForDeeds(
 // The Rampart Run's 25 is the Express Tour's 26 scaled by the two circuits'
 // best ace-bot flying laps (22.25 s against 23.05 s, measured 2026-09-28), and
 // the Lagoon Run's 24 the same way (21.45 s against 23.05 s, 2026-09-29).
-const RALLY_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: number }> = new Map([
-  ['evergarden_express_tour', { deedId: 'pvp_rr_fast_lap', seconds: 26 }],
-  ['drakelands_rampart_run', { deedId: 'pvp_rr_rampart_lap', seconds: 25 }],
-  ['palmreach_lagoon_run', { deedId: 'pvp_rr_lagoon_lap', seconds: 24 }],
-]);
+const MORTAR_OVERDRIVE_FAST_LAP_DEEDS: ReadonlyMap<string, { deedId: string; seconds: number }> =
+  new Map([
+    ['evergarden_express_tour', { deedId: 'pvp_mortar_overdrive_fast_lap', seconds: 26 }],
+    ['drakelands_rampart_run', { deedId: 'pvp_mortar_overdrive_rampart_lap', seconds: 25 }],
+    ['palmreach_lagoon_run', { deedId: 'pvp_mortar_overdrive_lagoon_lap', seconds: 24 }],
+  ]);
 
-/** One pilot's race-end tableau, already resolved by the rally module (which
+/** One pilot's race-end tableau, already resolved by the Mortar Overdrive module (which
  *  owns the progress state this is read from): whether they are a house
  *  pilot, crossed the finish line under their own power (a forfeit or a
  *  disconnect never has: retireRacer clears the crossing), kept the run clean
  *  (never left the racing surface and never traded paint with a rival), took
- *  the overall win, had a human rival who raced (realm_racers_credit.ts),
+ *  the overall win, had a human rival who raced (mortar_overdrive/credit.ts),
  *  and, if they won, whether that win followed being dead last and caught by
- *  a Ground Blast. Structural rather than the real `RealmRacersProgress`, so
- *  this module never imports `social/realm_racers.ts`. */
-export interface RallyRaceDeedEntry {
+ *  a Ground Blast. Structural rather than the real `MortarOverdriveProgress`, so
+ *  this module never imports `mortar_overdrive/race.ts`. */
+export interface MortarOverdriveRaceDeedEntry {
   pid: number;
   bot: boolean;
   finished: boolean;
@@ -2094,31 +2095,31 @@ export interface RallyRaceDeedEntry {
 }
 
 /** Full time (or the last pilot pulling off) on a rated (non-practice) heat.
- *  Practice laps and house pilots never earn a Rally deed. Win-based credit
- *  (the rrWins meter deeds, the comeback) also needs `humanRival`; the finish
+ *  Practice laps and house pilots never earn a Mortar Overdrive deed. Win-based credit
+ *  (the mortarOverdriveWins meter deeds, the comeback) also needs `humanRival`; the finish
  *  and clean-run deeds do not, so a solo backfilled heat still earns those. */
-export function onRallyRaceEndForDeeds(
+export function onMortarOverdriveRaceEndForDeeds(
   ctx: SimContext,
   practice: boolean,
-  entries: readonly RallyRaceDeedEntry[],
+  entries: readonly MortarOverdriveRaceDeedEntry[],
 ): void {
   if (practice) return;
   for (const entry of entries) {
     if (entry.bot) continue;
     const meta = ctx.players.get(entry.pid);
     if (!meta) continue;
-    // The rally module already moved meta.rrWins for a winning entry: this is
-    // the meter's one full-pass re-check site (rrWins carries no narrow key).
+    // The Mortar Overdrive module already moved meta.mortarOverdriveWins for a winning entry: this is
+    // the meter's one full-pass re-check site (mortarOverdriveWins carries no narrow key).
     markDeedsDirty(ctx, entry.pid);
     // Crossing the line, never merely being on the grid: a forfeiter, a
     // disconnect, and a pilot idling until the clock closed the heat all go
     // without (a crossing is never also a retirement: retireRacer clears it).
-    if (entry.finished) grantDeed(ctx, meta, 'pvp_rr_first_race');
-    if (entry.finished && entry.clean) grantDeed(ctx, meta, 'pvp_rr_clean_race');
-    // A win-based deed, so it needs another human at the GO, like the rrWins
-    // meter the rally module only moves on the same condition.
+    if (entry.finished) grantDeed(ctx, meta, 'pvp_mortar_overdrive_first_race');
+    if (entry.finished && entry.clean) grantDeed(ctx, meta, 'pvp_mortar_overdrive_clean_race');
+    // A win-based deed, so it needs another human at the GO, like the mortarOverdriveWins
+    // meter the Mortar Overdrive module only moves on the same condition.
     if (entry.won && entry.humanRival && entry.comeback) {
-      grantDeed(ctx, meta, 'pvp_rr_comeback');
+      grantDeed(ctx, meta, 'pvp_mortar_overdrive_comeback');
     }
   }
 }
@@ -2127,7 +2128,7 @@ export function onRallyRaceEndForDeeds(
  *  lap like any other and deliberately earns credit here too) on a rated
  *  heat: the one per-tick spot fast enough to check against the fixed
  *  threshold above. */
-export function onRallyLapForDeeds(
+export function onMortarOverdriveLapForDeeds(
   ctx: SimContext,
   practice: boolean,
   bot: boolean,
@@ -2136,7 +2137,7 @@ export function onRallyLapForDeeds(
   lapSeconds: number,
 ): void {
   if (practice || bot) return;
-  const fastLap = RALLY_FAST_LAP_DEEDS.get(circuitId);
+  const fastLap = MORTAR_OVERDRIVE_FAST_LAP_DEEDS.get(circuitId);
   if (!fastLap || lapSeconds >= fastLap.seconds) return;
   const meta = ctx.players.get(pid);
   if (meta) grantDeed(ctx, meta, fastLap.deedId);

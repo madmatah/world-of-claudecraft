@@ -28,15 +28,15 @@ export interface RendererPrewarmAndGroundFxOwner<T extends RendererDisposable> {
    *  texture, the placement instances, the decals and its share of the
    *  point-light budget. */
   bgViews?: Map<number, RendererDisposable>;
-  /** The Realm Racers scene (realm_racers_scene.ts): the circuit pool (every
+  /** The Mortar Overdrive scene (mortar_overdrive/scene.ts): the circuit pool (every
    *  circuit this renderer built, drafts included, and the materials its
    *  circuits share), the ground-blast shell pool, both attached for the
    *  renderer's life, plus the field cues' oil-spray pool. The pool stops any
    *  build still in flight and gives back only what its builds minted
-   *  (realm_racers_track_dispose_core.ts) and its palette's materials; the
+   *  (mortar_overdrive/track_dispose_core.ts) and its palette's materials; the
    *  spray pool its per-slot instance buffers (the shared droplet material and
    *  geometry are never disposed). */
-  realmRacers?: {
+  mortarOverdrive?: {
     readonly track?: RendererDisposable;
     readonly groundBlasts: RendererDisposable;
     readonly fieldCues: RendererDisposable;
@@ -66,11 +66,11 @@ export function disposeRendererPrewarmAndGroundFx(
   // this is the terminal drain for whatever the teardown catches standing.
   for (const view of resources.bgViews?.values() ?? []) bestEffort(() => view.dispose());
   resources.bgViews?.clear();
-  const rally = resources.realmRacers;
-  const track = rally?.track;
+  const mortarOverdrive = resources.mortarOverdrive;
+  const track = mortarOverdrive?.track;
   if (track) bestEffort(() => track.dispose());
-  bestEffort(() => rally?.groundBlasts.dispose());
-  bestEffort(() => rally?.fieldCues.dispose());
+  bestEffort(() => mortarOverdrive?.groundBlasts.dispose());
+  bestEffort(() => mortarOverdrive?.fieldCues.dispose());
   // The occluder-fade gate and its twins were linked on this renderer's
   // context; a later renderer installs its own (occluder_fade_gate.ts).
   bestEffort(() => uninstallOccluderFadeGate());

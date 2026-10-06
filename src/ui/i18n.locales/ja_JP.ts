@@ -12396,35 +12396,35 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.keybinds.petTaunt': 'ペット：挑発',
   'hudChrome.keybinds.petDefensive': 'ペット：防御',
   'hudChrome.keybinds.petAggressive': 'ペット：攻撃的',
-  'guide.nav.realmRacers': 'レルムレーサーズ',
-  'guide.realmRacersPage.heading': 'レルムレーサーズ',
-  'guide.realmRacersPage.intro':
+  'guide.nav.mortarOverdrive': '迫撃オーバードライブ',
+  'guide.mortarOverdrivePage.heading': '迫撃オーバードライブ',
+  'guide.mortarOverdrivePage.intro':
     'エバーガーデン・レーシング協会は、運転する度胸さえあれば誰でも参加できるガーデンサーキットを運営している。グリッドには4人のパイロット、代名詞となる必殺武器がひとつ、そして大胆なラインだけでなく綺麗なラインにも報いる、生垣沿いのコースだ。',
-  'guide.realmRacersPage.loreHeading': 'エバーガーデン・レーシング協会',
-  'guide.realmRacersPage.loreBody':
+  'guide.mortarOverdrivePage.loreHeading': 'エバーガーデン・レーシング協会',
+  'guide.mortarOverdrivePage.loreBody':
     'エバーガーデンの庭師長たちは、生垣の間の巡回路を一輪車より速く走るためのものだとは考えたこともなかった。しかし暇を持て余し、騎乗動物を借りていたある管理人は、そうは思わなかった。その最初の無謀な挑戦から育った協会は、今では本格的なサーキットを引き、フルグリッドを揃え、4人のパイロットの準備が整うたびにフラッグを振り下ろす。',
-  'guide.realmRacersPage.howHeading': '遊び方',
-  'guide.realmRacersPage.howQueueBody':
-    '世界のどこからでも、レルムレーサーズのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。',
-  'guide.realmRacersPage.howRaceBody':
+  'guide.mortarOverdrivePage.howHeading': '遊び方',
+  'guide.mortarOverdrivePage.howQueueBody':
+    '世界のどこからでも、迫撃オーバードライブのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。',
+  'guide.mortarOverdrivePage.howRaceBody':
     'いつもの移動キーでステアリング、アクセル、ブレーキを操作し、ジャンプボタンを押し続けるとサイドブレーキでタイトなコーナーを滑って抜けられる。すべてのパイロットはグラウンドブラストを携えている。これは捕らえた相手をよろめかせる前方への一撃で、進路をふさぐライバルは決して安全ではない。最終ラップの後に先にラインを越えた者が勝利し、レースが決着した時点での位置で全員の順位が決まる。',
-  'guide.realmRacersPage.howLimitsBody':
+  'guide.mortarOverdrivePage.howLimitsBody':
     'コース両脇の庭園は開かれていて走行可能なので、膨らむこと、押し出されること、花壇を滑り抜けることはレースの一部です。代償は速度だけ。ただし、それで得をすることは許されません。コースを外れてコース自体より短いラインを走れば、進行委員が離脱した地点まで戻します。庭園で止まったままの操縦者も、数秒後にコースへ戻されます。',
-  'guide.realmRacersPage.howPracticeBody':
+  'guide.mortarOverdrivePage.howPracticeBody':
     '見知らぬ相手とまだ走る心の準備ができていない？練習走行なら同じマシン、同じ操作感覚のまま、専用のサーキットの複製上で自分で選んだ相手と走れるので、本番に並ぶ前にラインを覚えられる。',
-  'guide.realmRacersPage.machineHeading': '貸与されるマシン',
-  'guide.realmRacersPage.machineBody':
+  'guide.mortarOverdrivePage.machineHeading': '貸与されるマシン',
+  'guide.mortarOverdrivePage.machineBody':
     'どのパイロットもその日は協会自前の貸与マシンに乗る。誰も自分の騎乗動物をグリッドに持ち込まず、それが手に入らなかったからといってピットで見ているだけの者もいない。このマシンは覚えが早く、コーナーの限界を見つけた瞬間、確かな重みを感じさせる。',
-  'guide.realmRacersPage.circuitsHeading': 'サーキット',
-  'guide.realmRacersPage.circuitsPracticeTitle': 'エバーガーデン練習場',
-  'guide.realmRacersPage.circuitsPracticeBody':
+  'guide.mortarOverdrivePage.circuitsHeading': 'サーキット',
+  'guide.mortarOverdrivePage.circuitsPracticeTitle': 'エバーガーデン練習場',
+  'guide.mortarOverdrivePage.circuitsPracticeBody':
     'どのパイロットもここでマシンを覚える。練習中の本人だけの、他の誰にも関係のない、より短いガーデン周回コースだ。',
-  'guide.realmRacersPage.circuitsCompetitionTitle': '大会サーキット',
-  'guide.realmRacersPage.circuitsCompetitionBody':
+  'guide.mortarOverdrivePage.circuitsCompetitionTitle': '大会サーキット',
+  'guide.mortarOverdrivePage.circuitsCompetitionBody':
     '待機列からのレースは練習用の周回コースを走ることはない。代わりに、より長い大会用サーキットの別のプールから抽選される。それぞれが地面を借りているゲームゾーンのテーマで装飾されているため、マシンは変わらなくても会場は変わる。',
-  'guide.realmRacersPage.rewardsHeading': '何のために走るのか',
-  'guide.realmRacersPage.rewardsBody':
-    'レルムレーサーズは経験値も戦利品も一切支払わない。これはそれ自体のため、そしてそれがもたらす地位のために走る競技だ。とはいえ、格付けされたヒートでの順位は功績の書にはきちんと数えられる。ゴールラインを越えること、勝利、そしてより難しい運転の偉業のひと揃いが、挑む意志のあるパイロットを待っている。ただし勝利が数えられるのは、少なくとも一人の他のプレイヤーが一緒にスタートし、実際に走ったとき（ゴールするか、少なくとも一周を走り切ったとき）だけだ。協会のハウスパイロットや、グリッドから一度も動かなかった相手に勝っても、それは練習であって記録ではない。これらの功績は名声をもたらさないが、十分な勝利を重ねれば、身に着けられる装飾用の称号が手に入る。',
+  'guide.mortarOverdrivePage.rewardsHeading': '何のために走るのか',
+  'guide.mortarOverdrivePage.rewardsBody':
+    '迫撃オーバードライブは経験値も戦利品も一切支払わない。これはそれ自体のため、そしてそれがもたらす地位のために走る競技だ。とはいえ、格付けされたヒートでの順位は功績の書にはきちんと数えられる。ゴールラインを越えること、勝利、そしてより難しい運転の偉業のひと揃いが、挑む意志のあるパイロットを待っている。ただし勝利が数えられるのは、少なくとも一人の他のプレイヤーが一緒にスタートし、実際に走ったとき（ゴールするか、少なくとも一周を走り切ったとき）だけだ。協会のハウスパイロットや、グリッドから一度も動かなかった相手に勝っても、それは練習であって記録ではない。これらの功績は名声をもたらさないが、十分な勝利を重ねれば、身に着けられる装飾用の称号が手に入る。',
   'entities.npcs.chronicler_saul.name': '年代記官ソール',
   'entities.npcs.chronicler_saul.title': 'イーストブルック渓谷の年代記',
   'entities.npcs.chronicler_saul.greeting':
@@ -15451,131 +15451,137 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.auraOverlay.procs.aetherRush': 'エーテルラッシュ',
   'itemUi.vendor.buyStack': '{count}個購入',
   'itemUi.vendor.buyStackAria': '{item}を{count}個、{price}で購入',
-  'hudChrome.keybinds.rally': 'レルムレーサーズ',
-  'hudChrome.rally.kicker': 'エバーガーデン・レーシング協会',
-  'hudChrome.rally.title': 'レルムレーサーズ',
-  'hudChrome.rally.close': 'レルムレーサーズのウィンドウを閉じる',
-  'hudChrome.rally.pitch':
+  'hudChrome.keybinds.mortarOverdrive': '迫撃オーバードライブ',
+  'hudChrome.mortarOverdrive.kicker': 'エバーガーデン・レーシング協会',
+  'hudChrome.mortarOverdrive.title': '迫撃オーバードライブ',
+  'hudChrome.mortarOverdrive.close': '迫撃オーバードライブのウィンドウを閉じる',
+  'hudChrome.mortarOverdrive.pitch':
     '鉄が生け垣を突き抜ける。ラインを見つけ、スライドを信じ、ライバルを砂塵に残せ。',
-  'hudChrome.rally.promiseCircuit': '庭園サーキット',
-  'hudChrome.rally.promiseSlide': 'サイドブレーキ・スライド',
-  'hudChrome.rally.promiseRival': '生身のライバル',
-  'hudChrome.rally.howToPlayTitle': '遊び方',
-  'hudChrome.rally.howToPlay':
+  'hudChrome.mortarOverdrive.promiseCircuit': '庭園サーキット',
+  'hudChrome.mortarOverdrive.promiseSlide': 'サイドブレーキ・スライド',
+  'hudChrome.mortarOverdrive.promiseRival': '生身のライバル',
+  'hudChrome.mortarOverdrive.howToPlayTitle': '遊び方',
+  'hudChrome.mortarOverdrive.howToPlay':
     '移動キーでアクセル、ブレーキ、ステアリングを操作し、ジャンプボタンを押し続けるとサイドブレーキでタイトなコーナーを滑って抜けられます。先にフィニッシュラインを越えた者が勝ちです。',
-  'hudChrome.rally.orRace': 'または',
-  'hudChrome.rally.handbrake': 'サイドブレーキ',
-  'hudChrome.rally.join': 'レースの待機列に参加',
-  'hudChrome.rally.leave': '待機列から離脱',
-  'hudChrome.rally.forfeit': 'レースを棄権',
-  'hudChrome.rally.forfeitConfirm': '棄権を確認',
-  'hudChrome.rally.waiting': '{count}人のパイロットがグリッドを待っています。',
-  'hudChrome.rally.queueNeedsRealm':
+  'hudChrome.mortarOverdrive.orRace': 'または',
+  'hudChrome.mortarOverdrive.handbrake': 'サイドブレーキ',
+  'hudChrome.mortarOverdrive.join': 'レースの待機列に参加',
+  'hudChrome.mortarOverdrive.leave': '待機列から離脱',
+  'hudChrome.mortarOverdrive.forfeit': 'レースを棄権',
+  'hudChrome.mortarOverdrive.forfeitConfirm': '棄権を確認',
+  'hudChrome.mortarOverdrive.waiting': '{count}人のパイロットがグリッドを待っています。',
+  'hudChrome.mortarOverdrive.queueNeedsRealm':
     'キューでのレースにはオンラインサーバーの他のパイロットが必要です。代わりに練習走行をお試しください。',
-  'hudChrome.rally.queued': '待機位置 {position}/{count}。戦車を準備しています。',
-  'hudChrome.rally.racingAgainst': 'レースが始まりました。現在{total}台中{position}位です。',
-  'hudChrome.rally.practice': '練習',
-  'hudChrome.rally.practiceIntro':
+  'hudChrome.mortarOverdrive.queued': '待機位置 {position}/{count}。戦車を準備しています。',
+  'hudChrome.mortarOverdrive.racingAgainst':
+    'レースが始まりました。現在{total}台中{position}位です。',
+  'hudChrome.mortarOverdrive.practice': '練習',
+  'hudChrome.mortarOverdrive.practiceIntro':
     'あなただけのプライベートサーキット。相手を選び、操作を覚えて、準備ができたらスタートです。',
-  'hudChrome.rally.practiceUnavailable':
+  'hudChrome.mortarOverdrive.practiceUnavailable':
     '練習用サーキットはすべて使用中です。数分後にもう一度お試しください。',
-  'hudChrome.rally.practiceCircuit':
+  'hudChrome.mortarOverdrive.practiceCircuit':
     '走るのは{circuit}。すべてのパイロットがマシンを覚えるサーキットです。公式レースは別のサーキットが抽選されます。',
-  'hudChrome.rally.practiceTierLegend': '対戦相手を選ぶ',
-  'hudChrome.rally.practiceControlsLegend': '操作方法',
-  'hudChrome.rally.practicePlay': 'レースを始める',
-  'hudChrome.rally.practiceBack': '戻る',
-  'hudChrome.rally.practiceTouchNote':
+  'hudChrome.mortarOverdrive.practiceTierLegend': '対戦相手を選ぶ',
+  'hudChrome.mortarOverdrive.practiceControlsLegend': '操作方法',
+  'hudChrome.mortarOverdrive.practicePlay': 'レースを始める',
+  'hudChrome.mortarOverdrive.practiceBack': '戻る',
+  'hudChrome.mortarOverdrive.practiceTouchNote':
     'タッチ操作では、左スティックでステアリングと走行、ジャンプボタンがサイドブレーキです。',
-  'hudChrome.rally.tierRookie': 'ルーキー',
-  'hudChrome.rally.tierDriver': 'ドライバー',
-  'hudChrome.rally.tierAce': 'エース',
-  'hudChrome.rally.tierRookieHint': 'ラインを覚えている最中。最初の周回でも勝てます。',
-  'hudChrome.rally.tierDriverHint': 'コースを知り、ブレーキも遅らせます。互角の勝負です。',
-  'hudChrome.rally.tierAceHint':
+  'hudChrome.mortarOverdrive.tierRookie': 'ルーキー',
+  'hudChrome.mortarOverdrive.tierDriver': 'ドライバー',
+  'hudChrome.mortarOverdrive.tierAce': 'エース',
+  'hudChrome.mortarOverdrive.tierRookieHint': 'ラインを覚えている最中。最初の周回でも勝てます。',
+  'hudChrome.mortarOverdrive.tierDriverHint':
+    'コースを知り、ブレーキも遅らせます。互角の勝負です。',
+  'hudChrome.mortarOverdrive.tierAceHint':
     'すべてのクリップを取り、ヘアピンでは滑らせます。全力で挑んでください。',
-  'hudChrome.rally.controlThrottle': 'アクセル',
-  'hudChrome.rally.controlThrottleHint':
+  'hudChrome.mortarOverdrive.controlThrottle': 'アクセル',
+  'hudChrome.mortarOverdrive.controlThrottleHint':
     '押し続けて加速します。本物の慣性があるので、速度は徐々に乗ります。',
-  'hudChrome.rally.controlBrake': 'ブレーキとバック',
-  'hudChrome.rally.controlBrakeHint':
+  'hudChrome.mortarOverdrive.controlBrake': 'ブレーキとバック',
+  'hudChrome.mortarOverdrive.controlBrakeHint':
     '押し続けて減速し、停止後にもう一度押し続けるとバックします。',
-  'hudChrome.rally.controlSteer': 'ステアリング',
-  'hudChrome.rally.controlSteerHint': 'ノーズをコーナーへ向けます。中速域が最もよく曲がります。',
-  'hudChrome.rally.controlHandbrake': 'サイドブレーキ',
-  'hudChrome.rally.controlHandbrakeHint':
+  'hudChrome.mortarOverdrive.controlSteer': 'ステアリング',
+  'hudChrome.mortarOverdrive.controlSteerHint':
+    'ノーズをコーナーへ向けます。中速域が最もよく曲がります。',
+  'hudChrome.mortarOverdrive.controlHandbrake': 'サイドブレーキ',
+  'hudChrome.mortarOverdrive.controlHandbrakeHint':
     'あえてグリップを切り、タイトなコーナーを滑って抜けます。',
-  'hudChrome.rally.racingAgainstBot': '練習レースが始まりました。現在{total}台中{position}位です。',
-  'hudChrome.rally.won': '勝利。エバーガーデンに新たな王者が誕生しました。',
-  'hudChrome.rally.lost':
+  'hudChrome.mortarOverdrive.racingAgainstBot':
+    '練習レースが始まりました。現在{total}台中{position}位です。',
+  'hudChrome.mortarOverdrive.won': '勝利。エバーガーデンに新たな王者が誕生しました。',
+  'hudChrome.mortarOverdrive.lost':
     '{total}台中{position}位でフィニッシュ。次のスターティンググリッドが待っています。',
-  'hudChrome.rally.standingsYou': 'あなた',
-  'hudChrome.rally.standingsFinished': 'ゴール',
-  'hudChrome.rally.standingsRetired': 'リタイア',
-  'hudChrome.rally.lobbyReadyCount': '準備完了のパイロット {ready}/{total}',
-  'hudChrome.rally.lobbyReady': '準備完了',
-  'hudChrome.rally.lobbyWaiting': '待機中',
-  'hudChrome.rally.lobbyPreparing': 'サーキットを準備中',
-  'hudChrome.rally.lobbyPrepared': 'サーキットの準備完了',
-  'hudChrome.rally.lobbyStartsBy':
+  'hudChrome.mortarOverdrive.standingsYou': 'あなた',
+  'hudChrome.mortarOverdrive.standingsFinished': 'ゴール',
+  'hudChrome.mortarOverdrive.standingsRetired': 'リタイア',
+  'hudChrome.mortarOverdrive.lobbyReadyCount': '準備完了のパイロット {ready}/{total}',
+  'hudChrome.mortarOverdrive.lobbyReady': '準備完了',
+  'hudChrome.mortarOverdrive.lobbyWaiting': '待機中',
+  'hudChrome.mortarOverdrive.lobbyPreparing': 'サーキットを準備中',
+  'hudChrome.mortarOverdrive.lobbyPrepared': 'サーキットの準備完了',
+  'hudChrome.mortarOverdrive.lobbyStartsBy':
     '全パイロットの準備が整うとレースが始まります（遅くとも{time}後）。',
-  'hudChrome.rally.circuitName_evergarden_practice': 'エバーガーデン練習場',
-  'hudChrome.rally.circuitName_evergarden_express_tour': 'エバーガーデン・エクスプレスツアー',
-  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・月の泉ラン',
-  'hudChrome.rally.circuitName_drakelands_rampart_run': 'ドレイクランド・ランパートラン',
-  'hudChrome.rally.circuitName_palmreach_lagoon_run': 'パームリーチ・ラグーンラン',
-  'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
-  'hudChrome.rally.draw': '同着。レースの審判が引き分けを宣言しました。',
-  'hudChrome.rally.position': '順位 {position}/{total}',
-  'hudChrome.rally.lap': 'ラップ {lap}/{total}',
-  'hudChrome.rally.time': '{minutes}:{seconds}',
-  'hudChrome.rally.speed': '速度 {speed}',
-  'hudChrome.rally.wrongWay': '逆走',
-  'hudChrome.rally.offTrack': 'コースに戻れ: {seconds}',
-  'hudChrome.rally.cutReturned': 'ショートカット。コースを外れた地点に戻されました。',
-  'hudChrome.rally.reset': 'コースに戻る',
-  'hudChrome.rally.pickupCharge': '砲弾装填',
-  'hudChrome.rally.pickupNitro': 'ニトロ準備完了',
-  'hudChrome.rally.pickupWard': '守護発動',
-  'hudChrome.rally.pickupSlick': 'オイル準備完了',
-  'hudChrome.rally.wardHeld': '守護',
-  'hudChrome.rally.wardBroken': '守護が砕けた',
-  'hudChrome.auraEffect.rallyWard':
+  'hudChrome.mortarOverdrive.circuitName_evergarden_practice': 'エバーガーデン練習場',
+  'hudChrome.mortarOverdrive.circuitName_evergarden_express_tour':
+    'エバーガーデン・エクスプレスツアー',
+  'hudChrome.mortarOverdrive.circuitName_nightbloom_moonwell_run': 'ナイトブルーム・月の泉ラン',
+  'hudChrome.mortarOverdrive.circuitName_drakelands_rampart_run': 'ドレイクランド・ランパートラン',
+  'hudChrome.mortarOverdrive.circuitName_palmreach_lagoon_run': 'パームリーチ・ラグーンラン',
+  'hudChrome.mortarOverdrive.podiumTime': '{minutes}:{seconds}.{tenths}',
+  'hudChrome.mortarOverdrive.draw': '同着。レースの審判が引き分けを宣言しました。',
+  'hudChrome.mortarOverdrive.position': '順位 {position}/{total}',
+  'hudChrome.mortarOverdrive.lap': 'ラップ {lap}/{total}',
+  'hudChrome.mortarOverdrive.time': '{minutes}:{seconds}',
+  'hudChrome.mortarOverdrive.speed': '速度 {speed}',
+  'hudChrome.mortarOverdrive.wrongWay': '逆走',
+  'hudChrome.mortarOverdrive.offTrack': 'コースに戻れ: {seconds}',
+  'hudChrome.mortarOverdrive.cutReturned': 'ショートカット。コースを外れた地点に戻されました。',
+  'hudChrome.mortarOverdrive.reset': 'コースに戻る',
+  'hudChrome.mortarOverdrive.pickupCharge': '砲弾装填',
+  'hudChrome.mortarOverdrive.pickupNitro': 'ニトロ準備完了',
+  'hudChrome.mortarOverdrive.pickupWard': '守護発動',
+  'hudChrome.mortarOverdrive.pickupSlick': 'オイル準備完了',
+  'hudChrome.mortarOverdrive.wardHeld': '守護',
+  'hudChrome.mortarOverdrive.wardBroken': '守護が砕けた',
+  'hudChrome.auraEffect.mortarOverdriveWard':
     '次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。',
-  'hudChrome.auraEffect.rallyGhost':
+  'hudChrome.auraEffect.mortarOverdriveGhost':
     'コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。',
-  'hudChrome.auraEffect.rallyGroundBlast':
+  'hudChrome.auraEffect.mortarOverdriveGroundBlast':
     '移動速度を{pct}%低下させる。被弾後{gripSeconds}秒間、機体のグリップが{gripPct}%低下する。',
-  'hudChrome.auraEffect.rallyOffTrack':
+  'hudChrome.auraEffect.mortarOverdriveOffTrack':
     '移動速度を{pct}%低下させる。機体のグリップが{gripPct}%低下し、抵抗が路面上の{drag}倍になる。路面に戻るまで続く。',
-  'entities.abilities.rally_nitro.name': 'ニトロ',
-  'entities.abilities.rally_nitro.description':
+  'entities.abilities.mortar_overdrive_nitro.name': 'ニトロ',
+  'entities.abilities.mortar_overdrive_nitro.description':
     'ニトロを焚き、瞬時に前方へ{kick}ヤード/秒の加速を得る。{seconds}秒間、最高速度が機体の通常の上限より{speedPct}%上がる。',
-  'entities.abilities.rally_oil_slick.name': 'オイルスリック',
-  'entities.abilities.rally_oil_slick.description':
+  'entities.abilities.mortar_overdrive_oil_slick.name': 'オイルスリック',
+  'entities.abilities.mortar_overdrive_oil_slick.description':
     '機体の下にオイルをまく。オイルは{seconds}秒間コースに残る。踏み込んだライバルは横へ押し出され（速いほど強く）、{gripSeconds}秒間グリップを{gripPct}%失う。自分のオイルは、一度そこから抜け出すまで自分には効かない。レースの守護はこれを吸収する。',
-  'hudChrome.rally.countdown': 'エンジン固定中。開始まで{seconds}秒',
-  'hudChrome.rally.go': 'スタート！',
-  'hudChrome.rally.finalLap': 'ファイナルラップ',
-  'hudChrome.rally.chase': '残り{seconds}秒でフラッグ',
-  'hudChrome.rally.wonReturn': '勝利！{seconds}秒後に戻ります',
-  'hudChrome.rally.lostReturn': 'フィニッシュ。{seconds}秒後に戻ります',
-  'hudChrome.rally.drawReturn': '引き分け。{seconds}秒後に戻ります',
-  'hudChrome.rally.voidReturn': 'レース無効。{seconds}秒後に戻ります',
-  'hudChrome.rally.logQueued': 'レルムレーサーズの待機位置：{position}。',
-  'hudChrome.rally.logUnqueued': 'レルムレーサーズの待機列から離れました。',
-  'hudChrome.rally.bannerLap': '{total}周中{lap}周目',
-  'hudChrome.rally.bannerWin': 'レースに勝利しました！',
-  'hudChrome.rally.bannerLoss': '{name}がレースに勝利しました。',
-  'hudChrome.rally.bannerDraw': 'レースは引き分けです。',
-  'hudChrome.rally.logWin': '勝利。最初にゴールラインを越えました。',
-  'hudChrome.rally.logLoss': '{name}が先にゴールラインを越えました。',
-  'hudChrome.rally.logForfeit': 'レースを棄権しました。{name}の勝利です。',
-  'hudChrome.rally.bannerForfeit': 'レースを棄権しました。',
-  'hudChrome.rally.logForfeitRaceOn': 'レースを棄権しました。レースはあなた抜きで続きます。',
-  'hudChrome.rally.mobileLabel': 'レーサーズ',
-  'entities.abilities.rally_ground_blast.name': 'グラウンドブラスト',
-  'entities.abilities.rally_ground_blast.description':
+  'hudChrome.mortarOverdrive.countdown': 'エンジン固定中。開始まで{seconds}秒',
+  'hudChrome.mortarOverdrive.go': 'スタート！',
+  'hudChrome.mortarOverdrive.finalLap': 'ファイナルラップ',
+  'hudChrome.mortarOverdrive.chase': '残り{seconds}秒でフラッグ',
+  'hudChrome.mortarOverdrive.wonReturn': '勝利！{seconds}秒後に戻ります',
+  'hudChrome.mortarOverdrive.lostReturn': 'フィニッシュ。{seconds}秒後に戻ります',
+  'hudChrome.mortarOverdrive.drawReturn': '引き分け。{seconds}秒後に戻ります',
+  'hudChrome.mortarOverdrive.voidReturn': 'レース無効。{seconds}秒後に戻ります',
+  'hudChrome.mortarOverdrive.logQueued': '迫撃オーバードライブの待機位置：{position}。',
+  'hudChrome.mortarOverdrive.logUnqueued': '迫撃オーバードライブの待機列から離れました。',
+  'hudChrome.mortarOverdrive.bannerLap': '{total}周中{lap}周目',
+  'hudChrome.mortarOverdrive.bannerWin': 'レースに勝利しました！',
+  'hudChrome.mortarOverdrive.bannerLoss': '{name}がレースに勝利しました。',
+  'hudChrome.mortarOverdrive.bannerDraw': 'レースは引き分けです。',
+  'hudChrome.mortarOverdrive.logWin': '勝利。最初にゴールラインを越えました。',
+  'hudChrome.mortarOverdrive.logLoss': '{name}が先にゴールラインを越えました。',
+  'hudChrome.mortarOverdrive.logForfeit': 'レースを棄権しました。{name}の勝利です。',
+  'hudChrome.mortarOverdrive.bannerForfeit': 'レースを棄権しました。',
+  'hudChrome.mortarOverdrive.logForfeitRaceOn':
+    'レースを棄権しました。レースはあなた抜きで続きます。',
+  'hudChrome.mortarOverdrive.mobileLabel': 'レーサーズ',
+  'entities.abilities.mortar_overdrive_ground_blast.name': 'グラウンドブラスト',
+  'entities.abilities.mortar_overdrive_ground_blast.description':
     '前方{minRange}ヤード以上先、車体の正面から{coneDegrees}度以内の地面の一点に砲弾を撃つ。砲弾は{minFlight}～{maxFlight}秒後に着弾する。着弾点から{radius}ヤード以内のライバルは全員打ち上げられて吹き飛ばされ、{coreRadius}ヤード以内では最大の威力、外側ほど弱くなる。さらに{gripSeconds}秒間グリップを{gripPct}%失い、{slowSeconds}秒間{slowPct}%減速する。レースの守護はこの命中を吸収する。',
   // Craft Cast System Phase 6 M16 non-Latin fills
   'abilityUi.cast.crafting': '製作',

@@ -18,8 +18,8 @@ import {
 } from '../sim/world';
 
 /** The maze's modeled hedge wall and entry arch. garden_features.ts draws them
- *  with their own glTF materials, and a Realm Racers circuit wearing a hedge
- *  keeps that exception (realm_racers_dressing_material.ts). */
+ *  with their own glTF materials, and a Mortar Overdrive circuit wearing a hedge
+ *  keeps that exception (mortar_overdrive/dressing_material.ts). */
 export const GARDEN_MAZE_WALL_URL = '/models/props/maze_hedge_wall.glb';
 export const GARDEN_MAZE_ARCH_URL = '/models/props/maze_hedge_arch.glb';
 

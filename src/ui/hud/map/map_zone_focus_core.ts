@@ -1,7 +1,7 @@
 // Which zone the overworld map frames. Pure, extracted from Hud.updateMapWindow
 // (the monolith ratchet): inside a dungeon, the zone its door stands in
-// (dungeonAt owns the instance x-band layout); on a Realm Racers circuit, the
-// zone the circuit belongs to (realmRacersZoneAt); in any other instance band
+// (dungeonAt owns the instance x-band layout); on a Mortar Overdrive circuit, the
+// zone the circuit belongs to (mortarOverdriveZoneAt); in any other instance band
 // the zone the player entered from (the zone tracker freezes past
 // DUNGEON_X_THRESHOLD, so `lastZoneId` carries it); outdoors, the committed
 // zone, so border-straddling cannot thrash the cached terrain regen. A dev or
@@ -14,7 +14,7 @@ export interface MapZoneFocusLookup {
   zones: readonly ZoneDef[];
   zoneAt(x: number, z: number): ZoneDef;
   dungeonAt(x: number): { doorPos: { x: number; z: number } } | null | undefined;
-  realmRacersZoneAt(x: number, z: number): { id: string } | null;
+  mortarOverdriveZoneAt(x: number, z: number): { id: string } | null;
 }
 
 /**
@@ -33,7 +33,7 @@ export function resolveMapZone(
   if (mapZoneOverride !== null) return byId(mapZoneOverride) ?? lookup.zoneAt(pos.x, pos.z);
   const dungeon = lookup.dungeonAt(pos.x);
   if (dungeon) return lookup.zoneAt(dungeon.doorPos.x, dungeon.doorPos.z);
-  const circuit = byId(lookup.realmRacersZoneAt(pos.x, pos.z)?.id ?? null);
+  const circuit = byId(lookup.mortarOverdriveZoneAt(pos.x, pos.z)?.id ?? null);
   if (circuit) return circuit;
   return byId(lastZoneId) ?? lookup.zoneAt(pos.x, pos.z);
 }

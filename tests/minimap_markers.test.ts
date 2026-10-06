@@ -21,8 +21,11 @@ import {
   YUMI_MAZE_X,
   zoneAt,
 } from '../src/sim/data';
+import {
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOrigin,
+} from '../src/sim/mortar_overdrive/layout';
 import { isProfessionQuest } from '../src/sim/quests/ambient_quest_marker';
-import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
 import { isQuestTurnInNpc } from '../src/sim/types';
 import { WORLD_BOSSES, worldBossLockoutId } from '../src/sim/world_boss';
 import { STABLE_MAP_NAVIGATION_LANDMARKS } from '../src/ui/map_navigation_landmarks_core';
@@ -985,7 +988,7 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
     expect(model.zoneId.length).toBeGreaterThan(0);
   });
 
-  // The circuit each Realm Racers lane holds and the zone it belongs to. The
+  // The circuit each Mortar Overdrive lane holds and the zone it belongs to. The
   // band sits on the instance plane, where zoneAt answers with whichever zone
   // band a lane's z shares (the Lagoon Run read The Drakelands).
   const CIRCUIT_ZONE: Record<string, string> = {
@@ -996,10 +999,10 @@ describe('createMinimapMarkers: the discriminated union per draw kind', () => {
     palmreach_lagoon_run: 'palmreach',
   };
 
-  it.each(REALM_RACERS_LANES.map((lane) => [lane.index, lane.circuit.id] as const))(
+  it.each(MORTAR_OVERDRIVE_LANES.map((lane) => [lane.index, lane.circuit.id] as const))(
     'names the circuit zone for the #zone-label on lane %i (%s)',
     (index, circuitId) => {
-      const origin = realmRacersLaneOrigin(index);
+      const origin = mortarOverdriveLaneOrigin(index);
       for (const shape of ['sim', 'client'] as const) {
         const world = makeWorld(shape);
         (world.player as { pos: { x: number; z: number } }).pos = { x: origin.x, z: origin.z };

@@ -3597,82 +3597,82 @@ export const DEEDS: Record<string, DeedDef> = {
       ],
     },
   },
-  // Realm Racers (docs/design/deeds.md "Realm Racers deeds", docs/design/realm-racers.md):
+  // Mortar Overdrive (docs/design/deeds.md "Mortar Overdrive deeds", docs/design/mortar-overdrive.md):
   // placing-based, on the model the retired Vale Cup set (pvp_vcup_*, records
   // kept for their holders) rather than a
   // win/lose pair, since a four-pilot heat has a whole finishing order. Only
   // rated (queued, non-practice) heats count, and a house pilot never earns
-  // one of these (see onRallyRaceEndForDeeds / onRallyLapForDeeds in
-  // src/sim/deeds.ts, credited from src/sim/social/realm_racers.ts). The win
+  // one of these (see onMortarOverdriveRaceEndForDeeds / onMortarOverdriveLapForDeeds in
+  // src/sim/deeds.ts, credited from src/sim/mortar_overdrive/race.ts). The win
   // deeds (first_win, wins_10, wins_25, comeback) also need another human who
   // was seated at the GO and then finished or completed a lap
-  // (src/sim/social/realm_racers_credit.ts); the finish,
+  // (src/sim/mortar_overdrive/credit.ts); the finish,
   // clean-run and flying-lap deeds stay solo-earnable.
   // Zero Renown, still counted in the Book: a casual unranked heat the server
   // backfills with house pilots never scores the Renown board (the rule the
   // release applied to the Vale Cup and Fiesta families).
-  pvp_rr_first_race: {
-    id: 'pvp_rr_first_race',
+  pvp_mortar_overdrive_first_race: {
+    id: 'pvp_mortar_overdrive_first_race',
     name: 'Wheels on the Line',
-    desc: 'Cross the finish line in a rated Realm Racers heat, placing or not.',
+    desc: 'Cross the finish line in a rated Mortar Overdrive heat, placing or not.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
   },
-  pvp_rr_first_win: {
-    id: 'pvp_rr_first_win',
+  pvp_mortar_overdrive_first_win: {
+    id: 'pvp_mortar_overdrive_first_win',
     name: 'Chequered and Cheered',
-    desc: 'Take first place in a rated Realm Racers heat against at least one other player who completes a lap.',
+    desc: 'Take first place in a rated Mortar Overdrive heat against at least one other player who completes a lap.',
     category: 'pvp',
     renown: 0,
-    trigger: { kind: 'meter', meter: 'rrWins', amount: 1 },
+    trigger: { kind: 'meter', meter: 'mortarOverdriveWins', amount: 1 },
   },
-  pvp_rr_wins_10: {
-    id: 'pvp_rr_wins_10',
+  pvp_mortar_overdrive_wins_10: {
+    id: 'pvp_mortar_overdrive_wins_10',
     name: 'Podium Regular',
-    desc: 'Take first place in 10 rated Realm Racers heats, each against at least one other player who completes a lap.',
+    desc: 'Take first place in 10 rated Mortar Overdrive heats, each against at least one other player who completes a lap.',
     category: 'pvp',
     renown: 0,
-    trigger: { kind: 'meter', meter: 'rrWins', amount: 10 },
+    trigger: { kind: 'meter', meter: 'mortarOverdriveWins', amount: 10 },
   },
-  pvp_rr_wins_25: {
-    id: 'pvp_rr_wins_25',
+  pvp_mortar_overdrive_wins_25: {
+    id: 'pvp_mortar_overdrive_wins_25',
     name: 'Overdrive Ace',
-    desc: 'Take first place in 25 rated Realm Racers heats, each against at least one other player who completes a lap.',
+    desc: 'Take first place in 25 rated Mortar Overdrive heats, each against at least one other player who completes a lap.',
     category: 'pvp',
     renown: 0,
-    trigger: { kind: 'meter', meter: 'rrWins', amount: 25 },
+    trigger: { kind: 'meter', meter: 'mortarOverdriveWins', amount: 25 },
     reward: { kind: 'title', text: 'Overdrive Ace' },
   },
-  pvp_rr_fast_lap: {
-    id: 'pvp_rr_fast_lap',
+  pvp_mortar_overdrive_fast_lap: {
+    id: 'pvp_mortar_overdrive_fast_lap',
     name: 'Flying Lap',
     desc: 'Post a lap of the Evergarden Express Tour in under 26 seconds.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
   },
-  pvp_rr_clean_race: {
-    id: 'pvp_rr_clean_race',
+  pvp_mortar_overdrive_clean_race: {
+    id: 'pvp_mortar_overdrive_clean_race',
     name: 'Not a Scratch',
-    desc: 'Finish a rated Realm Racers heat without leaving the racing surface or trading paint with a rival.',
+    desc: 'Finish a rated Mortar Overdrive heat without leaving the racing surface or trading paint with a rival.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
   },
-  pvp_rr_comeback: {
-    id: 'pvp_rr_comeback',
+  pvp_mortar_overdrive_comeback: {
+    id: 'pvp_mortar_overdrive_comeback',
     name: 'From the Back of the Pack',
-    desc: 'Take first place in a rated Realm Racers heat against at least one other player who completes a lap, after falling to dead last and taking a Ground Blast hit.',
+    desc: 'Take first place in a rated Mortar Overdrive heat against at least one other player who completes a lap, after falling to dead last and taking a Ground Blast hit.',
     category: 'pvp',
     renown: 0,
     trigger: { kind: 'manual' },
   },
   // The Drakelands Rampart Run's flying lap, the Express Tour's Flying Lap on
   // the third competition circuit (the per-circuit threshold table sits beside
-  // onRallyLapForDeeds in src/sim/deeds.ts).
-  pvp_rr_rampart_lap: {
-    id: 'pvp_rr_rampart_lap',
+  // onMortarOverdriveLapForDeeds in src/sim/deeds.ts).
+  pvp_mortar_overdrive_rampart_lap: {
+    id: 'pvp_mortar_overdrive_rampart_lap',
     name: 'Scorching Lap',
     desc: 'Post a lap of the Drakelands Rampart Run in under 25 seconds.',
     category: 'pvp',
@@ -3680,8 +3680,8 @@ export const DEEDS: Record<string, DeedDef> = {
     trigger: { kind: 'manual' },
   },
   // The Palmreach Lagoon Run's flying lap, on the fourth competition circuit.
-  pvp_rr_lagoon_lap: {
-    id: 'pvp_rr_lagoon_lap',
+  pvp_mortar_overdrive_lagoon_lap: {
+    id: 'pvp_mortar_overdrive_lagoon_lap',
     name: 'Tidal Lap',
     desc: 'Post a lap of the Palmreach Lagoon Run in under 24 seconds.',
     category: 'pvp',

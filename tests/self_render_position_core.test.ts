@@ -141,7 +141,7 @@ describe('noteSelfIdentity', () => {
         facing,
         auras: [],
         ghost: false,
-        drive: createVehicleDrive('rally_loaner'),
+        drive: createVehicleDrive('mo_loaner'),
       }) as unknown as Entity;
     const state = createSelfRenderPositionState();
     noteSelfIdentity(state, 7);
@@ -804,13 +804,13 @@ describe('updateSelfRenderPosition teleport rule for a seated driver', () => {
       pos: { ...at },
       auras: [],
       ghost: false,
-      drive: createVehicleDrive('rally_loaner'),
+      drive: createVehicleDrive('mo_loaner'),
     }) as unknown as Entity;
 
   it('widens the limit by the ground the speed budget covers this frame', () => {
     const snapDist = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ);
     const driver = driverAt({ x: 0, y: 0, z: 0 });
-    const reach = snapDist + vehicleProfile('rally_loaner').maxSpeed * HITCH_DT;
+    const reach = snapDist + vehicleProfile('mo_loaner').maxSpeed * HITCH_DT;
     expect(teleportGapLimitSq(driver, HITCH_DT)).toBeCloseTo(reach * reach, 10);
     expect(teleportGapLimitSq(playerAt({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }), HITCH_DT)).toBe(
       SELF_MOTION_SNAP_DIST_SQ,
@@ -875,7 +875,7 @@ describe('a predicted driver hands off across its lead without popping', () => {
       onGround: true,
       auras: [],
       ghost: false,
-      drive: createVehicleDrive('rally_loaner'),
+      drive: createVehicleDrive('mo_loaner'),
     }) as unknown as Entity;
   /** The lead as the predictor reports it: (tickOffset - 1 + alpha) ticks. */
   const predictedAt = (
@@ -892,7 +892,7 @@ describe('a predicted driver hands off across its lead without popping', () => {
         velocityX: 0,
         velocityZ: SPEED,
         onGround: true,
-        state: createVehicleDrive('rally_loaner'),
+        state: createVehicleDrive('mo_loaner'),
       },
       tickOffset: ticks,
       tickAlpha: ALPHA,
@@ -947,7 +947,7 @@ describe('a predicted driver hands off across its lead without popping', () => {
   });
 
   it('sizes the limit by the speed budget over the frame, the lead and a tick', () => {
-    const budget = vehicleProfile('rally_loaner').maxSpeed;
+    const budget = vehicleProfile('mo_loaner').maxSpeed;
     const reach = Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + budget * (FRAME_DT + 0.2 + TICK);
     expect(teleportGapLimitSq(racer(), FRAME_DT, 200)).toBeCloseTo(reach * reach, 9);
     // No lead in play: the one-frame limit, exactly as before.
@@ -980,7 +980,7 @@ describe('selfPredictionLeadMs and displayedAimPose', () => {
     onGround: true,
     auras: [],
     ghost: false,
-    drive: createVehicleDrive('rally_loaner'),
+    drive: createVehicleDrive('mo_loaner'),
   } as unknown as Entity;
   const reconciled = (over: Partial<ReconciledSelfPrediction> = {}): ReconciledSelfPrediction => ({
     kind: 'reconciled',
@@ -991,7 +991,7 @@ describe('selfPredictionLeadMs and displayedAimPose', () => {
       velocityX: 30,
       velocityZ: -12,
       onGround: true,
-      state: createVehicleDrive('rally_loaner'),
+      state: createVehicleDrive('mo_loaner'),
     },
     tickOffset: 3,
     tickAlpha: 0.5,

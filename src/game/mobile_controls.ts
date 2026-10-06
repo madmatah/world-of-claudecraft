@@ -136,7 +136,7 @@ export interface MobileControlCallbacks {
   onArena(): void;
   onDungeonFinder(): void;
   /** Open the Vale Cup window (queue/roster board for the boarball minigame). */
-  onRally?(): void;
+  onMortarOverdrive?(): void;
   onQuestLog(): void;
   onCharacter(): void;
   onBags(): void;
@@ -541,7 +541,7 @@ export class MobileControls {
     this.bindButton('mobile-emote', () => this.callbacks.onEmotes());
     this.bindButton('mobile-arena', () => this.callbacks.onArena());
     this.bindButton('mobile-dfinder', () => this.callbacks.onDungeonFinder());
-    this.bindButton('mobile-rally', () => this.callbacks.onRally?.());
+    this.bindButton('mobile-mortar-overdrive', () => this.callbacks.onMortarOverdrive?.());
     this.bindButton('mobile-quest', () => this.callbacks.onQuestLog());
     this.bindButton('mobile-char', () => this.callbacks.onCharacter());
     this.bindButton('mobile-bags', () => this.callbacks.onBags());
@@ -962,8 +962,8 @@ export class MobileControls {
     this.handbrakeMode = on;
     const button = document.getElementById('mobile-jump');
     if (!button) return;
-    const text = on ? t('hudChrome.rally.handbrake') : t('hudChrome.mobile.jump');
-    const name = on ? t('hudChrome.rally.handbrake') : t('hud.keybinds.actions.jump');
+    const text = on ? t('hudChrome.mortarOverdrive.handbrake') : t('hudChrome.mobile.jump');
+    const name = on ? t('hudChrome.mortarOverdrive.handbrake') : t('hud.keybinds.actions.jump');
     const label = button.querySelector('.mobile-label');
     if (label) label.textContent = text;
     button.setAttribute('aria-label', name);

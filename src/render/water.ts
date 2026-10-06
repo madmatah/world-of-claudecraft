@@ -955,8 +955,8 @@ export function createWaterSurfaceMaterial(
      * The two ends of the depth ramp, if this surface wants its own.
      *
      * Absent leaves the world's shipped pair, which every overworld body and
-     * the shipped rally pools use, so this is invisible until something asks.
-     * What asks is a Realm Racers circuit THEME: a coastal circuit's pools have
+     * the shipped Mortar Overdrive pools use, so this is invisible until something asks.
+     * What asks is a Mortar Overdrive circuit THEME: a coastal circuit's pools have
      * to read as its own sea rather than as the Evergarden's pond, and the
      * colour ramp is the whole of that difference (the ripples, the fresnel and
      * the foam are the same water everywhere, deliberately).
@@ -1703,7 +1703,7 @@ let lowTierWater: THREE.MeshPhongMaterial | null = null;
 /**
  * The water surface of the tier that skips the shader (see `usesShaderWater`):
  * ONE shared material, the world's plane and an instanced band's water alike
- * (realm_racers_track.ts), so the band links the program the world links and
+ * (mortar_overdrive/track.ts), so the band links the program the world links and
  * scrolls with the world's `update`. A surface other than the world plane lays
  * its uv with `layLowTierWaterUv` to read the plane's texel density.
  */

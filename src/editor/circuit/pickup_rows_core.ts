@@ -7,17 +7,20 @@
 // the record's list.
 //
 // Where the boxes THEMSELVES end up is not decided here and must not be:
-// `src/sim/realm_racers_pickups.ts` resolves a row into boxes, the game draws
+// `src/sim/mortar_overdrive/pickups.ts` resolves a row into boxes, the game draws
 // what it returns, and the plan draws the same thing. The bug class that rule
 // exists for is the one the dressing already met once, a tool drawing a
 // placement the game did not have.
 //
 // Pure and DOM-free, deterministic, no rng. Dev tool, so English lives here.
 
-import type { RallyPickupRow, RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
-import { realmRacersPickupBoxes } from '../../sim/realm_racers_pickups';
-import { realmRacersTrack } from '../../sim/realm_racers_spline';
+import type {
+  MortarOverdriveCircuit,
+  MortarOverdrivePickupRow,
+} from '../../sim/content/mortar_overdrive';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../../sim/mortar_overdrive/layout';
+import { mortarOverdrivePickupBoxes } from '../../sim/mortar_overdrive/pickups';
+import { mortarOverdriveTrack } from '../../sim/mortar_overdrive/spline';
 import { NUDGE_STEP_BIG_YD, NUDGE_STEP_YD } from '../placement_transform_core';
 
 /**
@@ -57,12 +60,12 @@ export const MAX_PICKUP_ROWS = 32;
  * limitation every unhinted placement in this tool has.
  */
 export function pickupRowFractionAt(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
 ): number | null {
-  const track = realmRacersTrack(circuit);
-  const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
+  const track = mortarOverdriveTrack(circuit);
+  const projection = track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z);
   if (Math.abs(projection.lateral) > track.halfWidthAt(projection.s)) return null;
   return track.length <= 0 ? null : projection.s / track.length;
 }
@@ -80,13 +83,13 @@ export function pickupRowFractionAt(
  * whatever road is there.
  */
 export function pickupDragFractionAt(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
 ): number | null {
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   if (track.length <= 0) return null;
-  const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
+  const projection = track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z);
   return projection.s / track.length;
 }
 
@@ -98,17 +101,17 @@ export function pickupDragFractionAt(
  * see, which at the outer lane is eight yards off the centerline.
  */
 export function pickupRowAtPoint(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
   tolerance: number,
 ): number {
   let best = -1;
   let bestDistance = tolerance;
-  for (const box of realmRacersPickupBoxes(circuit)) {
+  for (const box of mortarOverdrivePickupBoxes(circuit)) {
     const distance = Math.hypot(
-      box.x - REALM_RACERS_ORIGIN.x - x,
-      box.z - REALM_RACERS_ORIGIN.z - z,
+      box.x - MORTAR_OVERDRIVE_ORIGIN.x - x,
+      box.z - MORTAR_OVERDRIVE_ORIGIN.z - z,
     );
     if (distance > bestDistance) continue;
     best = box.row;
@@ -124,7 +127,7 @@ export type PickupRowAddOutcome = 'added' | 'tooClose' | 'full';
 export interface PickupRowAdd {
   outcome: PickupRowAddOutcome;
   /** The list to commit; the original array when nothing was added. */
-  rows: readonly RallyPickupRow[];
+  rows: readonly MortarOverdrivePickupRow[];
   /** Index of the row the outcome is about: the new one, or the one in the way. */
   index: number;
 }
@@ -137,7 +140,10 @@ export interface PickupRowAdd {
  * click too near an existing row selects nothing and authors nothing: it is
  * reported, because a gesture that silently does nothing reads as a broken tool.
  */
-export function addPickupRow(rows: readonly RallyPickupRow[], fraction: number): PickupRowAdd {
+export function addPickupRow(
+  rows: readonly MortarOverdrivePickupRow[],
+  fraction: number,
+): PickupRowAdd {
   // Wrapped only where it has to be: `((f % 1) + 1) % 1` is not the identity on
   // a fraction already in range (it turns 0.2 into 0.19999999999999996), and
   // this number goes on the record.
@@ -157,9 +163,9 @@ export function addPickupRow(rows: readonly RallyPickupRow[], fraction: number):
 
 /** The list without one entry. */
 export function removedPickupRow(
-  rows: readonly RallyPickupRow[],
+  rows: readonly MortarOverdrivePickupRow[],
   index: number,
-): readonly RallyPickupRow[] {
+): readonly MortarOverdrivePickupRow[] {
   return rows.filter((_, i) => i !== index);
 }
 
@@ -203,7 +209,7 @@ const GAP_SLACK = 1e-4;
 
 /** Is `s` far enough from every row in `rows`? The same test `addPickupRow`
  *  refuses a placement with, so a move cannot author what a click could not. */
-function isClearOf(rows: readonly RallyPickupRow[], s: number): boolean {
+function isClearOf(rows: readonly MortarOverdrivePickupRow[], s: number): boolean {
   return rows.every((row) => gapBetween(row.s, s) >= PICKUP_ROW_MIN_GAP);
 }
 
@@ -220,7 +226,10 @@ function isClearOf(rows: readonly RallyPickupRow[], s: number): boolean {
  * across. Nothing in between is ever committed, so the record never holds two
  * rows a click could not have authored.
  */
-function nearestClearFraction(others: readonly RallyPickupRow[], target: number): number | null {
+function nearestClearFraction(
+  others: readonly MortarOverdrivePickupRow[],
+  target: number,
+): number | null {
   if (isClearOf(others, target)) return target;
   let best: number | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -244,7 +253,7 @@ export type PickupRowMoveOutcome = 'moved' | 'blocked';
 export interface PickupRowMove {
   outcome: PickupRowMoveOutcome;
   /** The list to commit; the original array when nothing moved. */
-  rows: readonly RallyPickupRow[];
+  rows: readonly MortarOverdrivePickupRow[];
   /** Where the row ended up, which is NOT where it started once a move has
    *  carried it past a neighbour. */
   index: number;
@@ -263,7 +272,7 @@ export interface PickupRowMove {
  * placement refusals are: the caller has a status bar to say so with.
  */
 export function movedPickupRow(
-  rows: readonly RallyPickupRow[],
+  rows: readonly MortarOverdrivePickupRow[],
   index: number,
   fraction: number,
 ): PickupRowMove {

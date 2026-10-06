@@ -9,9 +9,9 @@ import {
   sampleAmbienceInto,
 } from '../src/render/ambience_state_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT,
-  REALM_RACERS_THEME_IDS,
-} from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
+  MORTAR_OVERDRIVE_THEME_IDS,
+} from '../src/sim/content/mortar_overdrive/circuits';
 import {
   arenaOrigin,
   bgOriginAt,
@@ -23,17 +23,17 @@ import {
   ZONES,
 } from '../src/sim/data';
 import {
-  clearRealmRacersDraftCircuits,
-  putRealmRacersDraftCircuit,
-} from '../src/sim/realm_racers_draft_registry';
+  clearMortarOverdriveDraftCircuits,
+  putMortarOverdriveDraftCircuit,
+} from '../src/sim/mortar_overdrive/draft_registry';
 import {
-  REALM_RACERS_LANE_DZ,
-  REALM_RACERS_LANES,
-  REALM_RACERS_ORIGIN,
-  realmRacersLaneAt,
-  realmRacersLaneOrigin,
-  realmRacersPublicLane,
-} from '../src/sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_LANE_DZ,
+  MORTAR_OVERDRIVE_LANES,
+  MORTAR_OVERDRIVE_ORIGIN,
+  mortarOverdriveLaneAt,
+  mortarOverdriveLaneOrigin,
+  mortarOverdrivePublicLane,
+} from '../src/sim/mortar_overdrive/layout';
 import { groundHeight, waterLevelAt, zoneBiomeAt } from '../src/sim/world';
 
 describe('ambience_state_core', () => {
@@ -82,26 +82,26 @@ describe('ambience_state_core', () => {
 // whole visit a dungeon and played amb_dungeon under the race music. By the
 // developer's listening test a circuit plays no bed at all, from the lobby to
 // the results: its music, engines and effects are the whole mix.
-describe('ambience on a Realm Racers circuit', () => {
+describe('ambience on a Mortar Overdrive circuit', () => {
   const SEED = 1234;
 
   afterEach(() => {
-    clearRealmRacersDraftCircuits();
+    clearMortarOverdriveDraftCircuits();
   });
 
   const sampleAt = (x: number, z: number): AmbienceState =>
     sampleAmbienceInto(createAmbienceState(), x, z, SEED, true);
 
   function draftLaneOrigin(theme: string): { x: number; z: number } {
-    const draft = { ...REALM_RACERS_PRACTICE_CIRCUIT, id: `ambience_probe_${theme}`, theme };
-    putRealmRacersDraftCircuit(draft);
-    return realmRacersLaneOrigin(realmRacersPublicLane(draft));
+    const draft = { ...MORTAR_OVERDRIVE_PRACTICE_CIRCUIT, id: `ambience_probe_${theme}`, theme };
+    putMortarOverdriveDraftCircuit(draft);
+    return mortarOverdriveLaneOrigin(mortarOverdrivePublicLane(draft));
   }
 
   // The centre and two opposite corners of a lane's region.
   function lanePoints(index: number): { x: number; z: number }[] {
-    const lane = REALM_RACERS_LANES[index] ?? null;
-    const origin = realmRacersLaneOrigin(index);
+    const lane = MORTAR_OVERDRIVE_LANES[index] ?? null;
+    const origin = mortarOverdriveLaneOrigin(index);
     const hx = (lane?.circuit.regionHalfX ?? 1) - 1;
     const hz = (lane?.circuit.regionHalfZ ?? 1) - 1;
     return [
@@ -118,13 +118,13 @@ describe('ambience on a Realm Racers circuit', () => {
     delveOrigin(0, 0),
     riftOriginAt(0),
     bgOriginAt(0),
-    { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z + REALM_RACERS_LANE_DZ / 2 },
+    { x: MORTAR_OVERDRIVE_ORIGIN.x, z: MORTAR_OVERDRIVE_ORIGIN.z + MORTAR_OVERDRIVE_LANE_DZ / 2 },
   ];
 
   it('samples every authored lane as nowhere a bed plays', () => {
     // Every lane, practice copies included: the Express Tour, the Moonspring
     // Run and each Evergarden practice copy.
-    const ids = new Set(REALM_RACERS_LANES.map((lane) => lane.circuit.id));
+    const ids = new Set(MORTAR_OVERDRIVE_LANES.map((lane) => lane.circuit.id));
     for (const id of [
       'evergarden_practice',
       'evergarden_express_tour',
@@ -132,10 +132,10 @@ describe('ambience on a Realm Racers circuit', () => {
     ]) {
       expect(ids.has(id), id).toBe(true);
     }
-    expect(REALM_RACERS_LANES.some((lane) => lane.practice)).toBe(true);
-    for (const lane of REALM_RACERS_LANES) {
+    expect(MORTAR_OVERDRIVE_LANES.some((lane) => lane.practice)).toBe(true);
+    for (const lane of MORTAR_OVERDRIVE_LANES) {
       for (const point of lanePoints(lane.index)) {
-        expect(realmRacersLaneAt(point.x, point.z)?.index).toBe(lane.index);
+        expect(mortarOverdriveLaneAt(point.x, point.z)?.index).toBe(lane.index);
         expect(sampleAt(point.x, point.z), `${lane.circuit.id} lane ${lane.index}`).toEqual({
           inDungeon: false,
           biome: null,
@@ -148,7 +148,7 @@ describe('ambience on a Realm Racers circuit', () => {
 
   it('keeps every other instance, and the empty band between lanes, on the dungeon bed', () => {
     for (const point of instancePoints()) {
-      expect(realmRacersLaneAt(point.x, point.z)).toBeNull();
+      expect(mortarOverdriveLaneAt(point.x, point.z)).toBeNull();
       const s = sampleAt(point.x, point.z);
       expect(s.inDungeon, JSON.stringify(point)).toBe(true);
       expect(s.biome).toBe(zoneBiomeAt(point.x, point.z));
@@ -212,7 +212,7 @@ describe('ambience on a Realm Racers circuit', () => {
     });
 
     it('plays no bed on any authored lane, the dungeon bed included', () => {
-      for (const lane of REALM_RACERS_LANES) {
+      for (const lane of MORTAR_OVERDRIVE_LANES) {
         for (const point of lanePoints(lane.index)) {
           expectSilent(
             bedsFor(sampleAt(point.x, point.z)),
@@ -225,7 +225,7 @@ describe('ambience on a Realm Racers circuit', () => {
     it('plays no bed on a draft circuit, whatever theme it wears', () => {
       // A rain realm, a shore isle, the dungeon-dark hollow and a typo: the
       // theme dresses the circuit and never reaches the mix.
-      for (const theme of [...REALM_RACERS_THEME_IDS, 'no_such_theme']) {
+      for (const theme of [...MORTAR_OVERDRIVE_THEME_IDS, 'no_such_theme']) {
         const origin = draftLaneOrigin(theme);
         expectSilent(bedsFor(sampleAt(origin.x, origin.z)), theme);
       }

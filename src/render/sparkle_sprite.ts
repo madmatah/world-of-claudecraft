@@ -3,7 +3,7 @@
 //
 // It is one factory rather than a block copied per caller because there are now
 // three of them (the renderer's F-interactable objects, its ground quest
-// objects, and the Realm Racers pickup boxes) and the glint has to be the SAME
+// objects, and the Mortar Overdrive pickup boxes) and the glint has to be the SAME
 // glint: a player learns it once, on a quest crate, and then reads it at race
 // speed on a circuit.
 //

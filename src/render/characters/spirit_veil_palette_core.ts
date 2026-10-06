@@ -16,9 +16,9 @@ export type SpiritVeilPalette =
   | 'stealth-other'
   | 'moonkin'
   | 'soul-rend'
-  | 'rally-ward'
-  | 'rally-ward-ending'
-  | 'rally-ghost';
+  | 'mortar-overdrive-ward'
+  | 'mortar-overdrive-ward-ending'
+  | 'mortar-overdrive-ghost';
 
 export interface SpiritVeilPaletteValues {
   tint: number;
@@ -41,7 +41,7 @@ export interface SpiritVeilPaletteValues {
   band: number;
 }
 
-const RALLY_WARD_LOOK: Readonly<SpiritVeilPaletteValues> = {
+const MORTAR_OVERDRIVE_WARD_LOOK: Readonly<SpiritVeilPaletteValues> = {
   tint: 0xffd35a,
   deep: 0x8a6418,
   rim: 0xfeb50b,
@@ -140,18 +140,18 @@ export const SPIRIT_VEIL_PALETTES: Readonly<
     keepColor: 0,
     band: 1,
   },
-  // A Realm Racers machine carrying the ward, which a Ground Blast will not
+  // A Mortar Overdrive machine carrying the ward, which a Ground Blast will not
   // touch: the March's look, far denser, with a hot gold rim, so it reads on
   // a kart at racing distance. Tuned live on the machine.
-  'rally-ward': RALLY_WARD_LOOK,
+  'mortar-overdrive-ward': MORTAR_OVERDRIVE_WARD_LOOK,
   // The same ward in its last seconds: the same values, pulsed
   // (SPIRIT_VEIL_PULSES), so the rig swaps palette once when the ward starts
   // to run out and every ending ward shares the one pulsing uniform set.
-  'rally-ward-ending': RALLY_WARD_LOOK,
-  // A Realm Racers machine just recovered onto the road, which rivals drive
+  'mortar-overdrive-ward-ending': MORTAR_OVERDRIVE_WARD_LOOK,
+  // A Mortar Overdrive machine just recovered onto the road, which rivals drive
   // through: its own colours under a pale, still, see-through body, never the
   // released spirit's blue. Tuned live on the machine.
-  'rally-ghost': {
+  'mortar-overdrive-ghost': {
     tint: 0xeef3f8,
     deep: 0x9aa6b4,
     rim: 0xf2f7ff,
@@ -166,14 +166,19 @@ export const SPIRIT_VEIL_PALETTES: Readonly<
 
 /**
  * The veils a player ACTS on (docs/design/graphics-settings-fairness.md): Soul
- * Rend, and a Realm Racers rival's ward (ending or not) and recovery ghost.
+ * Rend, and a Mortar Overdrive rival's ward (ending or not) and recovery ghost.
  * They mount on the frame their state lands, never staged behind the effect
  * gate: a staged veil that never proves its link would leave the state unread
  * while it holds. A tuple the boot family has not linked yet links live
  * instead, once.
  */
 export const SPIRIT_VEIL_NEVER_DEFERRED: ReadonlySet<SpiritVeilPalette> =
-  new Set<SpiritVeilPalette>(['soul-rend', 'rally-ward', 'rally-ward-ending', 'rally-ghost']);
+  new Set<SpiritVeilPalette>([
+    'soul-rend',
+    'mortar-overdrive-ward',
+    'mortar-overdrive-ward-ending',
+    'mortar-overdrive-ghost',
+  ]);
 
 /** A palette whose rim strength and body opacity pulse on the world clock. */
 export interface SpiritVeilPulse {
@@ -186,15 +191,18 @@ export interface SpiritVeilPulse {
 
 /** How fast an ending ward pulses, cycles per second. Kept under three a
  *  second, the flash-safety ceiling. */
-export const RALLY_WARD_ENDING_PULSE_HZ = 2.5;
+export const MORTAR_OVERDRIVE_WARD_ENDING_PULSE_HZ = 2.5;
 /** How far an ending ward dims at the trough, as a fraction of the full
  *  ward's rim and body: a dimmer gold, still plainly a ward. */
-export const RALLY_WARD_ENDING_DIM = 0.4;
+export const MORTAR_OVERDRIVE_WARD_ENDING_DIM = 0.4;
 
 export const SPIRIT_VEIL_PULSES: Readonly<
   Partial<Record<SpiritVeilPalette, Readonly<SpiritVeilPulse>>>
 > = {
-  'rally-ward-ending': { hz: RALLY_WARD_ENDING_PULSE_HZ, dim: RALLY_WARD_ENDING_DIM },
+  'mortar-overdrive-ward-ending': {
+    hz: MORTAR_OVERDRIVE_WARD_ENDING_PULSE_HZ,
+    dim: MORTAR_OVERDRIVE_WARD_ENDING_DIM,
+  },
 };
 
 /**
@@ -225,7 +233,7 @@ export const SPIRIT_VEIL_POLICY: Readonly<Record<SpiritVeilPalette, Readonly<Spi
   'stealth-other': { castsShadow: false, weaponVfx: false },
   moonkin: { castsShadow: true, weaponVfx: true },
   'soul-rend': { castsShadow: false, weaponVfx: true },
-  'rally-ward': { castsShadow: false, weaponVfx: false },
-  'rally-ward-ending': { castsShadow: false, weaponVfx: false },
-  'rally-ghost': { castsShadow: false, weaponVfx: false },
+  'mortar-overdrive-ward': { castsShadow: false, weaponVfx: false },
+  'mortar-overdrive-ward-ending': { castsShadow: false, weaponVfx: false },
+  'mortar-overdrive-ghost': { castsShadow: false, weaponVfx: false },
 };

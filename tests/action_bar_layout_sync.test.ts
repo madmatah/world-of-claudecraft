@@ -110,7 +110,7 @@ describe('sanitizeActionBarLayout (untrusted payload bounds)', () => {
       'cat',
       'cat_stealth',
       'stealth',
-      'rally',
+      'mortarOverdrive',
     ]);
   });
 

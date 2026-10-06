@@ -479,6 +479,8 @@ import { MapSidebarCollapse } from './hud/map/map_sidebar_collapse';
 import { resolveMapZone } from './hud/map/map_zone_focus_core';
 import { MAP_ZONE_LOOKUP } from './hud/map/map_zone_focus_lookup';
 import { refreshSideButtonLabels } from './hud/menu/side_buttons';
+import * as moHud from './hud/mortar_overdrive';
+import { MortarOverdriveUi } from './hud/mortar_overdrive/composer';
 import { livingSecondaryPet } from './hud/pet_bar_core';
 import { CARD_POSES } from './hud/player_card/player_card';
 import { PlayerCardController } from './hud/player_card/player_card_controller';
@@ -582,7 +584,6 @@ import { parseChatSegments } from './hud/quest/quest_link';
 import { QuestProgressBanner } from './hud/quest/quest_progress_banner';
 import { QuestTrackerController } from './hud/quest/quest_tracker_controller';
 import { QuestLogWindow } from './hud/quest/questlog_window';
-import * as realmRacersHud from './hud/realm_racers';
 import { paintFactionTierCelebrations } from './hud/reputation/faction_tier_celebration_painter';
 import { advanceFactionTierObservation } from './hud/reputation/faction_tier_celebration_view';
 import { RiftMapPainter } from './hud/rift';
@@ -810,7 +811,6 @@ import { formatLockoutDuration, raidLockoutDisplayName } from './raid_lockout_fo
 import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view';
 import { RAID_MARKER_LABEL_KEYS, raidMarkerDisplayName } from './raid_marker_labels_view';
 import { presentRealmBuilder, RealmBuilderPopup } from './realm_builder_popup';
-import { RealmRacersUi } from './realm_racers';
 import { RecipePinStore } from './recipe_pins_store';
 import { RecipeTrackerPainter } from './recipe_tracker_painter';
 import {
@@ -1376,7 +1376,7 @@ export class Hud {
     return this.sim.vehicleSession ? this.vehicleControls.aim : this.playerGroundAim;
   }
   private readonly playerGroundAim = new GroundAimController({
-    player: () => realmRacersHud.rallyAimCaster(this),
+    player: () => moHud.mortarOverdriveAimCaster(this),
     resolveAbility: (id) => resolveGroundAimAbility(this.sim.known, id),
     seedTargetPoint: () =>
       selectedGroundAimPoint(
@@ -1392,7 +1392,7 @@ export class Hud {
       // mouse click, mobile tap), so the button flash lives here, once, instead
       // of only on the keyboard path.
       if (barSlot !== null) this.flashActionSlot(barSlot);
-      realmRacersHud.predictRallyGroundBlastFire(this, id, point);
+      moHud.predictMortarOverdriveGroundBlastFire(this, id, point);
     },
     clearReticle: () => this.renderer.setGroundAimReticle(null),
     projectPlacement: (id, point) => this.sim.groundAimPlacementPreview(id, point),
@@ -2335,7 +2335,7 @@ export class Hud {
       talentSpec: () => this.sim.talentSpec,
       knownAbilityIds: () => this.sim.known.map((known) => known.def.id),
       hasAura: (kind) => this.sim.player.auras.some((aura) => aura.kind === kind),
-      isInRealmRacers: () => this.sim.realmRacersInfo.match !== null,
+      isInMortarOverdrive: () => this.sim.mortarOverdriveInfo.match !== null,
       showAttackButton: () => this.optionsHooks?.settings.get('showAttackButton') ?? true,
       // The arrangement profile for this device's interface (desktop or touch),
       // read from the same body.mobile-touch signal every touch-gated path uses.
@@ -3177,7 +3177,7 @@ export class Hud {
     $('#mm-wiki')?.addEventListener('click', () => this.openWiki());
     $('#mm-arena').addEventListener('click', () => this.toggleArena());
     $('#mm-dfinder').addEventListener('click', () => this.toggleDungeonFinder());
-    $('#mm-rally').addEventListener('click', () => this.toggleRealmRacers());
+    $('#mm-mortar-overdrive').addEventListener('click', () => this.toggleMortarOverdrive());
     $('#mm-cardduel').addEventListener('click', () => this.toggleCardDuel());
     $('#mm-leaderboard').addEventListener('click', () => this.toggleLeaderboard());
     $('#mm-wocmarket')?.addEventListener('click', () => this.toggleWocMarket());
@@ -3707,8 +3707,8 @@ export class Hud {
       case 'raid-boss-guide-window':
         this.raidBossGuideWindow.close();
         break;
-      case 'realm-racers-window':
-        this.realmRacersUi.close();
+      case 'mortar-overdrive-window':
+        this.mortarOverdriveUi.close();
         break;
       case 'card-duel-window':
         // Route through the painter so focus returns to the opener (WCAG 2.2 AA).
@@ -5602,9 +5602,9 @@ export class Hud {
     root: () => $('#bg-proposal-popup'),
     world: () => this.sim,
   });
-  private readonly realmRacersSplash = realmRacersHud.createRealmRacersSplash(this);
-  private readonly realmRacersUi = new RealmRacersUi(realmRacersHud.realmRacersUiDeps(this));
-  readonly lobbyHold = this.realmRacersUi.lobbyHold;
+  private readonly mortarOverdriveSplash = moHud.createMortarOverdriveSplash(this);
+  private readonly mortarOverdriveUi = new MortarOverdriveUi(moHud.mortarOverdriveUiDeps(this));
+  readonly lobbyHold = this.mortarOverdriveUi.lobbyHold;
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
   // menu AND the persistent #mm-cardduel micromenu button both toggle it (a card
@@ -7001,8 +7001,8 @@ export class Hud {
     this.bgProposalPopup.relocalize();
     // Same text-independent-sig contract for the Vale Cup surfaces: clear the
     // sigs so the next render/update rebuilds with fresh t().
-    this.realmRacersUi.relocalize();
-    this.realmRacersSplash.clear();
+    this.mortarOverdriveUi.relocalize();
+    this.mortarOverdriveSplash.clear();
     this.questDialog.relocalize();
     // Same text-independent-sig contract, one surface at a time (#2529). Every
     // one of these was rebuilding only when its own data moved, so an open one
@@ -7445,7 +7445,7 @@ export class Hud {
     resolved: ResolvedAbility,
     slotForAim: number,
   ): void {
-    if (realmRacersHud.refuseLockedAbility(this, abilityId, slotForAim)) return;
+    if (moHud.refuseLockedAbility(this, abilityId, slotForAim)) return;
     const cdReady =
       abilityId === 'clockwork_shock_bomb'
         ? (this.sim.player.cooldowns.get(abilityId) ?? 0) <= 0
@@ -7504,7 +7504,7 @@ export class Hud {
             this.sim.castAbilityOn(action.id, mouseoverPid);
           } else {
             this.sim.castAbility(action.id);
-            realmRacersHud.predictRallySlickDrop(this, action.id);
+            moHud.predictMortarOverdriveSlickDrop(this, action.id);
           }
           // Optional QoL: also engage auto-attack when the ability is an offensive
           // attack, so white swings start without a separate Attack press. Gated on
@@ -8765,7 +8765,7 @@ export class Hud {
     // Self-contained timer controller: a roll must keep expiring on schedule
     // whether or not this frame paints.
     this.lootRolls.update(now);
-    this.realmRacersUi.sendReady();
+    this.mortarOverdriveUi.sendReady();
     // The zone/combat/boss music state machine, hoisted above the cut (phase 4
     // QA F1): music keeps PLAYING on hidden frames, so its transitions (combat
     // over, zone change, boss engage) must keep executing or a
@@ -8784,7 +8784,7 @@ export class Hud {
         zone: zoneAt(p.pos.x, p.pos.z),
         inDungeon: p.pos.x > DUNGEON_X_THRESHOLD,
         entities: sim.entities.values(),
-        realmRacersMatchId: sim.realmRacersInfo.match?.id ?? null,
+        mortarOverdriveMatchId: sim.mortarOverdriveInfo.match?.id ?? null,
         riftFloor: sim.riftFloor,
       });
     }
@@ -8801,7 +8801,7 @@ export class Hud {
     this.mountRaceStrip.repaintIfChanged();
     this.mountRaceControls.update();
     this.vehicleControls.update();
-    this.realmRacersUi.update();
+    this.mortarOverdriveUi.update();
     this.lockpickController.repaintIfChanged();
     this.tutorial.update(sim, this.renderer, this.keybinds);
     this.bootcamp.update(sim, this.renderer, this.keybinds, this.optionsHooks?.gamepad ?? null);
@@ -10453,8 +10453,8 @@ export class Hud {
     this.dungeonFinderWindow.toggle();
   }
 
-  toggleRealmRacers(): void {
-    this.realmRacersUi.toggle();
+  toggleMortarOverdrive(): void {
+    this.mortarOverdriveUi.toggle();
   }
 
   toggleCardDuel(): void {
@@ -11162,7 +11162,7 @@ export class Hud {
       this.meters.onEvent(ev);
       if (this.isNythraxisEvent(ev)) this.lastNythraxisCombatEventAt = performance.now();
       if (applyQuestEventPresentation(this, ev)) continue;
-      if (realmRacersHud.applyRealmRacersEventPresentation(this, ev)) continue;
+      if (moHud.applyMortarOverdriveEventPresentation(this, ev)) continue;
       if (ev.type === 'worldQuestInvestigationDialogue') this.questDialog.open(ev.targetId);
       if (ev.type === 'worldQuestWeeklyOpen') this.weeklyQuestsWindow.open();
       switch (ev.type) {

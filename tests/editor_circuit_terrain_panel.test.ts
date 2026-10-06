@@ -26,13 +26,13 @@ import {
   type TerrainPanelHost,
   terrainArmStateText,
 } from '../src/editor/circuit/panel_terrain';
-import { REALM_RACERS_BARRIERS } from '../src/sim/content/realm_racers_barriers';
+import { MORTAR_OVERDRIVE_BARRIERS } from '../src/sim/content/mortar_overdrive/barriers';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 /** The Evergarden's own vocabulary, which is what the palette folds on. */
 const ZONE_KITS = ['ironwork', 'hedge', 'stoneWall'];
@@ -43,11 +43,11 @@ function mount(overrides: Partial<TerrainPanelHost> = {}): {
   host: TerrainPanelHost;
 } {
   document.body.innerHTML = '';
-  const record = (overrides.record?.() ?? GARDEN) as RealmRacersCircuit;
+  const record = (overrides.record?.() ?? GARDEN) as MortarOverdriveCircuit;
   const host: TerrainPanelHost = {
     record: () => record,
-    metrics: () => realmRacersCircuitMetrics(record),
-    track: () => realmRacersTrack(record),
+    metrics: () => mortarOverdriveCircuitMetrics(record),
+    track: () => mortarOverdriveTrack(record),
     drawn: () => true,
     mode: () => 'terrain',
     selection: () => null,
@@ -145,7 +145,7 @@ describe('the terrain palette', () => {
       (el) => el.dataset.kit as string,
     );
     expect(kits.slice(0, ZONE_KITS.length)).toEqual(ZONE_KITS);
-    expect(new Set(kits)).toEqual(new Set(Object.keys(REALM_RACERS_BARRIERS)));
+    expect(new Set(kits)).toEqual(new Set(Object.keys(MORTAR_OVERDRIVE_BARRIERS)));
     // ...and no kit is offered twice, which the two groups make possible.
     expect(kits.length).toBe(new Set(kits).size);
   });
@@ -238,7 +238,7 @@ describe('what the tool says it is doing', () => {
 });
 
 describe('the terrain inspector', () => {
-  const walled: RealmRacersCircuit = {
+  const walled: MortarOverdriveCircuit = {
     ...GARDEN,
     id: 'terrain_panel_fixture',
     fences: [
@@ -288,7 +288,7 @@ describe('the terrain inspector', () => {
     // spelled as halves because that is what the record holds and what a grip
     // writes: a field called "width" over half of one is a field typed into
     // wrong.
-    const commits: RealmRacersCircuit[] = [];
+    const commits: MortarOverdriveCircuit[] = [];
     const { inspector } = mount({ record: () => walled, commit: (next) => commits.push(next) });
     inspector.paint();
     const inputs = [...inspector.el.querySelectorAll('input[type="number"]')].filter(
@@ -325,7 +325,7 @@ describe('the terrain inspector', () => {
     // ...and it points at the bar, which is where both ways to make one live.
     expect(inspector.el.textContent).toContain('Draw ground shape');
 
-    const island: RealmRacersCircuit = {
+    const island: MortarOverdriveCircuit = {
       ...walled,
       id: 'terrain_panel_island',
       groundOutline: [
@@ -348,7 +348,7 @@ describe('the terrain inspector', () => {
     // Drawing a shape and discarding one are not selection edits: there is one
     // ground, so they belong on the mode's action bar. What stays here is the
     // barrier's own delete, which acts on one of many.
-    const island: RealmRacersCircuit = {
+    const island: MortarOverdriveCircuit = {
       ...walled,
       id: 'terrain_panel_island_buttons',
       groundOutline: [
@@ -372,14 +372,14 @@ describe('the terrain inspector', () => {
     // One run of 80 yards, one collider, and the kit's own drawn height.
     expect(text).toContain('80.0 yd');
     expect(text).toContain('an open run');
-    expect(text).toContain(REALM_RACERS_BARRIERS.ironwork.height.toFixed(2));
+    expect(text).toContain(MORTAR_OVERDRIVE_BARRIERS.ironwork.height.toFixed(2));
   });
 
   it('reports a barrier whose kit precedes it in the record, not the one beside it', () => {
     // The aliasing this exists to refuse: the resolver SKIPS an unknown kit, so
     // the placement list is shorter than the record's and a positional lookup
     // reports the wrong barrier's numbers for the selection.
-    const withUnknownFirst: RealmRacersCircuit = {
+    const withUnknownFirst: MortarOverdriveCircuit = {
       ...GARDEN,
       id: 'terrain_panel_aliasing',
       fences: [
@@ -449,7 +449,7 @@ describe('the terrain inspector', () => {
     // data-loss bug, not a style one: a committed record the validator refuses
     // still reaches the autosave, and boot re-validates what it finds, so the
     // stored draft degrades to a fresh canvas and the session is gone.
-    const commits: RealmRacersCircuit[] = [];
+    const commits: MortarOverdriveCircuit[] = [];
     const setStatus = vi.fn();
     const { inspector } = mount({
       record: () => walled,

@@ -3,8 +3,8 @@
 //
 // `jungle_features.ts` fetches every one of them in the deferred lane at world
 // entry and keeps each parsed scene for the session, drawing its raw glTF
-// materials; the Realm Racers dressing draws the palms and the coconuts through
-// that same parse (realm_racers_dressing_material.ts, the `worldRaw` route).
+// materials; the Mortar Overdrive dressing draws the palms and the coconuts through
+// that same parse (mortar_overdrive/dressing_material.ts, the `worldRaw` route).
 
 /** The three beach-palm variants, indexed by `ReachPalm.variant`. */
 export const JUNGLE_PALM_URLS = [

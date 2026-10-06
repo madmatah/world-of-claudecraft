@@ -30,7 +30,7 @@ export interface AbilityBudgetSubject {
 
 /**
  * A FIXED charge budget, spent out: N uses granted for the duration of an
- * activity and never refilled (the Realm Racers's weapon slot).
+ * activity and never refilled (the Mortar Overdrive's weapon slot).
  *
  * The `fixed` flag is load-bearing and not merely `rechargeLength <= 0`: the
  * shared recharge tick reads a zero recharge length as "every timer already

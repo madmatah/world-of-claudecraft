@@ -111,9 +111,9 @@ export const HUD_LOG = {
   DELVE_LORE: '#cba6f0',
   /** A soft hint the player may ignore (the crafting trend nudge). */
   HINT: '#c8b888',
-  /** A Realm Racers queue or draw notice, in the circuit's own gold. */
+  /** A Mortar Overdrive queue or draw notice, in the circuit's own gold. */
   RACE_NOTICE: '#dcb75b',
-  /** A Realm Racers loss because a rival's race ended on a forfeit. */
+  /** A Mortar Overdrive loss because a rival's race ended on a forfeit. */
   RACE_FORFEIT: '#ff9b72',
 } as const;
 

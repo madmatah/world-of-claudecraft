@@ -34,18 +34,18 @@ import {
   withAlpha,
 } from '../src/editor/circuit/plan_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
 import {
-  REALM_RACERS_LAWN_OVERSHOOT,
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_RUNOFF_WIDTH,
-  REALM_RACERS_VERGE_MARGIN,
-} from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_LAWN_OVERSHOOT,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+  MORTAR_OVERDRIVE_RUNOFF_WIDTH,
+  MORTAR_OVERDRIVE_VERGE_MARGIN,
+} from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 describe('the starter oval', () => {
   it('is a closed counter-clockwise ring the spline can read', () => {
@@ -68,7 +68,7 @@ describe('the starter oval', () => {
     // measuring the spline instead passes with the oval wound backwards, which
     // is `reversed_winding` on screen from the first frame.
     const circuit = {
-      ...REALM_RACERS_PRACTICE_CIRCUIT,
+      ...MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
       id: 'test_starter',
       controlPoints: starterControlPoints(),
       widthBands: [
@@ -80,11 +80,11 @@ describe('the starter oval', () => {
       ponds: undefined,
       basin: undefined,
     };
-    expect(realmRacersCircuitMetrics(circuit).problems).toEqual([]);
+    expect(mortarOverdriveCircuitMetrics(circuit).problems).toEqual([]);
     // Counter-clockwise, which is the winding the readout wants, named rather
     // than left to the empty-problems assertion alone.
-    expect(realmRacersCircuitMetrics(circuit).winding).toBeGreaterThan(0);
-    expect(realmRacersTrack(circuit).length).toBeGreaterThan(100);
+    expect(mortarOverdriveCircuitMetrics(circuit).winding).toBeGreaterThan(0);
+    expect(mortarOverdriveTrack(circuit).length).toBeGreaterThan(100);
   });
 
   it('fits inside the room a circuit has, garden and all', () => {
@@ -102,7 +102,8 @@ describe('framing the plan', () => {
     const blank = fitHalfExtent(false, 5, 5);
     expect(blank).toBe(fitHalfExtent(false, 900, 900));
     expect(blank).toBeCloseTo(
-      Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * FIT_MARGIN_BLANK,
+      Math.max(MORTAR_OVERDRIVE_MAX_REGION_HALF_X, MORTAR_OVERDRIVE_MAX_REGION_HALF_Z) *
+        FIT_MARGIN_BLANK,
       6,
     );
   });
@@ -137,7 +138,7 @@ describe('the centerline aim box', () => {
     // drawn exactly on this box carries a road the widest legal wall can hold.
     for (const road of [6, 10, 24]) {
       const limit = centerlineLimit([road]);
-      const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+      const gardenEdge = road + MORTAR_OVERDRIVE_VERGE_MARGIN + MORTAR_OVERDRIVE_RUNOFF_WIDTH;
       expect(limit.halfX + gardenEdge, `x at ${road}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_X);
       expect(limit.halfZ + gardenEdge, `z at ${road}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_Z);
       // ...and not needlessly tighter than that, or the tool would be refusing
@@ -147,8 +148,8 @@ describe('the centerline aim box', () => {
     }
     // The wall's ceiling really is inside the volume's, which is the fact the
     // relation above rests on.
-    expect(MAX_PERIMETER_HALF_X).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_X);
-    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(MAX_PERIMETER_HALF_X).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
+    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z);
   });
 
   it('shrinks as the road widens, since the pen only draws the middle', () => {
@@ -170,7 +171,7 @@ describe('the centerline aim box', () => {
 });
 
 describe('the named boxes on the plan', () => {
-  const GARDEN = REALM_RACERS_PRACTICE_CIRCUIT;
+  const GARDEN = MORTAR_OVERDRIVE_PRACTICE_CIRCUIT;
 
   it('gives a blank canvas the volume, and nothing the placeholder brought', () => {
     // The rule the whole canvas follows: none of the borrowed record is shown
@@ -194,7 +195,7 @@ describe('the named boxes on the plan', () => {
     // operator reaches for. What it IS goes in the value, read once.
     expect(drawn.label).toBe('max');
     expect(drawn.value).toBe(
-      `${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd, the flat floor`,
+      `${MORTAR_OVERDRIVE_MAX_REGION_HALF_X * 2} x ${MORTAR_OVERDRIVE_MAX_REGION_HALF_Z * 2} yd, the flat floor`,
     );
   });
 
@@ -202,14 +203,14 @@ describe('the named boxes on the plan', () => {
     // A draft authored before the volume became the ceiling is legal and still
     // loads. Printing its number beside the word "ceiling" would be the plan
     // lying about the one mark it promises never moves.
-    const old: RealmRacersCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
+    const old: MortarOverdriveCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
     const volume = planBearings(old, true)[0];
     expect(volume.half).toEqual({ halfX: 170, halfZ: 140 });
     // Still called max, and the row says it is UNDER one rather than printing a
     // number beside a word that would then be a lie.
     expect(volume.label).toBe('max');
     expect(volume.value).toBe(
-      `340 x 280 yd, under the ${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd ceiling`,
+      `340 x 280 yd, under the ${MORTAR_OVERDRIVE_MAX_REGION_HALF_X * 2} x ${MORTAR_OVERDRIVE_MAX_REGION_HALF_Z * 2} yd ceiling`,
     );
   });
 
@@ -231,19 +232,19 @@ describe('the named boxes on the plan', () => {
     const ground = planBearings(GARDEN, true)[2];
     expect(ground.id).toBe('ground');
     expect(ground.half).toBeNull();
-    const halfX = GARDEN.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT;
-    const halfZ = GARDEN.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT;
+    const halfX = GARDEN.regionHalfX + MORTAR_OVERDRIVE_LAWN_OVERSHOOT;
+    const halfZ = GARDEN.regionHalfZ + MORTAR_OVERDRIVE_LAWN_OVERSHOOT;
     expect(ground.value).toBe(`${halfX * 2} x ${halfZ * 2} yd, the lawn past the edge`);
     // ...and it really is bigger than the box that bounds everything else,
     // which is the whole reason drawing it was confusing rather than useful.
-    expect(halfX).toBeGreaterThan(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(halfX).toBeGreaterThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
   });
 
   it('stops describing the ground as a rectangle once one is DRAWN', () => {
     // It is a curve then, drawn as itself. A rectangle in the legend beside a
     // shore on the canvas would be the key describing the box the shape
     // replaced.
-    const island: RealmRacersCircuit = {
+    const island: MortarOverdriveCircuit = {
       ...GARDEN,
       groundOutline: [
         { x: -100, z: -80 },
@@ -259,7 +260,7 @@ describe('the named boxes on the plan', () => {
   });
 
   it('gives every box its own dashes, so a legend swatch cannot stand for two', () => {
-    const bearings = planBearings(REALM_RACERS_PRACTICE_CIRCUIT, true, true);
+    const bearings = planBearings(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT, true, true);
     for (const bearing of bearings) {
       expect(bearing.dash).toEqual(PLAN_BEARING_DASH[bearing.id]);
     }
@@ -401,8 +402,8 @@ describe('the colours the canvas borrows', () => {
     // that field is the one thing the shipped records do not carry: run over the
     // record alone, every assertion about it passes with the clearing deleted,
     // which is exactly how the two defects above got in.
-    const template: RealmRacersCircuit = {
-      ...REALM_RACERS_PRACTICE_CIRCUIT,
+    const template: MortarOverdriveCircuit = {
+      ...MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
       groundOutline: [
         { x: -100, z: -80 },
         { x: 100, z: -80 },
@@ -413,10 +414,10 @@ describe('the colours the canvas borrows', () => {
     const blank = blankCircuit(template);
     // The template really does carry all of it: without this the assertions
     // below would pass over an empty source and prove nothing.
-    expect(REALM_RACERS_PRACTICE_CIRCUIT.props?.length ?? 0).toBeGreaterThan(0);
-    expect(REALM_RACERS_PRACTICE_CIRCUIT.ponds?.length ?? 0).toBeGreaterThan(0);
-    expect(REALM_RACERS_PRACTICE_CIRCUIT.pickupRows?.length ?? 0).toBeGreaterThan(0);
-    expect(REALM_RACERS_PRACTICE_CIRCUIT.basin).toBeDefined();
+    expect(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.props?.length ?? 0).toBeGreaterThan(0);
+    expect(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.ponds?.length ?? 0).toBeGreaterThan(0);
+    expect(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.pickupRows?.length ?? 0).toBeGreaterThan(0);
+    expect(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.basin).toBeDefined();
     expect(blank.props).toBeUndefined();
     expect(blank.scatters).toBeUndefined();
     expect(blank.ponds).toBeUndefined();
@@ -424,8 +425,8 @@ describe('the colours the canvas borrows', () => {
     expect(blank.pickupRows).toBeUndefined();
     expect(blank.groundOutline).toBeUndefined();
     // And it did inherit the numbers, or it would be clearing the wrong thing.
-    expect(blank.perimeter).toEqual(REALM_RACERS_PRACTICE_CIRCUIT.perimeter);
-    expect(blank.laps).toBe(REALM_RACERS_PRACTICE_CIRCUIT.laps);
+    expect(blank.perimeter).toEqual(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.perimeter);
+    expect(blank.laps).toBe(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.laps);
   });
 
   it('leaves NOTHING placed behind, whatever the record grows next', () => {
@@ -437,7 +438,7 @@ describe('the colours the canvas borrows', () => {
     const SHAPE_LISTS = ['controlPoints', 'widthBands', 'roles'];
     const kept = Object.entries(
       blankCircuit({
-        ...REALM_RACERS_PRACTICE_CIRCUIT,
+        ...MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
         groundOutline: [
           { x: -10, z: -10 },
           { x: 10, z: -10 },

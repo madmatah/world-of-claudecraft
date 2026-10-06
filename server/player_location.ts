@@ -3,7 +3,7 @@
 // embed, and the admin live location. Host-free (no sessions, no sockets):
 // game.ts hands in the entity and the session state these read.
 //
-// One zone rule serves them all (presenceZoneAt): a player on the Realm Racers
+// One zone rule serves them all (presenceZoneAt): a player on the Mortar Overdrive
 // band reads the zone of the circuit on that lane, the one the minimap shows,
 // never the overworld band the lane's z happens to share. The band sits past
 // DUNGEON_X_THRESHOLD but between the instance bands, so instanceZoneName
@@ -21,7 +21,7 @@ import {
   isDelvePos,
   zoneAt,
 } from '../src/sim/data';
-import { realmRacersZoneAt } from '../src/sim/realm_racers_zone';
+import { mortarOverdriveZoneAt } from '../src/sim/mortar_overdrive/zone';
 import type { AwayStatus } from '../src/sim/sim';
 import type { DelveRun, Entity, Vec3, ZoneDef } from '../src/sim/types';
 import type { Presence, PresenceStatus } from './social';
@@ -54,7 +54,7 @@ export interface LiveLocationHost {
 
 /** The world zone a position outside any instance reads as. */
 export function presenceZoneAt(x: number, z: number): ZoneDef {
-  return realmRacersZoneAt(x, z) ?? zoneAt(x, z);
+  return mortarOverdriveZoneAt(x, z) ?? zoneAt(x, z);
 }
 
 // The instance (dungeon OR delve) an entity is inside, named as its own zone,

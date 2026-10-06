@@ -29,7 +29,7 @@ describe('exclusive player movement ordering', () => {
     const player = { pos: { y: 10 } } as Entity;
     const meta = {
       vehicle: {},
-      realmRacersMatchId: null,
+      mortarOverdriveMatchId: null,
       moveInput: { forward: true },
       worldQuestLog: new Map(),
     } as PlayerMeta;

@@ -310,7 +310,7 @@ describe('collectDoomedViewsInto', () => {
     expect(doomed).toEqual([11, 12, 13]);
   });
 
-  it('exempts a Realm Racers co-pilot from the distance arm only', () => {
+  it('exempts a Mortar Overdrive co-pilot from the distance arm only', () => {
     const player = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Probe');
     const rival = mob(12, 300);
     const stranger = mob(14, 300);

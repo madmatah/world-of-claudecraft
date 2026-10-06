@@ -24,7 +24,7 @@ export interface CameraBoomState {
   active: boolean;
 }
 
-/** A chase boom's feel. The rally profile lowers the eye and lengthens the
+/** A chase boom's feel. The Mortar Overdrive profile lowers the eye and lengthens the
  *  arm, so the renderer reads the boom distance and the eye height from the
  *  active profile rather than the on-foot constants (the default profile
  *  carries the on-foot values). */
@@ -57,7 +57,7 @@ export const DEFAULT_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
   eyeHeight: 2,
 };
 
-export const REALM_RACERS_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
+export const MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
   omegaXZ: 9.5,
   omegaY: 5.5,
   leashXZ: 2.5,
@@ -67,10 +67,10 @@ export const REALM_RACERS_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
 };
 
 export function cameraBoomProfileForDriving(driving: boolean): CameraBoomProfile {
-  return driving ? REALM_RACERS_CAMERA_BOOM_PROFILE : DEFAULT_CAMERA_BOOM_PROFILE;
+  return driving ? MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE : DEFAULT_CAMERA_BOOM_PROFILE;
 }
 
-/** The chase distance under a profile (the rally arm is longer). */
+/** The chase distance under a profile (the Mortar Overdrive arm is longer). */
 export function cameraBoomDistance(distance: number, profile: CameraBoomProfile): number {
   return distance * profile.distanceScale;
 }

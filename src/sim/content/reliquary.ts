@@ -457,10 +457,10 @@ export const RELIQUARY_HORIZON_TITLES = [
   // The Clue Scroll tenth-casket title (world quests, Stage 3): Treasure
   // Hunter pages here per the locked titles-page rule.
   'exp_clue_ten_caskets',
-  // Realm Racers' own title, on the same locked rule. Its crest is
+  // Mortar Overdrive's own title, on the same locked rule. Its crest is
   // commissioned and not yet committed, so it rides its category crest via the
   // enumerated DEED_ART_PENDING arm until the painting lands.
-  'pvp_rr_wins_25',
+  'pvp_mortar_overdrive_wins_25',
 ] as const;
 
 // Profession lifetime mark ids (Phase 7). Prefer existing visited namespaces

@@ -270,22 +270,23 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
     command: (values) => `/dev raid ${values.raidDifficulty === 'normal' ? 'normal' : 'heroic'}`,
   },
   {
-    id: 'rally',
+    id: 'mortarOverdrive',
     category: 'travel',
-    labelKey: 'devCommand.actions.rally.label',
-    descriptionKey: 'devCommand.actions.rally.description',
+    labelKey: 'devCommand.actions.mortarOverdrive.label',
+    descriptionKey: 'devCommand.actions.mortarOverdrive.description',
     command: (values) => {
-      const circuit = token(values, 'rallyCircuit');
-      const tier = token(values, 'rallyTier') ?? 'ace';
-      return circuit ? `/dev rally ${circuit} ${tier}` : null;
+      const circuit = token(values, 'mortarOverdriveCircuit');
+      const tier = token(values, 'mortarOverdriveTier') ?? 'ace';
+      return circuit ? `/dev overdrive ${circuit} ${tier}` : null;
     },
   },
   {
-    id: 'rallykit',
+    id: 'mortarOverdriveKit',
     category: 'travel',
-    labelKey: 'devCommand.actions.rallykit.label',
-    descriptionKey: 'devCommand.actions.rallykit.description',
-    command: (values) => `/dev rallykit ${boundedInteger(values, 'rallyKitCharges', 0, 999, 50)}`,
+    labelKey: 'devCommand.actions.mortarOverdriveKit.label',
+    descriptionKey: 'devCommand.actions.mortarOverdriveKit.description',
+    command: (values) =>
+      `/dev overdrivekit ${boundedInteger(values, 'mortarOverdriveKitCharges', 0, 999, 50)}`,
   },
   {
     id: 'raidreset',

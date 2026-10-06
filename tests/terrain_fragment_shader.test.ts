@@ -245,7 +245,7 @@ describe('insane terrain fragment shader', () => {
   });
 
   it('anchors every painted lookup on the surface origin, defaulting to the world', () => {
-    // The band the rally circuit is built on (instance_surface.ts) sits around
+    // The band the Mortar Overdrive circuit is built on (instance_surface.ts) sits around
     // x = 113_700, where a highp float resolves about 7mm: a lookup taken
     // straight off vWPos.xz quantizes past a texel out there. The subtraction
     // happens ONCE, in the vertex stage, and every painted sample reads the

@@ -73,6 +73,18 @@ import { convertHusks, harvestCrop, plantCrop } from '../../src/sim/professions/
 // exactly where the golden was minted.
 const FARM_PLANT_WINDOW_TICKS = 41;
 
+import { mortarOverdriveGhosted } from '../../src/sim/mortar_overdrive/ghost';
+import { mortarOverdrivePickupBoxes } from '../../src/sim/mortar_overdrive/pickups';
+import {
+  MORTAR_OVERDRIVE_COUNTDOWN_TICKS,
+  MORTAR_OVERDRIVE_RESET_LOCK_TICKS,
+  MORTAR_OVERDRIVE_RETURN_TICKS,
+  mortarOverdriveCircuitOf,
+  mortarOverdriveReady,
+  mortarOverdriveToCanonical,
+  mortarOverdriveToWorld,
+} from '../../src/sim/mortar_overdrive/race';
+import { mortarOverdriveTrack } from '../../src/sim/mortar_overdrive/spline';
 import { startFishing } from '../../src/sim/professions/fishing';
 import { gatherCastDurationSec, gatherNodeById } from '../../src/sim/professions/gathering';
 import {
@@ -80,21 +92,9 @@ import {
   PERFECTING_SKILL_REQ,
 } from '../../src/sim/professions/perfecting';
 import { stationsOfType } from '../../src/sim/professions/stations';
-import { realmRacersGhosted } from '../../src/sim/realm_racers_ghost';
-import { realmRacersPickupBoxes } from '../../src/sim/realm_racers_pickups';
-import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
 import { riftRankForBaseLevel } from '../../src/sim/rift/ranks';
 import { type ArenaMatch, type PlayerMeta, Sim } from '../../src/sim/sim';
 import { ARENA_MIN_LEVEL } from '../../src/sim/social/arena';
-import {
-  REALM_RACERS_COUNTDOWN_TICKS,
-  REALM_RACERS_RESET_LOCK_TICKS,
-  REALM_RACERS_RETURN_TICKS,
-  realmRacersCircuitOf,
-  realmRacersReady,
-  realmRacersToCanonical,
-  realmRacersToWorld,
-} from '../../src/sim/social/realm_racers';
 import { addThreat } from '../../src/sim/threat';
 import {
   type Aura,
@@ -6545,16 +6545,16 @@ function bankSocketRoundTrip(): Scenario {
   };
 }
 
-// Realm Racers: the rally's two shared-stream draw sites (the competition
+// Mortar Overdrive: the Mortar Overdrive's two shared-stream draw sites (the competition
 // circuit pick when a grid seats, and the weighted pickup-effect draw when a
 // box changes hands) plus the vehicle kernel, the countdown lock, the surface
 // pass, and the forfeit-cascade classification, all inside the digest. Before
-// this scenario the whole rally phase sat outside the golden-trace net.
-function realmRacersRace(): Scenario {
+// this scenario the whole Mortar Overdrive phase sat outside the golden-trace net.
+function mortarOverdriveRace(): Scenario {
   return {
-    name: 'realm_racers',
+    name: 'mortar_overdrive',
     coverage: [
-      'realm racers grid seat (startMatch competition-circuit draw)',
+      'mortar overdrive grid seat (startMatch competition-circuit draw)',
       'loading lobby: every pilot ready closes it on one tick',
       'countdown lock + vehicle kernel drive on the circuit copy',
       'rival contact: the swept same-tick resolve, depenetration, impulse and bump event',
@@ -6570,19 +6570,19 @@ function realmRacersRace(): Scenario {
       const pids = (['warrior', 'mage', 'rogue', 'priest'] as const).map((cls, i) =>
         sim.addPlayer(cls, names[i]),
       );
-      for (const pid of pids) sim.realmRacersQueueJoin(pid);
+      for (const pid of pids) sim.mortarOverdriveQueueJoin(pid);
       rec.tick(1); // seats the grid: the circuit draw enters the digest here
       rec.snapshot('seated');
-      for (const pid of pids) realmRacersReady(sim.ctx, pid);
+      for (const pid of pids) mortarOverdriveReady(sim.ctx, pid);
       rec.tick(1); // the lobby closes and the countdown starts
-      rec.tick(REALM_RACERS_COUNTDOWN_TICKS); // the start lock, then GO
+      rec.tick(MORTAR_OVERDRIVE_COUNTDOWN_TICKS); // the start lock, then GO
       for (const pid of pids) {
         const meta = sim.players.get(pid);
         if (meta) meta.moveInput.forward = true;
       }
       rec.tick(40); // two seconds of the vehicle kernel on the circuit
-      const liveMatch = sim.realmRacers.match;
-      if (!liveMatch) throw new Error('realm racers grid did not seat');
+      const liveMatch = sim.mortarOverdrive.match;
+      if (!liveMatch) throw new Error('mortar overdrive grid did not seat');
       // Placed on the circuit FLOOR: the shared `teleport` helper snaps y to the
       // overworld terrainHeight, which stands a machine tens of yards over the
       // band's flat floor, and the fall kills it before the beat it was placed
@@ -6598,8 +6598,8 @@ function realmRacersRace(): Scenario {
       // draw above picks one of several competition circuits, and a box
       // resolved off another circuit's road would stand the leader in the
       // meadow of this one.
-      const circuit = realmRacersCircuitOf(liveMatch);
-      const lap = realmRacersTrack(circuit);
+      const circuit = mortarOverdriveCircuitOf(liveMatch);
+      const lap = mortarOverdriveTrack(circuit);
       // A rival contact: stand the fourth pilot a hull's width inside the
       // third's reach, level with it on the road and sliding into it, so the
       // contact pass resolves a real impact (depenetration, impulse, spin,
@@ -6612,10 +6612,14 @@ function realmRacersRace(): Scenario {
       if (!rammedProgress || !rammerProgress || !rammed.drive || !rammer.drive) {
         throw new Error('missing rival contact pilots');
       }
-      const at = realmRacersToCanonical(liveMatch, rammed.pos.x, rammed.pos.z);
+      const at = mortarOverdriveToCanonical(liveMatch, rammed.pos.x, rammed.pos.z);
       const onLap = lap.project(at.x, at.z, rammedProgress.trackIndex);
       const sample = lap.samples[onLap.index];
-      const side = realmRacersToWorld(liveMatch, at.x - sample.tz * 3.0, at.z + sample.tx * 3.0);
+      const side = mortarOverdriveToWorld(
+        liveMatch,
+        at.x - sample.tz * 3.0,
+        at.z + sample.tx * 3.0,
+      );
       floorTeleport(rammer, side.x, side.z);
       rammer.facing = rammed.facing;
       rammer.drive.speed = rammed.drive.speed;
@@ -6641,7 +6645,7 @@ function realmRacersRace(): Scenario {
       parker.drive.speed = 0;
       parker.drive.slip = 0;
       parker.drive.yawRate = 0;
-      sim.realmRacersResetPosition(pids[1]);
+      sim.mortarOverdriveResetPosition(pids[1]);
       // A yard up the road from the recovered hull, whichever way the road runs
       // where the draw seated the grid.
       floorTeleport(
@@ -6650,12 +6654,12 @@ function realmRacersRace(): Scenario {
         recovered.pos.z + Math.cos(recovered.facing),
       );
       parker.facing = recovered.facing;
-      const parkedAt = realmRacersToCanonical(liveMatch, parker.pos.x, parker.pos.z);
+      const parkedAt = mortarOverdriveToCanonical(liveMatch, parker.pos.x, parker.pos.z);
       const parkedOnLap = lap.project(parkedAt.x, parkedAt.z, rammerProgress.trackIndex);
       rammerProgress.lastS = parkedOnLap.s;
       rammerProgress.trackIndex = parkedOnLap.index;
-      rec.tick(REALM_RACERS_RESET_LOCK_TICKS + 4); // past the lock, still overlapped
-      rec.notes.ghostHeldPastLock = realmRacersGhosted(recovered);
+      rec.tick(MORTAR_OVERDRIVE_RESET_LOCK_TICKS + 4); // past the lock, still overlapped
+      rec.notes.ghostHeldPastLock = mortarOverdriveGhosted(recovered);
       rec.snapshot('ghost-held');
       rec.tick(recoveredProgress.ghostCapTick - sim.tickCount - 1);
       // Rolling back into the recovered hull on the cap tick, so the parting the
@@ -6663,7 +6667,7 @@ function realmRacersRace(): Scenario {
       // between two parked machines.
       parker.drive.speed = -6;
       rec.tick(1); // the cap
-      rec.notes.ghostGoneAtCap = !realmRacersGhosted(recovered);
+      rec.notes.ghostGoneAtCap = !mortarOverdriveGhosted(recovered);
       rec.snapshot('ghost-cap');
       for (const pid of [pids[1], pids[3]]) {
         const meta = sim.players.get(pid);
@@ -6672,8 +6676,8 @@ function realmRacersRace(): Scenario {
       // A deterministic take: stand the leader on box 0 with the bookkeeping a
       // machine that DROVE there would carry. A bare jump reads as a cut and
       // the referee returns it before the take can fire.
-      const box = realmRacersPickupBoxes(circuit)[0];
-      const world = realmRacersToWorld(liveMatch, box.x, box.z);
+      const box = mortarOverdrivePickupBoxes(circuit)[0];
+      const world = mortarOverdriveToWorld(liveMatch, box.x, box.z);
       const racer = sim.entities.get(pids[0]) as AnyEntity;
       floorTeleport(racer, world.x, world.z);
       const progress = liveMatch.progress.get(pids[0]);
@@ -6697,10 +6701,10 @@ function realmRacersRace(): Scenario {
       if (!coreVictim.drive || !bandVictim.drive || !bandProgress || !coreProgress) {
         throw new Error('missing blast victims');
       }
-      const coreAt = realmRacersToCanonical(liveMatch, coreVictim.pos.x, coreVictim.pos.z);
+      const coreAt = mortarOverdriveToCanonical(liveMatch, coreVictim.pos.x, coreVictim.pos.z);
       const coreOnLap = lap.project(coreAt.x, coreAt.z, coreProgress.trackIndex);
       const coreSample = lap.samples[coreOnLap.index];
-      const behind = realmRacersToWorld(
+      const behind = mortarOverdriveToWorld(
         liveMatch,
         coreAt.x - coreSample.tx * 4,
         coreAt.z - coreSample.tz * 4,
@@ -6723,7 +6727,7 @@ function realmRacersRace(): Scenario {
         const meta = sim.players.get(victim.id);
         if (meta) meta.moveInput.forward = false;
       }
-      const crater = realmRacersToWorld(
+      const crater = mortarOverdriveToWorld(
         liveMatch,
         coreAt.x - coreSample.tz * 1,
         coreAt.z + coreSample.tx * 1,
@@ -6737,7 +6741,7 @@ function realmRacersRace(): Scenario {
       // The fourth pilot, still beside the core victim since the ghost beat, is
       // sent well up the road so the shell catches exactly the two it is for.
       const clearOfBlast = lap.pointAt(coreOnLap.s + 40);
-      const clearWorld = realmRacersToWorld(liveMatch, clearOfBlast.x, clearOfBlast.z);
+      const clearWorld = mortarOverdriveToWorld(liveMatch, clearOfBlast.x, clearOfBlast.z);
       floorTeleport(parker, clearWorld.x, clearWorld.z);
       const parkerProgress = liveMatch.progress.get(pids[3]);
       if (parkerProgress) {
@@ -6751,10 +6755,10 @@ function realmRacersRace(): Scenario {
       rec.snapshot('ground_blast');
       // The forfeit cascade ends it: three quit, the lone survivor's race is
       // decided, and the classification plus deed credit land in the digest.
-      sim.realmRacersForfeit(pids[1]);
-      sim.realmRacersForfeit(pids[2]);
-      sim.realmRacersForfeit(pids[3]);
-      rec.tick(REALM_RACERS_RETURN_TICKS + 2); // tableau, returns, teardown
+      sim.mortarOverdriveForfeit(pids[1]);
+      sim.mortarOverdriveForfeit(pids[2]);
+      sim.mortarOverdriveForfeit(pids[3]);
+      rec.tick(MORTAR_OVERDRIVE_RETURN_TICKS + 2); // tableau, returns, teardown
       rec.snapshot('teardown');
     },
   };
@@ -8148,5 +8152,5 @@ export const SCENARIOS: Scenario[] = [
   bopPartyTradeEligibility(),
   // Appended on the same tiling rule: this branch's own scenario lands after
   // every release scenario, so no release scenario moves between shards.
-  realmRacersRace(),
+  mortarOverdriveRace(),
 ];

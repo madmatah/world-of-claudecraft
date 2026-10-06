@@ -64,9 +64,9 @@ export function buildRealmSimConfig(
     // (server/raid_reset.ts): realm-local Tuesday, ported here when the boot
     // config moved out of game.ts (the 3685 base sync).
     weeklyRaidResetMs: (nowMs) => nextWeeklyRaidResetMs(nowMs, REALM_RESET_TIME_ZONE),
-    // A player left alone in the rally queue past the wait gets a house pilot
+    // A player left alone in the Mortar Overdrive queue past the wait gets a house pilot
     // rather than an empty circuit. Offline the Practice button covers it.
-    realmRacersBackfill: true,
+    mortarOverdriveBackfill: true,
     perfLap,
     vaultConsumptionAdmission,
     // Boot-time construction input: the optional STORAGE_PRICES env override

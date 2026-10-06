@@ -149,10 +149,10 @@ const EFFECT_CLASS: Record<AbilityEffect['type'], AutoAttackClass> = {
   ruinousBrand: 'other',
   duskfireClaim: 'other',
   summonPyreColossus: 'other',
-  realmRacersGroundBlast: 'other',
+  mortarOverdriveGroundBlast: 'other',
   // Spending a held pickup effect is not an attack: it is a burst of speed or a
   // patch of oil, and neither starts a swing.
-  realmRacersPickupEffect: 'other',
+  mortarOverdrivePickupEffect: 'other',
   packCommand: 'damage',
   unleashBeast: 'damage',
   howlingRage: 'other',

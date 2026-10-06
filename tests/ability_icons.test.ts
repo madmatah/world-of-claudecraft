@@ -129,16 +129,18 @@ describe('ability icons', () => {
     // 469: plus the Wildfang kit pass 2 glyphs (lunge, hamstring_bite).
     // 473: plus the Buried Hoards Clockwork Shock Bomb glyph (the 2026-09-28
     // release/v0.44.0 merge into feature/buried-hoards).
-    // 476: plus the Realm Racers pickup abilities (rally_ground_blast,
-    // rally_nitro, rally_oil_slick), each an authored procedural recipe.
+    // 476: plus the Mortar Overdrive pickup abilities (mortar_overdrive_ground_blast,
+    // mortar_overdrive_nitro, mortar_overdrive_oil_slick), each an authored procedural recipe.
     expect(ids).toHaveLength(476);
     for (const id of ids) expect(hasExplicitAbilityIcon(id), id).toBe(true);
 
     const identity = ids.map((id) => ({ id, recipe: abilityIconRecipe(id) }));
     const hash = createHash('sha256').update(stableSerialize(identity)).digest('hex');
     // Re-baselined on the release/v0.45.0 merged tree: the release's Clockwork
-    // Shock Bomb glyph plus the three appended Realm Racers recipes; no shipped
+    // Shock Bomb glyph plus the three appended Mortar Overdrive recipes; no shipped
     // recipe's payload changed on either side of the merge.
-    expect(hash).toBe('3db9ff53868309b33b508a35e4f7876d956dc9ed30253b7c6224523196c95353');
+    // Re-baselined for the Mortar Overdrive rename: the three branch-only recipe ids
+    // moved from rally_* to mortar_overdrive_* (never shipped); every payload is unchanged.
+    expect(hash).toBe('f98a30c4e07cf36ffec6bec786ce99c63ed290586af2771df2afbcbc4303bdbd');
   });
 });

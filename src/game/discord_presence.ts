@@ -17,7 +17,7 @@
 
 import type { DesktopBridge, DesktopDiscordActivity } from '../runtime';
 import { DUNGEON_X_THRESHOLD, zoneAt } from '../sim/data';
-import { realmRacersZoneAt } from '../sim/realm_racers_zone';
+import { mortarOverdriveZoneAt } from '../sim/mortar_overdrive/zone';
 import { zoneDisplayName } from '../ui/entity_i18n';
 import { Settings } from './settings';
 
@@ -196,11 +196,11 @@ export function initDiscordPresence(bridge: DesktopBridge): void {
  * The zone the presence names at a point, or null to HOLD the last one.
  * Dungeons have no zone row (the instance strip sits past the threshold), so
  * inside one the presence holds the region the player entered from: phase 10
- * is zone-only, and naming the instance is a separate design call. A Realm
- * Racers circuit is the instance that still names a zone: the one it belongs to.
+ * is zone-only, and naming the instance is a separate design call. A Mortar
+ * Overdrive circuit is the instance that still names a zone: the one it belongs to.
  */
 function presenceZoneIdAt(x: number, z: number): string | null {
-  const circuit = realmRacersZoneAt(x, z);
+  const circuit = mortarOverdriveZoneAt(x, z);
   if (circuit) return circuit.id;
   return x <= DUNGEON_X_THRESHOLD ? zoneAt(x, z).id : null;
 }

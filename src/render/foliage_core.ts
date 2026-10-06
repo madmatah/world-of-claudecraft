@@ -281,7 +281,7 @@ export function insideEastbrookGrassExclusion(
 // Which colour a realm's grass is and how thickly it grows. They live in the
 // CORE rather than in `foliage.ts` because three consumers need them and only
 // one of the three may load three.js: the card-tuft field and the near-field
-// blade carpet are both renderers, but `realm_racers_grass_core.ts` is a
+// blade carpet are both renderers, but `mortar_overdrive/grass_core.ts` is a
 // registered pure core, and reaching these through `foliage.ts` would drag
 // three and its module-level preload registrations in behind them.
 
@@ -318,7 +318,7 @@ export const GRASS_BIOME_DENSITY: Partial<Record<BiomeId, number>> = {
 
 /**
  * A realm's own grass tint, for a scatter OUTSIDE the terrain chunks that has
- * to read as that realm's ground cover: the Realm Racers circuits, which sit in
+ * to read as that realm's ground cover: the Mortar Overdrive circuits, which sit in
  * an instance band no chunk ever reaches and would otherwise be the one place
  * in a zone's colour where its grass is missing.
  *

@@ -65,6 +65,21 @@ import {
   VARKHUL_MAKERS_BRAND_TANK_SWAP_STACKS,
 } from '../sim/encounters/varkhul';
 import {
+  MORTAR_OVERDRIVE_GHOST_MARGIN_TICKS,
+  MORTAR_OVERDRIVE_GHOST_MIN_TICKS,
+} from '../sim/mortar_overdrive/ghost';
+import {
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+} from '../sim/mortar_overdrive/ground_blast';
+import {
+  MORTAR_OVERDRIVE_GARDEN_BAND,
+  MORTAR_OVERDRIVE_GROUND_BLAST_AURA,
+  MORTAR_OVERDRIVE_OFF_TRACK_AURA,
+  MORTAR_OVERDRIVE_VERGE_BAND,
+  MORTAR_OVERDRIVE_WARD_AURA_SECONDS,
+} from '../sim/mortar_overdrive/race';
+import {
   NYTHRAXIS_ASCENSION_AURA_ID,
   NYTHRAXIS_ASCENSION_HASTE_AURA_ID,
   NYTHRAXIS_BOUND_AURA_ID,
@@ -99,21 +114,6 @@ import {
   NYTHRAXIS_ENRAGE_HASTE_BONUS,
 } from '../sim/nythraxis_enrage_clock';
 import { NYTHRAXIS_KINGS_WRATH_AURA_ID } from '../sim/nythraxis_kings_wrath';
-import {
-  REALM_RACERS_GHOST_MARGIN_TICKS,
-  REALM_RACERS_GHOST_MIN_TICKS,
-} from '../sim/realm_racers_ghost';
-import {
-  GROUND_BLAST_SHOCK_GRIP,
-  GROUND_BLAST_SHOCK_TICKS,
-} from '../sim/realm_racers_ground_blast';
-import {
-  REALM_RACERS_GARDEN_BAND,
-  REALM_RACERS_GROUND_BLAST_AURA,
-  REALM_RACERS_OFF_TRACK_AURA,
-  REALM_RACERS_VERGE_BAND,
-  REALM_RACERS_WARD_AURA_SECONDS,
-} from '../sim/social/realm_racers';
 import type { AuraKind } from '../sim/types';
 import {
   CAT_FORM_MOVE_MULT,
@@ -353,9 +353,9 @@ export function auraEffectDescriptor(
       },
     };
   }
-  if (a.id === REALM_RACERS_GROUND_BLAST_AURA) {
+  if (a.id === MORTAR_OVERDRIVE_GROUND_BLAST_AURA) {
     return {
-      key: `${KEY}.rallyGroundBlast`,
+      key: `${KEY}.mortarOverdriveGroundBlast`,
       nums: {
         pct: pctFromMult(a.value),
         gripPct: pctFromFrac(1 - GROUND_BLAST_SHOCK_GRIP),
@@ -363,15 +363,15 @@ export function auraEffectDescriptor(
       },
     };
   }
-  if (a.id === REALM_RACERS_OFF_TRACK_AURA) {
+  if (a.id === MORTAR_OVERDRIVE_OFF_TRACK_AURA) {
     // One aura id serves both bands and only its value tells them apart; a
     // value matching neither (an older server's tuning) keeps the plain slow line.
-    const band = [REALM_RACERS_VERGE_BAND, REALM_RACERS_GARDEN_BAND].find(
+    const band = [MORTAR_OVERDRIVE_VERGE_BAND, MORTAR_OVERDRIVE_GARDEN_BAND].find(
       (candidate) => candidate.speedMult === a.value,
     );
     if (band) {
       return {
-        key: `${KEY}.rallyOffTrack`,
+        key: `${KEY}.mortarOverdriveOffTrack`,
         nums: {
           pct: pctFromMult(a.value),
           gripPct: pctFromFrac(1 - band.gripMult),
@@ -984,14 +984,17 @@ export function auraEffectDescriptor(
     case 'buff_dr_phys':
       return { key: `${KEY}.physicalReduction`, nums: { pct: pctFromFrac(a.value) } };
 
-    case 'rally_ward':
-      return { key: `${KEY}.rallyWard`, nums: { seconds: REALM_RACERS_WARD_AURA_SECONDS } };
-    case 'rally_ghost':
+    case 'mortar_overdrive_ward':
       return {
-        key: `${KEY}.rallyGhost`,
+        key: `${KEY}.mortarOverdriveWard`,
+        nums: { seconds: MORTAR_OVERDRIVE_WARD_AURA_SECONDS },
+      };
+    case 'mortar_overdrive_ghost':
+      return {
+        key: `${KEY}.mortarOverdriveGhost`,
         nums: {
-          minSeconds: REALM_RACERS_GHOST_MIN_TICKS / TICK_RATE,
-          marginSeconds: REALM_RACERS_GHOST_MARGIN_TICKS / TICK_RATE,
+          minSeconds: MORTAR_OVERDRIVE_GHOST_MIN_TICKS / TICK_RATE,
+          marginSeconds: MORTAR_OVERDRIVE_GHOST_MARGIN_TICKS / TICK_RATE,
         },
       };
 

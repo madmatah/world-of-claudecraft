@@ -812,6 +812,8 @@ export { eloDelta } from './social/arena';
 
 import { FINDER_ACTIVITIES, type FinderListingTag } from './content/dungeon_finder';
 import { setHelmHidden as setHelmHiddenMod } from './helm_visibility';
+import * as moMod from './mortar_overdrive/context';
+import { mortarOverdriveSaveFragment } from './mortar_overdrive/context';
 import { collectPartyInfo } from './party_frame_info';
 import { DungeonFinderMachine } from './social/dungeon_finder';
 import * as fiestaMod from './social/fiesta';
@@ -828,8 +830,6 @@ import * as fiestaBotsMod from './social/fiesta_bots';
 import { PartyMachine } from './social/party';
 import * as pullTimerMod from './social/pull_timer';
 import * as readyCheckMod from './social/ready_check';
-import * as realmRacersMod from './social/realm_racers_context';
-import { realmRacersSaveFragment } from './social/realm_racers_context';
 import { SpatialGrid } from './spatial';
 import { diminishedCrowdControlDuration as diminishedCrowdControlDurationImpl } from './stun_dr';
 import { Targeting } from './targeting';
@@ -1306,7 +1306,7 @@ export type JoinableChannel = (typeof JOINABLE_CHANNELS)[number];
 // everything that belongs to the character sheet.
 export interface PlayerMeta
   extends worldQuestState.WorldQuestPlayerState,
-    realmRacersMod.RealmRacersPlayerMeta {
+    moMod.MortarOverdrivePlayerMeta {
   entityId: number;
   // Stable database character id when running on the server. Offline/sim-only
   // callers fall back to entityId for systems that need a rename-proof owner key.
@@ -2017,7 +2017,7 @@ export class Sim {
   readonly bgProposals: bgProposalMod.BgProposal[] = [];
   readonly bgProposalLockouts = new Map<number, number>();
   nextBgProposalId = 1;
-  readonly realmRacers: realmRacersMod.RealmRacersState = realmRacersMod.createRealmRacersState();
+  readonly mortarOverdrive: moMod.MortarOverdriveState = moMod.createMortarOverdriveState();
   // per-player chat token bucket (anti-spam); refilled lazily by sim time
   private chatTokens = new Map<number, { tokens: number; at: number }>();
   // per-player set of opt-in global channels (world, lfg) joined via /join
@@ -2232,7 +2232,7 @@ export class Sim {
       raidResetMs: cfg.raidResetMs ?? ((nowMs: number) => nowMs + DEFAULT_RAID_LOCKOUT_MS),
       weeklyRaidResetMs:
         cfg.weeklyRaidResetMs ?? ((nowMs: number) => nowMs + DEFAULT_WEEKLY_RAID_LOCKOUT_MS),
-      realmRacersBackfill: cfg.realmRacersBackfill ?? false,
+      mortarOverdriveBackfill: cfg.mortarOverdriveBackfill ?? false,
       // Carried through so the renderer (which reaches the Sim as IWorld) can read
       // the same custom world via sim.cfg.world. Undefined for the built-in world.
       world: cfg.world,
@@ -2861,7 +2861,7 @@ export class Sim {
       bgCaptures: Number.isFinite(savedState?.bgCaptures)
         ? Math.max(0, savedState?.bgCaptures as number)
         : 0,
-      ...realmRacersMod.freshRealmRacersMeta(savedState),
+      ...moMod.freshMortarOverdriveMeta(savedState),
       vcupWins: savedState?.vcupWins ?? 0,
       vcupLosses: savedState?.vcupLosses ?? 0,
       vcupDraws: savedState?.vcupDraws ?? 0,
@@ -3754,9 +3754,9 @@ export class Sim {
     // the offline Sim / headless env from leaking cardDuels/cardDuelQueue
     // entries for a departed pid).
     this.leaveCardMinigameEntirely(pid);
-    // Idempotent: preparePlayerLeave above already forfeited the Rally; this is
+    // Idempotent: preparePlayerLeave above already forfeited the race; this is
     // the same defensive second pass the trade cancel below takes.
-    realmRacersMod.realmRacersForfeit(this.ctx, pid, true);
+    moMod.mortarOverdriveForfeit(this.ctx, pid, true);
     this.party.partyInvites.delete(pid);
     this.tradeInvites.delete(pid);
     this.duelInvites.delete(pid);
@@ -3818,9 +3818,9 @@ export class Sim {
     // after it: without this a disconnecting player could still be matched, or burn a
     // whole 30-second proposal for four other players. onPlayerRemoved is idempotent.
     this.dungeonFinder.onPlayerRemoved(pid);
-    // Resolve and restore the Rally before persistence captures temporary kit,
+    // Resolve and restore the race before persistence captures temporary kit,
     // vehicle, pools, or instance coordinates.
-    realmRacersMod.realmRacersForfeit(this.ctx, pid, true);
+    moMod.mortarOverdriveForfeit(this.ctx, pid, true);
     // Trades are not escrowed. Cancel before the leave snapshot so the other
     // party cannot confirm during the persistence await and receive an item
     // that the departing character's already-captured save still contains.
@@ -3978,8 +3978,8 @@ export class Sim {
             vcupBetNet: meta.vcupBetNet,
           }
         : {}),
-      // Absent until the first Rally win (back-compat + parity-stable saves).
-      ...(meta.rrWins ? { rrWins: meta.rrWins } : {}),
+      // Absent until the first Mortar Overdrive win (back-compat + parity-stable saves).
+      ...(meta.mortarOverdriveWins ? { mortarOverdriveWins: meta.mortarOverdriveWins } : {}),
       talents: cloneAllocation(restore ? restore.talents : meta.talents),
       loadouts: meta.loadouts.map((l) => ({
         name: l.name,
@@ -4097,7 +4097,7 @@ export class Sim {
       // must never carry an identity claim back in), so its blob and every
       // pre-feature save stay byte-equal.
       ...materialGathererIdentitySaveFragment(meta.gathererIdentity),
-      ...realmRacersSaveFragment(this.ctx, pid), // seated: the pre-race state, never the race's
+      ...mortarOverdriveSaveFragment(this.ctx, pid), // seated: the pre-race state, never the race's
     };
     // Expired party-trade markers retire at this persistence boundary, never by tick sweep.
     return sanitizeRemovedZone1Content(retirePartyTradeOnSave(state, this.lockoutNowMs())).state;
@@ -5240,8 +5240,8 @@ export class Sim {
       get guildBanks() {
         return sim.guildBanks;
       },
-      get realmRacers() {
-        return sim.realmRacers;
+      get mortarOverdrive() {
+        return sim.mortarOverdrive;
       },
       // Book of Deeds live views (all mutated in place, never reassigned).
       get deedDirtyPids() {
@@ -5692,7 +5692,7 @@ export class Sim {
       bgOnPlayerDamaged: (victim, source) => bgMod.bgOnPlayerDamaged(sim.ctx, victim, source),
       bgOnPlayerHealed: (target, source) => bgMod.bgOnPlayerHealed(sim.ctx, target, source),
       bgCancelFlagAura: (e, auraId) => bgMod.bgCancelCarriedFlagAura(sim.ctx, e, auraId),
-      ...realmRacersMod.realmRacersContextBindings(sim),
+      ...moMod.mortarOverdriveContextBindings(sim),
     };
     return createSimContext(host);
   }
@@ -6160,8 +6160,8 @@ export class Sim {
     // at match START), so its tick position cannot fork the draw order mid-match.
     bgMod.updateBattleground(this.ctx);
     lap?.('battleground');
-    realmRacersMod.updateRealmRacersPhase(this); // after all movement; rng: see its doc
-    lap?.('realmRacers');
+    moMod.updateMortarOverdrivePhase(this); // after all movement; rng: see its doc
+    lap?.('mortarOverdrive');
     worldPvpMod.updateWorldPvp(this.ctx); // the /pvp clock, zone pass + books sweep; zero rng
     lap?.('worldPvp');
     hillMod.updateHill(this.ctx); // King of the Hill (pvp/hill.ts): spawns draw a PRIVATE rng
@@ -9904,73 +9904,73 @@ export class Sim {
     fiestaBotsMod.updateFiestaBots(this);
   }
 
-  // --- The Realm Racers (social/realm_racers*.ts via realm_racers_context.ts): state stays on
-  // Sim (`this.realmRacers`), thin delegates serve the IWorld facet, the server, and tests. ---
+  // --- The Mortar Overdrive (mortar_overdrive/*.ts via mortar_overdrive/context.ts): state stays on
+  // Sim (`this.mortarOverdrive`), thin delegates serve the IWorld facet, the server, and tests. ---
 
-  realmRacersQueueJoin(pid?: number): void {
-    realmRacersMod.realmRacersQueueJoin(this.ctx, pid);
+  mortarOverdriveQueueJoin(pid?: number): void {
+    moMod.mortarOverdriveQueueJoin(this.ctx, pid);
   }
 
-  realmRacersQueueLeave(pid?: number): void {
-    realmRacersMod.realmRacersQueueLeave(this.ctx, pid);
+  mortarOverdriveQueueLeave(pid?: number): void {
+    moMod.mortarOverdriveQueueLeave(this.ctx, pid);
   }
 
-  realmRacersForfeit(pid?: number, restoreImmediately = false): void {
-    realmRacersMod.realmRacersForfeit(this.ctx, pid, restoreImmediately);
+  mortarOverdriveForfeit(pid?: number, restoreImmediately = false): void {
+    moMod.mortarOverdriveForfeit(this.ctx, pid, restoreImmediately);
   }
 
-  realmRacersResetPosition(pid?: number): void {
-    realmRacersMod.realmRacersResetPosition(this.ctx, pid);
+  mortarOverdriveResetPosition(pid?: number): void {
+    moMod.mortarOverdriveResetPosition(this.ctx, pid);
   }
 
-  realmRacersInfoFor(pid: number): realmRacersMod.RealmRacersInfo {
-    return realmRacersMod.realmRacersInfoFor(this.ctx, pid);
+  mortarOverdriveInfoFor(pid: number): moMod.MortarOverdriveInfo {
+    return moMod.mortarOverdriveInfoFor(this.ctx, pid);
   }
 
-  get realmRacersInfo(): realmRacersMod.RealmRacersInfo {
-    return this.realmRacersInfoFor(this.primaryId);
+  get mortarOverdriveInfo(): moMod.MortarOverdriveInfo {
+    return this.mortarOverdriveInfoFor(this.primaryId);
   }
 
-  realmRacersTracksideFor(pid: number): realmRacersMod.RealmRacersLaneView | null {
-    return realmRacersMod.realmRacersTracksideFor(this.ctx, pid);
+  mortarOverdriveTracksideFor(pid: number): moMod.MortarOverdriveLaneView | null {
+    return moMod.mortarOverdriveTracksideFor(this.ctx, pid);
   }
 
-  get realmRacersTrackside(): realmRacersMod.RealmRacersLaneView | null {
-    return this.realmRacersTracksideFor(this.primaryId);
+  get mortarOverdriveTrackside(): moMod.MortarOverdriveLaneView | null {
+    return this.mortarOverdriveTracksideFor(this.primaryId);
   }
 
-  joinRealmRacersQueue(): void {
-    this.realmRacersQueueJoin(this.primaryId);
+  joinMortarOverdriveQueue(): void {
+    this.mortarOverdriveQueueJoin(this.primaryId);
   }
 
-  leaveRealmRacersQueue(): void {
-    this.realmRacersQueueLeave(this.primaryId);
+  leaveMortarOverdriveQueue(): void {
+    this.mortarOverdriveQueueLeave(this.primaryId);
   }
 
-  forfeitRealmRacers(): void {
-    this.realmRacersForfeit(this.primaryId);
+  forfeitMortarOverdrive(): void {
+    this.mortarOverdriveForfeit(this.primaryId);
   }
 
-  resetRealmRacersPosition(): void {
-    this.realmRacersResetPosition(this.primaryId);
+  resetMortarOverdrivePosition(): void {
+    this.mortarOverdriveResetPosition(this.primaryId);
   }
 
-  readyRealmRacers(): void {
-    realmRacersMod.realmRacersReady(this.ctx, this.primaryId);
+  readyMortarOverdrive(): void {
+    moMod.mortarOverdriveReady(this.ctx, this.primaryId);
   }
 
-  realmRacersPracticeStart(tier: realmRacersMod.RallyDriverTier, pid?: number): void {
-    realmRacersMod.startRealmRacersPractice(this, tier, pid);
+  mortarOverdrivePracticeStart(tier: moMod.MortarOverdriveDriverTier, pid?: number): void {
+    moMod.startMortarOverdrivePractice(this, tier, pid);
   }
 
-  startRealmRacersPractice(tier: realmRacersMod.RallyDriverTier): void {
-    this.realmRacersPracticeStart(tier, this.primaryId);
+  startMortarOverdrivePractice(tier: moMod.MortarOverdriveDriverTier): void {
+    this.mortarOverdrivePracticeStart(tier, this.primaryId);
   }
 
-  realmRacersRegisterDraftCircuit(
-    circuit: realmRacersMod.RealmRacersCircuit,
-  ): realmRacersMod.RealmRacersDraftRegistration {
-    return realmRacersMod.realmRacersRegisterDraftCircuit(this.ctx, circuit);
+  mortarOverdriveRegisterDraftCircuit(
+    circuit: moMod.MortarOverdriveCircuit,
+  ): moMod.MortarOverdriveDraftRegistration {
+    return moMod.mortarOverdriveRegisterDraftCircuit(this.ctx, circuit);
   }
 
   private fiestaMatchInfo(

@@ -166,7 +166,7 @@ export interface DoomedViewScanInput {
   questObjectHidden: QuestObjectGate;
   center: Entity;
   destroyRangeSq: number;
-  /** Ids the DISTANCE arm never drops (a rival in the local Realm Racers
+  /** Ids the DISTANCE arm never drops (a rival in the local Mortar Overdrive
    *  match: membership, not range, is its visibility rule). Every other drop
    *  reason still applies to them. */
   rangeExemptIds?: readonly number[];

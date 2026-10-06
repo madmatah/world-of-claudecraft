@@ -66,9 +66,9 @@ export const ja_JP: EnTranslations = {
       "difficulty": "難易度",
       "name": "名前",
       "spec": "スペック",
-      "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier",
-      "rallyKitCharges": "Weapon charges",
+      "mortarOverdriveCircuit": "Circuit",
+      "mortarOverdriveTier": "Rival tier",
+      "mortarOverdriveKitCharges": "Weapon charges",
       "bed": "畝のID（任意）"
     },
     "difficulty": {
@@ -176,12 +176,12 @@ export const ja_JP: EnTranslations = {
         "label": "レイドに入る",
         "description": "ナイスラクシスのレイドアリーナへ直接入ります。"
       },
-      "rally": {
+      "mortarOverdrive": {
         "label": "Race a circuit",
-        "description": "Start a Realm Racers race on the chosen circuit right now."
+        "description": "Start a Mortar Overdrive race on the chosen circuit right now."
       },
-      "rallykit": {
-        "label": "Fill the rally kit",
+      "mortarOverdriveKit": {
+        "label": "Fill the Mortar Overdrive kit",
         "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
@@ -1925,7 +1925,7 @@ export const ja_JP: EnTranslations = {
       "targetFriendlyNext": "味方ターゲットを順に切り替え",
       "targetPrev": "ターゲットを逆順に切り替え",
       "discord": "Discord",
-      "rally": "レルムレーサーズ",
+      "mortarOverdrive": "迫撃オーバードライブ",
       "bgFlag": "戦場フラッグアクション",
       "friendlyNameplates": "友好ネームプレート切り替え",
       "sheathe": "武器を納刀/抜刀",
@@ -2130,10 +2130,10 @@ export const ja_JP: EnTranslations = {
         "graveyard": "墓地"
       }
     },
-    "rally": {
+    "mortarOverdrive": {
       "kicker": "エバーガーデン・レーシング協会",
-      "title": "レルムレーサーズ",
-      "close": "レルムレーサーズのウィンドウを閉じる",
+      "title": "迫撃オーバードライブ",
+      "close": "迫撃オーバードライブのウィンドウを閉じる",
       "pitch": "鉄が生け垣を突き抜ける。ラインを見つけ、スライドを信じ、ライバルを砂塵に残せ。",
       "promiseCircuit": "庭園サーキット",
       "promiseSlide": "サイドブレーキ・スライド",
@@ -2217,8 +2217,8 @@ export const ja_JP: EnTranslations = {
       "drawReturn": "引き分け。{seconds}秒後に戻ります",
       "raceVoid": "RACE VOID",
       "voidReturn": "レース無効。{seconds}秒後に戻ります",
-      "logQueued": "レルムレーサーズの待機位置：{position}。",
-      "logUnqueued": "レルムレーサーズの待機列から離れました。",
+      "logQueued": "迫撃オーバードライブの待機位置：{position}。",
+      "logUnqueued": "迫撃オーバードライブの待機列から離れました。",
       "bannerLap": "{total}周中{lap}周目",
       "bannerWin": "レースに勝利しました！",
       "bannerLoss": "{name}がレースに勝利しました。",
@@ -4088,10 +4088,10 @@ export const ja_JP: EnTranslations = {
       "temporalEcho": "術者の秘術ダメージのうち、単体なら{singlePct}%、範囲なら{areaPct}%があなたへの回復になる。エーテルサージとエーテルダートは個別の時の残響に4倍のボーナスを使う。グループの残響は同量の回復予備を作り、体力が60%未満の標識付き味方へ失った体力に応じて分配する",
       "arcaneCharge": "秘術チャージ{stacks}：エーテル・サージのダメージが{damagePct}%増加、詠唱が{castPct}%短縮、マナ消費が{costMult}倍になる",
       "physicalReduction": "受ける物理ダメージが{pct}%減少する",
-      "rallyGroundBlast": "移動速度を{pct}%低下させる。被弾後{gripSeconds}秒間、機体のグリップが{gripPct}%低下する。",
-      "rallyOffTrack": "移動速度を{pct}%低下させる。機体のグリップが{gripPct}%低下し、抵抗が路面上の{drag}倍になる。路面に戻るまで続く。",
-      "rallyWard": "次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。",
-      "rallyGhost": "コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。",
+      "mortarOverdriveGroundBlast": "移動速度を{pct}%低下させる。被弾後{gripSeconds}秒間、機体のグリップが{gripPct}%低下する。",
+      "mortarOverdriveOffTrack": "移動速度を{pct}%低下させる。機体のグリップが{gripPct}%低下し、抵抗が路面上の{drag}倍になる。路面に戻るまで続く。",
+      "mortarOverdriveWard": "次に受けるグラウンドブラストかオイルスリックを吸収し、砕け散る。{seconds}秒間持続する。他の機体との接触は防げない。",
+      "mortarOverdriveGhost": "コースに戻された後、ライバルの機体があなたをすり抜ける。最低{minSeconds}秒、かつ再び運転できるようになるまで続き、その後すべてのライバルから離れた時点で終わる。延長は最長{marginSeconds}秒。グラウンドブラストとオイルスリックは引き続き命中する。",
       "temporalHourglass": "ダメージを受けず行動不能になります。体力を回復し、クールダウンを加速します。右クリックで解除できます。",
       "tongues": "詠唱時間を{pct}%増加させる",
       "combustionCrit": "火炎呪文が必ずクリティカルになる",
@@ -7101,7 +7101,7 @@ export const ja_JP: EnTranslations = {
       "combat": "戦闘",
       "talents": "タレント",
       "arena": "アリーナとPvP",
-      "realmRacers": "レルムレーサーズ",
+      "mortarOverdrive": "迫撃オーバードライブ",
       "thornhollow": "ソーンホロウ平原",
       "worldPvp": "ワールドPvP",
       "deeds": "功績の書",
@@ -8465,13 +8465,13 @@ export const ja_JP: EnTranslations = {
       "rewardsHeading": "試合が支払うもの",
       "rewardsBody": "試合を最後まで戦えば、必ず名誉が支払われます。勝てば多く、敗北や引き分けでも慰めの分があり、さらに自分が決めた止めの一撃と、助太刀した撃破のそれぞれにわずかな上乗せがつくので、旗から離れた場所で戦うことにも意味があります。その日の初勝利にはさらにボーナスが加わり、そのボーナスがまだ残っているあいだはパネルが教えてくれます。この一日は名誉が持つ独自のもので、レルムのインスタンスリセットとは別の時計で切り替わります。同じ相手と何度も当たると、初回のあとは試合そのものの支払いが減りますが、すぐに下限で落ち着き、まったくのゼロまで落ちることはありません。放棄した試合には何も支払われません。稼いだものは、どちらのウォーフェア補給官のもとでも使えます。"
     },
-    "realmRacersPage": {
-      "heading": "レルムレーサーズ",
+    "mortarOverdrivePage": {
+      "heading": "迫撃オーバードライブ",
       "intro": "エバーガーデン・レーシング協会は、運転する度胸さえあれば誰でも参加できるガーデンサーキットを運営している。グリッドには4人のパイロット、代名詞となる必殺武器がひとつ、そして大胆なラインだけでなく綺麗なラインにも報いる、生垣沿いのコースだ。",
       "loreHeading": "エバーガーデン・レーシング協会",
       "loreBody": "エバーガーデンの庭師長たちは、生垣の間の巡回路を一輪車より速く走るためのものだとは考えたこともなかった。しかし暇を持て余し、騎乗動物を借りていたある管理人は、そうは思わなかった。その最初の無謀な挑戦から育った協会は、今では本格的なサーキットを引き、フルグリッドを揃え、4人のパイロットの準備が整うたびにフラッグを振り下ろす。",
       "howHeading": "遊び方",
-      "howQueueBody": "世界のどこからでも、レルムレーサーズのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。",
+      "howQueueBody": "世界のどこからでも、迫撃オーバードライブのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。",
       "howRaceBody": "いつもの移動キーでステアリング、アクセル、ブレーキを操作し、ジャンプボタンを押し続けるとサイドブレーキでタイトなコーナーを滑って抜けられる。すべてのパイロットはグラウンドブラストを携えている。これは捕らえた相手をよろめかせる前方への一撃で、進路をふさぐライバルは決して安全ではない。最終ラップの後に先にラインを越えた者が勝利し、レースが決着した時点での位置で全員の順位が決まる。",
       "howLimitsBody": "コース両脇の庭園は開かれていて走行可能なので、膨らむこと、押し出されること、花壇を滑り抜けることはレースの一部です。代償は速度だけ。ただし、それで得をすることは許されません。コースを外れてコース自体より短いラインを走れば、進行委員が離脱した地点まで戻します。庭園で止まったままの操縦者も、数秒後にコースへ戻されます。",
       "howPracticeBody": "見知らぬ相手とまだ走る心の準備ができていない？練習走行なら同じマシン、同じ操作感覚のまま、専用のサーキットの複製上で自分で選んだ相手と走れるので、本番に並ぶ前にラインを覚えられる。",
@@ -8483,7 +8483,7 @@ export const ja_JP: EnTranslations = {
       "circuitsCompetitionTitle": "大会サーキット",
       "circuitsCompetitionBody": "待機列からのレースは練習用の周回コースを走ることはない。代わりに、より長い大会用サーキットの別のプールから抽選される。それぞれが地面を借りているゲームゾーンのテーマで装飾されているため、マシンは変わらなくても会場は変わる。",
       "rewardsHeading": "何のために走るのか",
-      "rewardsBody": "レルムレーサーズは経験値も戦利品も一切支払わない。これはそれ自体のため、そしてそれがもたらす地位のために走る競技だ。とはいえ、格付けされたヒートでの順位は功績の書にはきちんと数えられる。ゴールラインを越えること、勝利、そしてより難しい運転の偉業のひと揃いが、挑む意志のあるパイロットを待っている。ただし勝利が数えられるのは、少なくとも一人の他のプレイヤーが一緒にスタートし、実際に走ったとき（ゴールするか、少なくとも一周を走り切ったとき）だけだ。協会のハウスパイロットや、グリッドから一度も動かなかった相手に勝っても、それは練習であって記録ではない。これらの功績は名声をもたらさないが、十分な勝利を重ねれば、身に着けられる装飾用の称号が手に入る。"
+      "rewardsBody": "迫撃オーバードライブは経験値も戦利品も一切支払わない。これはそれ自体のため、そしてそれがもたらす地位のために走る競技だ。とはいえ、格付けされたヒートでの順位は功績の書にはきちんと数えられる。ゴールラインを越えること、勝利、そしてより難しい運転の偉業のひと揃いが、挑む意志のあるパイロットを待っている。ただし勝利が数えられるのは、少なくとも一人の他のプレイヤーが一緒にスタートし、実際に走ったとき（ゴールするか、少なくとも一周を走り切ったとき）だけだ。協会のハウスパイロットや、グリッドから一度も動かなかった相手に勝っても、それは練習であって記録ではない。これらの功績は名声をもたらさないが、十分な勝利を重ねれば、身に着けられる装飾用の称号が手に入る。"
     },
     "factionsPage": {
       "heading": "勢力と評判",
@@ -13235,15 +13235,15 @@ export const ja_JP: EnTranslations = {
         "name": "ぜんまい式ショックボム",
         "description": "目標地点にぜんまい式ショックボムを投げ、5ヤード以内の敵に120～160の自然ダメージを与える。"
       },
-      "rally_ground_blast": {
+      "mortar_overdrive_ground_blast": {
         "name": "グラウンドブラスト",
         "description": "前方{minRange}ヤード以上先、車体の正面から{coneDegrees}度以内の地面の一点に砲弾を撃つ。砲弾は{minFlight}～{maxFlight}秒後に着弾する。着弾点から{radius}ヤード以内のライバルは全員打ち上げられて吹き飛ばされ、{coreRadius}ヤード以内では最大の威力、外側ほど弱くなる。さらに{gripSeconds}秒間グリップを{gripPct}%失い、{slowSeconds}秒間{slowPct}%減速する。レースの守護はこの命中を吸収する。"
       },
-      "rally_nitro": {
+      "mortar_overdrive_nitro": {
         "name": "ニトロ",
         "description": "ニトロを焚き、瞬時に前方へ{kick}ヤード/秒の加速を得る。{seconds}秒間、最高速度が機体の通常の上限より{speedPct}%上がる。"
       },
-      "rally_oil_slick": {
+      "mortar_overdrive_oil_slick": {
         "name": "オイルスリック",
         "description": "機体の下にオイルをまく。オイルは{seconds}秒間コースに残る。踏み込んだライバルは横へ押し出され（速いほど強く）、{gripSeconds}秒間グリップを{gripPct}%失う。自分のオイルは、一度そこから抜け出すまで自分には効かない。レースの守護はこれを吸収する。"
       },

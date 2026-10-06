@@ -13,7 +13,7 @@ import {
   TEMPORAL_ECHO_ROTATION_CONVERSION_MULTIPLIER,
   TEMPORAL_ECHO_SINGLE_CONVERSION,
 } from '../sim/content/chronomancy_tuning';
-import { realmRacersAbilityTextValues } from '../sim/content/realm_racers';
+import { mortarOverdriveAbilityTextValues } from '../sim/content/mortar_overdrive/kit';
 import type { ResolvedAbility } from '../sim/sim';
 import {
   type AbilityEffect,
@@ -243,8 +243,8 @@ function abilityOverTimeText(res: ResolvedAbility, scaling?: AbilityScaling): st
 // Two fraction digits rather than formatAbilityNumber's one: the Ground Blast's
 // flight window is a pair of whole-tick times that a single digit would round
 // into a different, untrue pair.
-function realmRacersTextValues(abilityId: string): InterpolationValues {
-  const figures = realmRacersAbilityTextValues(abilityId);
+function mortarOverdriveTextValues(abilityId: string): InterpolationValues {
+  const figures = mortarOverdriveAbilityTextValues(abilityId);
   if (!figures) return {};
   const values: InterpolationValues = {};
   for (const [name, value] of Object.entries(figures)) {
@@ -319,7 +319,7 @@ export function abilityDisplayDescription(
   const echoSingle = res.echoConvertSingle ?? TEMPORAL_ECHO_SINGLE_CONVERSION;
   const dawnreaver = dawnreaverTooltipValues(res, scaling);
   const values: InterpolationValues = {
-    ...realmRacersTextValues(res.def.id),
+    ...mortarOverdriveTextValues(res.def.id),
     damage: damageText,
     overTime: abilityOverTimeText(res, scaling),
     buff: buff === null ? '' : formatAbilityNumber(buff),

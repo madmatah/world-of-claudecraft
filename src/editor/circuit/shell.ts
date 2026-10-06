@@ -7,7 +7,7 @@
 // drift: they all render the same table. What is left here is elements and
 // listeners, which is why this module has no test of its own.
 
-import type { RealmRacersCircuitProblem } from '../../sim/realm_racers_circuit_metrics';
+import type { MortarOverdriveCircuitProblem } from '../../sim/mortar_overdrive';
 import { type EditorIconId, editorIcon } from './editor_icons';
 import {
   type ActionId,
@@ -48,7 +48,7 @@ export interface ShellHost {
   onMode(id: RailModeId): void;
   onSideTab(id: SideTabId): void;
   /** A callout or the status chip was clicked: centre the plan on that spot. */
-  onFocusProblem(problem: RealmRacersCircuitProblem): void;
+  onFocusProblem(problem: MortarOverdriveCircuitProblem): void;
   onToolValue(): void;
   /** The operator took the autosaved draft the status bar was offering. */
   onResume(): void;
@@ -128,7 +128,7 @@ export class EditorShell {
   private readonly keysBodyEl = document.getElementById('keysBody') as HTMLDivElement;
 
   /** The problem the status chip points at, so clicking it focuses the worst. */
-  private worst: RealmRacersCircuitProblem | null = null;
+  private worst: MortarOverdriveCircuitProblem | null = null;
   private zoomChip!: HTMLButtonElement;
   private gridChip!: HTMLButtonElement;
   private snapChip!: HTMLButtonElement;
@@ -397,8 +397,8 @@ export class EditorShell {
    * for it.
    */
   setProblems(
-    problems: readonly RealmRacersCircuitProblem[],
-    callouts: readonly RealmRacersCircuitProblem[],
+    problems: readonly MortarOverdriveCircuitProblem[],
+    callouts: readonly MortarOverdriveCircuitProblem[],
     project: PlanProjector,
     planWidth: number,
   ): void {

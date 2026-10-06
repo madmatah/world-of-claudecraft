@@ -226,6 +226,7 @@ import { INPUT_SEND_TIMER_INTERVAL_MS, inputFlushGateOpen } from './input_send_c
 import { inputSignature } from './input_signature';
 import { copyPos, wrapAngle } from './interp_math';
 import { applyMaterialInventoryWire } from './material_inventory_wire';
+import { decodeDriveWire, MortarOverdriveWireState } from './mortar_overdrive';
 import {
   applyMountRaceEventToMirror,
   decodeMountRaceView,
@@ -250,7 +251,6 @@ import {
 import { decodePlayerIdentityWire } from './player_identity_wire';
 import { applyProfessionsSelfMirror } from './professions_self_mirror';
 import { optimisticQuestState } from './quest_state_optimistic';
-import { decodeDriveWire, RealmRacersWireState } from './realm_racers_wire_state';
 import { isTransientReconnectRejection, isTransientTimeoutRejection } from './reconnect_policy';
 import { isInputSendBackpressured } from './send_backpressure';
 import { snapshotAlpha } from './snapshot_alpha';
@@ -1177,7 +1177,7 @@ const INCOMPATIBLE_WORLD_VERSION_ERROR = ONLINE_WORLD_INCOMPATIBLE_MESSAGE;
 // stealthed unit at that range when far out-leveling it.
 const DESPAWN_GRACE_MIN_DIST_SQ = 70 * 70;
 
-export class ClientWorld extends RealmRacersWireState implements IWorld {
+export class ClientWorld extends MortarOverdriveWireState implements IWorld {
   // --- IWorldEntityRoster: roster + player reads, mirrored from snapshots. The
   // `player` getter lives below the ctor (it reads `entities`/`playerId`). `known`
   // is IWorldCombat-owned but rides here as a self-wire mirror field with the rest
@@ -3236,7 +3236,7 @@ export class ClientWorld extends RealmRacersWireState implements IWorld {
       this.talentMods = presentation.mods;
       this.talentSpec = presentation.mods.spec;
       this.talentRole = presentation.mods.role;
-      this.known = this.applyRealmRacersSelf(s, e, presentation.known);
+      this.known = this.applyMortarOverdriveSelf(s, e, presentation.known);
       if (this.spectateExitPending) {
         this.spectateExitPending = false;
         this.spectating = null; // own presentation rebuilt: the view is ours again

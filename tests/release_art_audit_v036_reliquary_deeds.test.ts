@@ -198,7 +198,7 @@ describe('v0.36 release-audit Reliquary deed art', () => {
     // committed the prog_farming_100 crest. The later Masterwrought art wave
     // paints ten more live rows and records the replacement separately, while
     // the historical v0.36 evidence remains untouched. The release-owned
-    // additions, the personal hammer quest and the seven Realm Racers placing
+    // additions, the personal hammer quest and the seven Mortar Overdrive placing
     // deeds remain on the current pending ledger.
     expect([...DEED_ART_PENDING]).toEqual([
       'exp_the_last_keep',
@@ -251,19 +251,19 @@ describe('v0.36 release-audit Reliquary deed art', () => {
       // The release's Eastbrook ferry round trip rides the deed_cat_exploration crest
       // until its commissioned art lands (docs/design/deeds.md, Icons).
       'exp_harbor_to_harbor',
-      // The seven Realm Racers placing deeds ride their category crest until
+      // The seven Mortar Overdrive placing deeds ride their category crest until
       // their commissioned art lands (docs/achievements/icon-brief.md).
-      'pvp_rr_first_race',
-      'pvp_rr_first_win',
-      'pvp_rr_wins_10',
-      'pvp_rr_wins_25',
-      'pvp_rr_fast_lap',
-      'pvp_rr_clean_race',
-      'pvp_rr_comeback',
+      'pvp_mortar_overdrive_first_race',
+      'pvp_mortar_overdrive_first_win',
+      'pvp_mortar_overdrive_wins_10',
+      'pvp_mortar_overdrive_wins_25',
+      'pvp_mortar_overdrive_fast_lap',
+      'pvp_mortar_overdrive_clean_race',
+      'pvp_mortar_overdrive_comeback',
       // The Drakelands Rampart Run's flying lap rides the same crest.
-      'pvp_rr_rampart_lap',
+      'pvp_mortar_overdrive_rampart_lap',
       // So does the Palmreach Lagoon Run's.
-      'pvp_rr_lagoon_lap',
+      'pvp_mortar_overdrive_lagoon_lap',
     ]);
     // RE-PINNED at this merge of release/v0.42.0 into feature/masterwrought:
     // 300 live (counted directly off the resolved src/sim/content/deeds.ts
@@ -276,7 +276,7 @@ describe('v0.36 release-audit Reliquary deed art', () => {
     // 318 with the release's ferry round trip, the pending ledger's last row,
     // so the painted count still holds at 289. 319 with the Buried Hoards Coinsack
     // catch (2026-09-28 merge), also pending: still 289 painted.
-    // 326 with the seven Realm Racers placing deeds, all seven on the pending
+    // 326 with the seven Mortar Overdrive placing deeds, all seven on the pending
     // ledger above, so the painted count still holds at 289.
     // 327 with the Drakelands Rampart Run's flying lap, then 328 with the
     // Palmreach Lagoon Run's, the ledger's last row.

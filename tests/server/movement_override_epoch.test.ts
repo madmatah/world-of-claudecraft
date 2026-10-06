@@ -9,27 +9,27 @@ import {
   vehicleStepKinematicYd,
   vehicleStepSettleMarginYd,
 } from '../../server/movement_override_epoch';
-import { realmRacersCompetitionCircuits } from '../../src/sim/content/realm_racers_circuits';
+import { mortarOverdriveCompetitionCircuits } from '../../src/sim/content/mortar_overdrive/circuits';
 import {
   EASTBROOK_FERRY_HULL,
   EASTBROOK_NIGHTBLOOM_FERRY,
 } from '../../src/sim/content/transport_ships';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
-import { REALM_RACERS_GRID_SIZE } from '../../src/sim/realm_racers_layout';
-import { REALM_RACERS_NITRO_SPEED_MULT } from '../../src/sim/realm_racers_pickup_effects';
-import { REALM_RACERS_SLICK_SLIP_CAP } from '../../src/sim/realm_racers_slicks';
-import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
-import { Sim } from '../../src/sim/sim';
+import { MORTAR_OVERDRIVE_GRID_SIZE } from '../../src/sim/mortar_overdrive/layout';
+import { MORTAR_OVERDRIVE_NITRO_SPEED_MULT } from '../../src/sim/mortar_overdrive/pickup_effects';
 import {
-  REALM_RACERS_GARDEN_BAND,
-  REALM_RACERS_RETURN_TICKS,
-  REALM_RACERS_STUCK_TICKS,
-  REALM_RACERS_VERGE_BAND,
-  type RealmRacersMatch,
-  realmRacersStartMatch,
-  realmRacersToCanonical,
-  realmRacersToWorld,
-} from '../../src/sim/social/realm_racers';
+  MORTAR_OVERDRIVE_GARDEN_BAND,
+  MORTAR_OVERDRIVE_RETURN_TICKS,
+  MORTAR_OVERDRIVE_STUCK_TICKS,
+  MORTAR_OVERDRIVE_VERGE_BAND,
+  type MortarOverdriveMatch,
+  mortarOverdriveStartMatch,
+  mortarOverdriveToCanonical,
+  mortarOverdriveToWorld,
+} from '../../src/sim/mortar_overdrive/race';
+import { MORTAR_OVERDRIVE_SLICK_SLIP_CAP } from '../../src/sim/mortar_overdrive/slicks';
+import { mortarOverdriveTrack } from '../../src/sim/mortar_overdrive/spline';
+import { Sim } from '../../src/sim/sim';
 import { deckToWorld } from '../../src/sim/transport_deck';
 import { carryPassengersAcrossClockJump, transportClock } from '../../src/sim/transport_ferry';
 import { transportShipPoseAt, transportVoyageSeconds } from '../../src/sim/transport_schedule';
@@ -45,7 +45,7 @@ import { MAX_BUMP_IMPULSE } from '../../src/sim/vehicle_contact';
 import { addVehicleSlip, createVehicleDrive, vehicleMaxSlip } from '../../src/sim/vehicle_motion';
 import { WATER_LEVEL } from '../../src/sim/world';
 import { WORLD_SEED } from '../../src/sim/world_seed';
-import { addAt, makeWorld, readyAllRacers } from '../realm_racers_util';
+import { addAt, makeWorld, readyAllRacers } from '../mortar_overdrive_util';
 
 function fixture(): { sim: Sim; session: MovementOverrideSessionState } {
   const sim = new Sim({ seed: 42, playerClass: 'warrior' });
@@ -298,16 +298,16 @@ describe('a ferry passenger (server/transport_head.ts ferryMovementFrame)', () =
 // override. What is: the seat and the unseat, every circuit teleport, and the
 // race lock the movement pass returns early on, bumped for the exact tick the
 // next pass reads.
-describe('a Realm Racers driver (vehicle-aware epoch)', () => {
-  const CIRCUIT = realmRacersCompetitionCircuits()[0];
-  const TRACK = realmRacersTrack(CIRCUIT);
+describe('a Mortar Overdrive driver (vehicle-aware epoch)', () => {
+  const CIRCUIT = mortarOverdriveCompetitionCircuits()[0];
+  const TRACK = mortarOverdriveTrack(CIRCUIT);
 
   interface RaceRig {
     sim: Sim;
     pids: number[];
     sessions: MovementOverrideSessionState[];
     events: { type: string; pid?: number }[];
-    match(): RealmRacersMatch;
+    match(): MortarOverdriveMatch;
     entity(pid: number): Entity;
     input(pid: number, mi: Partial<MoveInput>): void;
     /** One server tick, then the post-tick epoch pass (server/game.ts order);
@@ -325,7 +325,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
 
   function rig(): RaceRig {
     const sim = makeWorld();
-    const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    const pids = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
       addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
     );
     const sessions = pids.map(
@@ -337,8 +337,8 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     );
     const events: { type: string; pid?: number }[] = [];
     updateMovementOverrideEpochs(sim, sessions);
-    const match = (): RealmRacersMatch => {
-      const found = sim.realmRacers.match;
+    const match = (): MortarOverdriveMatch => {
+      const found = sim.mortarOverdrive.match;
       if (!found) throw new Error('no race seated');
       return found;
     };
@@ -380,14 +380,14 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
         return bumped;
       },
       // A fixture teleport, stamped the way a machine that drove there would
-      // have left its lap bookkeeping (tests/realm_racers_reset.test.ts
+      // have left its lap bookkeeping (tests/mortar_overdrive_reset.test.ts
       // parkOffRoad). Its own jump is absorbed by one epoch pass here, the way
       // the ferry case absorbs its placement.
       place(pid, s, opts = {}) {
         const m = match();
         const point = TRACK.pointAt(s);
         const lateral = opts.lateral ?? 0;
-        const world = realmRacersToWorld(
+        const world = mortarOverdriveToWorld(
           m,
           point.x - point.tz * lateral,
           point.z + point.tx * lateral,
@@ -395,7 +395,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
         const e = entity(pid);
         e.pos = sim.ctx.groundPos(world.x, world.z);
         e.prevPos = { ...e.pos };
-        const canonical = realmRacersToCanonical(m, world.x, world.z);
+        const canonical = mortarOverdriveToCanonical(m, world.x, world.z);
         const projection = TRACK.project(canonical.x, canonical.z);
         const progress = m.progress.get(pid)!;
         progress.lastS = projection.s;
@@ -406,7 +406,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
         updateMovementOverrideEpochs(sim, sessions);
       },
       resets(pid) {
-        return events.filter((ev) => ev.type === 'realmRacersReset' && ev.pid === pid).length;
+        return events.filter((ev) => ev.type === 'mortarOverdriveReset' && ev.pid === pid).length;
       },
       worst,
       resetWorst() {
@@ -448,7 +448,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
    *  down the lap so only the case under test touches the local machine. */
   function racing(clearFrom: number): RaceRig {
     const r = rig();
-    realmRacersStartMatch(r.sim.ctx, r.pids, undefined, CIRCUIT.id);
+    mortarOverdriveStartMatch(r.sim.ctx, r.pids, undefined, CIRCUIT.id);
     r.step();
     readyAllRacers(r.sim);
     while (r.match().phase !== 'racing') r.step();
@@ -469,7 +469,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     const r = rig();
     const [a] = r.pids;
     const session = r.sessions[0];
-    realmRacersStartMatch(r.sim.ctx, r.pids, undefined, CIRCUIT.id);
+    mortarOverdriveStartMatch(r.sim.ctx, r.pids, undefined, CIRCUIT.id);
     const seat = r.run(1);
     expect(seat[0], 'the seat: drive, grid teleport and race lock in one bump').toHaveLength(1);
     expect(r.resets(a), 'the grid teleport snaps the owning client').toBe(1);
@@ -488,7 +488,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
         lkAtGo = r.entity(a).drive?.controlsLocked ?? null;
       }
     }
-    // One bump, on the post-tick of the very tick whose rally pass drops the
+    // One bump, on the post-tick of the very tick whose Mortar Overdrive pass drops the
     // flag. The drive's lock (`lk` on the wire) was written earlier in that
     // same tick, so the mirror clears it one snapshot late; this bit does not.
     expect(goSeen).toBe(r.match().goTick);
@@ -512,9 +512,9 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     const nitroTicks = 6;
     progress.nitroUntilTick = r.sim.tickCount + nitroTicks;
     progress.slickGripUntilTick = r.sim.tickCount + 20;
-    drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
-    drive.slipCap = REALM_RACERS_SLICK_SLIP_CAP;
-    drive.speed = profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT;
+    drive.speedCap = MORTAR_OVERDRIVE_NITRO_SPEED_MULT;
+    drive.slipCap = MORTAR_OVERDRIVE_SLICK_SLIP_CAP;
+    drive.speed = profile.maxSpeed * MORTAR_OVERDRIVE_NITRO_SPEED_MULT;
     drive.slip = vehicleMaxSlip(profile, drive);
     r.input(a, { forward: true, turnLeft: true, jump: true });
     r.resetWorst();
@@ -555,8 +555,8 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     expect(r.resets(a)).toBe(0);
     expect([...mults]).toEqual(
       expect.arrayContaining([
-        road * REALM_RACERS_VERGE_BAND.speedMult,
-        road * REALM_RACERS_GARDEN_BAND.speedMult,
+        road * MORTAR_OVERDRIVE_VERGE_BAND.speedMult,
+        road * MORTAR_OVERDRIVE_GARDEN_BAND.speedMult,
       ]),
     );
     expectLegalVehicleSteps(r, 0);
@@ -573,7 +573,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     r.input(a, { forward: true });
     r.resetWorst();
     const contact = r.run(12);
-    expect(r.events.some((ev) => ev.type === 'realmRacersBump')).toBe(true);
+    expect(r.events.some((ev) => ev.type === 'mortarOverdriveBump')).toBe(true);
     expect(r.resets(a) + r.resets(b)).toBe(0);
     expect(contact[0]).toEqual([]);
     expect(contact[1]).toEqual([]);
@@ -643,7 +643,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
       if (!e.onGround) airborne++;
       else if (airborne > 0) landed = true;
     }
-    expect(r.events.some((ev) => ev.type === 'realmRacersGroundBlastHit')).toBe(true);
+    expect(r.events.some((ev) => ev.type === 'mortarOverdriveGroundBlastHit')).toBe(true);
     expect(airborne).toBeGreaterThan(3);
     expect(landed).toBe(true);
     expect(mults.size).toBeGreaterThan(1);
@@ -709,7 +709,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     r.input(a, { forward: true });
     r.run(10);
     const commandTick = r.sim.tickCount;
-    r.sim.realmRacersResetPosition(a);
+    r.sim.mortarOverdriveResetPosition(a);
     const until = r.match().progress.get(a)!.resetLockedUntilTick;
     const e = r.entity(a);
     const held = { ...e.pos };
@@ -743,14 +743,14 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     const mults = new Set<number>();
     const bumps: number[] = [];
     let resetTick: number | null = null;
-    for (let i = 0; i < REALM_RACERS_STUCK_TICKS + 20; i++) {
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS + 20; i++) {
       if (r.step()[0]) bumps.push(r.sim.tickCount);
       if (resetTick === null && r.resets(a) > 0) resetTick = r.sim.tickCount;
       mults.add(r.sessions[0].movementMoveSpeedMult);
     }
     expect(r.resets(a)).toBe(1);
     // Stopped on the lawn under its slow for the whole wait: not an override.
-    expect(mults.has(road * REALM_RACERS_GARDEN_BAND.speedMult)).toBe(true);
+    expect(mults.has(road * MORTAR_OVERDRIVE_GARDEN_BAND.speedMult)).toBe(true);
     expect(bumps).toEqual([resetTick, (resetTick ?? 0) + 1]);
   });
 
@@ -761,10 +761,10 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     r.place(a, s);
     r.match().deadlineTick = r.sim.tickCount + 1;
     const finishTick = r.sim.tickCount + 1;
-    const bumps = r.run(REALM_RACERS_RETURN_TICKS + 10)[0];
-    expect(r.sim.realmRacers.match).toBeNull();
+    const bumps = r.run(MORTAR_OVERDRIVE_RETURN_TICKS + 10)[0];
+    expect(r.sim.mortarOverdrive.match).toBeNull();
     expect(r.entity(a).drive).toBeNull();
-    expect(bumps).toEqual([finishTick, finishTick + REALM_RACERS_RETURN_TICKS]);
+    expect(bumps).toEqual([finishTick, finishTick + MORTAR_OVERDRIVE_RETURN_TICKS]);
     expect(r.sessions[0].movementOverrideSignature).toMatchObject({
       driving: false,
       raceLocked: false,
@@ -775,7 +775,7 @@ describe('a Realm Racers driver (vehicle-aware epoch)', () => {
     const r = rig();
     const [a] = r.pids;
     const e = r.entity(a);
-    e.drive = createVehicleDrive('rally_loaner');
+    e.drive = createVehicleDrive('mo_loaner');
     updateMovementOverrideEpochs(r.sim, r.sessions);
     expect(r.sessions[0].movementOverrideEpoch).toBe(1);
     expect(r.sessions[0].movementOverrideActive).toBe(false);

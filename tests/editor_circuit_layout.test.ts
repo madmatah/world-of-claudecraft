@@ -68,16 +68,18 @@ import {
   zoomPercent,
   zoomScale,
 } from '../src/editor/circuit/layout_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR,
-  REALM_RACERS_RADIUS_OVER_WIDTH_WARN,
-  type RealmRacersCircuitProblem,
-  realmRacersCircuitMetrics,
-} from '../src/sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_MIN_HALF_WIDTH } from '../src/sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR,
+  MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN,
+  type MortarOverdriveCircuitProblem,
+  mortarOverdriveCircuitMetrics,
+} from '../src/sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_MIN_HALF_WIDTH } from '../src/sim/mortar_overdrive/layout';
 
-const problem = (over: Partial<RealmRacersCircuitProblem> = {}): RealmRacersCircuitProblem => ({
+const problem = (
+  over: Partial<MortarOverdriveCircuitProblem> = {},
+): MortarOverdriveCircuitProblem => ({
   code: 'corner_folds_road',
   severity: 'error',
   value: 0.8,
@@ -484,8 +486,8 @@ describe('the rail', () => {
     expect(TOOL_VALUE_FIELDS.props).toBeNull();
     // The road's floor is the SIM's floor, not a second opinion: the tool must
     // not offer a road narrower than the game will drive.
-    expect(TOOL_VALUE_FIELDS.width?.min).toBe(REALM_RACERS_MIN_HALF_WIDTH);
-    expect(TOOL_VALUE_FIELDS.width?.max).toBeGreaterThan(REALM_RACERS_MIN_HALF_WIDTH);
+    expect(TOOL_VALUE_FIELDS.width?.min).toBe(MORTAR_OVERDRIVE_MIN_HALF_WIDTH);
+    expect(TOOL_VALUE_FIELDS.width?.max).toBeGreaterThan(MORTAR_OVERDRIVE_MIN_HALF_WIDTH);
   });
 
   it('puts a mode repair on the plan, and only where it means something', () => {
@@ -802,7 +804,7 @@ describe('zoom, grid and snap', () => {
 });
 
 describe('the headline chips', () => {
-  const metrics = realmRacersCircuitMetrics(REALM_RACERS_PRACTICE_CIRCUIT);
+  const metrics = mortarOverdriveCircuitMetrics(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT);
 
   it('reads the three numbers off the real readout', () => {
     const chips = headlineChips(metrics);
@@ -824,7 +826,7 @@ describe('the headline chips', () => {
     // satisfied by the 1.5 beside it and by almost any title, so the two
     // thresholds could swap places unnoticed.
     expect(title('tightest')).toBe(
-      `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${REALM_RACERS_RADIUS_OVER_WIDTH_WARN} is tight, under ${REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
+      `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN} is tight, under ${MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
     );
     expect(title('props')).toBe(
       `${metrics.propCount} placed, ${metrics.scatterCount} scattered, ${metrics.pondCount} pond(s)`,
@@ -839,10 +841,10 @@ describe('the headline chips', () => {
       headlineChips({ ...metrics, minRadiusOverWidth: ratio }).find(
         (chip) => chip.id === 'tightest',
       )?.tone ?? '';
-    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR - 0.01)).toBe('bad');
-    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR)).toBe('warn');
-    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_WARN - 0.01)).toBe('warn');
-    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_WARN)).toBe('good');
+    expect(tone(MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR - 0.01)).toBe('bad');
+    expect(tone(MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR)).toBe('warn');
+    expect(tone(MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN - 0.01)).toBe('warn');
+    expect(tone(MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN)).toBe('good');
   });
 
   it('tints the corner ratio against the 1.5 floor and the 1.0 fold', () => {

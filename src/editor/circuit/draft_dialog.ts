@@ -3,7 +3,7 @@
 //
 // The dev server could list and parse them from the day those endpoints existed
 // and nothing read the list, so the only way back into last week's circuit was to
-// type its id at `/dev rallydraft`.
+// type its id at `/dev overdrivedraft`.
 //
 // A sibling module rather than a block in `main.ts`, on this directory's own
 // test for which side of the seam something belongs on: none of this needs the
@@ -18,8 +18,8 @@
 import {
   CIRCUIT_DRAFT_ENDPOINT,
   CIRCUIT_DRAFT_LIST_ENDPOINT,
-} from '../../game/realm_racers_draft_dev';
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+} from '../../game/mortar_overdrive/draft_dev';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
 import { type DiskDraftRow, diskDraftRows } from './draft_store_core';
 import { editorIcon } from './editor_icons';
 import { validateCircuitPayload } from './export_core';
@@ -30,7 +30,7 @@ export interface DraftDialogHost {
   /** Take a draft on disk as the working document, and close the dialog with
    *  it: the two are one act, and a dialog left open over a freshly loaded
    *  circuit is a dialog the operator has to dismiss to see what they asked for. */
-  load(circuit: RealmRacersCircuit, label: string): void;
+  load(circuit: MortarOverdriveCircuit, label: string): void;
   setStatus(text: string, tone?: MessageTone): void;
   /** The wall clock, injected. The ages are the one thing on this list that is
    *  not a function of the payload, and a core that reads a clock cannot be
@@ -101,7 +101,7 @@ export class DraftDialog {
       const response = await fetch(`${CIRCUIT_DRAFT_ENDPOINT}/${id}`);
       if (!response.ok) throw new Error(await response.text());
       // Validated here as well as at the endpoint, on the same rule `/dev
-      // rallydraft` follows: this record is about to become the document, and
+      // mortarOverdriveDraft` follows: this record is about to become the document, and
       // the one validator both ends share is the one the editor exports through.
       const circuit = validateCircuitPayload(await response.json());
       if (!circuit) throw new Error('not a circuit record');
@@ -109,7 +109,7 @@ export class DraftDialog {
       // editing it can never hand the memoized derivation of a live circuit a
       // shape the game did not author; a draft is already a draft, and renaming
       // it would leave Save draft writing a SECOND file while
-      // `/dev rallydraft <id>` went on racing the one it was opened from.
+      // `/dev overdrivedraft <id>` went on racing the one it was opened from.
       this.host.load(circuit, id);
     } catch (err) {
       this.host.setStatus(`could not load draft ${id}: ${err}`, 'err');

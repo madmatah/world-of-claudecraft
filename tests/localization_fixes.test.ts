@@ -1212,6 +1212,9 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
   // now throws where a reader can see it.
   const socialFiles = tsFilesUnder(socialDir);
   const socialSrc = socialSourceUnder(socialDir);
+  const mortarOverdriveDir = path.resolve(process.cwd(), 'src/sim/mortar_overdrive');
+  const mortarOverdriveFiles = tsFilesUnder(mortarOverdriveDir);
+  const mortarOverdriveSrc = socialSourceUnder(mortarOverdriveDir);
   const simSrc = [
     fs.readFileSync(path.resolve(process.cwd(), 'src/sim/sim.ts'), 'utf8'),
     fs.readFileSync(path.resolve(process.cwd(), 'src/sim/inventory_receipt.ts'), 'utf8'),
@@ -1493,6 +1496,11 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
     // treatment src/sim/social and src/sim/professions get above, so a new
     // emit there sits under the drift guard from day one.
     socialSourceUnder(path.resolve(process.cwd(), 'src/sim/interactions')),
+    // Whole-directory sweep for src/sim/mortar_overdrive: the race module and the
+    // leaves that used to sit in src/sim/social (where the glob above reached them)
+    // moved into their own directory, so it is scanned whole, its pure leaves
+    // included, and every race emit stays under the drift guard.
+    mortarOverdriveSrc,
     // server/bank_wire.ts (Bank Storage phase 11): the FIRST server module
     // outside game.ts to emit player text, via sim.ctx.error (the storage
     // purchase-mutex refusal of a gold rung buy). It rides the ordinary sim
@@ -1765,14 +1773,6 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
       'party.ts',
       'pull_timer.ts',
       'ready_check.ts',
-      'realm_racers.ts',
-      'realm_racers_auras.ts',
-      'realm_racers_bots.ts',
-      'realm_racers_busy.ts',
-      'realm_racers_context.ts',
-      'realm_racers_credit.ts',
-      'realm_racers_loading.ts',
-      'realm_racers_seat.ts',
       'trade.ts',
       'trade_offer_sources.ts',
       'yumi.ts',
@@ -1781,6 +1781,30 @@ describe('S3: every sim.ts emit is recognized (drift guard)', () => {
       scanEmitCandidates(socialSrc, '').length,
       'the social glob still contributes its emits to the S3 corpus',
     ).toBeGreaterThan(220);
+  });
+
+  it('the src/sim/mortar_overdrive glob reaches the race modules that left src/sim/social', () => {
+    // The race module and its seat, queue-busy, loading, house-pilot and context
+    // leaves were in src/sim/social, scanned by its glob; they moved into their own
+    // directory, so this glob must reach them or their emits leave the corpus.
+    expect(mortarOverdriveFiles.map((f) => f.file)).toEqual(
+      expect.arrayContaining([
+        'auras.ts',
+        'bots.ts',
+        'busy.ts',
+        'credit.ts',
+        'context.ts',
+        'loading.ts',
+        'race.ts',
+        'seat.ts',
+      ]),
+    );
+    // Measured: one candidate today (the race speaks through keyed events and the
+    // client's own copy), so the floor proves the glob is wired, not a count.
+    expect(
+      scanEmitCandidates(mortarOverdriveSrc, '').length,
+      'the Mortar Overdrive glob contributes its emits to the S3 corpus',
+    ).toBeGreaterThan(0);
   });
 
   it('the corpus reads the tree through the shared walker, with no flat reader beside it', () => {

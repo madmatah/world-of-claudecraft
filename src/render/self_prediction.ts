@@ -1,7 +1,7 @@
 import type { InputTickFrame } from '../game/input_tick_sampler';
 import { type MovementWireClient, MovementWireGlue } from '../game/movement_wire_glue';
 import type { DelveMotionState } from '../sim/delves/geometry';
-import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
+import type { MortarOverdriveSlickRecon } from '../sim/mortar_overdrive';
 import {
   DT,
   type Entity,
@@ -48,10 +48,10 @@ export interface SelfPredictionWire extends MovementWireClient {
   reconVy?: number;
   reconOnGround?: boolean;
   /** The acknowledged standing with the oil, beside `reconDrive`. */
-  reconSlick?: RallySlickRecon | null;
+  reconSlick?: MortarOverdriveSlickRecon | null;
   /** The race readout of the same snapshot: the patches the predicted kart
    *  can cross and the race clock the standing is read against. */
-  realmRacersInfo?: { match: SlickPredictionMatch | null };
+  mortarOverdriveInfo?: { match: SlickPredictionMatch | null };
   /** The ferry timetable at the newest snapshot (IWorld.ferryView): its
    *  schedule clock times the deck-aware prediction. */
   ferryView?(): { clock: number } | null;
@@ -120,7 +120,7 @@ function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
     state.prevFacing = facing;
     state.slick = acknowledgedSlickState(
       wire.reconSlick,
-      wire.realmRacersInfo?.match,
+      wire.mortarOverdriveInfo?.match,
       drive.gripMult,
     );
   }
@@ -153,7 +153,7 @@ function acknowledgedPose(
   pose.slick = pose.drive
     ? acknowledgedSlickState(
         wire.reconSlick,
-        wire.realmRacersInfo?.match,
+        wire.mortarOverdriveInfo?.match,
         pose.drive.gripMult,
         acknowledged,
       )
@@ -228,7 +228,7 @@ export class MovementPredictionPipeline {
     const step = createDeckAwareStep(deps, (ct) => this.clockFor(ct));
     this.stepFn = (state, frame) => {
       step(state, frame);
-      if (state.slick) this.slickPredictor.step(state, this.wire?.realmRacersInfo?.match);
+      if (state.slick) this.slickPredictor.step(state, this.wire?.mortarOverdriveInfo?.match);
     };
     this.wireGlue.onFrame = (frame) => this.predictFrame(frame);
     this.wireGlue.onNegotiated = () => this.reset();

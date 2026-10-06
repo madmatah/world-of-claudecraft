@@ -46,7 +46,7 @@ describe('graphics-overhaul integration', () => {
     expect(chaseStart).toBeGreaterThan(0);
     expect(chaseEnd).toBeGreaterThan(chaseStart);
     const chaseCamera = renderer.slice(chaseStart, chaseEnd);
-    // The requested distance is read, never written: the rally boom profile
+    // The requested distance is read, never written: the Mortar Overdrive boom profile
     // lengthens the arm through cameraBoomDistance() rather than by moving
     // pose.dist, so scene geometry still cannot pull the camera in.
     expect(chaseCamera).not.toMatch(/pose\.dist\s*[-+*/]?=/);

@@ -77,7 +77,7 @@ const GROUPS: Group[] = [
       { keys: ['Shift+H'], label: 'guide.controls.meters' },
       { keys: ['I'], label: 'guide.controls.calendar' },
       { keys: ['Shift+I'], label: 'guide.controls.dungeonFinder' },
-      { keys: ['Shift+R'], label: 'hudChrome.rally.title' },
+      { keys: ['Shift+R'], label: 'hudChrome.mortarOverdrive.title' },
       { keys: ['U'], label: 'guide.controls.discord' },
       { keys: ['V'], label: 'controls.nameplates' },
       { keys: ['Ctrl+V'], label: 'hudChrome.keybinds.friendlyNameplates' },

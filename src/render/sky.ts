@@ -7,7 +7,7 @@ import {
   STRIP_ZONES,
   ZONES,
 } from '../sim/data';
-import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
+import { isAtMortarOverdriveXZ } from '../sim/mortar_overdrive/layout';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import { loadKtx2Texture, loadTexture, releaseKtx2Texture, releaseTexture } from './assets/loader';
 import { BIOME_HAZE_DECLARATIONS, biomeHazeUniforms, hasBiomeHazeField } from './biome_haze_field';
@@ -18,7 +18,7 @@ import {
   stepEnvironmentBlend,
 } from './environment_transition_core';
 import { GFX, type GfxSettings } from './gfx';
-import { realmRacersThemeAt } from './realm_racers_themes';
+import { mortarOverdriveThemeAt } from './mortar_overdrive/themes';
 import type { SkyResidencyRegion } from './sky_residency_core';
 import { skyTexture } from './textures';
 
@@ -1050,7 +1050,7 @@ function biomeBlendAt(x: number, z: number): BiomeBlend {
     to = 'farshore';
     t = isleT;
   }
-  // ...and a third: a Realm Racers circuit flies the sky its THEME names, so a
+  // ...and a third: a Mortar Overdrive circuit flies the sky its THEME names, so a
   // Nightbloom circuit is raced under the Nightbloom's dome wherever in the
   // instance band it happens to sit. Without this the band falls through to
   // whatever the world zones answer out at x = 113_700, which is a day sky and
@@ -1059,8 +1059,8 @@ function biomeBlendAt(x: number, z: number): BiomeBlend {
   // Hard, with no cross-fade, unlike the two above: those blend because a
   // player WALKS over their edge, and the band is only ever arrived at by
   // teleport. There is no boundary to smooth.
-  if (isAtRealmRacersXZ(x, z)) {
-    from = realmRacersThemeAt(x, z).sky.biome;
+  if (isAtMortarOverdriveXZ(x, z)) {
+    from = mortarOverdriveThemeAt(x, z).sky.biome;
     to = from;
     t = 0;
   }
@@ -1128,7 +1128,7 @@ export function buildSky(
       // The canvas dome has no cycle of its own, but it CAN take the grade's
       // sky multiplier: a MeshBasicMaterial's colour multiplies its map, and a
       // colour is a uniform, so nothing here relinks. It exists for the one
-      // caller that needs this tier graded, a Realm Racers circuit racing at an
+      // caller that needs this tier graded, a Mortar Overdrive circuit racing at an
       // authored hour: the light rig over that circuit is graded on every tier
       // so a low-tier pilot never gets a brighter road than the field, and a
       // dark road under a noon dome is the look that would leave.

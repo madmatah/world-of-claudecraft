@@ -251,9 +251,9 @@ describe('Ignivar arena atmosphere', () => {
     expect(source).toContain(
       'const fogScene = resolveFogScene(inside, px, camY, this.camera.position, this.sim.cfg.seed);',
     );
-    // A Realm Racers circuit is its own fog scene ahead of the hoard valley arm.
+    // A Mortar Overdrive circuit is its own fog scene ahead of the hoard valley arm.
     expect(source).toMatch(
-      /const desired: FogSceneState \| 'rally' = band\.inRally\s+\? 'rally'\s+: valley\s+\? 'hoardValley'\s+: fogScene\.desired;/,
+      /const desired: FogSceneState \| typeof MO_FOG = band\.inMortarOverdrive\s+\? MO_FOG\s+: valley\s+\? 'hoardValley'\s+: fogScene\.desired;/,
     );
     expect(source).toContain(
       'applyFogScenePreset(desired, fog, () => valley?.fog ?? this.outdoorFogPreset());',

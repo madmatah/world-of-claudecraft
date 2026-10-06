@@ -22,7 +22,7 @@
 import {
   GROUND_BLAST_MUZZLE_NOSE_YD,
   resolveGroundBlastAim,
-} from '../sim/realm_racers_ground_blast';
+} from '../sim/mortar_overdrive/ground_blast';
 import { DT, TICK_RATE } from '../sim/types';
 
 /** Where a shell leaves a machine at (x, z) facing `facing`: the server's muzzle

@@ -1,9 +1,9 @@
 import { DEV_KIT_ROLES } from '../sim/content/dev_kit_roles';
+import { MORTAR_OVERDRIVE_CIRCUIT_LIST } from '../sim/content/mortar_overdrive/circuits';
 import { GATHERING_PROFESSIONS } from '../sim/content/professions';
-import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
 import { DUNGEONS, getActiveWorldContent, ITEMS, MOBS, QUESTS } from '../sim/data';
 import { devTownTargets } from '../sim/dev/town_teleport';
-import { RALLY_DRIVER_TIERS } from '../sim/realm_racers_driver';
+import { MORTAR_OVERDRIVE_DRIVER_TIERS } from '../sim/mortar_overdrive/driver';
 import { ALL_CLASSES, MAX_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
 import {
@@ -193,20 +193,25 @@ function actionFields(actionId: string): string {
           tEntity({ kind: 'dungeon', id: dungeon.id, field: 'name' }),
         ),
       )}${selectField('devCommand.fields.difficulty', 'difficulty', `<option value="normal">${esc(t('devCommand.difficulty.normal'))}</option><option value="heroic">${esc(t('devCommand.difficulty.heroic'))}</option>`)}`;
-    case 'rally':
+    case 'mortarOverdrive':
       return `${selectField(
-        'devCommand.fields.rallyCircuit',
-        'rallyCircuit',
-        optionsHtml(REALM_RACERS_CIRCUIT_LIST, (circuit) => circuit.id, false),
+        'devCommand.fields.mortarOverdriveCircuit',
+        'mortarOverdriveCircuit',
+        optionsHtml(MORTAR_OVERDRIVE_CIRCUIT_LIST, (circuit) => circuit.id, false),
       )}${selectField(
-        'devCommand.fields.rallyTier',
-        'rallyTier',
-        RALLY_DRIVER_TIERS.map((tier) => `<option value="${esc(tier)}">${esc(tier)}</option>`).join(
-          '',
-        ),
+        'devCommand.fields.mortarOverdriveTier',
+        'mortarOverdriveTier',
+        MORTAR_OVERDRIVE_DRIVER_TIERS.map(
+          (tier) => `<option value="${esc(tier)}">${esc(tier)}</option>`,
+        ).join(''),
       )}`;
-    case 'rallykit':
-      return textField('devCommand.fields.rallyKitCharges', 'rallyKitCharges', '50', 'number');
+    case 'mortarOverdriveKit':
+      return textField(
+        'devCommand.fields.mortarOverdriveKitCharges',
+        'mortarOverdriveKitCharges',
+        '50',
+        'number',
+      );
     case 'raid':
       return selectField(
         'devCommand.fields.difficulty',

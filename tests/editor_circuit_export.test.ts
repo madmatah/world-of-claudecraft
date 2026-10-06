@@ -14,24 +14,24 @@ import {
   roundCircuit,
   validateCircuitPayload,
 } from '../src/editor/circuit/export_core';
-import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
+import type { MortarOverdriveCircuit } from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  REALM_RACERS_CIRCUIT_LIST,
-} from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  MORTAR_OVERDRIVE_CIRCUIT_LIST,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
 
 /** The garden circuit under a draft id. It carries the two pools and the
  *  fountain it ships with, so the dressing rides the round trip rather than
  *  being skipped by it. */
-const DRAFT: RealmRacersCircuit = {
+const DRAFT: MortarOverdriveCircuit = {
   ...GARDEN,
   id: 'draft_export_fixture',
 };
 
 /** A circuit with no water at all: no pond and no basin. The round trip has to
  *  carry the ABSENCE of a field as carefully as its presence. */
-const DRY: RealmRacersCircuit = {
+const DRY: MortarOverdriveCircuit = {
   ...GARDEN,
   id: 'draft_export_dry',
   ponds: undefined,
@@ -39,7 +39,7 @@ const DRY: RealmRacersCircuit = {
 };
 
 /** The payload the browser posts, as plain JSON. */
-const payload = (circuit: RealmRacersCircuit): Record<string, unknown> =>
+const payload = (circuit: MortarOverdriveCircuit): Record<string, unknown> =>
   JSON.parse(JSON.stringify(circuit));
 
 const withField = (key: string, value: unknown): Record<string, unknown> => ({
@@ -53,8 +53,8 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(parsed).toEqual(roundCircuit(DRAFT));
     if (!parsed) throw new Error('the export did not parse back');
     // The point of the round trip: what gets pasted derives the same circuit.
-    const before = realmRacersCircuitMetrics({ ...roundCircuit(DRAFT), id: 'export_before' });
-    const after = realmRacersCircuitMetrics({ ...parsed, id: 'export_after' });
+    const before = mortarOverdriveCircuitMetrics({ ...roundCircuit(DRAFT), id: 'export_before' });
+    const after = mortarOverdriveCircuitMetrics({ ...parsed, id: 'export_after' });
     expect(after.lapLength).toBe(before.lapLength);
     expect(after.turningDegrees).toBe(before.turningDegrees);
     expect(after.nearestApproach).toEqual(before.nearestApproach);
@@ -66,7 +66,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // rather than refused on purpose: the readout is what calls it out
     // (`unknown_theme`), and a theme being written in the same change is not in
     // the list yet.
-    const themed: RealmRacersCircuit = {
+    const themed: MortarOverdriveCircuit = {
       ...DRAFT,
       id: 'draft_export_themed',
       theme: 'galecrest',
@@ -74,7 +74,7 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(circuitToTypeScript(themed)).toContain("theme: 'galecrest',");
     expect(circuitFromTypeScript(circuitToTypeScript(themed))?.theme).toBe('galecrest');
     expect(validateCircuitPayload(payload(themed))?.theme).toBe('galecrest');
-    const unknown: RealmRacersCircuit = { ...themed, theme: 'frostveil' };
+    const unknown: MortarOverdriveCircuit = { ...themed, theme: 'frostveil' };
     expect(validateCircuitPayload(payload(unknown))?.theme).toBe('frostveil');
   });
 
@@ -83,7 +83,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // what "the world's clock" is spelled as. Membership is the readout's call
     // (`unknown_time_of_day`), exactly like the theme above, so an hour being
     // written in the same change still saves and still previews.
-    const dusk: RealmRacersCircuit = { ...DRAFT, id: 'draft_export_hour', timeOfDay: 'dusk' };
+    const dusk: MortarOverdriveCircuit = { ...DRAFT, id: 'draft_export_hour', timeOfDay: 'dusk' };
     expect(circuitToTypeScript(dusk)).toContain("timeOfDay: 'dusk',");
     expect(circuitFromTypeScript(circuitToTypeScript(dusk))?.timeOfDay).toBe('dusk');
     expect(validateCircuitPayload(payload(dusk))?.timeOfDay).toBe('dusk');
@@ -94,7 +94,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // The shipped circuits all name an hour now, so the absence case is built
     // rather than borrowed: a record with no `timeOfDay` at all.
     const { timeOfDay: _none, ...rest } = DRAFT;
-    const clockless: RealmRacersCircuit = rest;
+    const clockless: MortarOverdriveCircuit = rest;
     expect(clockless.timeOfDay).toBeUndefined();
     expect(circuitToTypeScript(clockless)).not.toContain('timeOfDay');
     expect(circuitFromTypeScript(circuitToTypeScript(clockless))?.timeOfDay).toBeUndefined();
@@ -124,7 +124,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // draft raced in game arrives through the validator, so the two views of
     // one circuit disagreed about the island in the lake. The dressing is a
     // whole document of such placements now, so all three fields ride together.
-    const dressed: RealmRacersCircuit = {
+    const dressed: MortarOverdriveCircuit = {
       ...DRAFT,
       id: 'draft_dressed_fixture',
       props: [
@@ -161,7 +161,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // Same rule as the dressing above, and the same failure it exists to
     // prevent: a field the validator silently drops makes the editor's preview
     // draw an enclosure the raced draft does not have.
-    const walled: RealmRacersCircuit = {
+    const walled: MortarOverdriveCircuit = {
       ...DRAFT,
       id: 'draft_walled_fixture',
       fences: [
@@ -201,7 +201,7 @@ describe('circuit editor export: the pasteable literal', () => {
     // being dropped: the outline decides where the land STOPS, so a validator
     // that swallowed it would race a draft whose road runs over open water while
     // the editor's own preview showed an island.
-    const island: RealmRacersCircuit = {
+    const island: MortarOverdriveCircuit = {
       ...DRAFT,
       id: 'draft_island_fixture',
       groundOutline: [
@@ -229,7 +229,7 @@ describe('circuit editor export: the pasteable literal', () => {
   it('refuses a ground shape that is not a closed ring of real points', () => {
     const base = { ...DRAFT, id: 'draft_bad_ground' };
     const withOutline = (groundOutline: unknown) =>
-      validateCircuitPayload(payload({ ...base, groundOutline } as RealmRacersCircuit));
+      validateCircuitPayload(payload({ ...base, groundOutline } as MortarOverdriveCircuit));
     expect(
       withOutline([
         { x: -10, z: -10 },
@@ -273,7 +273,7 @@ describe('circuit editor export: the pasteable literal', () => {
   it('refuses a barrier the game could not build, one field at a time', () => {
     const base = { ...DRAFT, id: 'draft_bad_fence' };
     const withFence = (fence: unknown) =>
-      validateCircuitPayload(payload({ ...base, fences: [fence] } as RealmRacersCircuit));
+      validateCircuitPayload(payload({ ...base, fences: [fence] } as MortarOverdriveCircuit));
     const good = {
       kit: 'ironwork',
       points: [
@@ -358,13 +358,15 @@ describe('circuit editor export: the pasteable literal', () => {
   it('is byte-stable, so two exports of one circuit diff as nothing', () => {
     expect(circuitToTypeScript(DRAFT)).toBe(circuitToTypeScript(DRAFT));
     expect(circuitToTypeScript(DRAFT)).toContain("id: 'draft_export_fixture'");
-    expect(circuitToTypeScript(DRAFT)).toContain('const DRAFT_EXPORT_FIXTURE: RealmRacersCircuit');
+    expect(circuitToTypeScript(DRAFT)).toContain(
+      'const DRAFT_EXPORT_FIXTURE: MortarOverdriveCircuit',
+    );
   });
 
   it('rounds the live record to exactly what it exports', () => {
     // An editor measuring more precision than it can paste would render a
     // readout of a circuit nobody can reproduce.
-    const messy: RealmRacersCircuit = {
+    const messy: MortarOverdriveCircuit = {
       ...GARDEN,
       id: 'draft_rounding',
       controlPoints: GARDEN.controlPoints.map((p) => ({ x: p.x + 0.04999, z: p.z - 0.04999 })),
@@ -384,14 +386,14 @@ describe('circuit editor export: the pasteable literal', () => {
     const contents = draftFileContents(DRAFT);
     expect(contents).toContain('Scratch only');
     expect(contents).toContain('draft_export_fixture');
-    expect(contents).toContain('const DRAFT_EXPORT_FIXTURE: RealmRacersCircuit');
+    expect(contents).toContain('const DRAFT_EXPORT_FIXTURE: MortarOverdriveCircuit');
     expect(circuitFromTypeScript(contents)).toEqual(roundCircuit(DRAFT));
   });
 });
 
 describe('circuit editor export: the save endpoint validator', () => {
   it('accepts every shipped circuit', () => {
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    for (const circuit of MORTAR_OVERDRIVE_CIRCUIT_LIST) {
       expect(validateCircuitPayload(payload(circuit)), circuit.id).toEqual(circuit);
     }
   });

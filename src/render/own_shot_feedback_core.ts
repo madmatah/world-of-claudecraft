@@ -16,7 +16,7 @@
 // Pure and clock-agnostic: the caller passes its wall clock in, so a Vitest
 // drives it with plain numbers (the net_interp_core pattern).
 
-import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
+import { GROUND_BLAST_RADIUS } from '../sim/mortar_overdrive/ground_blast';
 
 /** How long a local report suppresses the own Fired event's copy: one round
  *  trip plus generous slack. */

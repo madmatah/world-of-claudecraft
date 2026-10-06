@@ -23,10 +23,10 @@
 // this tool.
 
 import type {
-  RealmRacersCircuit,
-  RealmRacersPerimeter,
-} from '../../sim/content/realm_racers_circuits';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+  MortarOverdriveCircuit,
+  MortarOverdrivePerimeter,
+} from '../../sim/content/mortar_overdrive';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { roundCircuit } from './export_core';
 import { moveCircuitContent } from './fences_core';
@@ -154,10 +154,10 @@ const clamp = (value: number, low: number, high: number): number =>
  * dressing.
  */
 export function circuitMovedFromPress(
-  from: RealmRacersCircuit,
-  press: RallyPoint,
-  at: RallyPoint,
-): RealmRacersCircuit {
+  from: MortarOverdriveCircuit,
+  press: MortarOverdrivePoint,
+  at: MortarOverdrivePoint,
+): MortarOverdriveCircuit {
   return roundCircuit(moveCircuitContent(from, at.x - press.x, at.z - press.z));
 }
 
@@ -198,11 +198,11 @@ export function enclosureGrab(grip: EnclosureGrip, x: number, z: number): Enclos
  * would disagree in the export.
  */
 export function enclosureResized(
-  perimeter: RealmRacersPerimeter,
+  perimeter: MortarOverdrivePerimeter,
   grab: EnclosureGrab,
   x: number,
   z: number,
-): RealmRacersPerimeter {
+): MortarOverdrivePerimeter {
   const at = { x: x + grab.dx, z: z + grab.dz };
   return {
     ...perimeter,

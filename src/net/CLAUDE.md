@@ -15,6 +15,9 @@ The client even runs `abilitiesKnownAt` / `computeQuestState` locally, but purel
 New net logic that does not need `ClientWorld`'s private socket state lands as a
 tested sibling module here, never as more methods on `online.ts`. Exemplars
 (enumerate the live set: `ls src/net`):
+- `mortar_overdrive/`: the race's self-record (`mo`, `moc`, `mot`, `mokit`) and drive
+  record decoders plus its `ClientWorld` chain link, behind an `index.ts` barrel `online.ts`
+  imports; see `src/net/mortar_overdrive/CLAUDE.md`.
 - `char_sort.ts` / `charselect_action.ts`: pure, i18n-KEY-returning character-select
   cores; `charselect_action` is the single source of truth for BOTH the Enter World
   button's label/enabled state AND its enter-vs-takeover click routing, so the two
@@ -115,8 +118,8 @@ See `server/CLAUDE.md` for server conventions; read `server/game.ts` directly fo
   `sendInput`: an unconditional interval timer plus a changed-only gated flush; the
   cadence constants and gate predicate live in `input_send_cadence.ts`, kept in
   lockstep with the server contract by `tests/input_cadence_model.test.ts`), `cmd`
-  (every IWorld action via the `cmd()` helper; protected only so the Realm Racers
-  link of ClientWorld's class chain, `realm_racers_wire_state.ts`, sends through it).
+  (every IWorld action via the `cmd()` helper; protected only so the Mortar Overdrive
+  link of ClientWorld's class chain, `mortar_overdrive/wire_state.ts`, sends through it).
 - **Snapshot decode** (`applySnapshot`): `snap.ents` (others) + `snap.self`
   (extended state) go through `applyWire`; `snap.keep` = ids alive-but-unchanged,
   protected from the prune at the end. Encoder is server `wireEntity`; fields are
@@ -280,7 +283,7 @@ failure, kept as stable English that `main.ts` re-localizes.
   gated states and `?nopredict` use the plain interpolated fallback in
   `src/render/self_render_position_core.ts`, with the rewind-clamped handoff.
   The legacy extrapolator is deleted when v1 is retired, not before.
-- **Movement wire v2 predicts a seated Realm Racers pilot too**, under the same
+- **Movement wire v2 predicts a seated Mortar Overdrive pilot too**, under the same
   constraints. The pieces: (a) the capability: `src/net/world_auth_message.ts`
   advertises `driveReconWire` (`DRIVE_RECON_WIRE_VERSION`) and the server keeps
   it per session (`server/ws_auth.ts`, `server/movement_input_timeline_v2.ts`);
@@ -292,7 +295,7 @@ failure, kept as stable English that `main.ts` re-localizes.
   modules); rivals keep their `drv`, which the rival projection reads. A
   malformed `rdv` decodes to null and stands the prediction down. (c) The
   epoch: `server/movement_override_epoch.ts` compares a `driving` bit, carries
-  an active `raceLocked` bit (`realmRacersMovementLockedAt`: every phase but
+  an active `raceLocked` bit (`mortarOverdriveMovementLockedAt`: every phase but
   racing, a retired pilot, the recovery lock), sizes a driver's legal step by
   the machine (`vehicleStepCeilingYd`) instead of run speed, and ignores
   move-speed changes while a pilot drives, so a kart at race speed no longer
@@ -308,17 +311,17 @@ failure, kept as stable English that `main.ts` re-localizes.
   (`src/render/self_slick_prediction_core.ts`). A rival contact stays a server
   outcome, but its DRAWING starts at the seen touch, which is an exception to
   constraints (b) and (c) of the local-player prediction bullet above and a change to this model taken for the
-  maintainer's review: `src/render/realm_racers_contact_kick_core.ts` draws the
+  maintainer's review: `src/render/mortar_overdrive/contact_kick_core.ts` draws the
   sim resolver's velocity change on the drawn pair as its own term of the drawn
   pose (never of the prediction, the mirror, the wire, or the pose a command is
   aimed from), capped, and hands it to the glide on the first replay after the
   touch frame's acknowledgement, or the touch tick plus two with none (never on the bump event). `?contactkick=0` turns
   it off. Measured and pinned in
-  `docs/prd/realm-racers-contact-lag-compensation.md`.
-  Proofs: `tests/realm_racers_prediction_proof.test.ts`,
-  `tests/realm_racers_v2_prediction.test.ts`,
-  `tests/realm_racers_drive_recon_online.test.ts`, and for rivals drawn in the
-  local kart's time frame, `tests/realm_racers_rival_frames.test.ts`.
+  `docs/prd/mortar-overdrive-contact-lag-compensation.md`.
+  Proofs: `tests/mortar_overdrive_prediction_proof.test.ts`,
+  `tests/mortar_overdrive_v2_prediction.test.ts`,
+  `tests/mortar_overdrive_drive_recon_online.test.ts`, and for rivals drawn in the
+  local kart's time frame, `tests/mortar_overdrive_rival_frames.test.ts`.
 - **The heading is NOT predicted, it is client-authoritative input.** The facing
   channel (`input.facing`, applied outright when the player may turn)
   has always been client-driven for mouselook; `src/game/keyboard_turn_facing.ts`

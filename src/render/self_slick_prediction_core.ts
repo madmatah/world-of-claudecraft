@@ -2,8 +2,8 @@
 // slick grip loss and throw on the predicted tick the server will, instead of
 // meeting them one round trip late as a reconcile correction.
 //
-// Everything that decides it is the race's own code (`realm_racers_slicks.ts`
-// for who crosses what, `realm_racers_slick_contact.ts` for what a crossing
+// Everything that decides it is the race's own code (`mortar_overdrive/slicks.ts`
+// for who crosses what, `mortar_overdrive/slick_contact.ts` for what a crossing
 // does), fed from what the client already mirrors: the patches on the match
 // readout, the race clock beside it, and the pilot's standing with the oil on
 // `rdv`. Ticks here are RACE ticks (ticks since GO), the clock both the readout
@@ -19,27 +19,27 @@
 // rather than re-judged on the predicted tick (oil on the finish line, a lock
 // ending inside the window, the owner leaving their fresh patch).
 
-import { realmRacersLaneAt, realmRacersLaneOffset } from '../sim/realm_racers_layout';
+import { mortarOverdriveLaneAt, mortarOverdriveLaneOffset } from '../sim/mortar_overdrive/layout';
 import {
-  applyRallySlickSurface,
-  biteRallySlick,
-  type RallySlickContact,
-  type RallySlickRecon,
-  rallySlickCrossing,
-} from '../sim/realm_racers_slick_contact';
+  applyMortarOverdriveSlickSurface,
+  biteMortarOverdriveSlick,
+  type MortarOverdriveSlickContact,
+  type MortarOverdriveSlickRecon,
+  mortarOverdriveSlickCrossing,
+} from '../sim/mortar_overdrive/slick_contact';
 import {
-  type RallySlick,
-  type RallySlickRacer,
-  REALM_RACERS_SLICK_GRIP,
-  REALM_RACERS_SLICK_GRIP_TICKS,
-  REALM_RACERS_SLICK_SLIP_CAP,
-  stepRealmRacersSlicks,
-} from '../sim/realm_racers_slicks';
+  MORTAR_OVERDRIVE_SLICK_GRIP,
+  MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
+  MORTAR_OVERDRIVE_SLICK_SLIP_CAP,
+  type MortarOverdriveSlick,
+  type MortarOverdriveSlickRacer,
+  stepMortarOverdriveSlicks,
+} from '../sim/mortar_overdrive/slicks';
 import type { Aura, Vec3, VehicleDrive } from '../sim/types';
-import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
+import type { MortarOverdriveMatchInfo } from '../world_api/mortar_overdrive';
 
 /** A predicted tick's standing with the oil, in race ticks. */
-export interface SlickPredictionState extends RallySlickContact {
+export interface SlickPredictionState extends MortarOverdriveSlickContact {
   /** The race tick the state stands at the end of. */
   raceTick: number;
   /** The surface grip under the oil (band and shock folded in), or null when
@@ -52,7 +52,7 @@ export interface SlickPredictionState extends RallySlickContact {
 
 /** What the step reads of the race, off the newest snapshot. */
 export type SlickPredictionMatch = Pick<
-  RealmRacersMatchInfo,
+  MortarOverdriveMatchInfo,
   'phase' | 'elapsedTicks' | 'slicks' | 'resetLocked' | 'me'
 >;
 
@@ -78,16 +78,16 @@ function racing(match: SlickPredictionMatch | null | undefined): match is SlickP
 
 /**
  * The grip under the oil, from an acknowledged grip that carries it: exact or
- * null. The race multiplies the oil on last (`applyRallySlickSurface`), and every
+ * null. The race multiplies the oil on last (`applyMortarOverdriveSlickSurface`), and every
  * shipped surface factor divides back out to the bit (pinned in the core's
  * tests), so null is a guard, not a path a shipped surface takes.
  */
 export function unoiledGrip(gripMult: number): number | null {
-  const base = gripMult / REALM_RACERS_SLICK_GRIP;
+  const base = gripMult / MORTAR_OVERDRIVE_SLICK_GRIP;
   // Above the road's grip it was never oiled: a recovery that skipped the
   // surface pass left the window open over a clean grip.
   if (base > 1) return null;
-  return base * REALM_RACERS_SLICK_GRIP === gripMult ? base : null;
+  return base * MORTAR_OVERDRIVE_SLICK_GRIP === gripMult ? base : null;
 }
 
 /**
@@ -102,7 +102,7 @@ export function unoiledGrip(gripMult: number): number | null {
  * one replay the window's end would have cost anyway.
  */
 export function acknowledgedSlickState(
-  recon: RallySlickRecon | null | undefined,
+  recon: MortarOverdriveSlickRecon | null | undefined,
   match: SlickPredictionMatch | null | undefined,
   gripMult: number,
   predicted?: { drive?: VehicleDrive | null; slick?: SlickPredictionState | null } | null,
@@ -111,7 +111,7 @@ export function acknowledgedSlickState(
   const tick = match.elapsedTicks;
   let baseGrip: number | null;
   if (recon.gripLeft === 0) baseGrip = gripMult;
-  else if (recon.gripLeft < REALM_RACERS_SLICK_GRIP_TICKS) baseGrip = unoiledGrip(gripMult);
+  else if (recon.gripLeft < MORTAR_OVERDRIVE_SLICK_GRIP_TICKS) baseGrip = unoiledGrip(gripMult);
   else if (predicted?.slick && predicted.drive?.gripMult === gripMult)
     baseGrip = predicted.slick.baseGrip;
   else baseGrip = gripMult;
@@ -150,7 +150,7 @@ export function copySlickState(state: SlickPredictionState): SlickPredictionStat
 /** The ward, read by its own aura kind: the race's ward helper lives in a sim
  *  system module, which the render tree does not import. */
 function warded(auras: readonly Aura[]): boolean {
-  for (const aura of auras) if (aura.kind === 'rally_ward') return true;
+  for (const aura of auras) if (aura.kind === 'mortar_overdrive_ward') return true;
   return false;
 }
 
@@ -160,9 +160,9 @@ function warded(auras: readonly Aura[]): boolean {
  * scratch patch list, so a step allocates only what the race's own leaf does.
  */
 export class SelfSlickPredictor {
-  private readonly patches: RallySlick[] = [];
-  private readonly pool: RallySlick[] = [];
-  private readonly racer: RallySlickRacer = {
+  private readonly patches: MortarOverdriveSlick[] = [];
+  private readonly pool: MortarOverdriveSlick[] = [];
+  private readonly racer: MortarOverdriveSlickRacer = {
     pid: 0,
     fromX: 0,
     fromZ: 0,
@@ -170,7 +170,7 @@ export class SelfSlickPredictor {
     toZ: 0,
     eligible: false,
   };
-  private readonly racers: RallySlickRacer[] = [this.racer];
+  private readonly racers: MortarOverdriveSlickRacer[] = [this.racer];
 
   step(body: SlickPredictionBody, match: SlickPredictionMatch | null | undefined): void {
     const slick = body.slick;
@@ -184,9 +184,9 @@ export class SelfSlickPredictor {
     slick.raceTick = tick;
     if (!warded(body.auras)) slick.wardSpent = false;
     const slicked = tick < slick.slickGripUntilTick;
-    if (slick.baseGrip !== null) applyRallySlickSurface(drive, slick.baseGrip, slicked);
-    else drive.slipCap = slicked ? REALM_RACERS_SLICK_SLIP_CAP : 1;
-    const lane = realmRacersLaneAt(body.pos.x, body.pos.z);
+    if (slick.baseGrip !== null) applyMortarOverdriveSlickSurface(drive, slick.baseGrip, slicked);
+    else drive.slipCap = slicked ? MORTAR_OVERDRIVE_SLICK_SLIP_CAP : 1;
+    const lane = mortarOverdriveLaneAt(body.pos.x, body.pos.z);
     const patches = this.livePatches(match, tick);
     if (lane && patches.length > 0) this.cross(body, slick, drive, match, lane.index, tick);
     if (slick.slickContactId !== null && !this.standing(slick.slickContactId)) {
@@ -203,7 +203,7 @@ export class SelfSlickPredictor {
     laneIndex: number,
     tick: number,
   ): void {
-    const origin = realmRacersLaneOffset(laneIndex);
+    const origin = mortarOverdriveLaneOffset(laneIndex);
     const racer = this.racer;
     racer.pid = body.id;
     racer.fromX = body.prevPos.x - origin.x;
@@ -211,18 +211,18 @@ export class SelfSlickPredictor {
     racer.toX = body.pos.x - origin.x;
     racer.toZ = body.pos.z - origin.z;
     racer.eligible = !match.me.finished && !match.me.retired && !match.resetLocked;
-    const hit = stepRealmRacersSlicks(this.patches, { tick, racers: this.racers }).hits[0];
+    const hit = stepMortarOverdriveSlicks(this.patches, { tick, racers: this.racers }).hits[0];
     if (!hit) return;
     const remembered =
       slick.slickContactId !== null && slick.slickContactId !== hit.slick
         ? this.patches.find((patch) => patch.id === slick.slickContactId)
         : undefined;
-    if (!rallySlickCrossing(slick, hit, tick, remembered, racer.toX, racer.toZ)) return;
+    if (!mortarOverdriveSlickCrossing(slick, hit, tick, remembered, racer.toX, racer.toZ)) return;
     if (!slick.wardSpent && warded(body.auras)) {
       slick.wardSpent = true;
       return;
     }
-    biteRallySlick(
+    biteMortarOverdriveSlick(
       slick,
       drive,
       tick,
@@ -232,7 +232,7 @@ export class SelfSlickPredictor {
   }
 
   /** The patches standing at the end of `tick`, as the race's leaf reads them. */
-  private livePatches(match: SlickPredictionMatch, tick: number): RallySlick[] {
+  private livePatches(match: SlickPredictionMatch, tick: number): MortarOverdriveSlick[] {
     const patches = this.patches;
     patches.length = 0;
     for (const info of match.slicks) {

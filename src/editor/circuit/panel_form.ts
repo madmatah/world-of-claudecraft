@@ -13,11 +13,11 @@
 
 import { AREA_TRACK_URLS } from '../../game/music_tracks';
 import {
-  REALM_RACERS_THEME_IDS,
-  REALM_RACERS_TIME_OF_DAY_IDS,
-  type RealmRacersCircuit,
-  type RealmRacersCircuitRole,
-} from '../../sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_THEME_IDS,
+  MORTAR_OVERDRIVE_TIME_OF_DAY_IDS,
+  type MortarOverdriveCircuit,
+  type MortarOverdriveCircuitRole,
+} from '../../sim/content/mortar_overdrive/circuits';
 import { validateCircuitPayload } from './export_core';
 import { fieldRow, heading, numberOr, type PanelHost } from './panels';
 
@@ -37,10 +37,10 @@ const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
  * hour could be authored and still the right answer for a circuit with no
  * opinion about its light.
  */
-const TIME_OF_DAY_CHOICES: readonly string[] = ['', ...REALM_RACERS_TIME_OF_DAY_IDS];
+const TIME_OF_DAY_CHOICES: readonly string[] = ['', ...MORTAR_OVERDRIVE_TIME_OF_DAY_IDS];
 
 /** The record needs at least one role, and this is the order they are kept in. */
-const ROLE_ORDER: readonly RealmRacersCircuitRole[] = ['competition', 'practice'];
+const ROLE_ORDER: readonly MortarOverdriveCircuitRole[] = ['competition', 'practice'];
 
 /** The option value that means "not one of the above". */
 const CUSTOM_OPTION = '__custom__';
@@ -65,7 +65,7 @@ export class RecordFormPanel {
   /** The rows only a PRACTICE circuit has, hidden when it is not one. */
   private readonly practiceRows: HTMLElement[] = [];
   /** The role checkboxes, synced from the record rather than trusted. */
-  private readonly roleBoxes = new Map<RealmRacersCircuitRole, HTMLInputElement>();
+  private readonly roleBoxes = new Map<MortarOverdriveCircuitRole, HTMLInputElement>();
 
   constructor(private readonly host: PanelHost) {
     this.build();
@@ -80,7 +80,7 @@ export class RecordFormPanel {
    * value that is merely unwise (a region deeper than the lane budget) still
    * lands, because the readout is what says so.
    */
-  private applyEdit(label: string, next: RealmRacersCircuit | null, refusal?: string): boolean {
+  private applyEdit(label: string, next: MortarOverdriveCircuit | null, refusal?: string): boolean {
     const valid = next && validateCircuitPayload(next);
     if (!valid) {
       this.host.setStatus(refusal ?? `${label}: not a value a circuit can carry`, 'err');
@@ -94,7 +94,7 @@ export class RecordFormPanel {
     parent: HTMLElement,
     label: string,
     read: () => string,
-    write: (raw: string) => RealmRacersCircuit | null,
+    write: (raw: string) => MortarOverdriveCircuit | null,
     attrs: Partial<HTMLInputElement> = {},
   ): HTMLDivElement {
     const { wrap, name } = fieldRow(label);
@@ -131,7 +131,7 @@ export class RecordFormPanel {
     parent: HTMLElement,
     label: string,
     read: () => string,
-    write: (raw: string) => RealmRacersCircuit | null,
+    write: (raw: string) => MortarOverdriveCircuit | null,
     choices: readonly string[],
     // What a choice is CALLED, where the id is not the answer an author reads.
     // The one caller that needs it is the hour, whose empty choice stands for a
@@ -200,7 +200,7 @@ export class RecordFormPanel {
    * explanation reads as a broken control. Turning practice off also zeroes the
    * copy count, because a circuit nobody practises on has nothing to copy.
    */
-  private roleBox(parent: HTMLElement, role: RealmRacersCircuitRole, detail: string): void {
+  private roleBox(parent: HTMLElement, role: MortarOverdriveCircuitRole, detail: string): void {
     const wrap = document.createElement('div');
     wrap.className = 'field';
     const name = document.createElement('label');
@@ -236,7 +236,7 @@ export class RecordFormPanel {
   }
 
   private build(): void {
-    const record = (): RealmRacersCircuit => this.host.record();
+    const record = (): MortarOverdriveCircuit => this.host.record();
     this.el.replaceChildren();
     this.fields.length = 0;
     this.practiceRows.length = 0;
@@ -330,7 +330,7 @@ export class RecordFormPanel {
       'theme',
       () => record().theme,
       (raw) => ({ ...record(), theme: raw.trim() }),
-      REALM_RACERS_THEME_IDS,
+      MORTAR_OVERDRIVE_THEME_IDS,
     );
     // The HOUR the circuit is raced at, beside the art it wears, because that is
     // what it is: light is the other half of how a circuit looks. The empty

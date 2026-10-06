@@ -45,7 +45,7 @@
 //   guild_bank.ts       IWorldGuildBank      shared guild treasury + item store (guild-wide view
 //                                            with canEdit marking officer-plus EDITS,
 //                                            proximity-gated info + gold/item/buy-slots commands)
-//   realm_racers.ts     IWorldRealmRacers    Realm Racers queue, practice, race, Ground Blast
+//   mortar_overdrive.ts     IWorldMortarOverdrive    Mortar Overdrive queue, practice, race, Ground Blast
 //   mounts.ts           IWorldMounts         rideable ground mounts: pick + mount/dismount
 //   vehicles.ts         IWorldVehicles       personal vehicle session + enter/action/leave
 //   dungeon_finder.ts   IWorldDungeonFinder  Dungeon Finder queue/proposals/premade board
@@ -98,7 +98,7 @@ import type { IWorldQuests } from './world_api/quests';
 
 export type { WorldQuestLeaderboardEntry, WorldQuestLeaderboardPage } from './world_api/quests';
 
-import type { IWorldRealmRacers } from './world_api/realm_racers';
+import type { IWorldMortarOverdrive } from './world_api/mortar_overdrive';
 import type { IWorldReliquary } from './world_api/reliquary';
 import type { IWorldSocialGraph } from './world_api/social_graph';
 import type { IWorldTalents } from './world_api/talents';
@@ -267,7 +267,7 @@ export type { VehicleSession } from './world_api/vehicles';
 // Above both parents: an epoch-44 client would draw the ship moored and predict
 // a deck the server has sailed away; an epoch-30 client lacks the world-quest
 // wire. Both must fail closed.
-// 46 = The Realm Racers instance band and its race snapshot surface, carried
+// 46 = The Mortar Overdrive instance band and its race snapshot surface, carried
 // by the feature branch onto the release/v0.45.0 sync. It sits above the
 // release's own 45 rather than on either side of the merge: the branch grew
 // its own layout off an older epoch while the release grew the ledger above,
@@ -418,6 +418,15 @@ export type {
 export type { MailInfo, MailKindView, MailMessageView } from './world_api/mail';
 export type { MarketInfo, MarketListingView, MarketSweepQuote } from './world_api/market';
 export { queryDiffersFromEcho, searchDiffersFromEcho } from './world_api/market';
+export type {
+  MortarOverdriveDriverTier,
+  MortarOverdriveInfo,
+  MortarOverdriveLoadingInfo,
+  MortarOverdriveMatchInfo,
+  MortarOverdrivePhase,
+  MortarOverdriveRacerInfo,
+  MortarOverdriveResult,
+} from './world_api/mortar_overdrive';
 export type { MountRaceView } from './world_api/mounts';
 export type { PartyInfo, PartyMemberAura, PartyMemberInfo } from './world_api/party';
 export type {
@@ -439,15 +448,6 @@ export type {
   GuildRosterInfo,
   LeaderboardEntry,
 } from './world_api/progression_xp';
-export type {
-  RallyDriverTier,
-  RealmRacersInfo,
-  RealmRacersLoadingInfo,
-  RealmRacersMatchInfo,
-  RealmRacersPhase,
-  RealmRacersRacerInfo,
-  RealmRacersResult,
-} from './world_api/realm_racers';
 export type {
   ReliquaryCatalogCompletion,
   ReliquaryFirstFindView,
@@ -522,7 +522,7 @@ export interface IWorld
     IWorldVehicles,
     IWorldTransport,
     IWorldWorldPvp,
-    IWorldRealmRacers {}
+    IWorldMortarOverdrive {}
 
 // ---------------------------------------------------------------------------
 // Command schema (W0b): the shared wire-token vocabulary.
@@ -961,17 +961,17 @@ export const COMMAND_NAMES = [
   // Guild custom ranks (docs/prd/guild-custom-ranks.md): the Guild Master
   // replaces the guild's rank ladder (titles, order, permissions).
   'guild_set_ranks',
-  // The Realm Racers queue and active-race forfeit, plus the Practice start
+  // The Mortar Overdrive queue and active-race forfeit, plus the Practice start
   // that seats a house pilot against you immediately (no queue, no wait).
   // Appended AFTER the release's own tokens for the same reason they were
   // appended: a released index never moves, and these five have not shipped.
-  'realm_racers_join',
-  'realm_racers_leave',
-  'realm_racers_forfeit',
-  'realm_racers_practice',
-  'realm_racers_reset',
+  'mortar_overdrive_join',
+  'mortar_overdrive_leave',
+  'mortar_overdrive_forfeit',
+  'mortar_overdrive_practice',
+  'mortar_overdrive_reset',
   // The loading lobby's "my client has prepared the circuit".
-  'realm_racers_ready',
+  'mortar_overdrive_ready',
 ] as const;
 
 // The union both the send path (`online.ts`) and the dispatch switch
@@ -1063,7 +1063,7 @@ export type WorldFacet =
   | 'IWorldFarming'
   | 'IWorldVehicles'
   | 'IWorldWorldPvp'
-  | 'IWorldRealmRacers';
+  | 'IWorldMortarOverdrive';
 
 export const COMMAND_FACETS = {
   weekly_reward_claim: 'IWorldBank',
@@ -1302,15 +1302,15 @@ export const COMMAND_FACETS = {
   guild_bank_withdraw: 'IWorldGuildBank',
   guild_bank_buy_slots: 'IWorldGuildBank',
   guild_bank_log: 'IWorldGuildBank',
-  // IWorldRealmRacers: the Realm Racers queue and race control. raceInfo is a
-  // snapshot read (no send); realm_racers_practice starts a private instanced
+  // IWorldMortarOverdrive: the Mortar Overdrive queue and race control. raceInfo is a
+  // snapshot read (no send); mortar_overdrive_practice starts a private instanced
   // practice race (online and offline).
-  realm_racers_join: 'IWorldRealmRacers',
-  realm_racers_leave: 'IWorldRealmRacers',
-  realm_racers_forfeit: 'IWorldRealmRacers',
-  realm_racers_practice: 'IWorldRealmRacers',
-  realm_racers_reset: 'IWorldRealmRacers',
-  realm_racers_ready: 'IWorldRealmRacers',
+  mortar_overdrive_join: 'IWorldMortarOverdrive',
+  mortar_overdrive_leave: 'IWorldMortarOverdrive',
+  mortar_overdrive_forfeit: 'IWorldMortarOverdrive',
+  mortar_overdrive_practice: 'IWorldMortarOverdrive',
+  mortar_overdrive_reset: 'IWorldMortarOverdrive',
+  mortar_overdrive_ready: 'IWorldMortarOverdrive',
   // IWorldMounts: pick + mount/dismount (snake_case wire strings, by design).
   // The active mount is a self-snapshot read (terse `mnt`, no send, untagged);
   // summoning one is an item use (use_item), not a mount command.

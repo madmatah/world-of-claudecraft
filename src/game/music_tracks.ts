@@ -74,16 +74,16 @@ export const ZONE_STREAM_URLS: Record<MusicZone, string | null> = {
  *  public/audio/ next to the boss loop rather than under music/. At most one is
  *  active at a time: their areas are mutually exclusive. */
 export type AreaTrackId =
-  | 'realm_racers_evergarden'
-  | 'realm_racers_nightbloom'
-  | 'realm_racers_drakelands'
-  | 'realm_racers_palmreach';
+  | 'mortar_overdrive_evergarden'
+  | 'mortar_overdrive_nightbloom'
+  | 'mortar_overdrive_drakelands'
+  | 'mortar_overdrive_palmreach';
 
 export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
-  realm_racers_evergarden: '/audio/realm-racers-evergarden.mp3',
-  realm_racers_nightbloom: '/audio/realm-racers-nightbloom.mp3',
-  realm_racers_drakelands: '/audio/realm-racers-drakelands.mp3',
-  realm_racers_palmreach: '/audio/realm-racers-palmreach.mp3',
+  mortar_overdrive_evergarden: '/audio/mortar-overdrive-evergarden.mp3',
+  mortar_overdrive_nightbloom: '/audio/mortar-overdrive-nightbloom.mp3',
+  mortar_overdrive_drakelands: '/audio/mortar-overdrive-drakelands.mp3',
+  mortar_overdrive_palmreach: '/audio/mortar-overdrive-palmreach.mp3',
 };
 
 /** Which tracks belong to the same place. Activating one warms every track of
@@ -91,30 +91,30 @@ export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
  *  wait on a first-byte fetch; the other groups stay undownloaded, since
  *  reaching them means a loading screen or a long ride.
  *
- *  The unit is the TRACK, not the place that plays it: two Realm Racers circuits
+ *  The unit is the TRACK, not the place that plays it: two Mortar Overdrive circuits
  *  of the same zone may share one track and therefore its group, but two
  *  different circuit tracks must never share a group, or activating either would
  *  download both. You never cross from one circuit to another without a race
  *  start, so there is nothing to prewarm across them. */
 export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
-  realm_racers_evergarden: 'realm_racers_evergarden',
-  realm_racers_nightbloom: 'realm_racers_nightbloom',
-  realm_racers_drakelands: 'realm_racers_drakelands',
-  realm_racers_palmreach: 'realm_racers_palmreach',
+  mortar_overdrive_evergarden: 'mortar_overdrive_evergarden',
+  mortar_overdrive_nightbloom: 'mortar_overdrive_nightbloom',
+  mortar_overdrive_drakelands: 'mortar_overdrive_drakelands',
+  mortar_overdrive_palmreach: 'mortar_overdrive_palmreach',
 };
 
-/** The tracks a Realm Racers circuit may name, one per zone that has a
+/** The tracks a Mortar Overdrive circuit may name, one per zone that has a
  *  circuit. The music director restarts any of these from the top on every
  *  circuit visit and every new race, which is a rule about the PLACE rather
  *  than about one track, so it is asked here rather than by track id. */
-export const REALM_RACERS_AREA_TRACKS: ReadonlySet<AreaTrackId> = new Set<AreaTrackId>([
-  'realm_racers_evergarden',
-  'realm_racers_nightbloom',
-  'realm_racers_drakelands',
-  'realm_racers_palmreach',
+export const MORTAR_OVERDRIVE_AREA_TRACKS: ReadonlySet<AreaTrackId> = new Set<AreaTrackId>([
+  'mortar_overdrive_evergarden',
+  'mortar_overdrive_nightbloom',
+  'mortar_overdrive_drakelands',
+  'mortar_overdrive_palmreach',
 ]);
 
-/** Whether a plain string names an area track. The Realm Racers circuit records
+/** Whether a plain string names an area track. The Mortar Overdrive circuit records
  *  carry their track as a string, because `src/sim/` may not import this union;
  *  this is where that string is proved to be one of these. */
 export function isAreaTrackId(value: string): value is AreaTrackId {

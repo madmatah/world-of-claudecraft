@@ -617,8 +617,8 @@ describe('mount reins transfer (not soulbound: the collection trades hands)', ()
     }
   }
 
-  it('a seated rally pilot survives the re-validation with no reins of its own', () => {
-    // Realm Racers seats a pilot on the match's machine: the race hands it out
+  it('a seated Mortar Overdrive pilot survives the re-validation with no reins of its own', () => {
+    // Mortar Overdrive seats a pilot on the match's machine: the race hands it out
     // and takes it back, and no reins item exists for it. The transferable-reins
     // rule has nothing to re-validate against there, so the seat must outlive
     // the check, or a heat dismounts every pilot mid-race four ticks in.

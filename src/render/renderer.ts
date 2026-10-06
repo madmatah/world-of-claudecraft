@@ -466,6 +466,8 @@ import { buildMailboxPillar } from './mailbox';
 import { collectObjectTextures } from './material_texture_slots';
 import { meteorLandingBurst } from './meteor_landing_burst';
 import { buildMobNightGlow, type MobNightGlowView } from './mob_night_glow';
+import * as moRender from './mortar_overdrive';
+import * as moKart from './mortar_overdrive/kart_presentation';
 import { buildMotes, type MotesView } from './motes';
 import { MountBeacon } from './mount_beacon';
 import type { MountGlows } from './mount_glow';
@@ -646,13 +648,6 @@ import {
 import { isOwnedPetHostile } from './reaction';
 import { buildRealmBuilderMonumentPickBody } from './realm_builder_monument_fx';
 import { buildRealmFlora, type RealmFloraView } from './realm_flora';
-import { realmRacersDaylight } from './realm_racers_daylight_core';
-import * as realmRacersKart from './realm_racers_kart_presentation';
-import { updateRealmRacersLampGlow } from './realm_racers_lamps';
-import { rallyArrivalLifts } from './realm_racers_prepare';
-import { RealmRacersScene } from './realm_racers_scene';
-import { realmRacersThemeAt } from './realm_racers_themes';
-import { isOutsideRealmRacersDrawRange } from './realm_racers_visibility_core';
 import {
   RenderBudgetGovernor,
   type RenderBudgetSample,
@@ -897,7 +892,9 @@ const ENTITY_DRAW_RANGE = 80;
 const ENTITY_VIEW_CREATE_RANGE_SQ = ENTITY_DRAW_RANGE * ENTITY_DRAW_RANGE;
 export const ENTITY_VIEW_DESTROY_RANGE = 96;
 const ENTITY_VIEW_DESTROY_RANGE_SQ = ENTITY_VIEW_DESTROY_RANGE * ENTITY_VIEW_DESTROY_RANGE;
-const NO_REALM_RACERS_PARTICIPANTS: readonly number[] = [];
+const NO_MORTAR_OVERDRIVE_PARTICIPANTS: readonly number[] = [];
+/** The Mortar Overdrive band's own open-air fog state (see `fogState`). */
+const MO_FOG = 'mortarOverdrive';
 // Cooldown before re-attempting a view whose assets failed to build (the
 // fail-soft path, issue #2079). Without it a permanently failing entity
 // consumes a view-creation budget slot every frame; under the hitch backoff
@@ -1139,7 +1136,7 @@ interface AoeRingSlot {
 export interface EntityView
   extends RickshawMountViewState,
     WorldQuestCarryViewState,
-    realmRacersKart.ViewState {
+    moKart.ViewState {
   group: THREE.Group;
   /** Last frame's range verdict, kept off group.visible so the cull cannot latch it. */
   inDrawRange: boolean;
@@ -1693,7 +1690,7 @@ export class Renderer {
   // realm; see night_lighting_core.ts for why it is the global amount.
   private dnGlobalNight = 0;
   /** Does the circuit under the player name its own hour (daylight core)? */
-  private rallyAuthoredHour = false;
+  private mortarOverdriveAuthoredHour = false;
   private fixedLowDayBiome: BiomeId | null = null;
   private dnColorScratch = new THREE.Color();
   private dnMoonScratch = new THREE.Color();
@@ -1962,8 +1959,8 @@ export class Renderer {
     () => this.sim.cfg.seed,
     () => this.sim.riftFloor,
   );
-  /** The Realm Racers circuit, its pools and its race feedback (realm_racers_scene.ts). */
-  readonly realmRacers = new RealmRacersScene(this);
+  /** The Mortar Overdrive circuit, its pools and its race feedback (mortar_overdrive/scene.ts). */
+  readonly mortarOverdrive = new moRender.MortarOverdriveScene(this);
   /** Bound once: the puff runs per landing and must not allocate a closure. */
   private surfaceAtForPuff = (x: number, z: number, y: number) => this.surfaceAt(x, z, y);
   private selectionDrapeSupportY = 0;
@@ -2569,7 +2566,7 @@ export class Renderer {
       () => this.viewLights,
       () => this.lightPulses?.lights ?? NO_POINT_LIGHTS,
     ]);
-    this.realmRacers.attach(this.scene);
+    this.mortarOverdrive.attach(this.scene);
     this.propsView = props;
 
     // Eastbrook's replacement town is a distinct, stable scene subtree. Its
@@ -3834,9 +3831,10 @@ export class Renderer {
           npcGroup.visible = true;
           tCompile = performance.now();
           this.renderPrewarmPass(1 / 60);
-          // The gating path compiles after the pass; a band landing links the rally too.
+          // The gating path compiles after the pass; a band landing links the Mortar Overdrive too.
           if (this.asyncCompileSupported) {
-            await linkColorPrograms(this.compileArms, this.scene, false, rallyArrivalLifts(x, z));
+            const lifts = moRender.mortarOverdriveArrivalLifts(x, z);
+            await linkColorPrograms(this.compileArms, this.scene, false, lifts);
           }
         }
         this.prewarmedZonePrograms.add(zoneId);
@@ -4165,7 +4163,7 @@ export class Renderer {
 
   /** main.ts injects the spatial sound engine here (render never imports game/). */
   setAudioSink(sink: SpatialAudioSink | null): void {
-    realmRacersKart.stopVehicleAudio(this.audioSink, sink, this.views);
+    moKart.stopVehicleAudio(this.audioSink, sink, this.views);
     this.audioSink = sink;
   }
 
@@ -4659,13 +4657,13 @@ export class Renderer {
   private createRequiredViews(
     player: Entity,
     createdViewTypes: string[],
-    participantIds: readonly number[] = this.sim.realmRacersInfo.match?.participantIds ??
-      NO_REALM_RACERS_PARTICIPANTS,
+    participantIds: readonly number[] = this.sim.mortarOverdriveInfo.match?.participantIds ??
+      NO_MORTAR_OVERDRIVE_PARTICIPANTS,
   ): number {
     return (
       this.createRequiredView(player.id, createdViewTypes) +
       this.createRequiredView(player.targetId, createdViewTypes) +
-      this.realmRacers.createCoPilotViews(participantIds, player.id, createdViewTypes)
+      this.mortarOverdrive.createCoPilotViews(participantIds, player.id, createdViewTypes)
     );
   }
 
@@ -7610,13 +7608,13 @@ export class Renderer {
         });
         if (ev.entityId === this.sim.playerId) this.addShake(0.5);
         break;
-      case 'realmRacersGroundBlastFired':
-      case 'realmRacersGroundBlastHit':
-      case 'realmRacersBump':
-      case 'realmRacersSlicked':
-      case 'realmRacersSlickDropped':
-      case 'realmRacersPickupTaken':
-        this.realmRacers.onEvent(ev);
+      case 'mortarOverdriveGroundBlastFired':
+      case 'mortarOverdriveGroundBlastHit':
+      case 'mortarOverdriveBump':
+      case 'mortarOverdriveSlicked':
+      case 'mortarOverdriveSlickDropped':
+      case 'mortarOverdrivePickupTaken':
+        this.mortarOverdrive.onEvent(ev);
         break;
       // The farm flourishes. These arrive on the viewer's own pid-scoped
       // channel, so there is nothing to filter: the module turns each one into
@@ -8143,7 +8141,7 @@ export class Renderer {
       tiltSample: createEntityGroundSample(),
       groundSample: createEntityGroundSample(entityGroundSamplePhaseS(e.id)),
       // Last, so every field above stays in the literal's own layout.
-      ...realmRacersKart.createViewState(),
+      ...moKart.createViewState(),
     });
     const view = this.views.get(e.id);
     // Never gate the player's OWN view: it must be on screen immediately, its
@@ -8620,11 +8618,11 @@ export class Renderer {
   // Cached with riftFogKey: whether the current rift floor is an authored set
   // piece, so the per-frame lighting read avoids regenerating the floor.
   private riftFogAuthored = false;
-  // 'rally' is the Realm Racers band's own open-air state. It stays out of
+  // 'mortarOverdrive' is the Mortar Overdrive band's own open-air state. It stays out of
   // FogSceneState (interior_light_rig.ts) because that union is the set of
   // states with an authored light rig, and a circuit is lit like the overworld:
   // the rig call below maps it to 'outdoor', which IS those legs.
-  private fogState: FogSceneState | 'rally' = 'outdoor';
+  private fogState: FogSceneState | typeof MO_FOG = 'outdoor';
 
   /** Drop a retired interior's scene nodes, registries, and owned resources. */
   private retireInteriorGroup(group: THREE.Group): void {
@@ -8948,7 +8946,7 @@ export class Renderer {
    *  void above the ramparts), and a circuit's theme dome. */
   private pushSkyGrade(dt: number): void {
     this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
-    this.sky.visible = this.fogState === 'rally' || isOpenAirFogState(this.fogState);
+    this.sky.visible = this.fogState === MO_FOG || isOpenAirFogState(this.fogState);
     if (!this.sky.visible) return;
     hoardValley.setSkyCamera(this.skyView, this.sim.riftFloor, this.camera.position, dt);
     if (!this.lowGfx) {
@@ -8961,7 +8959,7 @@ export class Renderer {
       this.skyView.setFog((this.scene.fog as THREE.Fog).color);
       this.skyView.setStars(this.starAmt, this.time);
       this.updateEnvBiome(dt);
-    } else if (this.rallyAuthoredHour) {
+    } else if (this.mortarOverdriveAuthoredHour) {
       // The Lambert tier's canvas dome has no cycle, right for a world it never
       // darkens; a circuit at an authored hour IS darkened there, so its dome
       // takes the grade instead of standing at noon over a dark road.
@@ -8992,8 +8990,8 @@ export class Renderer {
   private updateAmbience(px: number, camY: number, dt: number): void {
     const inside = px > DUNGEON_X_THRESHOLD;
     const pz = this.sim.player.pos.z;
-    // A circuit flies its theme's sky at its record's hour (realm_racers_scene.ts).
-    const band = this.realmRacers.ambienceAt(px, pz, this.sim.player.pos.x);
+    // A circuit flies its theme's sky at its record's hour (mortar_overdrive/scene.ts).
+    const band = this.mortarOverdrive.ambienceAt(px, pz, this.sim.player.pos.x);
     // The entry-curtain settle is one-shot and belongs to THIS update only:
     // consumed by the outdoor arm below when the entry really is outdoors,
     // discarded otherwise (an interior login must keep its normal eased
@@ -9014,13 +9012,13 @@ export class Renderer {
     // world's clock otherwise, the dev override over both. An authored hour is
     // not the CYCLE (so DAY_ONLY misses it) and is graded on EVERY tier: nobody
     // gets a brighter road, or darker lamps, by turning the graphics down.
-    const daylight = realmRacersDaylight(
+    const daylight = moRender.mortarOverdriveDaylight(
       band.circuit?.timeOfDay,
       currentDayNightPhase(),
       phaseOverride,
     );
     const pinDay = DAY_ONLY && phaseOverride === null && !daylight.authored;
-    this.rallyAuthoredHour = daylight.authored;
+    this.mortarOverdriveAuthoredHour = daylight.authored;
     // This is render-only, so the clock read never touches sim parity.
     const nightLayers = !this.lowGfx || daylight.authored;
     if (this.lowGfx && pinDay) {
@@ -9123,7 +9121,7 @@ export class Renderer {
           }
         }
       }
-    } else if (inside && !band.inRally) {
+    } else if (inside && !band.inMortarOverdrive) {
       void ensureDungeonAssets().catch(() => undefined);
       // build the interior copy the player is standing in
       for (const dungeon of DUNGEON_LIST) {
@@ -9141,12 +9139,12 @@ export class Renderer {
     // Which state this position means (and its preset below) is
     // fog_scene_state.ts's to own, the fog twin of interior_light_rig.ts.
     const fogScene = resolveFogScene(inside, px, camY, this.camera.position, this.sim.cfg.seed);
-    // A Realm Racers circuit is its own fog scene. The shared resolver cannot
+    // A Mortar Overdrive circuit is its own fog scene. The shared resolver cannot
     // answer it: the instance band belongs to no zone, so it reads out there as
     // an ordinary interior, and the haze a circuit wants comes out of its THEME
     // record, which is render-side data the sim-facing resolver never sees.
-    const desired: FogSceneState | 'rally' = band.inRally
-      ? 'rally'
+    const desired: FogSceneState | typeof MO_FOG = band.inMortarOverdrive
+      ? MO_FOG
       : valley
         ? 'hoardValley'
         : fogScene.desired;
@@ -9178,14 +9176,14 @@ export class Renderer {
     this.riftFogKey = null;
     if (desired !== this.fogState) {
       this.fogState = desired;
-      if (desired === 'rally') this.realmRacers.applyFog(fog, px, pz);
+      if (desired === MO_FOG) this.mortarOverdrive.applyFog(fog, px, pz);
       else applyFogScenePreset(desired, fog, () => valley?.fog ?? this.outdoorFogPreset());
       // interiors must not leak daylight: drop sun + sky ambient + IBL
       // underground so the torch point lights own the scene; restore outside.
       // The rim glow cranks up instead, silhouettes must split from the murk.
       // Which numbers each state means is interior_light_rig.ts's to own.
       if (!this.lowGfx) {
-        this.applyStateLightRig(desired === 'rally' ? 'outdoor' : desired);
+        this.applyStateLightRig(desired === MO_FOG ? 'outdoor' : desired);
       }
       return;
     }
@@ -9266,7 +9264,7 @@ export class Renderer {
     sharedUniforms.uTerrainFillBoost.value = dampedValue(
       sharedUniforms.uTerrainFillBoost.value,
       // A circuit runs the outdoor rig, so its Lambert ground takes the same lift.
-      terrainFillBoostTarget(GFX, usesLiveDayNightLighting(desired) || desired === 'rally'),
+      terrainFillBoostTarget(GFX, usesLiveDayNightLighting(desired) || desired === MO_FOG),
       dt,
       ZONE_ENVIRONMENT_RESPONSE,
     );
@@ -9280,19 +9278,20 @@ export class Renderer {
     // A circuit is open-air too and was left out: its rig was posed ONCE on
     // entry while the dome and IBL over it followed the clock, so a race held a
     // daylight key under a night sky, and its fog never took the grade at all.
-    if (usesLiveDayNightLighting(desired) || desired === 'rally') {
+    if (usesLiveDayNightLighting(desired) || desired === MO_FOG) {
       const g = this.dnGrade;
       // A circuit's air is its THEME's, out of the same record as its ground.
-      const rally = desired === 'rally' ? (band.theme ?? realmRacersThemeAt(px, pz)) : null;
+      const mortarOverdrive =
+        desired === MO_FOG ? (band.theme ?? moRender.mortarOverdriveThemeAt(px, pz)) : null;
       const preset =
-        rally?.sky.fog ??
+        mortarOverdrive?.sky.fog ??
         (desired === 'battleground'
           ? Renderer.BATTLEGROUND_FOG
           : (valley?.fog ?? this.outdoorFogPreset()));
       const k = transitionAlpha(dt, ZONE_ENVIRONMENT_RESPONSE);
       // On a CIRCUIT the Lambert tier's permanent daylight is not a look but an
       // edge, so an authored hour is graded there too, at no per-frame cost.
-      if (this.lowGfx && !(desired === 'rally' && daylight.authored)) return;
+      if (this.lowGfx && !(desired === MO_FOG && daylight.authored)) return;
       // fog color: the biome hue multiplied by the day/night color (a dark
       // dusk-blue by night)
       this.fogScratch.setHex(preset.color);
@@ -9387,13 +9386,13 @@ export class Renderer {
   // low contribution, authorizes the texture/rotation swap, then restores the
   // new biome on the same long response as fog and light tint.
   private updateEnvBiome(dt: number): void {
-    // 'rally' rides along with the live-graded states because a circuit is
+    // 'mortarOverdrive' rides along with the live-graded states because a circuit is
     // outdoors: it keeps the sky dome, and its ambient has to come from the
     // dome it is actually under. Left out, the IBL stayed frozen on the last
     // overworld biome the player crossed, so a Nightbloom circuit was lit by
     // whatever realm they teleported in from.
     if (this.lowGfx || this.envRTs.size < 2) return;
-    if (this.fogState !== 'rally' && !usesLiveDayNightLighting(this.fogState)) return;
+    if (this.fogState !== MO_FOG && !usesLiveDayNightLighting(this.fogState)) return;
     const blend = this.skyView.currentBiomeBlend();
     const dominant = blend.t < 0.5 ? blend.from : blend.to;
     // the biome's light-level scale applies to the IBL too, or a dimmed realm
@@ -9459,7 +9458,7 @@ export class Renderer {
       const blend = t * t * (3 - 2 * t);
       this.lightDir.copy(this.sunDir).lerp(this.moonDir, blend).normalize();
       interiorKeyLightDirection(
-        this.fogState === 'rally' ? 'outdoor' : this.fogState,
+        this.fogState === MO_FOG ? 'outdoor' : this.fogState,
         this.lightDir,
       );
       if (this.sun.castShadow) snapShadowAnchor(this.lightDir, pp, this.shadowTexelWorld, anchor);
@@ -9525,7 +9524,7 @@ export class Renderer {
     // The basin keeps directional daylight and the sky dome, but the camera-
     // riding sun and moon sprites can clip against its high rim as oversized
     // wedges. Reserve screen-space celestial overlays for the overworld.
-    const outdoor = this.fogState === 'outdoor' || this.fogState === 'rally';
+    const outdoor = this.fogState === 'outdoor' || this.fogState === MO_FOG;
     // keep the moon's shape on the lunar clock (no-op between phase buckets)
     // and run the sun's disc to sunset orange on the same horizon curve the
     // sky glow uses
@@ -9792,8 +9791,9 @@ export class Renderer {
     }
     const sim = this.sim;
     const p = sim.player;
-    const realmRacersInfo = sim.realmRacersInfo;
-    const participantIds = realmRacersInfo.match?.participantIds ?? NO_REALM_RACERS_PARTICIPANTS;
+    const mortarOverdriveInfo = sim.mortarOverdriveInfo;
+    const participantIds =
+      mortarOverdriveInfo.match?.participantIds ?? NO_MORTAR_OVERDRIVE_PARTICIPANTS;
     if (noteSelfIdentity(this.selfRender, p.id)) {
       this.selfFacingOverride = null;
       this.selfFacingLastTarget = null;
@@ -9877,7 +9877,7 @@ export class Renderer {
       const inDrawRange =
         isSelf ||
         isDistanceCullExemptObject(e) ||
-        !isOutsideRealmRacersDrawRange(
+        !moRender.isOutsideMortarOverdriveDrawRange(
           participantIds,
           p.id,
           id,
@@ -10069,7 +10069,7 @@ export class Renderer {
       // entities interpolate on their own measured cadence via
       // remoteEntityAlpha (unknown-cadence fallback).
       const rp = entityRenderPose(sim, e, ea, isSelf ? selfPos : null, v);
-      this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);
+      this.mortarOverdrive.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);
       const { x, y, z, deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
       v.group.position.set(x, y, z);
       let facing = rp.facing;
@@ -10757,7 +10757,7 @@ export class Renderer {
           settled && !v.tiltOnProp,
           dt,
         );
-        realmRacersKart.leanRider(this, v, v.visual, e, settled, dt);
+        moKart.leanRider(this, v, v.visual, e, settled, dt);
       }
       // Ledge climb: the sim owns the move (Entity.climb offline, the mirrored
       // progress online); the visual poses it by hand, tracking the move's
@@ -10834,7 +10834,7 @@ export class Renderer {
       // --- spatial movement audio (self + others) --------------------------
       // All gated by audibility (squared distance) so far entities cost nothing.
       const sink = this.audioSink;
-      realmRacersKart.syncVehicleAudio(this, e, v, d2 < SFX_MOVE_RANGE_SQ, ax, ay, az);
+      moKart.syncVehicleAudio(this, e, v, d2 < SFX_MOVE_RANGE_SQ, ax, ay, az);
       if (sink && d2 < SFX_MOVE_RANGE_SQ) {
         const rocketSledMounted = logicallyMounted && mountLook === 'goblin_rocket_sled';
         // jump / land / water-entry edges
@@ -11136,7 +11136,7 @@ export class Renderer {
         groundSample: this.groundSample,
         dt,
       });
-      realmRacersKart.leanMount(e, v, !!mountSpec && mountShown && runCharacterPresentation);
+      moKart.leanMount(e, v, !!mountSpec && mountShown && runCharacterPresentation);
       // The rider is placed: carry the body-attached auras to the saddle.
       syncRiderAnchor(v.riderAnchor, v.visual.root);
       const ascensionPlan = paladinAscensionVisualPlanInto(e, this.paladinAscensionPlanScratch);
@@ -11161,7 +11161,7 @@ export class Renderer {
         mountShown && !v.mountCompilePending && runCharacterPresentation,
         mountShown && !v.mountCompilePending && runCharacterPresentation ? this.vfx : null,
       );
-      realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);
+      moKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);
 
       const emoteId =
         e.kind === 'player' && e.overheadEmoteId && !e.dead ? e.overheadEmoteId : null;
@@ -11475,7 +11475,7 @@ export class Renderer {
     this.decorTorchFx?.update(lampGlow, this.time);
     // A circuit's own lamps burn on the SAME amount, so the world's lamps and a
     // track's never disagree.
-    updateRealmRacersLampGlow(lampGlow, this.time);
+    moRender.updateMortarOverdriveLampGlow(lampGlow, this.time);
     // The night light field: every lamp and camp fire plus the nearby bodies
     // collected above, packed into the terrain shader's uniform slots. Indoors
     // the world clock does not govern the ground either, so the same fogState
@@ -11485,7 +11485,7 @@ export class Renderer {
     // material and an authored dark hour has nothing else lighting it. The body
     // discs stay outdoor-only: a pool under every rival is a cue a race does not
     // need, and the rim lift already splits a machine from dark ground.
-    const lampsLightGround = this.fogState === 'outdoor' || this.fogState === 'rally';
+    const lampsLightGround = this.fogState === 'outdoor' || this.fogState === MO_FOG;
     updateNightLightField(
       p.pos.x,
       p.pos.z,
@@ -11742,7 +11742,7 @@ export class Renderer {
     this.galeFeatures?.update(this.time);
     this.birds.update(p.pos.x, p.pos.z, dt);
     this.impactSite.update(p.pos.x, p.pos.z, dt);
-    this.realmRacers.frame(realmRacersInfo, p.pos.x, p.pos.z, dt);
+    this.mortarOverdrive.frame(mortarOverdriveInfo, p.pos.x, p.pos.z, dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);
     this.underwaterView.frame(this.camera, this.scene, p.pos, this.sim.cfg.seed, dt);
@@ -11962,12 +11962,12 @@ export class Renderer {
     // Wildheart and the Thornhollow hollow are open-air, but the long
     // screen-space shafts read as giant triangles against an enclosed rim.
     // Both keep the sun, sky, and outdoor grade while these shafts stay
-    // reserved for the open world, which a rally circuit is: it flies its
+    // reserved for the open world, which a Mortar Overdrive circuit is: it flies its
     // theme's dome under that theme's own realm grade. Twilight and gloom
     // realms fade the shafts completely through BIOME_GOD_RAYS, so skip their
     // draw and math once the eased scale reaches zero.
     const shafts =
-      (this.fogState === 'outdoor' || this.fogState === 'rally') && this.godRayZoneScale > 0.02;
+      (this.fogState === 'outdoor' || this.fogState === MO_FOG) && this.godRayZoneScale > 0.02;
     // azimuth-only alignment, the chase cam always pitches down while the
     // sun sits high, so a full 3D dot product would never light the shafts
     this.camera.getWorldDirection(this.tmpV);

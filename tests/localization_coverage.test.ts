@@ -1440,8 +1440,8 @@ describe('i18n Localization Key Coverage', () => {
   it('should provide deed content translations for every supported locale', () => {
     const deedEntries = deedTranslationManifest();
     // name + release-filled desc per deed, plus one title entry per title
-    // deed (live count; tests/deeds_content.test.ts pins the catalog, Realm
-    // Racers' pvp_rr_wins_25 included).
+    // deed (live count; tests/deeds_content.test.ts pins the catalog, Mortar
+    // Overdrive' pvp_mortar_overdrive_wins_25 included).
     const titleCount = Object.values(DEEDS).filter((d) => d.reward?.kind === 'title').length;
     expect(deedEntries.length).toBe(
       Object.keys(DEEDS).length * 2 + titleCount - RETIRED_DEED_DESCRIPTION_FALLBACK_IDS.length,

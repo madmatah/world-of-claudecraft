@@ -25,7 +25,7 @@
 
 // The six action-bar "forms" a character can arrange independently: the base
 // bar, the druid Bear/Cat/Cat-stealth kits, the rogue Stealth bar, and the
-// Realm Racers rally bar. This is the full sibling set the localStorage keys
+// Mortar Overdrive bar. This is the full sibling set the localStorage keys
 // cover. The Vale Cup 'sport' bar left the list with the minigame itself:
 // nothing could arrange or show one any more, so it stayed only as a token. A
 // layout persisted before that retirement still degrades cleanly, because
@@ -37,7 +37,7 @@ export const ACTION_BAR_LAYOUT_FORMS = [
   'cat',
   'cat_stealth',
   'stealth',
-  'rally',
+  'mortarOverdrive',
 ] as const;
 export type ActionBarLayoutForm = (typeof ACTION_BAR_LAYOUT_FORMS)[number];
 

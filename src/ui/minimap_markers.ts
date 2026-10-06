@@ -37,12 +37,12 @@ import type { GatheringProfessionId } from '../sim/content/professions';
 import { GLIDER_NPC_DEF } from '../sim/content/world_quest_glider';
 import { corpseIndicatorFor } from '../sim/corpse_loot_state';
 import { GATHER_NODES, isBgPos, isDelvePos, isYumiMazePos, QUESTS, zoneAt } from '../sim/data';
+import { mortarOverdriveZoneAt } from '../sim/mortar_overdrive/zone';
 import { NODE_HARVEST_TABLE } from '../sim/professions/gathering';
 import { canGatherTier } from '../sim/professions/tools';
 import { isQuestGatedGroundObjectHidden } from '../sim/quest_gated_entity';
 import { ambientNpcQuestMarkerKind } from '../sim/quests/ambient_quest_marker';
 import { type QuestMarkerKind, strongerQuestMarker } from '../sim/quests/quest_marker_kind';
-import { realmRacersZoneAt } from '../sim/realm_racers_zone';
 import {
   EASTBROOK_NOTICEBOARD_TEMPLATE_ID,
   type GatherNodeType,
@@ -422,7 +422,7 @@ export function createMinimapMarkers(): MinimapMarkers {
       npcMarkers.length = 0;
       // A circuit lane reads its own zone: zoneAt would answer with whichever band
       // the lane's z shares out on the instance plane.
-      model.zoneId = (realmRacersZoneAt(p.pos.x, p.pos.z) ?? zoneAt(p.pos.x, p.pos.z)).id;
+      model.zoneId = (mortarOverdriveZoneAt(p.pos.x, p.pos.z) ?? zoneAt(p.pos.x, p.pos.z)).id;
       // Inside a rift the overworld zone (zoneAt reads x/z; rifts displace on x well
       // past any land) is the wrong label; surface the generated rift floor name + rank.
       const rf = world.riftFloor;

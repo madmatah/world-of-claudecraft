@@ -16,7 +16,7 @@
 // proved (linked_program_touch_lane runWorldGateTouchLane), the
 // ones a walk mark used to bless and block on; `units` carries the count.
 // `prepare` is a verdict, not an escape: an in-game preparation trigger (the
-// Realm Racers seam, realm_racers_prepare.ts) settled one client's gate, and
+// Mortar Overdrive seam, mortar_overdrive/prepare.ts) settled one client's gate, and
 // readyRoots/totalRoots say whether the settle record proved it (1/1) or not
 // (0/1), ageMs how long it took from the trigger.
 //

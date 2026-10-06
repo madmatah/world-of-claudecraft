@@ -23,12 +23,12 @@
 // point and what centring moves are `fences_core.ts`; where the modules stand is
 // the sim's own resolver. Dev tool, so English lives here (no `t()`).
 
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
 import {
-  REALM_RACERS_BARRIER_KEYS,
-  REALM_RACERS_BARRIERS,
-} from '../../sim/content/realm_racers_barriers';
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
+  MORTAR_OVERDRIVE_BARRIER_KEYS,
+  MORTAR_OVERDRIVE_BARRIERS,
+} from '../../sim/content/mortar_overdrive/barriers';
+import { mortarOverdriveFencePlacements } from '../../sim/mortar_overdrive/fences';
 import { parseThumbnailCache, THUMBNAIL_STORAGE_KEY } from './draft_store_core';
 import { editorIcon } from './editor_icons';
 import { MIN_PERIMETER_HALF } from './enclosure_core';
@@ -134,8 +134,8 @@ export class TerrainPalettePanel {
    * write onto elements that stay put.
    */
   paint(): void {
-    const own = this.host.themeBarriers().filter((kit) => REALM_RACERS_BARRIERS[kit]);
-    const rest = REALM_RACERS_BARRIER_KEYS.filter((kit) => !own.includes(kit));
+    const own = this.host.themeBarriers().filter((kit) => MORTAR_OVERDRIVE_BARRIERS[kit]);
+    const rest = MORTAR_OVERDRIVE_BARRIER_KEYS.filter((kit) => !own.includes(kit));
     const signature = own.join(',');
     if (this.builtFor === signature) {
       this.markArmed();
@@ -144,7 +144,7 @@ export class TerrainPalettePanel {
     this.builtFor = signature;
     this.gridEl.replaceChildren();
     const addTile = (kit: string): void => {
-      const def = REALM_RACERS_BARRIERS[kit];
+      const def = MORTAR_OVERDRIVE_BARRIERS[kit];
       const tile = document.createElement('button');
       tile.type = 'button';
       tile.className = 'lib-tile';
@@ -405,7 +405,7 @@ export class TerrainInspectorPanel {
     label: string,
     value: number,
     max: number,
-    write: (next: number) => RealmRacersCircuit,
+    write: (next: number) => MortarOverdriveCircuit,
   ): HTMLElement {
     const { wrap, name } = fieldRow(label);
     const input = document.createElement('input');
@@ -488,11 +488,11 @@ export class TerrainInspectorPanel {
       out.push(detailLine(`${fenceColliderCount(record)} colliders from barriers`));
       return out;
     }
-    const def = REALM_RACERS_BARRIERS[fence.kit];
+    const def = MORTAR_OVERDRIVE_BARRIERS[fence.kit];
     // Found by the record index it carries, not by its position: the resolver
     // skips an unknown kit, so the placement list is shorter than the record's
     // and a positional lookup would report another barrier's numbers.
-    const placed = realmRacersFencePlacements(record).fences;
+    const placed = mortarOverdriveFencePlacements(record).fences;
     const runs = placed.find((entry) => entry.index === index)?.runs ?? [];
     const length = runs.reduce((total, run) => total + run.length, 0);
 

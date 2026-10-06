@@ -131,9 +131,9 @@ export const en = {
       difficulty: 'Difficulty',
       name: 'Name',
       spec: 'Spec',
-      rallyCircuit: 'Circuit',
-      rallyTier: 'Rival tier',
-      rallyKitCharges: 'Weapon charges',
+      mortarOverdriveCircuit: 'Circuit',
+      mortarOverdriveTier: 'Rival tier',
+      mortarOverdriveKitCharges: 'Weapon charges',
       // Blank means every planted bed, which is what the farmgrow command
       // itself does without an argument; the action description says so.
       bed: 'Bed id (optional)',
@@ -209,12 +209,12 @@ export const en = {
         description: 'Enter a dungeon with dev gate bypass.',
       },
       raid: { label: 'Enter raid', description: 'Enter the Nythraxis arena directly.' },
-      rally: {
+      mortarOverdrive: {
         label: 'Race a circuit',
-        description: 'Start a Realm Racers race on the chosen circuit right now.',
+        description: 'Start a Mortar Overdrive race on the chosen circuit right now.',
       },
-      rallykit: {
-        label: 'Fill the rally kit',
+      mortarOverdriveKit: {
+        label: 'Fill the Mortar Overdrive kit',
         description: 'Top the seated weapon and every pickup effect up to the same count.',
       },
       raidreset: {

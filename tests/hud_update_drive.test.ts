@@ -291,7 +291,7 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the need/greed roll popups',
   },
   {
-    call: 'this.realmRacersUi.sendReady',
+    call: 'this.mortarOverdriveUi.sendReady',
     band: 'frame',
     gate: '',
     surface: 'none',
@@ -1127,20 +1127,20 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the battleground queue-pop prompt; a *_popup name the painter gate does not sweep either',
   },
   {
-    call: 'this.realmRacersUi.update',
+    call: 'this.mortarOverdriveUi.update',
     band: 'frame',
     gate: '',
     surface: 'window',
     guard: {
       kind: 'module',
-      module: 'realm_racers_window.ts',
+      module: 'hud/mortar_overdrive/race_window.ts',
       // One signature covers BOTH of the window's screens: the front screen's
       // world-derived view and the practice setup screen's painter-derived one
       // resolve to `sig` before the check, so stepping between them repaints
       // exactly once and an unchanged frame still does nothing.
       proof: 'if (sig === this.lastWindowSig) return;',
     },
-    why: 'the Realm Racers window (queue + practice setup) and in-race strip',
+    why: 'the Mortar Overdrive window (queue + practice setup) and in-race strip',
   },
   {
     call: 'this.cardDuelWindow.toggle',
@@ -1718,7 +1718,7 @@ describe('the hidden-frame paint cut', () => {
       'this.lootRolls.update',
       // The lobby ready is a command, not a paint: a hidden window must still
       // tell the server it has prepared, or it waits out the whole cap.
-      'this.realmRacersUi.sendReady',
+      'this.mortarOverdriveUi.sendReady',
       'syncMinigameMusic',
       // Music keeps playing on hidden frames, so its state machine must keep
       // transitioning there too (phase 4 QA F1: a minimized player heard the
@@ -1898,9 +1898,9 @@ describe('Hud.update() drives exactly the registered set, on the registered band
       // surface (51 / 96 measured on the merged tree). The release's Eastbrook
       // ferry countdown panel (hud ferryHud) is one more chrome surface at the
       // fourth release/v0.44.0 base merge (97 measured on the merged tree).
-      // window 51 -> 52 on this branch: the Realm Racers window row
-      // (realm_racers.ts, module-guarded). Counted off the merged table.
-      // none 18 -> 19: the Realm Racers lobby ready send above the paint cut.
+      // window 51 -> 52 on this branch: the Mortar Overdrive window row
+      // (mortar_overdrive/race_window.ts, module-guarded). Counted off the merged table.
+      // none 18 -> 19: the Mortar Overdrive lobby ready send above the paint cut.
     ).toEqual({ window: 52, chrome: 97, none: 19 });
     const windows = HUD_UPDATE_DRIVES.filter((r) => r.surface === 'window');
     expect(windows.map((r) => r.call)).toContain('this.spellbookWindow.tickOpen');
@@ -1924,7 +1924,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
       // loot window's corpse arm moved OUT of the `none` bucket below into
       // this one: it gained a corpseSig latch when the popup started
       // refreshing instead of only closing. The release arm lands on 28; this
-      // branch's Realm Racers window row, whose guard lives in realm_racers.ts,
+      // branch's Mortar Overdrive window row, whose guard lives in mortar_overdrive/race_window.ts,
       // takes it to 29.
       module: 29,
       // Phase 20's refreshCharSheetIfChanged and its siblings. Their latches are
@@ -1978,7 +1978,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
         'deeds_window.ts: if (sig === this.lastSig) return;',
         'dungeon_finder_proposal_popup.ts: if (view.sig !== this.lastSig) {',
         'dungeon_finder_window.ts: if (sig === this.lastSig) {',
-        'realm_racers_window.ts: if (sig === this.lastWindowSig) return;',
+        'hud/mortar_overdrive/race_window.ts: if (sig === this.lastWindowSig) return;',
         'hud/battleground/battleground_proposal_popup.ts: if (view.sig !== this.lastSig) {',
         'hud/cosmetics/cosmetics_window.ts: const sig = cosmeticsSig(this.snapshot()); if (sig === this.lastSig) return;',
         'hud.ts: if (craftCastActivitySig(session) !== this.lastCraftingCastSig) {',

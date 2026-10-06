@@ -18,7 +18,7 @@ import {
 } from '../src/ui/hud/menu/menu_control_controller';
 import { MENU_STRIP_ITEMS } from '../src/ui/hud/menu/menu_strip_core';
 import { t } from '../src/ui/i18n';
-import { RALLY_LOBBY_SHOWN_CLASS } from '../src/ui/root_state_classes';
+import { MORTAR_OVERDRIVE_LOBBY_SHOWN_CLASS } from '../src/ui/root_state_classes';
 import { bindTouchTap } from '../src/ui/touch_tap';
 
 const GESTURE_NAME = t('hudChrome.mobile.quickActionsAria');
@@ -242,7 +242,7 @@ describe('buildMobileMenuControl: a pick runs the seated action exactly once', (
     // A swipe picks by geometry, so a release over an item the curtain hides
     // must not open it; Chat, the one item left visible, keeps its id.
     const rig = pickRig(0, 'after');
-    document.body.classList.add(RALLY_LOBBY_SHOWN_CLASS);
+    document.body.classList.add(MORTAR_OVERDRIVE_LOBBY_SHOWN_CLASS);
     try {
       rig.anchor.dispatchEvent(touchPointer('pointerdown', 1, 100));
       rig.anchor.dispatchEvent(touchPointer('pointermove', 1, 130));
@@ -252,7 +252,7 @@ describe('buildMobileMenuControl: a pick runs the seated action exactly once', (
         'chat',
       );
     } finally {
-      document.body.classList.remove(RALLY_LOBBY_SHOWN_CLASS);
+      document.body.classList.remove(MORTAR_OVERDRIVE_LOBBY_SHOWN_CLASS);
     }
   });
 });

@@ -179,7 +179,7 @@ describe('buildManifest', () => {
     // The six Buried Hoard cues (the entrance open/hum pair and the four
     // tide-wave boss cues) bring that total to 393 (release/v0.44.0 merge
     // into feature/buried-hoards).
-    // 396 adds the three Realm Racers race cues (move_groundshaker_engine,
+    // 396 adds the three Mortar Overdrive race cues (move_groundshaker_engine,
     // proj_groundshaker, impact_groundshaker).
     const keys = new Set(SFX.map((entry) => entry.key));
     expect(keys.size).toBe(396);
@@ -298,7 +298,7 @@ describe('buildManifest', () => {
     expect([...SFX_FIXED_CATALOG_KEYS].sort()).toEqual([...keys].sort());
   });
 
-  it('lazy-loads the Realm Racers engine without changing movement defaults', () => {
+  it('lazy-loads the Mortar Overdrive engine without changing movement defaults', () => {
     expect(SFX.find((entry) => entry.key === 'move_groundshaker_engine')?.preload).toBe('lazy');
     expect(SFX_CLIPS.move_groundshaker_engine.preload).toBe('lazy');
     expect(SFX_CLIPS.move_jump.preload).toBe('startup');

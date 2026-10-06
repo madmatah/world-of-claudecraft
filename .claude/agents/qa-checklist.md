@@ -223,18 +223,18 @@ headline rules here:
   (`tests/reliquary_content.test.ts`), wiki regen plus any new `guide.*` prose keys
   (`npm run wiki:content`, freshness-gated by `tests/guide.test.ts`), and committed WebP item
   art plus M16 non-Latin name fills for every new item id (`tests/item_icons.test.ts`).
-- **A changed Realm Racers circuit gets the cut sweep, and this is the one category item you RUN
-  rather than read.** If `src/sim/content/realm_racers_circuits.ts` is in the diff, run
-  `npx tsx scripts/realm_racers_limits_probe.ts --cuts <circuitId>` for each circuit whose record
+- **A changed Mortar Overdrive circuit gets the cut sweep, and this is the one category item you RUN
+  rather than read.** If `src/sim/content/mortar_overdrive/circuits.ts` is in the diff, run
+  `npx tsx scripts/mortar_overdrive_limits_probe.ts --cuts <circuitId>` for each circuit whose record
   changed (about a minute each; it drives every candidate straight line through the real kernel).
   Report its two VERDICT lines, which are two different kinds of fact and must not be merged:
   - *best cut: +X s* is a fact about the SHAPE. A circuit offering a shortcut that pays is an
     authoring choice, not a defect. Report it as information so the author confirms they meant it.
   - *paying cuts the referee does NOT catch: N*. Any N above zero is a **defect**: the cut beats
-    the road AND clears `REALM_RACERS_CUT_TOLERANCE_YD`, so it is a free shortcut with no penalty,
+    the road AND clears `MORTAR_OVERDRIVE_CUT_TOLERANCE_YD`, so it is a free shortcut with no penalty,
     which means track limits do not reach that geometry. Nobody authors that on purpose.
 
-  No test covers this. It lived in `tests/realm_racers_track_limits.test.ts` as a blocking
+  No test covers this. It lived in `tests/mortar_overdrive_track_limits.test.ts` as a blocking
   assertion and was removed on the finding above: "no cut pays" is a fact about two shapes rather
   than an invariant, so it is a judgment call and belongs here. Say so explicitly when a circuit
   changed and you could not run the sweep, rather than leaving the category silent.

@@ -2,7 +2,7 @@
 //
 // Both halves of one feature: a barrier is drawn by a gesture that has to know
 // when a run ends, and judged by rules the GAME depends on. The rules live in
-// `src/sim/realm_racers_circuit_metrics.ts`, so they are asserted here against
+// `src/sim/mortar_overdrive/circuit_metrics.ts`, so they are asserted here against
 // the same records the gesture produces rather than against a fixture written to
 // suit them.
 
@@ -26,22 +26,28 @@ import {
   removeFencePoint,
   setFenceScale,
 } from '../src/editor/circuit/fences_core';
-import { REALM_RACERS_BARRIERS } from '../src/sim/content/realm_racers_barriers';
-import type { RallyFence, RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { MORTAR_OVERDRIVE_BARRIERS } from '../src/sim/content/mortar_overdrive/barriers';
+import type {
+  MortarOverdriveCircuit,
+  MortarOverdriveFence,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../src/sim/mortar_overdrive/layout';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../src/sim/mortar_overdrive/spline';
 
 let fixtureSeq = 0;
 
 /** A circuit carrying exactly these fences. A fresh id every call: every derived
  *  geometry is memoized by id AND record identity, so a reused id in one file is
  *  how a test reads a stale answer. */
-function withFences(fences: readonly RallyFence[]): RealmRacersCircuit {
+function withFences(fences: readonly MortarOverdriveFence[]): MortarOverdriveCircuit {
   fixtureSeq += 1;
   return {
-    ...REALM_RACERS_PRACTICE_CIRCUIT,
+    ...MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
     id: `fence_fixture_${fixtureSeq}`,
     props: undefined,
     scatters: undefined,
@@ -55,7 +61,7 @@ function withFences(fences: readonly RallyFence[]): RealmRacersCircuit {
 /** A point out in the lawn, clear of the road on the practice circuit: taken
  *  from the record's own enclosure rather than guessed, so it stays true if the
  *  circuit is ever redrawn. */
-const LAWN = { x: REALM_RACERS_PRACTICE_CIRCUIT.perimeter.halfX - 6, z: 0 };
+const LAWN = { x: MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.perimeter.halfX - 6, z: 0 };
 
 describe('drawing a barrier run', () => {
   it('lays a point per click, and ignores one on the point just laid', () => {
@@ -136,7 +142,7 @@ describe('drawing a barrier run', () => {
 });
 
 describe('picking a barrier back up', () => {
-  const fences: RallyFence[] = [
+  const fences: MortarOverdriveFence[] = [
     {
       kit: 'ironwork',
       points: [
@@ -179,7 +185,7 @@ describe('picking a barrier back up', () => {
 });
 
 describe('editing a barrier', () => {
-  const base: RallyFence[] = [
+  const base: MortarOverdriveFence[] = [
     {
       kit: 'hedge',
       points: [
@@ -213,7 +219,7 @@ describe('editing a barrier', () => {
     // A run needs two points, so removing one from a two-point fence is a
     // request to remove the fence: refusing would leave `del` doing nothing on
     // the commonest barrier there is.
-    const two: RallyFence[] = [
+    const two: MortarOverdriveFence[] = [
       {
         kit: 'hedge',
         points: [
@@ -248,10 +254,13 @@ describe('editing a barrier', () => {
 describe('the ghost tint asks the readout its own question', () => {
   it('says clear out in the lawn and blocked across the road', () => {
     const circuit = withFences([]);
-    const track = realmRacersTrack(circuit);
+    const track = mortarOverdriveTrack(circuit);
     const onRoad = track.samples[0];
-    const local = { x: onRoad.x - REALM_RACERS_ORIGIN.x, z: onRoad.z - REALM_RACERS_ORIGIN.z };
-    const half = REALM_RACERS_BARRIERS.ironwork.halfThickness;
+    const local = {
+      x: onRoad.x - MORTAR_OVERDRIVE_ORIGIN.x,
+      z: onRoad.z - MORTAR_OVERDRIVE_ORIGIN.z,
+    };
+    const half = MORTAR_OVERDRIVE_BARRIERS.ironwork.halfThickness;
     expect(fenceRunClearOfSurface(circuit, LAWN, { x: LAWN.x, z: LAWN.z + 20 }, half)).toBe(true);
     expect(fenceRunClearOfSurface(circuit, local, { x: local.x + 5, z: local.z }, half)).toBe(
       false,
@@ -281,18 +290,18 @@ describe('the ghost tint asks the readout its own question', () => {
  * A run whose two ends are clear of the racing surface and which crosses it in
  * the middle: out along the road's normal, both ways, from one centerline point.
  */
-function crossingChord(circuit: RealmRacersCircuit): {
+function crossingChord(circuit: MortarOverdriveCircuit): {
   from: { x: number; z: number };
   to: { x: number; z: number };
 } {
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const sample = track.samples[0];
   // The normal is a plain +90 degree rotation of the tangent in (x, z).
   const nx = -sample.tz;
   const nz = sample.tx;
-  const reach = rallyGardenEdgeOffsetAt(circuit, sample.s) + 4;
-  const x = sample.x - REALM_RACERS_ORIGIN.x;
-  const z = sample.z - REALM_RACERS_ORIGIN.z;
+  const reach = mortarOverdriveGardenEdgeOffsetAt(circuit, sample.s) + 4;
+  const x = sample.x - MORTAR_OVERDRIVE_ORIGIN.x;
+  const z = sample.z - MORTAR_OVERDRIVE_ORIGIN.z;
   return {
     from: { x: x + nx * reach, z: z + nz * reach },
     to: { x: x - nx * reach, z: z - nz * reach },
@@ -301,18 +310,18 @@ function crossingChord(circuit: RealmRacersCircuit): {
 
 /** Whether one point is clear of the racing surface, measured the way the
  *  readout measures it. */
-function endIsClear(circuit: RealmRacersCircuit, point: { x: number; z: number }): boolean {
-  const track = realmRacersTrack(circuit);
+function endIsClear(circuit: MortarOverdriveCircuit, point: { x: number; z: number }): boolean {
+  const track = mortarOverdriveTrack(circuit);
   const projection = track.project(
-    point.x + REALM_RACERS_ORIGIN.x,
-    point.z + REALM_RACERS_ORIGIN.z,
+    point.x + MORTAR_OVERDRIVE_ORIGIN.x,
+    point.z + MORTAR_OVERDRIVE_ORIGIN.z,
   );
-  return Math.abs(projection.lateral) > rallyGardenEdgeOffsetAt(circuit, projection.s);
+  return Math.abs(projection.lateral) > mortarOverdriveGardenEdgeOffsetAt(circuit, projection.s);
 }
 
 describe('what the readout says about a barrier', () => {
-  const codes = (circuit: RealmRacersCircuit): string[] =>
-    realmRacersCircuitMetrics(circuit).problems.map((problem) => problem.code);
+  const codes = (circuit: MortarOverdriveCircuit): string[] =>
+    mortarOverdriveCircuitMetrics(circuit).problems.map((problem) => problem.code);
 
   it('says nothing at all about a barrier standing out in the lawn', () => {
     const clean = codes(
@@ -334,7 +343,7 @@ describe('what the readout says about a barrier', () => {
   });
 
   it('names a barrier that leaves the collision region', () => {
-    const far = REALM_RACERS_PRACTICE_CIRCUIT.regionHalfX + 50;
+    const far = MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.regionHalfX + 50;
     expect(
       codes(
         withFences([
@@ -376,7 +385,7 @@ describe('centring a circuit in its enclosure', () => {
   it('moves EVERY circuit-local thing by the same offset, and no track-space one', () => {
     // The rule the whole action rests on: moving the road alone would walk it
     // out from under its own dressing. One of every kind on one record.
-    const before: RealmRacersCircuit = {
+    const before: MortarOverdriveCircuit = {
       ...withFences([
         {
           kit: 'ironwork',
@@ -445,7 +454,7 @@ describe('centring a circuit in its enclosure', () => {
     // the surface it claimed to.
     const LOCAL_LISTS = ['controlPoints', 'props', 'ponds', 'fences', 'groundOutline'] as const;
     const FOLLOWS_THE_ROAD = ['scatters', 'pickupRows', 'widthBands'] as const;
-    const record: RealmRacersCircuit = {
+    const record: MortarOverdriveCircuit = {
       ...withFences([
         {
           kit: 'ironwork',

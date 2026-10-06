@@ -1,4 +1,4 @@
-// The area music layer (a Realm Racers circuit): looped mp3s that crossfade
+// The area music layer (a Mortar Overdrive circuit): looped mp3s that crossfade
 // against each other and duck the procedural score while you stand there. Same
 // file-track pattern as the boss loop; catalog in music_tracks.ts. It sits
 // beside MusicDirector instead of inside it (the music.ts monolith ratchet),
@@ -10,7 +10,7 @@ import {
   AREA_TRACK_GROUP,
   AREA_TRACK_URLS,
   type AreaTrackId,
-  REALM_RACERS_AREA_TRACKS,
+  MORTAR_OVERDRIVE_AREA_TRACKS,
 } from './music_tracks';
 
 export type { AreaTrackId } from './music_tracks';
@@ -36,7 +36,7 @@ export class AreaTrackLayer {
   areaEls: Partial<Record<AreaTrackId, HTMLAudioElement>> = {};
   areaGains: Partial<Record<AreaTrackId, GainNode>> = {};
   private areaPauseTimer = 0;
-  // A dedicated file track owns the mix, and an AREA track is one: a rally
+  // A dedicated file track owns the mix, and an AREA track is one: a Mortar Overdrive
   // circuit ducks the procedural score exactly the way the boss loop does,
   // so it rides the policy's one file-track flag (music_mix_policy.ts).
   areaTrack: AreaTrackId | null = null;
@@ -58,12 +58,12 @@ export class AreaTrackLayer {
   }
 
   /** Drive the area music: which dedicated file track owns the mix right now
-   *  (a circuit's own track on the rally band), null when the player is in none
+   *  (a circuit's own track on the Mortar Overdrive band), null when the player is in none
    *  of those places. Idempotent; the HUD calls it every frame. Crossfades
    *  between the tracks and ducks the procedural score while active. */
   setAreaTrack(track: AreaTrackId | null, restart = false): void {
     const changed = track !== this.areaTrack;
-    if (track !== null && REALM_RACERS_AREA_TRACKS.has(track) && (changed || restart)) {
+    if (track !== null && MORTAR_OVERDRIVE_AREA_TRACKS.has(track) && (changed || restart)) {
       // Keep the downloaded element cached, but start each circuit visit and
       // each new match from the top of the soundtrack.
       this.ensureAreaElements(track);

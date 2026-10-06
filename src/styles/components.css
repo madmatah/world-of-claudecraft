@@ -26463,24 +26463,24 @@
 
 @layer components {
   /* -------------------------------------------------------------------------
-   The Realm Racers
+   The Mortar Overdrive
    ------------------------------------------------------------------------- */
   /* The window rides the window family (.ui-window frame, .ui-win-head head,
    DESIGN.md 8.1), so this section sets geometry only: the frame, the head and
-   the close control take the family's look, and the rally identity lives in
+   the close control take the family's look, and the Mortar Overdrive identity lives in
    the body (the hero card, the controls). No `background` here: the shared
    resize grip is drawn as a background layer on the window itself, and an id
    selector setting the shorthand would silently wipe it. The family frame
    clips its overflow, so the window scrolls its own body, as the legacy frame
    did. */
-  #realm-racers-window {
+  #mortar-overdrive-window {
     width: min(560px, calc(var(--app-vw, 100vw) - 32px));
     overflow-y: auto;
   }
-  .rally-body {
+  .mortar-overdrive-body {
     padding: 4px 4px 2px;
   }
-  .rally-hero {
+  .mortar-overdrive-hero {
     position: relative;
     display: grid;
     grid-template-columns: 78px 1fr;
@@ -26489,59 +26489,67 @@
     margin: 0 0 14px;
     padding: 16px 14px;
     overflow: hidden;
-    border: 1px solid var(--rally-frame-gold-a44);
+    border: 1px solid var(--mortar-overdrive-frame-gold-a44);
     border-radius: 10px;
     background:
-      radial-gradient(ellipse 80% 120% at 0% 50%, var(--rally-hero-glow-a33) 0%, transparent 55%),
+      radial-gradient(
+        ellipse 80% 120% at 0% 50%,
+        var(--mortar-overdrive-hero-glow-a33) 0%,
+        transparent 55%
+      ),
       /* The warm tail sits one step off #2a2214: that value is the catalogue
        border's ink in the deed accent palette (src/ui/deed_border_view.ts),
        which no other color on the scanned path may equal
        (tests/deed_border_accent.test.ts). */
       linear-gradient(
         135deg,
-        var(--rally-hero-bg-mid) 0%,
-        var(--rally-hero-bg) 48%,
-        var(--rally-hero-bg-end) 100%
+        var(--mortar-overdrive-hero-bg-mid) 0%,
+        var(--mortar-overdrive-hero-bg) 48%,
+        var(--mortar-overdrive-hero-bg-end) 100%
       );
-    box-shadow: inset 0 1px 0 var(--rally-glint-a18);
+    box-shadow: inset 0 1px 0 var(--mortar-overdrive-glint-a18);
   }
-  .rally-hero::before {
+  .mortar-overdrive-hero::before {
     position: absolute;
     inset: 0;
     background:
-      linear-gradient(90deg, transparent 0%, var(--rally-gold-a0a) 50%, transparent 100%),
-      repeating-linear-gradient(-18deg, transparent 0 10px, var(--rally-white-a03) 10px 11px);
+      linear-gradient(90deg, transparent 0%, var(--mortar-overdrive-gold-a0a) 50%, transparent 100%),
+      repeating-linear-gradient(
+        -18deg,
+        transparent 0 10px,
+        var(--mortar-overdrive-white-a03) 10px 11px
+      );
     content: "";
     pointer-events: none;
   }
-  .rally-hero-mark,
-  .rally-hero-copy {
+  .mortar-overdrive-hero-mark,
+  .mortar-overdrive-hero-copy {
     position: relative;
     z-index: 1;
   }
-  .rally-hero-mark {
+  .mortar-overdrive-hero-mark {
     display: grid;
     place-items: center;
   }
-  .rally-crest {
+  .mortar-overdrive-crest {
     position: relative;
     display: block;
     width: 64px;
     height: 64px;
-    border: 2px solid var(--rally-gold);
+    border: 2px solid var(--mortar-overdrive-gold);
     border-radius: 50%;
     background: radial-gradient(
       circle at 35% 30%,
-      var(--rally-crest-bg-lit) 0%,
-      var(--rally-crest-bg-light) 52%,
-      var(--rally-crest-bg) 100%
+      var(--mortar-overdrive-crest-bg-lit) 0%,
+      var(--mortar-overdrive-crest-bg-light) 52%,
+      var(--mortar-overdrive-crest-bg) 100%
     );
     box-shadow:
-      0 0 26px var(--rally-crest-glow-a55),
-      inset 0 0 0 1px var(--rally-crest-light-a33);
+      0 0 26px var(--mortar-overdrive-crest-glow-a55),
+      inset 0 0 0 1px var(--mortar-overdrive-crest-light-a33);
   }
-  .rally-crest::before,
-  .rally-crest::after {
+  .mortar-overdrive-crest::before,
+  .mortar-overdrive-crest::after {
     position: absolute;
     left: 50%;
     border-style: solid;
@@ -26549,23 +26557,23 @@
     content: "";
     transform: translateX(-50%);
   }
-  .rally-crest::before {
+  .mortar-overdrive-crest::before {
     top: 16px;
     border-width: 0 11px 14px;
-    border-bottom-color: var(--rally-crest-light);
-    filter: drop-shadow(0 10px 0 var(--rally-gold-aaa));
+    border-bottom-color: var(--mortar-overdrive-crest-light);
+    filter: drop-shadow(0 10px 0 var(--mortar-overdrive-gold-aaa));
   }
-  .rally-crest::after {
+  .mortar-overdrive-crest::after {
     top: 34px;
     width: 18px;
     height: 3px;
     border: 0;
-    background: var(--rally-crest-light-acc);
+    background: var(--mortar-overdrive-crest-light-acc);
     border-radius: 1px;
   }
-  .rally-pitch {
+  .mortar-overdrive-pitch {
     margin: 0 0 12px;
-    color: var(--rally-pitch-text);
+    color: var(--mortar-overdrive-pitch-text);
     font-family: var(--font-display, serif);
     font-size: 16px;
     font-style: italic;
@@ -26574,7 +26582,7 @@
     letter-spacing: 0.01em;
     text-wrap: pretty;
   }
-  .rally-promises {
+  .mortar-overdrive-promises {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -26582,12 +26590,12 @@
     padding: 0;
     list-style: none;
   }
-  .rally-promises > li {
+  .mortar-overdrive-promises > li {
     padding: 4px 9px;
-    border: 1px solid var(--rally-frame-gold-a55);
+    border: 1px solid var(--mortar-overdrive-frame-gold-a55);
     border-radius: 999px;
-    color: var(--rally-kicker-gold);
-    background: var(--rally-panel-ink-acc);
+    color: var(--mortar-overdrive-kicker-gold);
+    background: var(--mortar-overdrive-panel-ink-acc);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -26596,223 +26604,223 @@
   /* One primer card, not four rule cards. The grid of cards was most of the
    panel's height and pushed the two ways onto the grid into each other; what a
    first-time pilot actually needs is what the machine does under their hands. */
-  .rally-howto {
+  .mortar-overdrive-howto {
     padding: 12px;
-    border: 1px solid var(--rally-rule-gold-a3d);
+    border: 1px solid var(--mortar-overdrive-rule-gold-a3d);
     border-radius: 8px;
-    background: var(--rally-panel-ink-ab0);
+    background: var(--mortar-overdrive-panel-ink-ab0);
   }
-  .rally-howto strong,
-  .rally-howto span {
+  .mortar-overdrive-howto strong,
+  .mortar-overdrive-howto span {
     display: block;
   }
-  .rally-howto strong {
+  .mortar-overdrive-howto strong {
     margin-bottom: 6px;
-    color: var(--rally-kicker-gold);
+    color: var(--mortar-overdrive-kicker-gold);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
-  .rally-howto span {
-    color: var(--rally-text-soft);
+  .mortar-overdrive-howto span {
+    color: var(--mortar-overdrive-text-soft);
     font-size: 12px;
     line-height: 1.5;
   }
-  .rally-status {
+  .mortar-overdrive-status {
     margin: 15px 0 10px;
     padding: 10px 12px;
-    border-left: 3px solid var(--rally-status-edge);
-    color: var(--rally-status-text);
-    background: var(--rally-status-bg-ae8);
+    border-left: 3px solid var(--mortar-overdrive-status-edge);
+    color: var(--mortar-overdrive-status-text);
+    background: var(--mortar-overdrive-status-bg-ae8);
     font-size: 12px;
   }
-  .rally-status.queued {
-    border-color: var(--rally-status-queued);
-    color: var(--rally-status-queued-text);
+  .mortar-overdrive-status.queued {
+    border-color: var(--mortar-overdrive-status-queued);
+    color: var(--mortar-overdrive-status-queued-text);
   }
-  .rally-status.live {
-    border-color: var(--rally-status-live);
+  .mortar-overdrive-status.live {
+    border-color: var(--mortar-overdrive-status-live);
   }
-  #realm-racers-window .rally-cta {
+  #mortar-overdrive-window .mortar-overdrive-cta {
     width: 100%;
     min-height: 46px;
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
-  #realm-racers-window .rally-cta.leave {
-    color: var(--rally-leave-text);
-    border-color: var(--rally-leave-edge);
+  #mortar-overdrive-window .mortar-overdrive-cta.leave {
+    color: var(--mortar-overdrive-leave-text);
+    border-color: var(--mortar-overdrive-leave-edge);
     text-transform: none;
     letter-spacing: 0.02em;
   }
   /* Practice is the second, quieter route onto the grid. The two CTAs sat close
    enough to be pressed by accident, so a labelled rule separates them. */
-  .rally-or {
+  .mortar-overdrive-or {
     display: flex;
     gap: 10px;
     align-items: center;
     margin: 14px 0 10px;
-    color: var(--rally-text-quiet);
+    color: var(--mortar-overdrive-text-quiet);
     font-size: 10px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
-  .rally-or::before,
-  .rally-or::after {
+  .mortar-overdrive-or::before,
+  .mortar-overdrive-or::after {
     flex: 1 1 auto;
     height: 1px;
-    background: var(--rally-rule-gold-a33);
+    background: var(--mortar-overdrive-rule-gold-a33);
     content: "";
   }
-  #realm-racers-window .rally-practice-cta {
-    border-color: var(--rally-status-edge-a80);
-    color: var(--rally-status-text);
+  #mortar-overdrive-window .mortar-overdrive-practice-cta {
+    border-color: var(--mortar-overdrive-status-edge-a80);
+    color: var(--mortar-overdrive-status-text);
     background: linear-gradient(
       180deg,
-      var(--rally-practice-bg-light) 0%,
-      var(--rally-practice-bg) 100%
+      var(--mortar-overdrive-practice-bg-light) 0%,
+      var(--mortar-overdrive-practice-bg) 100%
     );
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   /* ---- the practice setup screen: pick a rival, learn the controls, go ---- */
-  .rally-setup-intro {
+  .mortar-overdrive-setup-intro {
     margin: 2px 0 14px;
-    color: var(--rally-intro-text);
+    color: var(--mortar-overdrive-intro-text);
     font-size: 13px;
     line-height: 1.55;
   }
   /* Which circuit practice runs, and the plain admission that competition runs a
    different one. Set apart from the intro copy above it: it is the one line on
    this screen a returning player still needs to read. */
-  .rally-setup-circuit {
+  .mortar-overdrive-setup-circuit {
     margin: -8px 0 14px;
     padding: 8px 10px;
-    border-left: 2px solid var(--rally-kicker-gold-a80);
+    border-left: 2px solid var(--mortar-overdrive-kicker-gold-a80);
     border-radius: 0 6px 6px 0;
-    color: var(--rally-circuit-gold);
-    background: var(--rally-panel-ink-a80);
+    color: var(--mortar-overdrive-circuit-gold);
+    background: var(--mortar-overdrive-panel-ink-a80);
     font-size: 12px;
     line-height: 1.5;
   }
-  .rally-legend {
+  .mortar-overdrive-legend {
     margin: 0 0 8px;
-    color: var(--rally-kicker-gold);
+    color: var(--mortar-overdrive-kicker-gold);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.16em;
     text-transform: uppercase;
   }
-  .rally-tiers {
+  .mortar-overdrive-tiers {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
     margin-bottom: 16px;
   }
-  .rally-tier {
+  .mortar-overdrive-tier {
     display: block;
     min-height: 40px;
     padding: 10px;
-    border: 1px solid var(--rally-rule-gold-a3d);
+    border: 1px solid var(--mortar-overdrive-rule-gold-a3d);
     border-radius: 8px;
     color: inherit;
-    background: var(--rally-panel-ink-ab0);
+    background: var(--mortar-overdrive-panel-ink-ab0);
     font: inherit;
     text-align: left;
     cursor: pointer;
   }
-  .rally-tier > strong {
+  .mortar-overdrive-tier > strong {
     display: block;
     margin-bottom: 4px;
-    color: var(--rally-label-gold);
+    color: var(--mortar-overdrive-label-gold);
     font-size: 13px;
   }
-  .rally-tier > span {
+  .mortar-overdrive-tier > span {
     display: block;
-    color: var(--rally-text-soft);
+    color: var(--mortar-overdrive-text-soft);
     font-size: 11px;
     line-height: 1.4;
   }
-  .rally-tier.selected {
-    border-color: var(--rally-gold);
-    background: var(--rally-key-bg);
-    box-shadow: inset 0 0 0 1px var(--rally-gold-a55);
+  .mortar-overdrive-tier.selected {
+    border-color: var(--mortar-overdrive-gold);
+    background: var(--mortar-overdrive-key-bg);
+    box-shadow: inset 0 0 0 1px var(--mortar-overdrive-gold-a55);
   }
-  .rally-tier.selected > strong {
-    color: var(--rally-title-text);
+  .mortar-overdrive-tier.selected > strong {
+    color: var(--mortar-overdrive-title-text);
   }
-  .rally-controls {
+  .mortar-overdrive-controls {
     display: grid;
     gap: 6px;
     margin-bottom: 14px;
   }
-  .rally-control {
+  .mortar-overdrive-control {
     display: flex;
     gap: 12px;
     align-items: center;
     justify-content: space-between;
     padding: 9px 11px;
-    border: 1px solid var(--rally-rule-gold-a26);
+    border: 1px solid var(--mortar-overdrive-rule-gold-a26);
     border-radius: 8px;
-    background: var(--rally-panel-ink-a8c);
+    background: var(--mortar-overdrive-panel-ink-a8c);
   }
-  .rally-control-copy > strong {
+  .mortar-overdrive-control-copy > strong {
     display: block;
     margin-bottom: 3px;
-    color: var(--rally-label-gold);
+    color: var(--mortar-overdrive-label-gold);
     font-size: 12px;
   }
-  .rally-control-copy > span {
+  .mortar-overdrive-control-copy > span {
     display: block;
-    color: var(--rally-text-soft);
+    color: var(--mortar-overdrive-text-soft);
     font-size: 11px;
     line-height: 1.4;
   }
-  .rally-control-keys {
+  .mortar-overdrive-control-keys {
     display: flex;
     flex: 0 0 auto;
     gap: 4px;
     align-items: center;
   }
-  .rally-key {
+  .mortar-overdrive-key {
     min-width: 26px;
     padding: 4px 7px;
-    border: 1px solid var(--rally-gold-a66);
+    border: 1px solid var(--mortar-overdrive-gold-a66);
     border-radius: 5px;
-    color: var(--rally-title-text);
-    background: var(--rally-key-bg);
+    color: var(--mortar-overdrive-title-text);
+    background: var(--mortar-overdrive-key-bg);
     font-family: inherit;
     font-size: 11px;
     font-weight: 700;
     text-align: center;
     text-transform: uppercase;
   }
-  .rally-key-sep {
-    color: var(--rally-text-quiet);
+  .mortar-overdrive-key-sep {
+    color: var(--mortar-overdrive-text-quiet);
     font-size: 10px;
   }
-  .rally-touch-note {
+  .mortar-overdrive-touch-note {
     margin: 0 0 14px;
-    color: var(--rally-text-soft);
+    color: var(--mortar-overdrive-text-soft);
     font-size: 11px;
     line-height: 1.45;
   }
-  .rally-setup-actions {
+  .mortar-overdrive-setup-actions {
     display: flex;
     gap: 10px;
     align-items: stretch;
   }
-  #realm-racers-window .rally-back {
+  #mortar-overdrive-window .mortar-overdrive-back {
     flex: 0 0 auto;
     min-width: 96px;
     min-height: 44px;
-    color: var(--rally-leave-text);
-    border-color: var(--rally-leave-edge);
+    color: var(--mortar-overdrive-leave-text);
+    border-color: var(--mortar-overdrive-leave-edge);
   }
-  #realm-racers-window .rally-play {
+  #mortar-overdrive-window .mortar-overdrive-play {
     flex: 1 1 auto;
     min-height: 44px;
     font-size: 14px;
@@ -26822,7 +26830,7 @@
    over the frames and trackers it overlaps, under the Esc menu's scrim and
    every open window, which hud.ts raises into a band from 51. At 58 an open
    map or character window drew under the strip. */
-  #realm-racers-hud {
+  #mortar-overdrive-hud {
     position: absolute;
     z-index: 30;
     top: 74px;
@@ -26830,8 +26838,8 @@
     width: min(420px, calc(var(--app-vw, 100vw) - 34px));
     transform: translateX(-50%);
     pointer-events: none;
-    color: var(--rally-hud-text);
-    filter: drop-shadow(0 3px 6px var(--rally-shadow-acc));
+    color: var(--mortar-overdrive-hud-text);
+    filter: drop-shadow(0 3px 6px var(--mortar-overdrive-shadow-acc));
   }
   /* While a race is on the strip owns the top centre. A plain banner (GO, the
    lap, the result, the circuit) rides the band above it instead of landing on
@@ -26841,7 +26849,7 @@
    arrow share the strip's slot and stand down until the race ends (the
    signpost and Realm Builder popups that reuse the card are player-opened, so
    they stay); the card's live region is silent while it is hidden. */
-  body.rally-race-on
+  body.mortar-overdrive-race-on
   #banner:not(
     .banner-with-art,
     .has-subtext,
@@ -26853,13 +26861,13 @@
     top: 16px;
     font-size: clamp(24px, 2.6vw, 38px);
   }
-  body.rally-race-on .tut-card:not(.nb-popup, .rb-popup),
-  body.rally-race-on .tut-arrow {
+  body.mortar-overdrive-race-on .tut-card:not(.nb-popup, .rb-popup),
+  body.mortar-overdrive-race-on .tut-arrow {
     visibility: hidden;
   }
-  .rallyhud-top,
-  .rallyhud-stats,
-  .rallyhud-actions {
+  .mortarOverdriveHud-top,
+  .mortarOverdriveHud-stats,
+  .mortarOverdriveHud-actions {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -26868,14 +26876,14 @@
    It used to carry a gold "G" medallion on the left, which is what the 7px
    left inset and the 9px gap were for; the mark said nothing a player could
    read, so it is gone and the label is simply centred in the pill. */
-  .rallyhud-top {
+  .mortarOverdriveHud-top {
     margin: 0 auto;
     width: max-content;
     max-width: 100%;
     padding: 5px 14px;
-    border: 1px solid var(--rally-gold-a99);
+    border: 1px solid var(--mortar-overdrive-gold-a99);
     border-radius: 999px;
-    background: var(--rally-strip-bg-ae8);
+    background: var(--mortar-overdrive-strip-bg-ae8);
   }
   /* During a race this pill carries the DRAWN CIRCUIT's name rather than the
    minigame's (the player did not choose the circuit and needs telling; the
@@ -26885,7 +26893,7 @@
    would grow the pill downward and push the whole readout row, plus both tap
    targets under it, down mid-race. The pill widens instead, to the strip's
    width, and then truncates. */
-  .rallyhud-title {
+  .mortarOverdriveHud-title {
     overflow: hidden;
     font-size: 12px;
     font-weight: 700;
@@ -26900,7 +26908,7 @@
 
    It is `pointer-events: none`, so a player who queued while grouped still
    reaches their party frames underneath it. Same tier as the strip. */
-  #realm-racers-standings {
+  #mortar-overdrive-standings {
     position: absolute;
     z-index: 30;
     left: 12px;
@@ -26908,18 +26916,18 @@
     padding: 4px 0;
     /* Sized from the longest thing it has to say: a house pilot's full name plus
      the Bot tag beside it, with the placing and the lap either side. The names
-     are 15 to 16 characters by construction (REALM_RACERS_BOT_NAMES), so a
+     are 15 to 16 characters by construction (MORTAR_OVERDRIVE_BOT_NAMES), so a
      narrower panel truncates every rival row of every practice race, not an
      edge case. Dropping the class crest paid for most of the extra width. */
     width: 240px;
     max-width: calc(var(--app-vw, 100vw) - 24px);
-    border: 1px solid var(--rally-gold-a55);
+    border: 1px solid var(--mortar-overdrive-gold-a55);
     border-radius: 7px;
-    background: var(--rally-hud-ink-ae8);
+    background: var(--mortar-overdrive-hud-ink-ae8);
     list-style: none;
     pointer-events: none;
-    color: var(--rally-hud-text);
-    filter: drop-shadow(0 3px 6px var(--rally-shadow-acc));
+    color: var(--mortar-overdrive-hud-text);
+    filter: drop-shadow(0 3px 6px var(--mortar-overdrive-shadow-acc));
     /* Slides in from the edge when the flag goes up and back out when the race
      ends, rather than snapping. `visibility` rides the same transition with a
      delay so the panel is really gone once it has faded, with no timer in the
@@ -26932,7 +26940,7 @@
       transform 180ms ease-out,
       visibility 0s linear 180ms;
   }
-  #realm-racers-standings.shown {
+  #mortar-overdrive-standings.shown {
     opacity: 1;
     visibility: visible;
     transform: none;
@@ -26945,40 +26953,40 @@
    uniform, so 100% of a row's own height IS one place: the cue needs no
    measurement, and a two-place jump reads as movement rather than as an exact
    distance, which at a glance is the same thing. */
-  @keyframes rally-standing-gained {
+  @keyframes mortar-overdrive-standing-gained {
     from {
       transform: translateY(100%);
-      background: var(--rally-gold-a4d);
+      background: var(--mortar-overdrive-gold-a4d);
     }
   }
-  @keyframes rally-standing-lost {
+  @keyframes mortar-overdrive-standing-lost {
     from {
       transform: translateY(-100%);
     }
   }
-  .rally-standing.gained {
-    animation: rally-standing-gained 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  .mortar-overdrive-standing.gained {
+    animation: mortar-overdrive-standing-gained 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
   }
-  .rally-standing.lost {
-    animation: rally-standing-lost 260ms ease-out;
+  .mortar-overdrive-standing.lost {
+    animation: mortar-overdrive-standing-lost 260ms ease-out;
   }
   /* Both cues are pure decoration on top of an order that is already correct:
    dropping them costs a player nothing they act on. */
   @media (prefers-reduced-motion: reduce) {
-    #realm-racers-standings,
-    #realm-racers-standings.shown {
+    #mortar-overdrive-standings,
+    #mortar-overdrive-standings.shown {
       transform: none;
       transition:
         opacity 120ms linear,
         visibility 0s linear 120ms;
     }
-    #realm-racers-standings.shown {
+    #mortar-overdrive-standings.shown {
       transition:
         opacity 120ms linear,
         visibility 0s;
     }
-    .rally-standing.gained,
-    .rally-standing.lost {
+    .mortar-overdrive-standing.gained,
+    .mortar-overdrive-standing.lost {
       animation: none;
     }
   }
@@ -26987,38 +26995,38 @@
    between them said nothing here (class has no effect on the machine) and cost
    the name a quarter of its width, which on a four-pilot grid of 15-character
    house-pilot names is the difference between a name and an ellipsis. */
-  .rally-standing {
+  .mortar-overdrive-standing {
     display: grid;
     grid-template-columns: 16px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     padding: 3px 10px;
-    color: var(--rally-standing-text);
+    color: var(--mortar-overdrive-standing-text);
     font-size: 13px;
     line-height: 1.5;
   }
-  .rally-standing.me {
-    color: var(--rally-highlight);
-    background: var(--rally-gold-a1f);
+  .mortar-overdrive-standing.me {
+    color: var(--mortar-overdrive-highlight);
+    background: var(--mortar-overdrive-gold-a1f);
     font-weight: 800;
   }
-  .rally-standing.out {
-    color: var(--rally-text-out);
+  .mortar-overdrive-standing.out {
+    color: var(--mortar-overdrive-text-out);
   }
-  .rally-standing-place {
-    color: var(--rally-gold);
+  .mortar-overdrive-standing-place {
+    color: var(--mortar-overdrive-gold);
     font-family: var(--font-display, serif);
     font-weight: 900;
     text-align: center;
   }
-  .rally-standing.out .rally-standing-place {
-    color: var(--rally-text-out);
+  .mortar-overdrive-standing.out .mortar-overdrive-standing-place {
+    color: var(--mortar-overdrive-text-out);
   }
   /* Name plus marker in one cell: only the NAME may shrink, so a pilot with a very
    long name loses letters and keeps their YOU. A marker glued onto the end of
    the name string is the first thing an ellipsis eats, which is the bug this
    two-element cell exists to prevent. */
-  .rally-standing-id {
+  .mortar-overdrive-standing-id {
     display: flex;
     gap: 5px;
     align-items: baseline;
@@ -27026,7 +27034,7 @@
   }
   /* The name is the row: it is what a player reads at speed, so it outsizes the
    placing badge and the lap beside it. */
-  .rally-standing-name {
+  .mortar-overdrive-standing-name {
     overflow: hidden;
     min-width: 0;
     font-size: 14px;
@@ -27034,76 +27042,76 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rally-standing-you {
+  .mortar-overdrive-standing-you {
     flex: 0 0 auto;
-    color: var(--rally-you-text);
+    color: var(--mortar-overdrive-you-text);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.06em;
   }
-  .rally-standing-you:empty {
+  .mortar-overdrive-standing-you:empty {
     display: none;
   }
   /* The house-pilot tag: the retired Vale Cup team sheet's Bot badge (same
-   chip shape and colors) in the rally row's flex cell. Collapses when empty,
+   chip shape and colors) in the Mortar Overdrive row's flex cell. Collapses when empty,
    the same contract as the YOU marker; the cell's own gap spaces it, so it
    carries no margin of its own. */
-  .rally-standing-bot {
+  .mortar-overdrive-standing-bot {
     flex: 0 0 auto;
     padding: 0 5px;
-    border: 1px solid var(--rally-bot-edge);
+    border: 1px solid var(--mortar-overdrive-bot-edge);
     border-radius: 7px;
-    background: var(--rally-bot-bg);
-    color: var(--rally-bot-text);
+    background: var(--mortar-overdrive-bot-bg);
+    color: var(--mortar-overdrive-bot-text);
     font-family: var(--title-font);
     font-size: 8.5px;
     letter-spacing: 0.5px;
   }
-  .rally-standing-bot:empty {
+  .mortar-overdrive-standing-bot:empty {
     display: none;
   }
-  .rally-standing-lap {
-    color: var(--rally-text-lap);
+  .mortar-overdrive-standing-lap {
+    color: var(--mortar-overdrive-text-lap);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     text-align: right;
     white-space: nowrap;
   }
-  .rally-standing.me .rally-standing-lap {
-    color: var(--rally-you-text);
+  .mortar-overdrive-standing.me .mortar-overdrive-standing-lap {
+    color: var(--mortar-overdrive-you-text);
   }
-  .rallyhud-stats {
+  .mortarOverdriveHud-stats {
     gap: 0;
     margin-top: 5px;
   }
-  .rallyhud-stats > span {
+  .mortarOverdriveHud-stats > span {
     min-width: 82px;
     padding: 5px 10px;
-    border: 1px solid var(--rally-gold-a55);
-    background: var(--rally-hud-ink-acf);
-    color: var(--rally-stat-text);
+    border: 1px solid var(--mortar-overdrive-gold-a55);
+    background: var(--mortar-overdrive-hud-ink-acf);
+    color: var(--mortar-overdrive-stat-text);
     font-size: 12px;
     font-weight: 800;
     text-align: center;
   }
-  .rallyhud-stats > span:first-child {
+  .mortarOverdriveHud-stats > span:first-child {
     border-radius: 6px 0 0 6px;
   }
   /* last-OF-TYPE, not last-child: the forfeit button now closes this row. */
-  .rallyhud-stats > span:last-of-type {
+  .mortarOverdriveHud-stats > span:last-of-type {
     border-radius: 0 6px 6px 0;
   }
-  .rallyhud-phase {
+  .mortarOverdriveHud-phase {
     margin-top: 7px;
-    color: var(--rally-highlight);
+    color: var(--mortar-overdrive-highlight);
     font-family: var(--font-display, serif);
     font-size: 20px;
     font-weight: 900;
     letter-spacing: 0.08em;
     text-align: center;
-    text-shadow: 0 0 14px var(--rally-limits-gold-a99);
+    text-shadow: 0 0 14px var(--mortar-overdrive-limits-gold-a99);
   }
-  .rallyhud-actions {
+  .mortarOverdriveHud-actions {
     gap: 8px;
     margin-top: 7px;
     pointer-events: none;
@@ -27116,7 +27124,7 @@
    every player gets, so nothing here is tiered or reduced by a graphics preset;
    the only motion knob it honours is prefers-reduced-motion, which drops the
    pop and leaves the fade. */
-  #realm-racers-splash {
+  #mortar-overdrive-splash {
     position: absolute;
     z-index: 59;
     top: 210px;
@@ -27128,53 +27136,53 @@
     transform: translateX(-50%);
     pointer-events: none;
     text-align: center;
-    filter: drop-shadow(0 6px 14px var(--rally-shadow-add));
+    filter: drop-shadow(0 6px 14px var(--mortar-overdrive-shadow-add));
   }
-  .rally-splash-icon {
+  .mortar-overdrive-splash-icon {
     width: 108px;
     height: 108px;
-    border: 2px solid var(--rally-splash-edge);
+    border: 2px solid var(--mortar-overdrive-splash-edge);
     border-radius: 16px;
-    background: var(--rally-splash-icon-bg-acc);
-    box-shadow: 0 0 22px var(--rally-shadow-a88);
+    background: var(--mortar-overdrive-splash-icon-bg-acc);
+    box-shadow: 0 0 22px var(--mortar-overdrive-shadow-a88);
   }
-  .rally-splash-label {
+  .mortar-overdrive-splash-label {
     padding: 4px 14px;
-    border: 1px solid var(--rally-gold-a99);
+    border: 1px solid var(--mortar-overdrive-gold-a99);
     border-radius: 999px;
-    background: var(--rally-strip-bg-aee);
-    color: var(--rally-splash-text);
+    background: var(--mortar-overdrive-strip-bg-aee);
+    color: var(--mortar-overdrive-splash-text);
     font-family: var(--font-display, serif);
     font-size: 20px;
     font-weight: 900;
     letter-spacing: 0.08em;
-    text-shadow: 0 1px 4px var(--rally-shadow);
+    text-shadow: 0 1px 4px var(--mortar-overdrive-shadow);
   }
   /* One tone per effect, so the colour is a stylesheet decision and the module
    holds none: the refill wears the readout gold, the nitro the speed blue, the
    ward its shield blue, the oil its bruised violet. */
-  .rally-splash-charge .rally-splash-icon {
-    border-color: var(--rally-splash-edge);
+  .mortar-overdrive-splash-charge .mortar-overdrive-splash-icon {
+    border-color: var(--mortar-overdrive-splash-edge);
   }
-  .rally-splash-nitro .rally-splash-icon {
-    border-color: var(--rally-splash-nitro);
+  .mortar-overdrive-splash-nitro .mortar-overdrive-splash-icon {
+    border-color: var(--mortar-overdrive-splash-nitro);
   }
-  .rally-splash-ward .rally-splash-icon {
-    border-color: var(--rally-splash-ward);
+  .mortar-overdrive-splash-ward .mortar-overdrive-splash-icon {
+    border-color: var(--mortar-overdrive-splash-ward);
   }
-  .rally-splash-slick .rally-splash-icon {
-    border-color: var(--rally-splash-slick);
+  .mortar-overdrive-splash-slick .mortar-overdrive-splash-icon {
+    border-color: var(--mortar-overdrive-splash-slick);
   }
   /* Two identical animations under two class names: showing the SAME effect twice
    in a row would otherwise re-add a class that is already there, which restarts
    nothing. The controller alternates them. */
-  .rally-splash-a {
-    animation: rally-splash-pop-a 1.36s ease-out forwards;
+  .mortar-overdrive-splash-a {
+    animation: mortar-overdrive-splash-pop-a 1.36s ease-out forwards;
   }
-  .rally-splash-b {
-    animation: rally-splash-pop-b 1.36s ease-out forwards;
+  .mortar-overdrive-splash-b {
+    animation: mortar-overdrive-splash-pop-b 1.36s ease-out forwards;
   }
-  @keyframes rally-splash-pop-a {
+  @keyframes mortar-overdrive-splash-pop-a {
     0% {
       opacity: 0;
       transform: translateX(-50%) scale(0.6);
@@ -27195,7 +27203,7 @@
       transform: translateX(-50%) scale(1.04);
     }
   }
-  @keyframes rally-splash-pop-b {
+  @keyframes mortar-overdrive-splash-pop-b {
     0% {
       opacity: 0;
       transform: translateX(-50%) scale(0.6);
@@ -27217,11 +27225,11 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .rally-splash-a,
-    .rally-splash-b {
-      animation-name: rally-splash-fade;
+    .mortar-overdrive-splash-a,
+    .mortar-overdrive-splash-b {
+      animation-name: mortar-overdrive-splash-fade;
     }
-    @keyframes rally-splash-fade {
+    @keyframes mortar-overdrive-splash-fade {
       0% {
         opacity: 0;
       }
@@ -27240,43 +27248,43 @@
    spends it. Deliberately the QUIETEST thing on the strip (no pulse, no alarm
    colour, a smaller box than the referee's line): it is a state a pilot plans
    around, not an event demanding a reaction. Cool blue, which nothing else in
-   the rally readout uses, so a glance separates it from the amber readouts and
+   the Mortar Overdrive readout uses, so a glance separates it from the amber readouts and
    the red forfeit. Sized to need no mobile override, like the limits line. */
-  .rallyhud-ward {
+  .mortarOverdriveHud-ward {
     width: max-content;
     max-width: 100%;
     margin: 8px auto 0;
     padding: 3px 12px;
-    border: 1px solid var(--rally-ward-edge);
+    border: 1px solid var(--mortar-overdrive-ward-edge);
     border-radius: 999px;
-    background: var(--rally-ward-bg-ae6);
-    color: var(--rally-ward-text);
+    background: var(--mortar-overdrive-ward-bg-ae6);
+    color: var(--mortar-overdrive-ward-text);
     font-family: var(--font-display, serif);
     font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.08em;
     text-align: center;
-    text-shadow: 0 1px 3px var(--rally-shadow);
+    text-shadow: 0 1px 3px var(--mortar-overdrive-shadow);
   }
-  .rallyhud-wrong-way {
+  .mortarOverdriveHud-wrong-way {
     width: max-content;
     margin: 8px auto 0;
     padding: 7px 18px;
-    border: 2px solid var(--rally-wrong-way-edge);
+    border: 2px solid var(--mortar-overdrive-wrong-way-edge);
     border-radius: 5px;
-    background: var(--rally-wrong-way-bg-aee);
-    color: var(--rally-splash-text);
+    background: var(--mortar-overdrive-wrong-way-bg-aee);
+    color: var(--mortar-overdrive-splash-text);
     font-family: var(--font-display, serif);
     font-size: 24px;
     font-weight: 1000;
     letter-spacing: 0.12em;
     text-align: center;
-    text-shadow: 0 1px 4px var(--rally-shadow);
-    animation: rally-wrong-way-pulse 0.7s ease-in-out infinite alternate;
+    text-shadow: 0 1px 4px var(--mortar-overdrive-shadow);
+    animation: mortar-overdrive-wrong-way-pulse 0.7s ease-in-out infinite alternate;
   }
-  @keyframes rally-wrong-way-pulse {
+  @keyframes mortar-overdrive-wrong-way-pulse {
     to {
-      border-color: var(--rally-podium-shine);
+      border-color: var(--mortar-overdrive-podium-shine);
       transform: scale(1.04);
     }
   }
@@ -27286,21 +27294,21 @@
    override. It never pulses: one of its two lines is already a per-second
    countdown, and the other is an explanation of something that has finished
    happening. */
-  .rallyhud-limits {
+  .mortarOverdriveHud-limits {
     width: max-content;
     max-width: 100%;
     margin: 8px auto 0;
     padding: 5px 14px;
-    border: 1px solid var(--rally-limits-gold);
+    border: 1px solid var(--mortar-overdrive-limits-gold);
     border-radius: 5px;
-    background: var(--rally-limits-bg-ae6);
-    color: var(--rally-limits-text);
+    background: var(--mortar-overdrive-limits-bg-ae6);
+    color: var(--mortar-overdrive-limits-text);
     font-family: var(--font-display, serif);
     font-size: 16px;
     font-weight: 800;
     letter-spacing: 0.06em;
     text-align: center;
-    text-shadow: 0 1px 3px var(--rally-shadow);
+    text-shadow: 0 1px 3px var(--mortar-overdrive-shadow);
   }
   /* The strip carries the only in-race forfeit control: the queue window closes
    itself when the match starts, so nothing else is reachable at speed. It rides
@@ -27311,14 +27319,14 @@
 
    min-width is sized for the ARMED label so the two-step swap never resizes the
    row: a centred row that grew mid-race would slide the readouts sideways. */
-  .rallyhud-reset,
-  .rallyhud-forfeit {
+  .mortarOverdriveHud-reset,
+  .mortarOverdriveHud-forfeit {
     min-width: 132px;
     padding: 5px 12px;
-    border: 1px solid var(--rally-danger-edge);
+    border: 1px solid var(--mortar-overdrive-danger-edge);
     border-radius: 6px;
-    background: var(--rally-danger-bg-ae0);
-    color: var(--rally-danger-text);
+    background: var(--mortar-overdrive-danger-bg-ae0);
+    color: var(--mortar-overdrive-danger-text);
     font-family: inherit;
     font-size: 12px;
     font-weight: 800;
@@ -27327,42 +27335,42 @@
     cursor: pointer;
     pointer-events: auto;
   }
-  .rallyhud-reset {
-    border-color: var(--rally-reset-edge);
-    background: var(--rally-reset-bg-ae8);
-    color: var(--rally-reset-text);
+  .mortarOverdriveHud-reset {
+    border-color: var(--mortar-overdrive-reset-edge);
+    background: var(--mortar-overdrive-reset-bg-ae8);
+    color: var(--mortar-overdrive-reset-text);
   }
-  .rallyhud-reset:hover:not(:disabled) {
-    border-color: var(--rally-reset-edge-hover);
-    color: var(--rally-white);
+  .mortarOverdriveHud-reset:hover:not(:disabled) {
+    border-color: var(--mortar-overdrive-reset-edge-hover);
+    color: var(--mortar-overdrive-white);
   }
-  .rallyhud-reset:disabled {
+  .mortarOverdriveHud-reset:disabled {
     cursor: default;
     opacity: 0.5;
   }
-  .rallyhud-forfeit:hover {
-    border-color: var(--rally-forfeit-edge-hover);
-    color: var(--rally-forfeit-text-hover);
+  .mortarOverdriveHud-forfeit:hover {
+    border-color: var(--mortar-overdrive-forfeit-edge-hover);
+    color: var(--mortar-overdrive-forfeit-text-hover);
   }
-  .rallyhud-forfeit.armed {
-    border-color: var(--rally-forfeit-armed-edge);
-    background: var(--rally-forfeit-armed-bg-aec);
-    color: var(--rally-forfeit-armed-text);
+  .mortarOverdriveHud-forfeit.armed {
+    border-color: var(--mortar-overdrive-forfeit-armed-edge);
+    background: var(--mortar-overdrive-forfeit-armed-bg-aec);
+    color: var(--mortar-overdrive-forfeit-armed-text);
   }
-  .rallyhud-reset:focus-visible,
-  .rallyhud-forfeit:focus-visible {
+  .mortarOverdriveHud-reset:focus-visible,
+  .mortarOverdriveHud-forfeit:focus-visible {
     outline: 2px solid var(--color-border-focus);
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
-    .rallyhud-wrong-way {
+    .mortarOverdriveHud-wrong-way {
       animation: none;
     }
   }
 }
 
 @layer components {
-  /* ---------- realm racers podium ---------- */
+  /* ---------- mortar overdrive podium ---------- */
 
   /* The end-of-race ceremony, over the middle of the viewport. A race used to
      end on one line of text and a standings panel that quietly stopped moving;
@@ -27373,7 +27381,7 @@
      one 38px line), where a deed plate earned at the finish lands (the plain
      result banner rides above the strip): centred, it covered the middle of
      that line on any viewport under 1080px tall. */
-  #realm-racers-podium {
+  #mortar-overdrive-podium {
     position: absolute;
     z-index: 60;
     left: 50%;
@@ -27385,14 +27393,14 @@
     padding: 20px 26px 16px;
     width: max-content;
     max-width: calc(var(--app-vw, 100vw) - 32px);
-    border: 1px solid var(--rally-gold-a99);
+    border: 1px solid var(--mortar-overdrive-gold-a99);
     border-radius: 12px;
-    background: var(--rally-podium-bg-af2);
-    color: var(--rally-hud-text);
+    background: var(--mortar-overdrive-podium-bg-af2);
+    color: var(--mortar-overdrive-hud-text);
     pointer-events: none;
     box-shadow:
-      0 10px 34px var(--rally-shadow-aaa),
-      inset 0 1px 0 var(--rally-white-a14);
+      0 10px 34px var(--mortar-overdrive-shadow-aaa),
+      inset 0 1px 0 var(--mortar-overdrive-white-a14);
     opacity: 0;
     visibility: hidden;
     transform: translate(-50%, 10px);
@@ -27401,7 +27409,7 @@
       transform 200ms ease-out,
       visibility 0s linear 200ms;
   }
-  #realm-racers-podium.shown {
+  #mortar-overdrive-podium.shown {
     opacity: 1;
     visibility: visible;
     transform: translate(-50%, 0);
@@ -27413,20 +27421,20 @@
   /* The circuit that was raced, heading the ceremony. Competition draws it, so
      it is worth naming at the end as well as at the start; it is absent
      entirely for a circuit nothing names (a dev draft). */
-  .rally-podium-heading {
+  .mortar-overdrive-podium-heading {
     margin: 0;
-    color: var(--rally-circuit-gold);
+    color: var(--mortar-overdrive-circuit-gold);
     font-family: var(--font-display, serif);
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-align: center;
     text-transform: uppercase;
-    text-shadow: 0 2px 6px var(--rally-shadow-aaa);
+    text-shadow: 0 2px 6px var(--mortar-overdrive-shadow-aaa);
   }
   /* Three steps, second to the LEFT of first: the core hands them over in
      display order, so the row needs no re-ordering here. */
-  .rally-podium-steps {
+  .mortar-overdrive-podium-steps {
     display: flex;
     gap: 10px;
     align-items: flex-end;
@@ -27434,21 +27442,21 @@
     padding: 0;
     list-style: none;
   }
-  .rally-podium-step {
+  .mortar-overdrive-podium-step {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
     width: 122px;
   }
-  .rally-podium-crest {
+  .mortar-overdrive-podium-crest {
     width: 44px;
     height: 44px;
-    border: 2px solid var(--rally-gold-a88);
+    border: 2px solid var(--mortar-overdrive-gold-a88);
     border-radius: 50%;
-    background: var(--rally-crest-ink);
+    background: var(--mortar-overdrive-crest-ink);
   }
-  .rally-podium-name {
+  .mortar-overdrive-podium-name {
     overflow: hidden;
     max-width: 100%;
     font-size: 14px;
@@ -27456,51 +27464,51 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rally-podium-time {
-    color: var(--rally-text-lap);
+  .mortar-overdrive-podium-time {
+    color: var(--mortar-overdrive-text-lap);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
   /* The block under each pilot. Its HEIGHT is the podium: first is tallest. */
-  .rally-podium-block {
+  .mortar-overdrive-podium-block {
     display: grid;
     place-items: center;
     margin-top: 2px;
     width: 100%;
-    border: 1px solid var(--rally-gold-a55);
+    border: 1px solid var(--mortar-overdrive-gold-a55);
     border-radius: 5px 5px 0 0;
     background: linear-gradient(
       to bottom,
-      var(--rally-podium-block-bg-top-add),
-      var(--rally-podium-block-bg-add)
+      var(--mortar-overdrive-podium-block-bg-top-add),
+      var(--mortar-overdrive-podium-block-bg-add)
     );
     font-family: var(--font-display, serif);
     font-size: 26px;
     font-weight: 900;
   }
-  .rally-podium-step.p1 .rally-podium-block {
+  .mortar-overdrive-podium-step.p1 .mortar-overdrive-podium-block {
     height: 74px;
-    border-color: var(--rally-podium-gold-edge);
-    color: var(--rally-podium-gold-text);
+    border-color: var(--mortar-overdrive-podium-gold-edge);
+    color: var(--mortar-overdrive-podium-gold-text);
   }
-  .rally-podium-step.p2 .rally-podium-block {
+  .mortar-overdrive-podium-step.p2 .mortar-overdrive-podium-block {
     height: 54px;
-    color: var(--rally-silver);
+    color: var(--mortar-overdrive-silver);
   }
-  .rally-podium-step.p3 .rally-podium-block {
+  .mortar-overdrive-podium-step.p3 .mortar-overdrive-podium-block {
     height: 40px;
-    color: var(--rally-bronze);
+    color: var(--mortar-overdrive-bronze);
   }
-  .rally-podium-step.me .rally-podium-crest,
-  .rally-podium-row.me .rally-podium-row-crest {
-    border-color: var(--rally-highlight);
+  .mortar-overdrive-podium-step.me .mortar-overdrive-podium-crest,
+  .mortar-overdrive-podium-row.me .mortar-overdrive-podium-row-crest {
+    border-color: var(--mortar-overdrive-highlight);
   }
-  .rally-podium-step.me .rally-podium-name,
-  .rally-podium-row.me .rally-podium-name {
-    color: var(--rally-highlight);
+  .mortar-overdrive-podium-step.me .mortar-overdrive-podium-name,
+  .mortar-overdrive-podium-row.me .mortar-overdrive-podium-name {
+    color: var(--mortar-overdrive-highlight);
   }
   /* Everyone below the podium: the roster row grammar, at roster size. */
-  .rally-podium-rest {
+  .mortar-overdrive-podium-rest {
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -27509,34 +27517,34 @@
     width: 100%;
     list-style: none;
   }
-  .rally-podium-row {
+  .mortar-overdrive-podium-row {
     display: grid;
     grid-template-columns: 18px 20px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     padding: 3px 6px;
     border-radius: 5px;
-    color: var(--rally-standing-text);
+    color: var(--mortar-overdrive-standing-text);
     font-size: 13px;
   }
-  .rally-podium-row.me {
-    background: var(--rally-gold-a1f);
+  .mortar-overdrive-podium-row.me {
+    background: var(--mortar-overdrive-gold-a1f);
   }
-  .rally-podium-row-place {
-    color: var(--rally-gold);
+  .mortar-overdrive-podium-row-place {
+    color: var(--mortar-overdrive-gold);
     font-family: var(--font-display, serif);
     font-weight: 900;
     text-align: center;
   }
-  .rally-podium-row-crest {
+  .mortar-overdrive-podium-row-crest {
     width: 20px;
     height: 20px;
-    border: 1px solid var(--rally-gold-a66);
+    border: 1px solid var(--mortar-overdrive-gold-a66);
     border-radius: 50%;
-    background: var(--rally-crest-ink);
+    background: var(--mortar-overdrive-crest-ink);
   }
-  .rally-podium-return {
-    color: var(--rally-highlight);
+  .mortar-overdrive-podium-return {
+    color: var(--mortar-overdrive-highlight);
     font-family: var(--font-display, serif);
     font-size: 18px;
     letter-spacing: 0.02em;
@@ -27544,14 +27552,14 @@
   }
   /* The rise is decoration on a classification that is already correct. */
   @media (prefers-reduced-motion: reduce) {
-    #realm-racers-podium,
-    #realm-racers-podium.shown {
+    #mortar-overdrive-podium,
+    #mortar-overdrive-podium.shown {
       transform: translate(-50%, 0);
       transition:
         opacity 120ms linear,
         visibility 0s linear 120ms;
     }
-    #realm-racers-podium.shown {
+    #mortar-overdrive-podium.shown {
       transition:
         opacity 120ms linear,
         visibility 0s;
@@ -27560,7 +27568,7 @@
 }
 
 @layer components {
-  /* ---------- realm racers lobby ---------- */
+  /* ---------- mortar overdrive lobby ---------- */
 
   /* The curtain a race opens under while every pilot's machine prepares the
      circuit. It covers the world and the HUD like the loading screen does (and
@@ -27573,7 +27581,7 @@
      the lobby's bounded wait, while body-level overlays above #ui (the
      reconnect and disconnect notices) still draw over it. The one HUD surface
      kept above it is the chat frame, so the grid can talk while it waits. */
-  #realm-racers-lobby {
+  #mortar-overdrive-lobby {
     position: absolute;
     inset: 0;
     z-index: 150;
@@ -27585,8 +27593,8 @@
     background-color: var(--color-ink-deep);
     background-image: radial-gradient(
       ellipse at center,
-      var(--rally-hero-bg-mid) 0%,
-      var(--rally-hero-bg) 55%,
+      var(--mortar-overdrive-hero-bg-mid) 0%,
+      var(--mortar-overdrive-hero-bg) 55%,
       var(--color-ink-deep) 100%
     );
     opacity: 0;
@@ -27595,7 +27603,7 @@
       opacity calc(0.35s * var(--motion-scale)) ease,
       visibility 0s linear calc(0.35s * var(--motion-scale));
   }
-  #realm-racers-lobby.shown {
+  #mortar-overdrive-lobby.shown {
     opacity: 1;
     visibility: visible;
     transition: none;
@@ -27603,10 +27611,10 @@
   /* The curtain is mounted first in #ui, so the chat frame (with the mobile
      composer it hosts) is a later sibling this can lift above it; the desktop
      composer is a body-level layer over #ui already. */
-  #realm-racers-lobby.shown ~ #chatlog-wrap {
+  #mortar-overdrive-lobby.shown ~ #chatlog-wrap {
     z-index: 151;
   }
-  .rally-lobby-panel {
+  .mortar-overdrive-lobby-panel {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -27614,27 +27622,27 @@
     width: 100%;
     max-width: 420px;
     padding: 20px 24px 16px;
-    border-color: var(--rally-gold-a99);
+    border-color: var(--mortar-overdrive-gold-a99);
   }
-  .rally-lobby-kicker {
+  .mortar-overdrive-lobby-kicker {
     margin: 0;
     text-align: center;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .rally-lobby-circuit {
+  .mortar-overdrive-lobby-circuit {
     margin: 0;
-    color: var(--rally-circuit-gold);
+    color: var(--mortar-overdrive-circuit-gold);
     font-family: var(--font-display, serif);
     font-size: 22px;
     text-align: center;
   }
-  .rally-lobby-count {
+  .mortar-overdrive-lobby-count {
     margin: 4px 0 0;
     color: var(--color-text-secondary);
     font-size: 13px;
   }
-  .rally-lobby-pilots {
+  .mortar-overdrive-lobby-pilots {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -27642,19 +27650,19 @@
     padding: 0;
     list-style: none;
   }
-  .rally-lobby-pilot {
+  .mortar-overdrive-lobby-pilot {
     display: flex;
     align-items: center;
     gap: 8px;
     min-height: 28px;
     padding: 2px 8px;
     border-radius: var(--radius-sm);
-    background: var(--rally-gold-a0a);
+    background: var(--mortar-overdrive-gold-a0a);
   }
-  .rally-lobby-pilot.me {
-    background: var(--rally-gold-a1f);
+  .mortar-overdrive-lobby-pilot.me {
+    background: var(--mortar-overdrive-gold-a1f);
   }
-  .rally-lobby-name {
+  .mortar-overdrive-lobby-name {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -27663,43 +27671,43 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rally-lobby-tag {
+  .mortar-overdrive-lobby-tag {
     flex: 0 0 auto;
-    color: var(--rally-gold);
+    color: var(--mortar-overdrive-gold);
     font-size: 11px;
     letter-spacing: 0.06em;
   }
-  .rally-lobby-status {
+  .mortar-overdrive-lobby-status {
     flex: 0 0 auto;
     justify-content: center;
     min-width: 72px;
   }
-  .rally-lobby-prep {
+  .mortar-overdrive-lobby-prep {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin-top: 6px;
   }
-  .rally-lobby-prep-label {
+  .mortar-overdrive-lobby-prep-label {
     color: var(--color-text-secondary);
     font-size: 13px;
   }
-  .rally-lobby-bar {
-    --bar-color: var(--rally-gold);
+  .mortar-overdrive-lobby-bar {
+    --bar-color: var(--mortar-overdrive-gold);
     height: 10px;
   }
-  .rally-lobby-fill {
+  .mortar-overdrive-lobby-fill {
     width: 0%;
     transition: width calc(0.2s * var(--motion-scale)) ease;
   }
-  .rally-lobby-deadline {
+  .mortar-overdrive-lobby-deadline {
     margin: 2px 0 0;
     font-size: 12px;
     text-align: center;
   }
   @media (prefers-reduced-motion: reduce) {
-    #realm-racers-lobby,
-    .rally-lobby-fill {
+    #mortar-overdrive-lobby,
+    .mortar-overdrive-lobby-fill {
       transition: none;
     }
   }

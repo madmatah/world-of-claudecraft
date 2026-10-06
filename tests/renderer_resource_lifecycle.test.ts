@@ -170,9 +170,9 @@ describe('renderer resource lifecycle', () => {
     expect(bgViews.size).toBe(0);
   });
 
-  it('releases the Realm Racers circuits and shell pool, each other failing', () => {
+  it('releases the Mortar Overdrive circuits and shell pool, each other failing', () => {
     // The pool's own dispose (what its builds minted, the palette, a build in
-    // flight) is pinned in tests/realm_racers_track_build.test.ts.
+    // flight) is pinned in tests/mortar_overdrive_track_build.test.ts.
     const track = {
       dispose: vi.fn(() => {
         throw new Error('track teardown failed');
@@ -185,7 +185,7 @@ describe('renderer resource lifecycle', () => {
     disposeRendererPrewarmAndGroundFx(
       {
         prewarmDepthMaterials: new Map(),
-        realmRacers: { track, groundBlasts, fieldCues },
+        mortarOverdrive: { track, groundBlasts, fieldCues },
       },
       (cleanup) => {
         try {
@@ -203,20 +203,24 @@ describe('renderer resource lifecycle', () => {
     expect(errors).toHaveLength(1);
   });
 
-  it('the renderer teardown reaches the Realm Racers views by field name (source pin)', () => {
+  it('the renderer teardown reaches the Mortar Overdrive views by field name (source pin)', () => {
     const renderer = stripComments(
       readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8'),
     );
-    expect(renderer).toContain('readonly realmRacers = new RealmRacersScene(this);');
+    expect(renderer).toContain(
+      'readonly mortarOverdrive = new moRender.MortarOverdriveScene(this);',
+    );
     expect(renderer).toContain('disposeRendererPrewarmAndGroundFx(this, bestEffort);');
     // The scene's own field names, which the teardown reads.
     const scene = stripComments(
-      readFileSync(new URL('../src/render/realm_racers_scene.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../src/render/mortar_overdrive/scene.ts', import.meta.url), 'utf8'),
     );
-    expect(scene).toContain('track!: RealmRacersTracksView;');
-    expect(scene).toContain('readonly groundBlasts = new RealmRacersGroundBlastVisuals();');
-    expect(scene).toContain('readonly fieldCues: RealmRacersFieldCues;');
-    expect(scene).toContain('this.fieldCues = new RealmRacersFieldCues(h.views, h.groundSample);');
+    expect(scene).toContain('track!: MortarOverdriveTracksView;');
+    expect(scene).toContain('readonly groundBlasts = new MortarOverdriveGroundBlastVisuals();');
+    expect(scene).toContain('readonly fieldCues: MortarOverdriveFieldCues;');
+    expect(scene).toContain(
+      'this.fieldCues = new MortarOverdriveFieldCues(h.views, h.groundSample);',
+    );
   });
 
   it('drains every battleground copy when one of them fails to release', () => {

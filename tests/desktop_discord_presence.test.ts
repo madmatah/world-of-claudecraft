@@ -19,7 +19,10 @@ import {
 import { Settings } from '../src/game/settings';
 import type { DesktopBridge, DesktopDiscordActivity } from '../src/runtime';
 import { DUNGEON_X_THRESHOLD, zoneAt } from '../src/sim/data';
-import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
+import {
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOrigin,
+} from '../src/sim/mortar_overdrive/layout';
 import { zoneDisplayName } from '../src/ui/entity_i18n';
 
 const SESSION_START_SEC = 1_700_000_000;
@@ -572,7 +575,7 @@ describe('initDiscordPresence + desktopPresenceOnFrame', () => {
     );
   });
 
-  it('names the circuit zone on a Realm Racers lane, then holds it past the threshold', () => {
+  it('names the circuit zone on a Mortar Overdrive lane, then holds it past the threshold', () => {
     const { bridge, setDiscordActivity } = makeBridge();
     initDiscordPresence(bridge);
     desktopPresenceOnFrame(world(0, 0));
@@ -581,9 +584,9 @@ describe('initDiscordPresence + desktopPresenceOnFrame', () => {
     // The band is on the instance plane too, but a circuit belongs to a zone:
     // the Lagoon Run publishes The Palmreach rather than holding the zone the
     // pilot queued from (or the band's own clamp, The Drakelands).
-    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    const lane = MORTAR_OVERDRIVE_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
     if (!lane) throw new Error('expected the Lagoon Run lane');
-    const origin = realmRacersLaneOrigin(lane.index);
+    const origin = mortarOverdriveLaneOrigin(lane.index);
     clock += 30_000;
     desktopPresenceOnFrame(world(origin.x, origin.z));
     expect(setDiscordActivity).toHaveBeenCalledTimes(3);

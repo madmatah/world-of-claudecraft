@@ -10,15 +10,15 @@
 // functions return into elements. Dev tool, so English lives here (no `t()`).
 
 import type {
-  RealmRacersCircuitMetrics,
-  RealmRacersCircuitProblem,
-  RealmRacersCircuitProblemCode,
-} from '../../sim/realm_racers_circuit_metrics';
+  MortarOverdriveCircuitMetrics,
+  MortarOverdriveCircuitProblem,
+  MortarOverdriveCircuitProblemCode,
+} from '../../sim/mortar_overdrive';
 import {
-  REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR,
-  REALM_RACERS_RADIUS_OVER_WIDTH_WARN,
-} from '../../sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_MIN_HALF_WIDTH } from '../../sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR,
+  MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN,
+} from '../../sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_MIN_HALF_WIDTH } from '../../sim/mortar_overdrive/layout';
 import type { EditorIconId } from './editor_icons';
 
 // ---- the plan's own units ----
@@ -208,7 +208,7 @@ export function clampToolValue(field: ToolValueField, raw: number): number {
 export const TOOL_VALUE_FIELDS: Record<CircuitTool, ToolValueField | null> = {
   draw: null,
   handles: null,
-  width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
+  width: { label: 'road half-width (yd)', min: MORTAR_OVERDRIVE_MIN_HALF_WIDTH, max: 40 },
   // PROPS has none any more. It used to carry the scatter's spacing, and the
   // library's own placement block now owns that number along with the mode and
   // the two toggles it only means anything beside: a spacing in the tool strip
@@ -337,7 +337,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     id: 'saveDraft',
     needsCircuit: true,
     label: 'Save draft',
-    detail: 'Write the record to tmp/circuit-drafts, ready for /dev rallydraft',
+    detail: 'Write the record to tmp/circuit-drafts, ready for /dev overdrivedraft',
     icon: 'save',
     scope: 'global',
     shortcut: 'mod+s',
@@ -348,7 +348,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     id: 'copyRecord',
     needsCircuit: true,
     label: 'Copy record',
-    detail: 'Copy the record as TypeScript, to paste into realm_racers_circuits.ts',
+    detail: 'Copy the record as TypeScript, to paste into mortar_overdrive/circuits.ts',
     icon: 'clipboard',
     scope: 'global',
     menu: 'file',
@@ -1310,7 +1310,7 @@ export interface HeadlineChip {
  * line: how long the lap is, whether any corner folds its own road, and how much
  * is standing on the circuit.
  */
-export function headlineChips(metrics: RealmRacersCircuitMetrics): HeadlineChip[] {
+export function headlineChips(metrics: MortarOverdriveCircuitMetrics): HeadlineChip[] {
   const ratio = metrics.minRadiusOverWidth;
   return [
     {
@@ -1331,12 +1331,12 @@ export function headlineChips(metrics: RealmRacersCircuitMetrics): HeadlineChip[
       // share: move the readout's warn floor and the chip would tint a corner
       // green that the readout is already complaining about.
       tone:
-        ratio < REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR
+        ratio < MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR
           ? 'bad'
-          : ratio < REALM_RACERS_RADIUS_OVER_WIDTH_WARN
+          : ratio < MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN
             ? 'warn'
             : 'good',
-      title: `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${REALM_RACERS_RADIUS_OVER_WIDTH_WARN} is tight, under ${REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
+      title: `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_WARN} is tight, under ${MORTAR_OVERDRIVE_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
     },
     {
       id: 'props',
@@ -1351,7 +1351,7 @@ export function headlineChips(metrics: RealmRacersCircuitMetrics): HeadlineChip[
 
 // ---- problems ----
 
-export const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
+export const PROBLEM_LABELS: Record<MortarOverdriveCircuitProblemCode, string> = {
   self_crossing: 'the loop crosses itself',
   reversed_winding: 'the loop runs clockwise',
   corner_folds_road: 'a corner is tighter than its own road',
@@ -1379,12 +1379,12 @@ export const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
 };
 
-export function problemHeadline(problem: RealmRacersCircuitProblem): string {
+export function problemHeadline(problem: MortarOverdriveCircuitProblem): string {
   const label = PROBLEM_LABELS[problem.code];
   return problem.axis ? `${label} (${problem.axis})` : label;
 }
 
-export function problemDetail(problem: RealmRacersCircuitProblem): string {
+export function problemDetail(problem: MortarOverdriveCircuitProblem): string {
   const where = problem.s >= 0 ? ` at ${problem.s.toFixed(0)} yd` : '';
   return `${problem.value.toFixed(2)} against ${problem.limit.toFixed(2)}${where}`;
 }
@@ -1401,7 +1401,7 @@ export interface ProblemsChip {
    * disagree. Null when there is nothing to focus, which includes a problem with
    * no location.
    */
-  focus: RealmRacersCircuitProblem | null;
+  focus: MortarOverdriveCircuitProblem | null;
 }
 
 /**
@@ -1411,7 +1411,7 @@ export interface ProblemsChip {
  * the operator opening a drawer to find out whether any of them stops the race,
  * and the answer is one word long.
  */
-export function problemsChip(problems: readonly RealmRacersCircuitProblem[]): ProblemsChip {
+export function problemsChip(problems: readonly MortarOverdriveCircuitProblem[]): ProblemsChip {
   if (problems.length === 0) return { text: 'no problems', tone: 'clean', focus: null };
   const worst = problems.find((problem) => problem.severity === 'error') ?? problems[0];
   const count = problems.length === 1 ? '1 problem' : `${problems.length} problems`;
@@ -1434,9 +1434,9 @@ export const MAX_CANVAS_CALLOUTS = 4;
  * thirty callouts hide the circuit they are about.
  */
 export function calloutProblems(
-  problems: readonly RealmRacersCircuitProblem[],
+  problems: readonly MortarOverdriveCircuitProblem[],
   limit = MAX_CANVAS_CALLOUTS,
-): RealmRacersCircuitProblem[] {
+): MortarOverdriveCircuitProblem[] {
   const located = problems.filter((problem) => problem.s >= 0);
   const errors = located.filter((problem) => problem.severity === 'error');
   const warnings = located.filter((problem) => problem.severity === 'warning');

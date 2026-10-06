@@ -179,11 +179,11 @@ describe('the consumer seams (source pins)', () => {
     expect(renderer).toContain('ensureNightLightField();');
     expect(renderer).toContain('updateNightLightField(');
     // The lamps light the ground in the two places the world's own splat
-    // material is drawn: the open world, and a Realm Racers circuit's band (the
+    // material is drawn: the open world, and a Mortar Overdrive circuit's band (the
     // one place a race can be authored dark enough to need them). Anywhere else
     // the field is zeroed, which is what keeps an interior off the world clock.
     expect(renderer).toContain(
-      "const lampsLightGround = this.fogState === 'outdoor' || this.fogState === 'rally';",
+      "const lampsLightGround = this.fogState === 'outdoor' || this.fogState === MO_FOG;",
     );
     expect(renderer).toContain('lampsLightGround ? lampGlow : 0,');
     // The body discs stay OUTDOOR-only: a pool of light under every rival is a

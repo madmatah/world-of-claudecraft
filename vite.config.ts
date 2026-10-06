@@ -320,14 +320,14 @@ function musicEditorSavePlugin() {
   };
 }
 
-// Dev-only endpoints for the Realm Racers circuit editor
+// Dev-only endpoints for the Mortar Overdrive circuit editor
 // (circuit_editor.html). configureServer only runs under the dev server, so
 // none of this ships, and the page that drives it is absent from `input`.
 //
 //  - POST /__circuit_editor/save         a drawn record in, a SCRATCH draft at
 //                                        tmp/circuit-drafts/<id>.ts out. It
 //                                        deliberately never rewrites
-//                                        src/sim/content/realm_racers_circuits.ts
+//                                        src/sim/content/mortar_overdrive/circuits.ts
 //                                        the way the music editor rewrites its
 //                                        generated module: that file is
 //                                        hand-curated and its comments carry the
@@ -340,7 +340,7 @@ function musicEditorSavePlugin() {
 //  - GET  /__circuit_editor/draft/<id>   one draft, PARSED back into a record,
 //                                        which is what lets a running game race
 //                                        a draft with no source edit
-//                                        (`/dev rallydraft`).
+//                                        (`/dev overdrivedraft`).
 //  - DELETE /__circuit_editor/draft/<id> discards one scratch draft, so the list
 //                                        above is something an operator can keep
 //                                        rather than only add to.

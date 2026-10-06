@@ -120,8 +120,8 @@ describe('wire compatibility epoch', () => {
     // (the scheduled ferry whose deck exists only where it lies docked) composed
     // with the branch's 44, so an epoch-44 client (which draws the ship moored
     // forever) and an epoch-30 client (no world-quest wire) are both fenced out.
-    // Epoch 46 at the release/v0.44.0 merge into feature/realm-racers: the
-    // Realm Racers race surface on top of the release's 45, so an epoch-45
+    // Epoch 46 at the release/v0.44.0 merge into feature/mortar-overdrive: the
+    // Mortar Overdrive race surface on top of the release's 45, so an epoch-45
     // client (no drive state, no race self keys) is fenced out too.
     expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(46);
     expect(ONLINE_WORLD_AUTH_TYPE).toBe(`auth-world-${ONLINE_WORLD_LAYOUT_VERSION}`);

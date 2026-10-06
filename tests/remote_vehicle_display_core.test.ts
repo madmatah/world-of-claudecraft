@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   createRemoteVehicleDisplay,
+  mortarOverdriveLaneResolve,
   REMOTE_RACER_MUZZLE_LIFT_YD,
   REMOTE_VEHICLE_AGE_CAP_MS,
   REMOTE_VEHICLE_LEAD_CAP_MS,
   type RemoteRacerHorizon,
   type RemoteRacerMirror,
   type RemoteVehicleDisplayState,
-  rallyLaneResolve,
   remoteRacerAuraMult,
   remoteRacerDisplayY,
   remoteRacerHorizon,
@@ -23,9 +23,9 @@ import {
   selfFrameLeadMs,
 } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/mortar_overdrive/ground_blast';
+import { MORTAR_OVERDRIVE_ORIGIN, mortarOverdriveLaneAt } from '../src/sim/mortar_overdrive/layout';
 import { auraSpeedMult } from '../src/sim/player_motion';
-import { GROUND_BLAST_MUZZLE_NOSE_YD } from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_ORIGIN, realmRacersLaneAt } from '../src/sim/realm_racers_layout';
 import { type Aura, DT, type Entity, type VehicleDrive } from '../src/sim/types';
 import {
   advanceVehicleDrive,
@@ -586,7 +586,7 @@ describe('a held or snared rival is projected the way the server moves it', () =
 describe('the drawn height and the muzzle of a projected rival', () => {
   const ramp = (x: number, z: number): number => 0.25 * x + 0.1 * z;
   const flat = (): number => 0;
-  /** The drawn height with no pop in play, as the rally scene reads it. */
+  /** The drawn height with no pop in play, as the Mortar Overdrive scene reads it. */
   const wireDrawnY = (
     wireX: number,
     wireY: number,
@@ -675,7 +675,7 @@ describe('the drawn height and the muzzle of a projected rival', () => {
 });
 
 describe('a projected rival keeps to the circuit colliders', () => {
-  const lane = realmRacersLaneAt(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z);
+  const lane = mortarOverdriveLaneAt(MORTAR_OVERDRIVE_ORIGIN.x, MORTAR_OVERDRIVE_ORIGIN.z);
   if (!lane) throw new Error('lane 0 has no circuit');
   const { halfX, halfThickness } = lane.circuit.perimeter;
   const radius = vehicleProfile(PROFILE_KEY).bodyRadius;
@@ -693,9 +693,9 @@ describe('a projected rival keeps to the circuit colliders', () => {
     const drive = createVehicleDrive(PROFILE_KEY);
     drive.speed = 40;
     // Six yards short of the wall, heading straight at it (+x).
-    const start = REALM_RACERS_ORIGIN.x + innerFace - radius - 6;
+    const start = MORTAR_OVERDRIVE_ORIGIN.x + innerFace - radius - 6;
     const mirror = {
-      pos: { x: start, z: REALM_RACERS_ORIGIN.z },
+      pos: { x: start, z: MORTAR_OVERDRIVE_ORIGIN.z },
       facing: Math.PI / 2,
       drive,
       netUpdatedAt: 1000,
@@ -703,16 +703,16 @@ describe('a projected rival keeps to the circuit colliders', () => {
     const lead = frame(6, 0); // (6 - 1) ticks: 250 ms
     const walled = createRemoteVehicleDisplay();
     stepRemoteRacerView(walled, mirror, lead, 1000, 1 / 60, 1000);
-    expect(walled.x - REALM_RACERS_ORIGIN.x).toBeLessThanOrEqual(innerFace - radius + 1e-6);
+    expect(walled.x - MORTAR_OVERDRIVE_ORIGIN.x).toBeLessThanOrEqual(innerFace - radius + 1e-6);
     expect(walled.x).toBeGreaterThan(start + 5);
     // The same step with no collision runs the hull 4 yd through the wall.
     const open = createRemoteVehicleDisplay();
     stepRemoteRacerView(open, mirror, lead, 1000, 1 / 60, 1000, null);
-    expect(open.x - REALM_RACERS_ORIGIN.x).toBeGreaterThan(halfX + halfThickness);
+    expect(open.x - MORTAR_OVERDRIVE_ORIGIN.x).toBeGreaterThan(halfX + halfThickness);
   });
 
-  it('passes a move outside every rally lane straight through', () => {
-    expect(rallyLaneResolve(0, 0, 3, 4, radius)).toEqual({ x: 3, z: 4 });
+  it('passes a move outside every Mortar Overdrive lane straight through', () => {
+    expect(mortarOverdriveLaneResolve(0, 0, 3, 4, radius)).toEqual({ x: 3, z: 4 });
   });
 });
 

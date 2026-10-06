@@ -2,7 +2,7 @@
 // and what a drag ALONG the road lays down.
 //
 // Every case runs against the REAL circuit and the REAL spline. The snap has to
-// be measured through `realmRacersPlacements` rather than against the numbers
+// be measured through `mortarOverdrivePlacements` rather than against the numbers
 // the snap itself returned, or the whole point (the ghost shows what the record
 // will hold) is asserted by restating it.
 
@@ -26,17 +26,20 @@ import {
 } from '../src/editor/circuit/placement_core';
 import { ghostPlacement, ghostRowPlacements } from '../src/editor/circuit/props_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdrivePlacements } from '../src/sim/mortar_overdrive/props_resolve';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../src/sim/mortar_overdrive/spline';
 
 /** A fresh id every time: the resolver and the spline both memoize per circuit
  *  id, and a fixture sharing the shipped one evicts what the rest measures. */
 let drafts = 0;
-const draft = (over: Partial<RealmRacersCircuit> = {}): RealmRacersCircuit => ({
+const draft = (over: Partial<MortarOverdriveCircuit> = {}): MortarOverdriveCircuit => ({
   ...GARDEN,
   id: `draft_place_${drafts++}`,
   props: undefined,
@@ -46,12 +49,12 @@ const draft = (over: Partial<RealmRacersCircuit> = {}): RealmRacersCircuit => ({
 
 /** A point ON the road, and one far out in the lawn, both derived from the real
  *  curve rather than guessed at. */
-function pointAtOffset(circuit: RealmRacersCircuit, s: number, offset: number) {
-  const track = realmRacersTrack(circuit);
+function pointAtOffset(circuit: MortarOverdriveCircuit, s: number, offset: number) {
+  const track = mortarOverdriveTrack(circuit);
   const point = track.pointAt(s);
   return {
-    x: point.x - REALM_RACERS_ORIGIN.x - point.tz * offset,
-    z: point.z - REALM_RACERS_ORIGIN.z + point.tx * offset,
+    x: point.x - MORTAR_OVERDRIVE_ORIGIN.x - point.tz * offset,
+    z: point.z - MORTAR_OVERDRIVE_ORIGIN.z + point.tx * offset,
   };
 }
 
@@ -66,7 +69,7 @@ describe('where a dropped piece lands', () => {
     const snap = resolveSnap(circuit, on.x, on.z, { grid: false, free: false });
     expect(snap.kind).toBe('roadEdge');
     const lateral = Math.abs(lateralAt(circuit, snap.x, snap.z));
-    const edge = rallyGardenEdgeOffsetAt(circuit, lapPositionAt(circuit, snap.x, snap.z));
+    const edge = mortarOverdriveGardenEdgeOffsetAt(circuit, lapPositionAt(circuit, snap.x, snap.z));
     expect(lateral).toBeCloseTo(edge + ROAD_EDGE_CLEARANCE, 1);
     expect(snap.label).toContain('road edge');
   });
@@ -88,7 +91,7 @@ describe('where a dropped piece lands', () => {
     // overruling a placement nobody made near the road at all.
     const circuit = draft();
     const s = 100;
-    const edge = rallyGardenEdgeOffsetAt(circuit, s);
+    const edge = mortarOverdriveGardenEdgeOffsetAt(circuit, s);
     const far = pointAtOffset(circuit, s, edge + ROAD_EDGE_CLEARANCE + ROAD_EDGE_SNAP_BAND + 6);
     expect(resolveSnap(circuit, far.x, far.z, { grid: false, free: false }).kind).not.toBe(
       'roadEdge',
@@ -122,7 +125,7 @@ describe('where a dropped piece lands', () => {
   it('rounds to the grid out in the lawn, and only when the grid is on', () => {
     const circuit = draft();
     const s = 100;
-    const edge = rallyGardenEdgeOffsetAt(circuit, s);
+    const edge = mortarOverdriveGardenEdgeOffsetAt(circuit, s);
     const far = pointAtOffset(circuit, s, edge + ROAD_EDGE_CLEARANCE + ROAD_EDGE_SNAP_BAND + 20);
     const gridded = resolveSnap(circuit, far.x, far.z, { grid: true, free: false });
     expect(gridded.kind).toBe('grid');
@@ -295,7 +298,7 @@ describe('a row laid along the road', () => {
     // The pit straight is where a row of banners belongs, and it is exactly the
     // stretch the lap fraction wraps on.
     const circuit = draft();
-    const lap = realmRacersTrack(circuit).length;
+    const lap = mortarOverdriveTrack(circuit).length;
     const run = alongRoadProps(circuit, lap - 20, 20, options);
     expect(run.props.length).toBeLessThanOrEqual(Math.floor(40 / 8) + 1);
     const fractions = run.props.map((prop) => ('s' in prop.at ? prop.at.s : -1));
@@ -332,7 +335,7 @@ describe('a row laid along the road', () => {
     // A drag over a whole lap at a two yard spacing is hundreds of props nobody
     // meant to author; a silent cap would read as the tool losing the gesture.
     const circuit = draft();
-    const lap = realmRacersTrack(circuit).length;
+    const lap = mortarOverdriveTrack(circuit).length;
     const run = alongRoadProps(circuit, 0, lap / 2 - 1, {
       ...options,
       spacing: ALONG_ROAD_MIN_SPACING,
@@ -382,7 +385,7 @@ describe('the row preview', () => {
     ]);
     expect(preview).toHaveLength(0);
     // Specifically NOT the fountain that was already standing there.
-    expect(realmRacersPlacements(circuit).props).toHaveLength(1);
+    expect(mortarOverdrivePlacements(circuit).props).toHaveLength(1);
   });
 
   it('answers an empty pending list without resolving anything', () => {

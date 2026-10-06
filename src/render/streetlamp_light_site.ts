@@ -5,7 +5,7 @@
 // track exactly as a lamp on a road lights the road, or the two read as
 // different objects that happen to share a model. So the numbers and the anchor
 // arithmetic live here, with `streetlamps.ts` (the world's network) and
-// `realm_racers_lamps.ts` (a circuit's dressing) as the two consumers.
+// `mortar_overdrive/lamps.ts` (a circuit's dressing) as the two consumers.
 //
 // A render pure core: no Three, no DOM. The anchor is plain trigonometry over
 // the fixture's own AUTHORED socket, which is the load-bearing part: the light

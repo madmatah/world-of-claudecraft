@@ -1,6 +1,6 @@
 // A racing pilot's reconcile outcomes under driver prediction, set against
 // the server ticks that changed what the kernel reads: the recorder the
-// flag-on racer suites share (tests/realm_racers_v2_prediction.test.ts).
+// flag-on racer suites share (tests/mortar_overdrive_v2_prediction.test.ts).
 // Each outcome is noted on the frame the client's counters moved, with the
 // server tick that consumed the acknowledged client tick; a frame hook and a
 // server tick hook on the online harness, nothing else.
@@ -136,7 +136,7 @@ export function watchPilot(
     lastFields = fields;
     for (const ev of events) {
       if (
-        ev.type === 'realmRacersBump' &&
+        ev.type === 'mortarOverdriveBump' &&
         (ev.aId === pilot.serverEntity.id || ev.bId === pilot.serverEntity.id)
       ) {
         noteTransition(tick, 'bump');

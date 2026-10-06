@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isBlocked, moverHeight, resolveMovement } from '../src/sim/colliders';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
 import { mountMoveSpeedPct } from '../src/sim/content/mounts';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { BUILTIN_WORLD, DELVES, DUNGEON_FLOOR_Y } from '../src/sim/data';
 import {
   clampDelveDoorSolids,
@@ -9,9 +9,9 @@ import {
   DELVE_DOOR_AISLE_HALF_DEPTH,
   delveDoorClampSolidsFromEntities,
 } from '../src/sim/delves/geometry';
+import { mortarOverdriveStarts } from '../src/sim/mortar_overdrive/spline';
 import { PLAYER_BODY_RADIUS, PLAYER_MAX_CLIMB_SLOPE } from '../src/sim/pathfind';
 import { moveSpeedMult, type PlayerMotionDeps, stepPlayerMotion } from '../src/sim/player_motion';
-import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import {
   type Aura,
@@ -434,7 +434,7 @@ describe('player motion kernel parity with the live Sim', () => {
   // simulates another, and every race rubber-bands.
   it('drives a vehicle identically (throttle, steering, handbrake, wall scrape)', () => {
     const sim = makeSim();
-    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
+    const start = mortarOverdriveStarts(GARDEN_CIRCUIT)[0];
     // groundHeight, not terrainHeight: the circuit sits on the flat instance
     // floor past DUNGEON_X_THRESHOLD, and seating a racer at the open-world
     // surface height instead drops them through a long fall before the first

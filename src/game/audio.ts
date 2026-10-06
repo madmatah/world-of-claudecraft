@@ -363,23 +363,23 @@ export class GameAudio {
     this.play(UI_CUES.duelCountdown);
   }
 
-  realmRacersFound(): void {
+  mortarOverdriveFound(): void {
     this.play(UI_CUES.duelChallenge);
   }
 
-  realmRacersCountdownTick(): void {
+  mortarOverdriveCountdownTick(): void {
     this.play(UI_CUES.fiestaWords[0]);
   }
 
-  realmRacersGo(): void {
+  mortarOverdriveGo(): void {
     this.play(UI_CUES.fiestaWords[3]);
   }
 
-  realmRacersLap(): void {
+  mortarOverdriveLap(): void {
     this.play(UI_CUES.fiestaScoreMine);
   }
 
-  realmRacersResult(won: boolean): void {
+  mortarOverdriveResult(won: boolean): void {
     this.play(won ? UI_CUES.questDone : UI_CUES.death);
   }
 

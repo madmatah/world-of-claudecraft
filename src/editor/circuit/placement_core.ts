@@ -9,21 +9,27 @@
 // wants the verge, not the exact pixel) and the first one must never be.
 //
 // The legality verdict is NOT re-derived here. It comes from
-// `realmRacersPropStanding`, the same predicate `prop_blocks_racing_surface` is
+// `mortarOverdrivePropStanding`, the same predicate `prop_blocks_racing_surface` is
 // raised from, so a ghost that tints green cannot be a placement the readout
 // then refuses: that disagreement is the whole reason the ghost goes through the
 // one resolver in the first place.
 //
 // Pure and DOM-free, deterministic, no rng.
 
-import type { RallyProp, RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+import type {
+  MortarOverdriveCircuit,
+  MortarOverdriveProp,
+} from '../../sim/content/mortar_overdrive';
+import type { MortarOverdrivePlacedProp } from '../../sim/mortar_overdrive';
 import {
-  type RealmRacersPropStanding,
-  realmRacersPropStanding,
-} from '../../sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
-import type { RallyPlacedProp } from '../../sim/realm_racers_props_resolve';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../../sim/realm_racers_spline';
+  type MortarOverdrivePropStanding,
+  mortarOverdrivePropStanding,
+} from '../../sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../../sim/mortar_overdrive/layout';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../../sim/mortar_overdrive/spline';
 import { type PlacementMode, snapPoint } from './layout_core';
 
 /** How a placement decided where to sit. */
@@ -79,16 +85,16 @@ export interface SnapOptions {
  * left, which is what makes a row of beds line up out in the lawn.
  */
 export function resolveSnap(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
   options: SnapOptions,
 ): SnapResult {
   if (options.free) return { x, z, kind: 'free', label: 'free (alt)' };
 
-  const track = realmRacersTrack(circuit);
-  const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
-  const edge = rallyGardenEdgeOffsetAt(circuit, projection.s);
+  const track = mortarOverdriveTrack(circuit);
+  const projection = track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z);
+  const edge = mortarOverdriveGardenEdgeOffsetAt(circuit, projection.s);
   const lateral = projection.lateral;
   const side = lateral >= 0 ? 1 : -1;
   const wanted = edge + ROAD_EDGE_CLEARANCE;
@@ -99,8 +105,8 @@ export function resolveSnap(
     const point = track.pointAt(projection.s);
     const offset = wanted * side;
     return {
-      x: point.x - REALM_RACERS_ORIGIN.x - point.tz * offset,
-      z: point.z - REALM_RACERS_ORIGIN.z + point.tx * offset,
+      x: point.x - MORTAR_OVERDRIVE_ORIGIN.x - point.tz * offset,
+      z: point.z - MORTAR_OVERDRIVE_ORIGIN.z + point.tx * offset,
       kind: 'roadEdge',
       label: `road edge, ${wanted.toFixed(1)} yd`,
     };
@@ -122,7 +128,7 @@ export interface PlacementLegality {
    * under is exactly that placement. `severity` is what the tint reads.
    */
   legal: boolean;
-  severity: RealmRacersPropStanding['severity'];
+  severity: MortarOverdrivePropStanding['severity'];
   /** Lateral clearance less the footprint radius, yards. */
   clear: number;
   /** The garden edge it is measured against, yards. */
@@ -132,11 +138,11 @@ export interface PlacementLegality {
 }
 
 export function placementLegality(
-  circuit: RealmRacersCircuit,
-  placed: RallyPlacedProp | null,
+  circuit: MortarOverdriveCircuit,
+  placed: MortarOverdrivePlacedProp | null,
 ): PlacementLegality | null {
   if (!placed) return null;
-  const standing = realmRacersPropStanding(circuit, placed);
+  const standing = mortarOverdrivePropStanding(circuit, placed);
   const over = (standing.surface - standing.clear).toFixed(1);
   return {
     legal: standing.severity !== 'error',
@@ -257,7 +263,7 @@ export interface AlongRoadOptions {
 }
 
 export interface AlongRoadRun {
-  props: RallyProp[];
+  props: MortarOverdriveProp[];
   /** What the status bar reports, including anything the cap dropped. */
   label: string;
 }
@@ -276,12 +282,12 @@ export interface AlongRoadRun {
  * belongs, and it is exactly the stretch the lap fraction wraps on.
  */
 export function alongRoadProps(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   fromS: number,
   toS: number,
   options: AlongRoadOptions,
 ): AlongRoadRun {
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const lap = track.length;
   const spacing = Math.max(ALONG_ROAD_MIN_SPACING, options.spacing);
   // Signed run in the direction dragged, taken the SHORT way round: a drag from
@@ -305,12 +311,12 @@ export function alongRoadProps(
   const at = (s: number): { x: number; z: number } => {
     const point = track.pointAt(((s % lap) + lap) % lap);
     return {
-      x: point.x - REALM_RACERS_ORIGIN.x - point.tz * options.offset,
-      z: point.z - REALM_RACERS_ORIGIN.z + point.tx * options.offset,
+      x: point.x - MORTAR_OVERDRIVE_ORIGIN.x - point.tz * options.offset,
+      z: point.z - MORTAR_OVERDRIVE_ORIGIN.z + point.tx * options.offset,
     };
   };
-  const piece = (s: number): RallyProp => {
-    const prop: RallyProp = {
+  const piece = (s: number): MortarOverdriveProp => {
+    const prop: MortarOverdriveProp = {
       asset: options.asset,
       at: { s: (((s % lap) + lap) % lap) / lap, offset: options.offset },
     };
@@ -323,7 +329,7 @@ export function alongRoadProps(
   // enough that half a lap is a couple of thousand samples rather than a hundred
   // thousand.
   const walk = Math.min(0.5, spacing / 4);
-  const all: RallyProp[] = [piece(fromS)];
+  const all: MortarOverdriveProp[] = [piece(fromS)];
   let previous = at(fromS);
   let accrued = 0;
   for (let travelled = walk; travelled <= total; travelled += walk) {
@@ -346,14 +352,14 @@ export function alongRoadProps(
 
 /** Where a circuit-local point sits along the lap, yards. The gesture's two ends
  *  are pointer positions, and the row is authored in lap distance. */
-export function lapPositionAt(circuit: RealmRacersCircuit, x: number, z: number): number {
-  const track = realmRacersTrack(circuit);
-  return track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z).s;
+export function lapPositionAt(circuit: MortarOverdriveCircuit, x: number, z: number): number {
+  const track = mortarOverdriveTrack(circuit);
+  return track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z).s;
 }
 
 /** The signed lateral a point sits at, which is the offset a row inherits from
  *  where the operator started dragging. */
-export function lateralAt(circuit: RealmRacersCircuit, x: number, z: number): number {
-  const track = realmRacersTrack(circuit);
-  return track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z).lateral;
+export function lateralAt(circuit: MortarOverdriveCircuit, x: number, z: number): number {
+  const track = mortarOverdriveTrack(circuit);
+  return track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z).lateral;
 }

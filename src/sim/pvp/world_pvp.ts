@@ -39,9 +39,9 @@
 // identically.
 
 import { formatMoney } from '../format_money';
+import { inMortarOverdriveHeat } from '../mortar_overdrive/seat';
 import type { PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
-import { inRealmRacersHeat } from '../social/realm_racers_seat';
 import type { Entity } from '../types';
 import { grantHonor } from './honor';
 import { updatePvpVitality } from './vitality';
@@ -382,13 +382,13 @@ export function updateWorldPvp(ctx: SimContext): void {
   }
 }
 
-/** A player mid-battleground, mid-arena or seated in a Realm Racers heat is
+/** A player mid-battleground, mid-arena or seated in a Mortar Overdrive heat is
  *  under that mode's rules, never the open world's, whatever their flag or
  *  their ground says. */
 function inInstancedPvp(ctx: SimContext, pid: number): boolean {
   if (ctx.bgMatches.get(pid)?.state === 'active') return true;
   if (ctx.arenaMatches.get(pid)?.state === 'active') return true;
-  return inRealmRacersHeat(ctx, pid);
+  return inMortarOverdriveHeat(ctx, pid);
 }
 
 /** Two players mid-duel are under the duel's rules: a consensual duel fought

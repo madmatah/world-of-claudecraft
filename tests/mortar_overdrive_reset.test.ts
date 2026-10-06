@@ -1,0 +1,744 @@
+import { describe, expect, it, vi } from 'vitest';
+import { mortarOverdriveCompetitionCircuits } from '../src/sim/content/mortar_overdrive/circuits';
+
+/** The circuit a QUEUED race runs on, which is what every case here seats.
+ *  Resolved from the pool rather than named, so these suites follow the
+ *  competition circuit instead of silently measuring the practice one. */
+const RACE_CIRCUIT = mortarOverdriveCompetitionCircuits()[0];
+
+import {
+  MORTAR_OVERDRIVE_GHOST_AURA,
+  mortarOverdriveGhosted,
+} from '../src/sim/mortar_overdrive/ghost';
+import {
+  MORTAR_OVERDRIVE_GATE_RESYNC_WINDOW,
+  MORTAR_OVERDRIVE_GRID_SIZE,
+} from '../src/sim/mortar_overdrive/layout';
+import {
+  MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS,
+  MORTAR_OVERDRIVE_RESET_LOCK_TICKS,
+  MORTAR_OVERDRIVE_STUCK_TICKS,
+  MORTAR_OVERDRIVE_VERGE_BAND,
+  MORTAR_OVERDRIVE_WRONG_WAY_TICKS,
+  type MortarOverdriveMatch,
+  mortarOverdriveMovementLocked,
+  mortarOverdriveStartMatch,
+  mortarOverdriveToCanonical,
+  mortarOverdriveToWorld,
+  updateMortarOverdrive,
+} from '../src/sim/mortar_overdrive/race';
+import { mortarOverdriveGates, mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
+import {
+  MORTAR_OVERDRIVE_CUT_LOCK_TICKS,
+  MORTAR_OVERDRIVE_LOITER_TICKS,
+  MORTAR_OVERDRIVE_LOITER_WARN_TICKS,
+} from '../src/sim/mortar_overdrive/track_limits';
+import type { Sim } from '../src/sim/sim';
+import { type Entity, TICK_RATE } from '../src/sim/types';
+import {
+  autoGhostClearTick,
+  expectGhostEndsWhenClear,
+  expectGhostWindow,
+  followThrough,
+} from './helpers/mortar_overdrive_ghost_window';
+import { addAt, makeWorld, teleport } from './mortar_overdrive_util';
+
+/** The racers the sim has marked with the silent relocation event (the
+ *  self-position discontinuity the online client snaps on), in emit order. */
+function watchResets(sim: Sim): () => number[] {
+  const emit = vi.spyOn(sim, 'emit');
+  return () =>
+    emit.mock.calls
+      .map(([event]) => event as { type: string; pid?: number })
+      .filter((event) => event.type === 'mortarOverdriveReset')
+      .map((event) => event.pid as number);
+}
+
+function required<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) throw new Error(`Missing ${label}`);
+  return value;
+}
+
+function staged(): {
+  sim: Sim;
+  a: number;
+  b: number;
+  pids: number[];
+  match: MortarOverdriveMatch;
+  racer: Entity;
+} {
+  const sim = makeWorld();
+  const pids = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
+    addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
+  );
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and every arc below is measured
+  // on this one's road.
+  mortarOverdriveStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
+  sim.tick();
+  const match = required(sim.mortarOverdrive.match, 'race');
+  if (match.circuitId !== RACE_CIRCUIT.id) throw new Error('race seated on another circuit');
+  const racer = required(sim.entities.get(pids[0]), 'racer');
+  return { sim, a: pids[0], b: pids[1], pids, match, racer };
+}
+
+/**
+ * A canonical spline point placed on the race's OWN lane, keeping the sample's
+ * frame-independent fields (arc length, tangent, width) as they are.
+ *
+ * Every case here seats a PUBLIC race, and a public race stopped standing on
+ * lane 0 the day the practice circuit lost its public lane: a canonical point is
+ * no longer a world one, and comparing a racer's world position against one
+ * silently measures the lane offset instead of the recovery.
+ */
+function onLane(match: MortarOverdriveMatch, s: number) {
+  const point = mortarOverdriveTrack(RACE_CIRCUIT).pointAt(s);
+  const world = mortarOverdriveToWorld(match, point.x, point.z);
+  return { ...point, x: world.x, z: world.z };
+}
+
+/**
+ * Parks a machine off the road at a chosen arc position, with the lap
+ * bookkeeping a machine that DROVE there would have left behind.
+ *
+ * A bare teleport is not a drive, and the track-limits referee is written in
+ * exactly that difference: it measures arc gained against ground covered, so a
+ * fixture that jumps a machine a third of a lap forward reads as a cut and is
+ * returned before the case under test gets a tick. Stamping `lastS` at the
+ * destination is what makes the jump a premise rather than an event.
+ */
+function parkOffRoad(
+  sim: Sim,
+  match: MortarOverdriveMatch,
+  pid: number,
+  x: number,
+  z: number,
+): void {
+  teleport(sim, pid, x, z);
+  const progress = required(match.progress.get(pid), `progress ${pid}`);
+  const local = mortarOverdriveToCanonical(match, x, z);
+  const projection = mortarOverdriveTrack(RACE_CIRCUIT).project(local.x, local.z);
+  progress.lastS = projection.s;
+  progress.trackIndex = projection.index;
+}
+
+function racing() {
+  const stagedRace = staged();
+  stagedRace.match.phase = 'racing';
+  stagedRace.sim.tick();
+  return stagedRace;
+}
+
+describe('Mortar Overdrive recovery', () => {
+  it('marks every seated racer relocated onto the grid as a self-position discontinuity', () => {
+    const sim = makeWorld();
+    const pids = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
+      addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
+    );
+    const resets = watchResets(sim);
+    mortarOverdriveStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
+    expect(resets()).toEqual(pids);
+    for (const pid of pids) expect(required(sim.entities.get(pid), 'racer').drive).not.toBeNull();
+  });
+
+  it('pins a two-second manual lock and three-second automatic recovery wait', () => {
+    expect(MORTAR_OVERDRIVE_RESET_LOCK_TICKS).toBe(40);
+    expect(MORTAR_OVERDRIVE_STUCK_TICKS).toBe(60);
+  });
+
+  it('advances the silent recovery anchor after crossing the next ordered spline gate', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const gate = required(mortarOverdriveGates(RACE_CIRCUIT)[1], 'recovery gate');
+    progress.nextResetGate = gate.index;
+    const before = mortarOverdriveToWorld(
+      match,
+      gate.x - gate.dirX * 1.5,
+      gate.z - gate.dirZ * 1.5,
+    );
+    const after = mortarOverdriveToWorld(match, gate.x + gate.dirX * 1.5, gate.z + gate.dirZ * 1.5);
+    racer.prevPos.x = before.x;
+    racer.prevPos.z = before.z;
+    racer.pos.x = after.x;
+    racer.pos.z = after.z;
+    sim.drainEvents();
+
+    updateMortarOverdrive(sim.ctx);
+
+    expect(progress).toMatchObject({ nextResetGate: 2, resetS: gate.s });
+    expect(progress.resetDistanceSinceWrap).toBeLessThan(progress.distanceSinceWrap);
+    expect(sim.drainEvents()).toEqual([]);
+  });
+
+  it('resets to the recovery-anchor pose and restores its progress snapshot', () => {
+    const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
+    const progress = required(match.progress.get(a), 'progress');
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const anchor = onLane(match, track.length * 0.25);
+    progress.resetS = anchor.s;
+    progress.resetLap = 2;
+    progress.resetDistanceSinceWrap = track.length * 0.25;
+    progress.lap = 3;
+    progress.distanceSinceWrap = track.length * 0.9;
+    required(racer.drive, 'drive').speed = 38;
+    teleport(sim, a, anchor.x + 30, anchor.z + 30);
+    sim.drainEvents();
+
+    sim.mortarOverdriveResetPosition(a);
+
+    expect(racer.pos.x).toBeCloseTo(anchor.x, 6);
+    expect(racer.pos.z).toBeCloseTo(anchor.z, 6);
+    expect(racer.facing).toBeCloseTo(Math.atan2(anchor.tx, anchor.tz), 6);
+    expect(racer.drive).toMatchObject({ speed: 0, slip: 0, controlsLocked: true });
+    expect(progress).toMatchObject({
+      lap: 2,
+      lastS: anchor.s,
+      distanceSinceWrap: track.length * 0.25,
+      wrongWay: false,
+      stuckTicks: 0,
+    });
+    expect(mortarOverdriveMovementLocked(sim.ctx, a)).toBe(true);
+    expect(sim.drainEvents()).toContainEqual({ type: 'mortarOverdriveReset', pid: a });
+    expect(resets()).toEqual([a]);
+  });
+
+  it('ignores reset requests outside a live racing phase', () => {
+    const { sim, a, match, racer } = staged();
+    const countdownX = racer.pos.x;
+    sim.mortarOverdriveResetPosition(a);
+    expect(racer.pos.x).toBe(countdownX);
+
+    match.phase = 'finished';
+    racer.pos.x += 7;
+    const finishedX = racer.pos.x;
+    sim.mortarOverdriveResetPosition(a);
+    expect(racer.pos.x).toBe(finishedX);
+  });
+
+  it('holds movement for two seconds after a reset, then returns control', () => {
+    const { sim, a, match, pids, racer } = racing();
+    // Clear the rest of the grid off the centerline: recovery drops a machine
+    // on the racing line, and a neighbour parked on it would legitimately be
+    // shoved aside by the contact pass, which is a different test.
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    pids.slice(1).forEach((pid, i) => {
+      const away = onLane(match, track.length * (0.3 + i * 0.15));
+      teleport(sim, pid, away.x, away.z);
+    });
+    sim.mortarOverdriveResetPosition(a);
+    const startX = racer.pos.x;
+    const startZ = racer.pos.z;
+    required(sim.players.get(a), 'player').moveInput.forward = true;
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_RESET_LOCK_TICKS; i++) sim.tick();
+    expect(Math.hypot(racer.pos.x - startX, racer.pos.z - startZ)).toBeLessThan(0.01);
+    expect(racer.drive?.speed).toBe(0);
+    expect(mortarOverdriveMovementLocked(sim.ctx, a)).toBe(true);
+
+    sim.tick();
+    expect(racer.drive?.speed).toBeGreaterThan(0);
+    expect(mortarOverdriveMovementLocked(sim.ctx, a)).toBe(false);
+  });
+
+  it('automatically recovers after three seconds stopped off track with only the one-tick lock', () => {
+    const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
+    const progress = required(match.progress.get(a), 'progress');
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const road = onLane(match, track.length * 0.4);
+    progress.resetS = road.s;
+    const lateral = road.halfWidth + 8;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS - 1; i++) sim.tick();
+    expect(progress.resetLockedUntilTick).toBe(0);
+    sim.tick();
+
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    expect(racer.pos.z).toBeCloseTo(road.z, 5);
+    expect(resets()).toEqual([a]);
+    // Since 22b the automatic recovery takes a ONE-TICK lock, just long enough
+    // for the pickup and slick eligibility guard to refuse the landing tick,
+    // nothing like the manual reset's full control lock. The pilot is free on
+    // the next tick.
+    expect(MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS).toBe(1);
+    expect(progress.resetLockedUntilTick).toBe(
+      sim.ctx.tickCount + MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS + 1,
+    );
+    expect(racer.drive?.controlsLocked).toBe(true);
+    while (sim.ctx.tickCount < progress.resetLockedUntilTick) sim.tick();
+    expect(racer.drive?.controlsLocked).toBe(false);
+    expect(mortarOverdriveMovementLocked(sim.ctx, a)).toBe(false);
+    expect(racer.auras.some((aura) => aura.name === MORTAR_OVERDRIVE_VERGE_BAND.name)).toBe(false);
+  });
+
+  it('never auto-recovers a machine parked on the road', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.4);
+    teleport(sim, a, road.x, road.z);
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS + 5; i++) sim.tick();
+
+    expect(progress.resetLockedUntilTick).toBe(0);
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    expect(racer.pos.z).toBeCloseTo(road.z, 5);
+  });
+
+  it('never auto-recovers an off-road machine that is still moving', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.4);
+    const lateral = road.halfWidth + 8;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    const offRoadX = racer.pos.x;
+    const offRoadZ = racer.pos.z;
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS + 5; i++) {
+      required(racer.drive, 'drive').speed = 2;
+      updateMortarOverdrive(sim.ctx);
+    }
+
+    expect(progress.stuckTicks).toBe(0);
+    expect(racer.pos.x).toBeCloseTo(offRoadX, 5);
+    expect(racer.pos.z).toBeCloseTo(offRoadZ, 5);
+  });
+
+  it('never advances the recovery anchor past the next UNCROSSED gate, so reset never gains ground', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const gates = mortarOverdriveGates(RACE_CIRCUIT);
+    const gate2 = required(gates[2], 'gate 2');
+    const gate3 = required(gates[3], 'gate 3');
+
+    // Cross gates 1 and 2 in order, exactly like the single-gate case above,
+    // so the anchor legitimately advances twice before the probe.
+    for (const gate of [required(gates[1], 'gate 1'), gate2]) {
+      progress.nextResetGate = gate.index;
+      const before = mortarOverdriveToWorld(
+        match,
+        gate.x - gate.dirX * 1.5,
+        gate.z - gate.dirZ * 1.5,
+      );
+      const after = mortarOverdriveToWorld(
+        match,
+        gate.x + gate.dirX * 1.5,
+        gate.z + gate.dirZ * 1.5,
+      );
+      racer.prevPos.x = before.x;
+      racer.prevPos.z = before.z;
+      racer.pos.x = after.x;
+      racer.pos.z = after.z;
+      updateMortarOverdrive(sim.ctx);
+    }
+    expect(progress).toMatchObject({ nextResetGate: gate3.index, resetS: gate2.s });
+    const anchorAfterGate2 = { resetS: progress.resetS, resetLap: progress.resetLap };
+
+    // Approach gate 3 but stop just short of its plane: both prevPos and pos
+    // stay on the near side, so this tick crosses nothing.
+    const short = mortarOverdriveToWorld(
+      match,
+      gate3.x - gate3.dirX * 1.5,
+      gate3.z - gate3.dirZ * 1.5,
+    );
+    racer.prevPos.x = short.x;
+    racer.prevPos.z = short.z;
+    racer.pos.x = short.x + gate3.dirX * 0.2;
+    racer.pos.z = short.z + gate3.dirZ * 0.2;
+    updateMortarOverdrive(sim.ctx);
+
+    expect(progress).toMatchObject({ nextResetGate: gate3.index, ...anchorAfterGate2 });
+
+    sim.drainEvents();
+    sim.mortarOverdriveResetPosition(a);
+    const anchor = onLane(match, anchorAfterGate2.resetS);
+    expect(racer.pos.x).toBeCloseTo(anchor.x, 6);
+    expect(racer.pos.z).toBeCloseTo(anchor.z, 6);
+  });
+
+  it('resyncs on a gate past one it was shoved wide of, never beyond the window', () => {
+    // A machine shoved past a gate's band (out on the garden, still drivable)
+    // used to keep that gate as its next for the rest of the lap, so every
+    // later recovery rewound to the anchor before it.
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const gates = mortarOverdriveGates(RACE_CIRCUIT);
+    const cross = (gate: (typeof gates)[number]) => {
+      const before = mortarOverdriveToWorld(
+        match,
+        gate.x - gate.dirX * 1.5,
+        gate.z - gate.dirZ * 1.5,
+      );
+      const after = mortarOverdriveToWorld(
+        match,
+        gate.x + gate.dirX * 1.5,
+        gate.z + gate.dirZ * 1.5,
+      );
+      racer.prevPos.x = before.x;
+      racer.prevPos.z = before.z;
+      racer.pos.x = after.x;
+      racer.pos.z = after.z;
+      updateMortarOverdrive(sim.ctx);
+    };
+    progress.nextResetGate = gates[1].index;
+    cross(gates[2]);
+    expect(progress).toMatchObject({ nextResetGate: gates[3].index, resetS: gates[2].s });
+    // Past the window the ordered rule stands: a gate that far ahead is not
+    // where this machine came from, so it is no anchor.
+    const anchor = { nextResetGate: progress.nextResetGate, resetS: progress.resetS };
+    cross(gates[gates[3].index + MORTAR_OVERDRIVE_GATE_RESYNC_WINDOW]);
+    expect(progress).toMatchObject(anchor);
+  });
+
+  it('requires the full stuck window WITHOUT interruption, not an accumulated total', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.4);
+    progress.resetS = road.s;
+    const lateral = road.halfWidth + 8;
+    const offRoadX = road.x - road.tz * lateral;
+    const offRoadZ = road.z + road.tx * lateral;
+    parkOffRoad(sim, match, a, offRoadX, offRoadZ);
+
+    // Stopped off track for most, but not all, of the window.
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS - 1; i++) sim.tick();
+    expect(progress.stuckTicks).toBe(MORTAR_OVERDRIVE_STUCK_TICKS - 1);
+
+    // One tick back on the road interrupts the count...
+    teleport(sim, a, road.x, road.z);
+    sim.tick();
+    expect(progress.stuckTicks).toBe(0);
+
+    // ...so returning off track resets the wait: the two nearly-full bouts
+    // never sum past the threshold, only a single unbroken window does.
+    parkOffRoad(sim, match, a, offRoadX, offRoadZ);
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS - 1; i++) sim.tick();
+    expect(progress.resetLockedUntilTick).toBe(0);
+    expect(racer.pos.x).toBeCloseTo(offRoadX, 5);
+
+    sim.tick();
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    expect(racer.pos.z).toBeCloseTo(road.z, 5);
+  });
+
+  it('never counts an off-road stopped machine while its manual reset lock is active', () => {
+    const { sim, a, match, racer } = racing();
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.4);
+    const lateral = road.halfWidth + 8;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    const lockedX = racer.pos.x;
+    const lockedZ = racer.pos.z;
+    progress.resetLockedUntilTick = sim.ctx.tickCount + MORTAR_OVERDRIVE_RESET_LOCK_TICKS;
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_STUCK_TICKS + 5; i++) updateMortarOverdrive(sim.ctx);
+
+    expect(progress.stuckTicks).toBe(0);
+    expect(racer.pos.x).toBeCloseTo(lockedX, 5);
+    expect(racer.pos.z).toBeCloseTo(lockedZ, 5);
+  });
+});
+
+describe('Mortar Overdrive wrong-way state', () => {
+  it('requires sustained reverse heading and clears on a forward heading', () => {
+    const { sim, a, match, racer } = racing();
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.3);
+    teleport(sim, a, road.x, road.z);
+    racer.facing = Math.atan2(-road.tx, -road.tz);
+
+    for (let i = 0; i < MORTAR_OVERDRIVE_WRONG_WAY_TICKS - 1; i++) sim.tick();
+    expect(sim.mortarOverdriveInfoFor(a).match?.wrongWay).toBe(false);
+    sim.tick();
+    expect(sim.mortarOverdriveInfoFor(a).match?.wrongWay).toBe(true);
+
+    racer.facing = Math.atan2(road.tx, road.tz);
+    sim.tick();
+    expect(sim.mortarOverdriveInfoFor(a).match?.wrongWay).toBe(false);
+  });
+
+  it('never raises on an isolated blip followed by neutral driving', () => {
+    const { sim, a, match, racer } = racing();
+    const road = onLane(match, mortarOverdriveTrack(RACE_CIRCUIT).length * 0.3);
+    teleport(sim, a, road.x, road.z);
+
+    // One tick pointed backward: far short of the debounce window.
+    racer.facing = Math.atan2(-road.tx, -road.tz);
+    sim.tick();
+    expect(sim.mortarOverdriveInfoFor(a).match?.wrongWay).toBe(false);
+
+    // Then drive with a heading perpendicular to the track (forwardDot ~ 0,
+    // inside the dead zone) for well over the debounce window. A regression
+    // that dropped the debounce entirely would have already tripped above;
+    // this proves the blip alone never surfaces as wrongWay to the player.
+    racer.facing = Math.atan2(-road.tz, road.tx);
+    for (let i = 0; i < MORTAR_OVERDRIVE_WRONG_WAY_TICKS * 2; i++) {
+      sim.tick();
+      expect(sim.mortarOverdriveInfoFor(a).match?.wrongWay).toBe(false);
+    }
+  });
+});
+
+describe('Mortar Overdrive track limits in a live race', () => {
+  /**
+   * Moves a machine as if it had DRIVEN there this tick: `prevPos` is where it
+   * stood, `pos` is where it ends up, and the referee reads the distance
+   * between them as the ground it covered. That is the whole difference between
+   * this and `teleport`, which collapses the two and looks like a cut.
+   */
+  function glide(sim: Sim, pid: number, x: number, z: number): void {
+    const e = required(sim.entities.get(pid), `entity ${pid}`);
+    e.prevPos = { ...e.pos };
+    e.pos.x = x;
+    e.pos.z = z;
+    sim.ctx.rebucket(e);
+    updateMortarOverdrive(sim.ctx);
+  }
+
+  /** Puts a machine ON the road at `s`, with the bookkeeping to match. */
+  function startFrom(sim: Sim, match: MortarOverdriveMatch, pid: number, s: number) {
+    const point = onLane(match, s);
+    parkOffRoad(sim, match, pid, point.x, point.z);
+    return point;
+  }
+
+  /** The first pair of samples on the lap whose straight chord saves more than
+   *  `minSaving` yards of arc: the shortest path a cheater can actually take. */
+  function findCut(minSaving: number): { from: number; to: number } {
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const count = track.samples.length;
+    for (let from = 0; from < count; from += 3) {
+      for (let ahead = 40; ahead < count / 2; ahead += 5) {
+        const to = (from + ahead) % count;
+        const a = track.samples[from];
+        const b = track.samples[to];
+        if (ahead * track.step - Math.hypot(b.x - a.x, b.z - a.z) > minSaving) {
+          return { from, to };
+        }
+      }
+    }
+    throw new Error('this circuit offers no cut worth taking, so nothing here is under test');
+  }
+
+  it('returns a machine that cuts a corner to the point it left the road', () => {
+    const { sim, a, match } = racing();
+    const resets = watchResets(sim);
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const cut = findCut(40);
+    // Advance the ordered anchor for real before the cut: DRIVE across the
+    // start line, so `resetS` sits at gate 0 by an honest crossing. The old
+    // fixture parked the machine exactly ON the gate plane and the anchor
+    // advance rested on a 1e-13 floating-point coincidence that flipped with
+    // the gate band's width.
+    const approach = onLane(match, track.length - 2);
+    parkOffRoad(sim, match, a, approach.x, approach.z);
+    const past = onLane(match, 2);
+    glide(sim, a, past.x, past.z);
+    expect(progress.resetS).toBe(0);
+    // Start the cut clear of the gate plane, not on it.
+    const exit = startFrom(sim, match, a, track.samples[Math.max(cut.from, 3)].s);
+    const lapBefore = progress.lap;
+    const target = onLane(match, track.samples[cut.to].s);
+
+    // Drive the chord in racing-sized steps until the referee steps in,
+    // remembering how far down the lap the cut had got by then.
+    const span = Math.hypot(target.x - exit.x, target.z - exit.z);
+    const steps = Math.ceil(span / 3);
+    let reachedS = progress.lastS;
+    for (let i = 1; i <= steps && progress.cutReturnUntilTick === 0; i++) {
+      const t = i / steps;
+      reachedS = progress.lastS;
+      glide(sim, a, exit.x + (target.x - exit.x) * t, exit.z + (target.z - exit.z) * t);
+    }
+
+    // Caught partway across rather than credited on arrival.
+    expect(progress.cutReturnUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    const racer = required(sim.entities.get(a), 'racer');
+    // Put back ON the racing line, which is where a reset leaves a machine, and
+    // BEHIND the arc the cut had reached: the gain is undone, not banked.
+    const back = onLane(match, progress.lastS);
+    expect(Math.hypot(racer.pos.x - back.x, racer.pos.z - back.z)).toBeLessThan(0.5);
+    expect(reachedS - progress.lastS).toBeGreaterThan(20);
+    // ...and the return is to the point the road was LEFT, not to a gate: the
+    // last ordered anchor is a long way further back than this.
+    expect(progress.lastS).toBeGreaterThan(progress.resetS);
+    expect(progress.lap).toBe(lapBefore);
+    // A short control lock, not a stop-go penalty: the point is to undo a gain.
+    expect(progress.resetLockedUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    expect(progress.resetLockedUntilTick - sim.ctx.tickCount).toBeLessThan(
+      MORTAR_OVERDRIVE_RESET_LOCK_TICKS,
+    );
+    // ...and the pilot is told why, in one line, for a few seconds.
+    expect(sim.mortarOverdriveInfoFor(a).match?.cutReturned).toBe(true);
+    expect(resets()).toEqual([a]);
+    // Put back on the line like every recovery: a ghost to rival machines.
+    expect(mortarOverdriveGhosted(racer)).toBe(true);
+  });
+
+  it('leaves a machine that ran wide and rejoined ahead completely alone', () => {
+    // The defect the whole containment family had, and the reason this design
+    // replaced it: an excursion that DROVE its yards is racing, whichever side
+    // of the road it happened on.
+    const { sim, a, match } = racing();
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const start = track.length * 0.5;
+    startFrom(sim, match, a, start);
+    for (let i = 1; i <= 20; i++) {
+      const point = onLane(match, start + i * 3);
+      // Nine yards OUTSIDE the road: past the verge, well into the garden.
+      const wide = point.halfWidth + 9;
+      glide(sim, a, point.x + point.tz * wide, point.z - point.tx * wide);
+    }
+    expect(progress.cutReturnUntilTick).toBe(0);
+    expect(progress.lastS).toBeGreaterThan(start + 50);
+    expect(sim.mortarOverdriveInfoFor(a).match?.cutReturned).toBe(false);
+  });
+
+  it('counts a machine loitering off the road down, then returns it to the last anchor', () => {
+    const { sim, a, match, racer } = racing();
+    const resets = watchResets(sim);
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, track.length * 0.4);
+    progress.resetS = road.s;
+    // Parked in the infield, moving just enough that the STUCK arm (three
+    // seconds under 0.75 yd/s) never fires: this is the camper, not the wedged
+    // machine, and only the loiter clock catches it.
+    const lateral = road.halfWidth + 10;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    const countdowns: number[] = [];
+    for (let i = 0; i < MORTAR_OVERDRIVE_LOITER_TICKS; i++) {
+      required(racer.drive, 'drive').speed = 4;
+      // A yard of circling, so the odometer runs and the arc does not.
+      const wobble = i % 2 === 0 ? 1 : -1;
+      glide(sim, a, racer.pos.x + road.tz * wobble, racer.pos.z - road.tx * wobble);
+      countdowns.push(sim.mortarOverdriveInfoFor(a).match?.offTrackIn ?? 0);
+    }
+    // Warned first, counting down in whole seconds, and silent before that.
+    expect(countdowns[0]).toBe(0);
+    expect(Math.max(...countdowns)).toBe(MORTAR_OVERDRIVE_LOITER_WARN_TICKS / TICK_RATE);
+    expect(countdowns.filter((seconds) => seconds > 0).length).toBeGreaterThan(TICK_RATE);
+    // ...then put back on the last ordered anchor, which is the recovery every
+    // other arm uses rather than a second machine of its own.
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    expect(racer.pos.z).toBeCloseTo(road.z, 5);
+    expect(sim.mortarOverdriveInfoFor(a).match?.offTrackIn).toBe(0);
+    expect(resets()).toEqual([a]);
+    expect(mortarOverdriveGhosted(racer)).toBe(true);
+  });
+
+  /** Every racer but `keep` parked on the lane well away from `s`. */
+  function clearTheField(
+    sim: Sim,
+    match: MortarOverdriveMatch,
+    pids: number[],
+    keep: number,
+    s: number,
+  ) {
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    pids
+      .filter((pid) => pid !== keep)
+      .forEach((pid, i) => {
+        const away = onLane(match, (s + track.length * (0.3 + i * 0.15)) % track.length);
+        parkOffRoad(sim, match, pid, away.x, away.z);
+      });
+  }
+
+  /** A real cut return: the chord driven until the referee steps in. */
+  function cutReturn() {
+    const staged = racing();
+    const { sim, a, match } = staged;
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const cut = findCut(40);
+    const exit = startFrom(sim, match, a, track.samples[Math.max(cut.from, 3)].s);
+    const target = onLane(match, track.samples[cut.to].s);
+    const steps = Math.ceil(Math.hypot(target.x - exit.x, target.z - exit.z) / 3);
+    for (let i = 1; i <= steps && progress.cutReturnUntilTick === 0; i++) {
+      const t = i / steps;
+      glide(sim, a, exit.x + (target.x - exit.x) * t, exit.z + (target.z - exit.z) * t);
+    }
+    expect(progress.cutReturnUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    const resetTick = sim.tickCount;
+    const lockedUntilTick = resetTick + MORTAR_OVERDRIVE_CUT_LOCK_TICKS + 1;
+    expect(progress.resetLockedUntilTick).toBe(lockedUntilTick);
+    return { ...staged, progress, resetTick, lockedUntilTick };
+  }
+
+  /** A real loiter return: parked off the road, circling, until the clock runs out. */
+  function loiterReturn() {
+    const staged = racing();
+    const { sim, a, match, racer } = staged;
+    const track = mortarOverdriveTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, track.length * 0.4);
+    progress.resetS = road.s;
+    const lateral = road.halfWidth + 10;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    for (let i = 0; i < MORTAR_OVERDRIVE_LOITER_TICKS; i++) {
+      required(racer.drive, 'drive').speed = 4;
+      const wobble = i % 2 === 0 ? 1 : -1;
+      glide(sim, a, racer.pos.x + road.tz * wobble, racer.pos.z - road.tx * wobble);
+    }
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    const resetTick = sim.tickCount;
+    const lockedUntilTick = resetTick + MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS + 1;
+    expect(progress.resetLockedUntilTick).toBe(lockedUntilTick);
+    return { ...staged, progress, resetTick, lockedUntilTick };
+  }
+
+  for (const [kind, stage] of [
+    ['cut return', cutReturn],
+    ['loiter return', loiterReturn],
+  ] as const) {
+    it(`holds a ${kind} ghost for its minimum past the lock, then to the cap`, () => {
+      const { sim, a, b, pids, match, racer, progress, resetTick } = stage();
+      clearTheField(sim, match, pids, a, progress.lastS);
+      expectGhostWindow({
+        sim,
+        racer,
+        progress,
+        earliestClearTick: autoGhostClearTick(resetTick),
+        holdRivalOn: () => parkOffRoad(sim, match, b, racer.pos.x + 1, racer.pos.z),
+      });
+    });
+
+    it(`ends a ${kind} ghost on its earliest clear tick with nobody near`, () => {
+      const { sim, a, pids, match, racer, progress, resetTick } = stage();
+      clearTheField(sim, match, pids, a, progress.lastS);
+      expectGhostEndsWhenClear({
+        sim,
+        racer,
+        progress,
+        earliestClearTick: autoGhostClearTick(resetTick),
+      });
+    });
+
+    it(`replays the playtest on a ${kind}: a follower at speed passes it clean`, () => {
+      const run = (ghost: boolean) => {
+        const { sim, a, b, pids, match, racer, progress, lockedUntilTick } = stage();
+        clearTheField(sim, match, pids, a, progress.lastS);
+        // The follower arrives once the short lock is over, which is exactly
+        // when a ghost tied to the lock alone would already have gone.
+        while (sim.tickCount < lockedUntilTick) sim.tick();
+        expect(mortarOverdriveGhosted(racer)).toBe(true);
+        if (!ghost)
+          racer.auras = racer.auras.filter((aura) => aura.id !== MORTAR_OVERDRIVE_GHOST_AURA);
+        return followThrough({
+          sim,
+          recovered: racer,
+          follower: required(sim.entities.get(b), 'follower'),
+          place: (pid, x, z) => parkOffRoad(sim, match, pid, x, z),
+          pids,
+        });
+      };
+      const clean = run(true);
+      expect(clean.bumps).toBe(0);
+      expect(clean.ahead).toBeGreaterThan(3.4);
+      // The same approach into a SOLID machine is the reported collision.
+      expect(run(false).bumps).toBeGreaterThan(0);
+    });
+  }
+});

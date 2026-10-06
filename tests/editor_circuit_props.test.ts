@@ -2,7 +2,7 @@
 //
 // Every case here is about the tool AUTHORING what the game will resolve: a
 // click becomes a record entry, and the record entry is fed back through
-// `realmRacersPlacements`, the one resolver, to say where the piece actually
+// `mortarOverdrivePlacements`, the one resolver, to say where the piece actually
 // stands. Asserting the editor's own arithmetic instead would pass while the
 // two disagree, which is the exact defect (a placement derived twice) the
 // resolver exists to make impossible.
@@ -22,6 +22,7 @@ import {
   hitTestPondHandle,
   hitTestPonds,
   hitTestPropHandle,
+  MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX,
   movedProp,
   nextSeed,
   nudgeKeyOf,
@@ -43,7 +44,6 @@ import {
   propPalette,
   propProjectionHint,
   propWithHandleAt,
-  RALLY_PLACEMENT_SCALE_MAX,
   removedAt,
   replacedAt,
   rotatedProp,
@@ -53,43 +53,49 @@ import {
   tangentProp,
   toggledCollide,
 } from '../src/editor/circuit/props_core';
-import type { RallyProp, RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
+import type {
+  MortarOverdriveCircuit,
+  MortarOverdriveProp,
+} from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  REALM_RACERS_CIRCUITS,
-} from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { rallyFootprintRadius, realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  MORTAR_OVERDRIVE_CIRCUITS,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PROPS } from '../src/sim/content/mortar_overdrive/props';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../src/sim/mortar_overdrive/layout';
 import {
-  REALM_RACERS_PROJECTION_ENVELOPE,
-  REALM_RACERS_PROJECTION_WINDOW,
-  realmRacersTrack,
-} from '../src/sim/realm_racers_spline';
+  mortarOverdriveFootprintRadius,
+  mortarOverdrivePlacements,
+} from '../src/sim/mortar_overdrive/props_resolve';
+import {
+  MORTAR_OVERDRIVE_PROJECTION_ENVELOPE,
+  MORTAR_OVERDRIVE_PROJECTION_WINDOW,
+  mortarOverdriveTrack,
+} from '../src/sim/mortar_overdrive/spline';
 
-const EXPRESS = REALM_RACERS_CIRCUITS.evergarden_express_tour;
+const EXPRESS = MORTAR_OVERDRIVE_CIRCUITS.evergarden_express_tour;
 
 /** A draft carrying one authored piece. A fresh id every time, because the
  *  resolver memoizes per circuit id and a fixture sharing the shipped one would
  *  evict the record the rest of the suite measures. */
 let drafts = 0;
 const withProps = (
-  circuit: RealmRacersCircuit,
-  props: readonly RallyProp[],
-): RealmRacersCircuit => ({ ...circuit, id: `draft_props_${drafts++}`, props });
+  circuit: MortarOverdriveCircuit,
+  props: readonly MortarOverdriveProp[],
+): MortarOverdriveCircuit => ({ ...circuit, id: `draft_props_${drafts++}`, props });
 
 /** Where the one prop on a draft actually stands, straight off the resolver. */
-const placedOn = (circuit: RealmRacersCircuit, prop: RallyProp) =>
-  realmRacersPlacements(withProps(circuit, [prop])).props[0];
+const placedOn = (circuit: MortarOverdriveCircuit, prop: MortarOverdriveProp) =>
+  mortarOverdrivePlacements(withProps(circuit, [prop])).props[0];
 
 /** A point `offset` yards along the left normal at lap fraction `fraction`,
  *  circuit-local. The frame every assertion below is written in. */
-function pointAt(circuit: RealmRacersCircuit, fraction: number, offset: number) {
-  const track = realmRacersTrack(circuit);
+function pointAt(circuit: MortarOverdriveCircuit, fraction: number, offset: number) {
+  const track = mortarOverdriveTrack(circuit);
   const point = track.pointAt(fraction * track.length);
   return {
-    x: point.x - REALM_RACERS_ORIGIN.x - point.tz * offset,
-    z: point.z - REALM_RACERS_ORIGIN.z + point.tx * offset,
+    x: point.x - MORTAR_OVERDRIVE_ORIGIN.x - point.tz * offset,
+    z: point.z - MORTAR_OVERDRIVE_ORIGIN.z + point.tx * offset,
   };
 }
 
@@ -117,7 +123,7 @@ describe('circuit editor props: which frame a click authors', () => {
     // placements the spline itself does not trust.
     const inside = pointAt(GARDEN, 0.3, PROP_TRACK_SPACE_BAND - 1);
     const outside = pointAt(GARDEN, 0.3, PROP_TRACK_SPACE_BAND + 1);
-    expect(PROP_TRACK_SPACE_BAND).toBe(REALM_RACERS_PROJECTION_ENVELOPE);
+    expect(PROP_TRACK_SPACE_BAND).toBe(MORTAR_OVERDRIVE_PROJECTION_ENVELOPE);
     expect(
       propFrameOf({ asset: 'bench', at: authorPlacement(GARDEN, inside.x, inside.z).at }),
     ).toBe('track');
@@ -160,7 +166,10 @@ describe('circuit editor props: what the resolver does with what was authored', 
 
   it('keeps a converted piece exactly where it stood, in the other frame', () => {
     const spot = pointAt(GARDEN, 0.62, 15);
-    const authored: RallyProp = { asset: 'bench', at: authorPlacement(GARDEN, spot.x, spot.z).at };
+    const authored: MortarOverdriveProp = {
+      asset: 'bench',
+      at: authorPlacement(GARDEN, spot.x, spot.z).at,
+    };
     const placed = placedOn(GARDEN, authored);
     const converted = convertedProp(GARDEN, authored, placed.x, placed.z);
     expect(propFrameOf(converted)).toBe('absolute');
@@ -178,9 +187,12 @@ describe('circuit editor props: what the resolver does with what was authored', 
     // hairpin after the corner is redrawn, where an absolute point would be
     // left standing in the new road.
     const spot = pointAt(GARDEN, 0.5, 14);
-    const authored: RallyProp = { asset: 'bench', at: authorPlacement(GARDEN, spot.x, spot.z).at };
+    const authored: MortarOverdriveProp = {
+      asset: 'bench',
+      at: authorPlacement(GARDEN, spot.x, spot.z).at,
+    };
     const before = placedOn(GARDEN, authored);
-    const moved: RealmRacersCircuit = {
+    const moved: MortarOverdriveCircuit = {
       ...GARDEN,
       controlPoints: GARDEN.controlPoints.map((point, i) =>
         i === 9 ? { x: point.x, z: point.z + 14 } : point,
@@ -190,10 +202,10 @@ describe('circuit editor props: what the resolver does with what was authored', 
     expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeGreaterThan(2);
     // It moved because the ROAD moved: the piece still sits the authored
     // fourteen yards off the centerline, on the redrawn curve.
-    const movedTrack = realmRacersTrack(moved);
+    const movedTrack = mortarOverdriveTrack(moved);
     const projection = movedTrack.project(
-      after.x + REALM_RACERS_ORIGIN.x,
-      after.z + REALM_RACERS_ORIGIN.z,
+      after.x + MORTAR_OVERDRIVE_ORIGIN.x,
+      after.z + MORTAR_OVERDRIVE_ORIGIN.z,
     );
     expect(projection.lateral).toBeCloseTo(14, 1);
   });
@@ -212,7 +224,7 @@ describe('circuit editor props: dragging across the pinch', () => {
 
   it('drops a piece dragged out of the band rather than re-anchoring it anywhere', () => {
     const start = pointAt(EXPRESS, CORRIDOR_FRACTION, 12);
-    const authored: RallyProp = {
+    const authored: MortarOverdriveProp = {
       asset: 'bench',
       at: authorPlacement(EXPRESS, start.x, start.z).at,
     };
@@ -224,10 +236,10 @@ describe('circuit editor props: dragging across the pinch', () => {
     // stretch. A projection at 30 yards is exactly what the sim distrusts: it
     // comes back on the far stretch at s = 0.457.
     const target = pointAt(EXPRESS, CORRIDOR_FRACTION, 30);
-    const track = realmRacersTrack(EXPRESS);
+    const track = mortarOverdriveTrack(EXPRESS);
     const raw = track.project(
-      target.x + REALM_RACERS_ORIGIN.x,
-      target.z + REALM_RACERS_ORIGIN.z,
+      target.x + MORTAR_OVERDRIVE_ORIGIN.x,
+      target.z + MORTAR_OVERDRIVE_ORIGIN.z,
       hint,
     );
     expect(Math.abs(raw.s / track.length - CORRIDOR_FRACTION)).toBeGreaterThan(0.1);
@@ -248,7 +260,7 @@ describe('circuit editor props: dragging across the pinch', () => {
     // caller's own, so a drag out across the strip and back re-anchors to the
     // stretch it started on.
     const start = pointAt(EXPRESS, CORRIDOR_FRACTION, 12);
-    const authored: RallyProp = {
+    const authored: MortarOverdriveProp = {
       asset: 'bench',
       at: authorPlacement(EXPRESS, start.x, start.z).at,
     };
@@ -266,7 +278,7 @@ describe('circuit editor props: dragging across the pinch', () => {
 
   it('keeps a piece dragged inside the band on the stretch it started on', () => {
     const start = pointAt(EXPRESS, CORRIDOR_FRACTION, 8);
-    const authored: RallyProp = {
+    const authored: MortarOverdriveProp = {
       asset: 'bench',
       at: authorPlacement(EXPRESS, start.x, start.z).at,
     };
@@ -283,7 +295,7 @@ describe('circuit editor props: dragging across the pinch', () => {
   });
 
   it('leaves an infield landmark absolute however near the road it is dragged', () => {
-    const fountain: RallyProp = { asset: 'fountain', at: { x: 0, z: 0 } };
+    const fountain: MortarOverdriveProp = { asset: 'fountain', at: { x: 0, z: 0 } };
     const target = pointAt(EXPRESS, 0.4, 6);
     const moved = movedProp(EXPRESS, fountain, target.x, target.z);
     expect(moved.prop.at).toEqual({ x: target.x, z: target.z });
@@ -299,7 +311,7 @@ describe('circuit editor props: what a drag carries between moves', () => {
     // very next shape edit. Each move returns the hint the next one should
     // carry, anchored to wherever the drag has got to.
     const start = pointAt(GARDEN, 0.3, 12);
-    const pressProp: RallyProp = {
+    const pressProp: MortarOverdriveProp = {
       asset: 'bench',
       at: authorPlacement(GARDEN, start.x, start.z).at,
     };
@@ -310,8 +322,8 @@ describe('circuit editor props: what a drag carries between moves', () => {
     // The drop point sits half again past the window's reach from the press, so
     // with the STALE press hint the projection is the whole-lap fallback: the
     // exact arm that used to flip the piece to circuit-local.
-    const track = realmRacersTrack(GARDEN);
-    const reach = (REALM_RACERS_PROJECTION_WINDOW * track.step) / track.length;
+    const track = mortarOverdriveTrack(GARDEN);
+    const reach = (MORTAR_OVERDRIVE_PROJECTION_WINDOW * track.step) / track.length;
     const endFraction = 0.3 + reach * 1.5;
     const end = pointAt(GARDEN, endFraction, 12);
     expect('s' in authorPlacement(GARDEN, end.x, end.z, 'auto', pressHint).at).toBe(false);
@@ -340,7 +352,7 @@ describe('circuit editor props: what a drag carries between moves', () => {
     // a decision at the DROP point. The drag carries the frame the piece wore
     // at the PRESS, and the band is re-decided from wherever the pointer is.
     const start = pointAt(GARDEN, 0.3, 12);
-    const pressProp: RallyProp = {
+    const pressProp: MortarOverdriveProp = {
       asset: 'bench',
       at: authorPlacement(GARDEN, start.x, start.z).at,
     };
@@ -367,7 +379,7 @@ describe('circuit editor props: what a drag carries between moves', () => {
     // The press frame is the OPERATOR's call when it is 'absolute' (the
     // inspector toggle says so): re-deciding it against the band would re-anchor
     // a fountain to the nearest stretch because a drag passed close to one.
-    const fountain: RallyProp = { asset: 'fountain', at: { x: 0, z: 0 } };
+    const fountain: MortarOverdriveProp = { asset: 'fountain', at: { x: 0, z: 0 } };
     const near = pointAt(GARDEN, 0.3, 6);
     const dragged = movedProp(GARDEN, fountain, near.x, near.z, undefined, 'absolute');
     expect(dragged.prop.at).toEqual({ x: near.x, z: near.z });
@@ -375,7 +387,7 @@ describe('circuit editor props: what a drag carries between moves', () => {
 });
 
 describe('circuit editor props: transforms', () => {
-  const BENCH: RallyProp = { asset: 'bench', at: { x: 20, z: 30 } };
+  const BENCH: MortarOverdriveProp = { asset: 'bench', at: { x: 20, z: 30 } };
 
   it('rotates by a fixed step from the angle the piece is drawn at', () => {
     const turned = rotatedProp(BENCH, 0, 1);
@@ -391,10 +403,10 @@ describe('circuit editor props: transforms', () => {
     // The ceiling is the circuit tool's own 50, not the map editor's 5:
     // a kit building at scale 5 keeps growing under the wheel.
     expect(scaledProp({ ...BENCH, scale: 5 }, -1).scale).toBeCloseTo(5.5, 6);
-    let big: RallyProp = { ...BENCH, scale: RALLY_PLACEMENT_SCALE_MAX };
+    let big: MortarOverdriveProp = { ...BENCH, scale: MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX };
     for (let i = 0; i < 5; i++) big = scaledProp(big, -1);
-    expect(big.scale).toBe(RALLY_PLACEMENT_SCALE_MAX);
-    let small: RallyProp = { ...BENCH, scale: 0.2 };
+    expect(big.scale).toBe(MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX);
+    let small: MortarOverdriveProp = { ...BENCH, scale: 0.2 };
     for (let i = 0; i < 5; i++) small = scaledProp(small, 1);
     expect(small.scale).toBe(0.2);
   });
@@ -405,14 +417,14 @@ describe('circuit editor props: transforms', () => {
     expect(placedOn(GARDEN, off).solid).toBe(false);
     const on = toggledCollide(off);
     expect(on.collide).toBeUndefined();
-    expect(placedOn(GARDEN, on).solid).toBe(REALM_RACERS_PROPS.bench.solid);
+    expect(placedOn(GARDEN, on).solid).toBe(MORTAR_OVERDRIVE_PROPS.bench.solid);
     // The keypress never eats a footprint typed into the inspector.
-    const bespoke: RallyProp = { ...BENCH, collide: { kind: 'circle', r: 3 } };
+    const bespoke: MortarOverdriveProp = { ...BENCH, collide: { kind: 'circle', r: 3 } };
     expect(toggledCollide(bespoke).collide).toBe('none');
   });
 
   it('edits and deletes list entries without touching the rest', () => {
-    const list: RallyProp[] = [BENCH, { ...BENCH, asset: 'oak' }];
+    const list: MortarOverdriveProp[] = [BENCH, { ...BENCH, asset: 'oak' }];
     expect(replacedAt(list, 1, { ...BENCH, asset: 'well' })[1].asset).toBe('well');
     expect(replacedAt(list, 1, { ...BENCH, asset: 'well' })[0]).toBe(BENCH);
     expect(removedAt(list, 0)).toEqual([{ ...BENCH, asset: 'oak' }]);
@@ -423,7 +435,7 @@ describe('circuit editor props: transforms', () => {
 });
 
 describe('circuit editor props: the selected piece own grips', () => {
-  const BENCH: RallyProp = { asset: 'bench', at: { x: 20, z: 30 }, yaw: 0 };
+  const BENCH: MortarOverdriveProp = { asset: 'bench', at: { x: 20, z: 30 }, yaw: 0 };
   const { PI } = Math;
   const STEP = PI / 12;
 
@@ -514,7 +526,7 @@ describe('circuit editor props: the selected piece own grips', () => {
 
     // And it is scale-invariant: the same gesture on a piece already at 2 lands
     // on the same place, because the grip moved out with the footprint.
-    const big: RallyProp = { ...BENCH, scale: 2 };
+    const big: MortarOverdriveProp = { ...BENCH, scale: 2 };
     const placedBig = placedOn(GARDEN, big);
     const bigGrips = propHandlePoints(placedBig);
     const doubled = propWithHandleAt(
@@ -534,7 +546,7 @@ describe('circuit editor props: the selected piece own grips', () => {
     // multiplies the scale by dist/reach on every pointermove and runs away to
     // the clamp within a few moves. The ratio is press-relative instead:
     // pressScale times dist over pressReach, stable at every size.
-    const literal: RallyProp = {
+    const literal: MortarOverdriveProp = {
       asset: 'bench',
       at: { x: 20, z: 30 },
       yaw: 0,
@@ -542,15 +554,15 @@ describe('circuit editor props: the selected piece own grips', () => {
     };
     const press = placedOn(GARDEN, literal);
     const scaledUp = placedOn(GARDEN, { ...literal, scale: 2.5 });
-    expect(rallyFootprintRadius(scaledUp.footprint)).toBeCloseTo(
-      rallyFootprintRadius(press.footprint),
+    expect(mortarOverdriveFootprintRadius(scaledUp.footprint)).toBeCloseTo(
+      mortarOverdriveFootprintRadius(press.footprint),
       6,
     );
 
     const grip = propHandlePoints(press).scale;
     /** One move of the drag: the grip pulled to `factor` times its press reach,
      *  read against the placement captured at the PRESS, as the page holds it. */
-    const pull = (prop: RallyProp, factor: number) =>
+    const pull = (prop: MortarOverdriveProp, factor: number) =>
       propWithHandleAt(
         prop,
         press,
@@ -579,12 +591,12 @@ describe('circuit editor props: the selected piece own grips', () => {
     // The circuit tool's own ceiling: building-sized kit pieces need 7 to 11
     // and up, and the export validator has accepted 50 all along. Pinned to
     // the literal so a shared-bound refactor cannot silently re-bridle it.
-    expect(RALLY_PLACEMENT_SCALE_MAX).toBe(50);
+    expect(MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX).toBe(50);
     expect(clampPropScale(400)).toBe(50);
   });
 
   it('leaves every other field of the piece alone', () => {
-    const solid: RallyProp = { asset: 'bench', at: { s: 0.25, offset: 9 }, scale: 1.4 };
+    const solid: MortarOverdriveProp = { asset: 'bench', at: { s: 0.25, offset: 9 }, scale: 1.4 };
     const placed = placedOn(GARDEN, solid);
     const turned = propWithHandleAt(solid, placed, 'rotate', placed.x + 3, placed.z + 3);
     expect(turned.at).toEqual(solid.at);
@@ -597,7 +609,7 @@ describe('circuit editor props: the selected piece own grips', () => {
 });
 
 describe('circuit editor props: nudging, and the copy beside it', () => {
-  const BENCH: RallyProp = { asset: 'bench', at: { x: 20, z: 30 } };
+  const BENCH: MortarOverdriveProp = { asset: 'bench', at: { x: 20, z: 30 } };
 
   it('matches the four arrow keys and nothing else', () => {
     expect(nudgeKeyOf('ArrowUp')).toBe('ArrowUp');
@@ -633,7 +645,7 @@ describe('circuit editor props: nudging, and the copy beside it', () => {
   });
 
   it('keeps a trackside copy in track-space, so it follows the road too', () => {
-    const roadside: RallyProp = { asset: 'postLantern', at: { s: 0.4, offset: 11 } };
+    const roadside: MortarOverdriveProp = { asset: 'postLantern', at: { s: 0.4, offset: 11 } };
     const placed = placedOn(GARDEN, roadside);
     const copy = duplicatedProp(
       GARDEN,
@@ -657,9 +669,9 @@ describe('circuit editor props: nudging, and the copy beside it', () => {
 
 describe('circuit editor props: where the view goes to look at a selection', () => {
   it('frames a prop where the RESOLVER put it, not where the record says', () => {
-    const roadside: RallyProp = { asset: 'bench', at: { s: 0.2, offset: 12 } };
+    const roadside: MortarOverdriveProp = { asset: 'bench', at: { s: 0.2, offset: 12 } };
     const circuit = withProps(GARDEN, [roadside]);
-    const placed = realmRacersPlacements(circuit).props[0];
+    const placed = mortarOverdrivePlacements(circuit).props[0];
     expect(selectionFocusPoint(circuit, { kind: 'prop', index: 0 })).toEqual({
       x: placed.x,
       z: placed.z,
@@ -676,7 +688,7 @@ describe('circuit editor props: where the view goes to look at a selection', () 
   });
 
   it('frames a scatter at the middle of the stretch it fills', () => {
-    const circuit: RealmRacersCircuit = {
+    const circuit: MortarOverdriveCircuit = {
       ...GARDEN,
       id: `draft_focus_${drafts++}`,
       scatters: [
@@ -690,7 +702,7 @@ describe('circuit editor props: where the view goes to look at a selection', () 
   });
 
   it('takes a wrapping span the SHORT way, so a fill over the grid frames the grid', () => {
-    const circuit: RealmRacersCircuit = {
+    const circuit: MortarOverdriveCircuit = {
       ...GARDEN,
       id: `draft_focus_${drafts++}`,
       scatters: [
@@ -712,7 +724,7 @@ describe('circuit editor props: where the view goes to look at a selection', () 
 
 describe('circuit editor props: what the pointer is over', () => {
   it('grabs a piece anywhere on its own footprint, and the topmost one first', () => {
-    const placements = realmRacersPlacements(
+    const placements = mortarOverdrivePlacements(
       withProps(GARDEN, [
         { asset: 'fountain', at: { x: 0, z: 0 }, scale: 2 },
         { asset: 'bench', at: { x: 0, z: 0 } },
@@ -728,14 +740,16 @@ describe('circuit editor props: what the pointer is over', () => {
   });
 
   it('lets a pixel tolerance grab a piece too small to aim at', () => {
-    const lone = realmRacersPlacements(withProps(GARDEN, [{ asset: 'bench', at: { x: 0, z: 0 } }]));
+    const lone = mortarOverdrivePlacements(
+      withProps(GARDEN, [{ asset: 'bench', at: { x: 0, z: 0 } }]),
+    );
     // A bench is under a yard across, which at a wide zoom is a pixel.
     expect(hitTestPlaced(lone.props, 0, 2)).toBe(-1);
     expect(hitTestPlaced(lone.props, 0, 2, 3)).toBe(0);
   });
 
   it('grabs a pond by its resolved outline, wobble and all', () => {
-    const ponds = realmRacersPlacements({
+    const ponds = mortarOverdrivePlacements({
       ...GARDEN,
       id: 'draft_props_pond_hit',
       ponds: [{ x: 30, z: -10, rx: 12, rz: 8, seed: 7 }],
@@ -805,7 +819,7 @@ describe('circuit editor props: ponds', () => {
 
 describe('circuit editor props: the scatter rectangle', () => {
   const rectAround = (
-    circuit: RealmRacersCircuit,
+    circuit: MortarOverdriveCircuit,
     fraction: number,
     offset: number,
     half: number,
@@ -849,8 +863,8 @@ describe('circuit editor props: the scatter rectangle', () => {
 
   it('fills only inside the span it was given', () => {
     const scatter = scatterFromRect(GARDEN, rectAround(GARDEN, 0.3, 25, 10), 'shrub', 4, 11);
-    const track = realmRacersTrack(GARDEN);
-    const placements = realmRacersPlacements({
+    const track = mortarOverdriveTrack(GARDEN);
+    const placements = mortarOverdrivePlacements({
       ...GARDEN,
       id: 'draft_props_scatter',
       scatters: [scatter],
@@ -860,8 +874,8 @@ describe('circuit editor props: the scatter rectangle', () => {
     if (!span) return;
     for (const piece of placements.scattered) {
       const projection = track.project(
-        piece.x + REALM_RACERS_ORIGIN.x,
-        piece.z + REALM_RACERS_ORIGIN.z,
+        piece.x + MORTAR_OVERDRIVE_ORIGIN.x,
+        piece.z + MORTAR_OVERDRIVE_ORIGIN.z,
       );
       const fraction = projection.s / track.length;
       const inside =
@@ -879,17 +893,17 @@ describe('circuit editor props: the palette', () => {
   const VOCABULARY = ['bench', 'oak', 'reeds'];
 
   it('offers every key the sim catalog authors, exactly once', () => {
-    const palette = propPalette(REALM_RACERS_PROPS, VOCABULARY);
+    const palette = propPalette(MORTAR_OVERDRIVE_PROPS, VOCABULARY);
     const assets = palette.map((entry) => entry.asset);
     expect(new Set(assets).size).toBe(assets.length);
-    expect(new Set(assets)).toEqual(new Set(Object.keys(REALM_RACERS_PROPS)));
+    expect(new Set(assets)).toEqual(new Set(Object.keys(MORTAR_OVERDRIVE_PROPS)));
   });
 
   it("puts the theme's own vocabulary first, and features only it", () => {
     // The whole point of the list: hand-dressing a circuit is the hunt for the
     // pieces that look like THIS zone inside a catalog that holds every zone's,
     // so the theme's are what the folded palette offers.
-    const palette = propPalette(REALM_RACERS_PROPS, VOCABULARY);
+    const palette = propPalette(MORTAR_OVERDRIVE_PROPS, VOCABULARY);
     expect(palette.slice(0, VOCABULARY.length).map((entry) => entry.asset)).toEqual(VOCABULARY);
     expect(palette.filter((entry) => entry.featured).map((entry) => entry.asset)).toEqual(
       VOCABULARY,
@@ -899,7 +913,7 @@ describe('circuit editor props: the palette', () => {
     expect(palette.find((entry) => entry.asset === 'oak')?.group).toBe('planting');
     // A different theme, a different fold: nothing here is the garden's by
     // default any more.
-    const other = propPalette(REALM_RACERS_PROPS, ['amethyst', 'glowFlower']);
+    const other = propPalette(MORTAR_OVERDRIVE_PROPS, ['amethyst', 'glowFlower']);
     expect(other.filter((entry) => entry.featured).map((entry) => entry.asset)).toEqual([
       'amethyst',
       'glowFlower',
@@ -907,7 +921,7 @@ describe('circuit editor props: the palette', () => {
   });
 
   it('drops a vocabulary key the catalog does not author, and never twice-lists one', () => {
-    const palette = propPalette(REALM_RACERS_PROPS, ['bench', 'notAThing', 'bench']);
+    const palette = propPalette(MORTAR_OVERDRIVE_PROPS, ['bench', 'notAThing', 'bench']);
     expect(palette.filter((entry) => entry.asset === 'bench')).toHaveLength(1);
     expect(palette.some((entry) => entry.asset === 'notAThing')).toBe(false);
   });
@@ -921,14 +935,14 @@ describe('circuit editor props: the palette', () => {
     const filed = PALETTE_GROUPS.flatMap((row) => row.assets);
     expect(filed.length).toBeGreaterThan(150);
     for (const asset of filed) {
-      expect(REALM_RACERS_PROPS[asset], `${asset} is filed but not authored`).toBeDefined();
+      expect(MORTAR_OVERDRIVE_PROPS[asset], `${asset} is filed but not authored`).toBeDefined();
     }
     // ...and no piece is filed twice, under two groups or the same one.
     expect(new Set(filed).size).toBe(filed.length);
   });
 
   it('files a key the tool has never heard of rather than dropping it', () => {
-    const palette = propPalette({ ...REALM_RACERS_PROPS, brandNewThing: {} }, VOCABULARY);
+    const palette = propPalette({ ...MORTAR_OVERDRIVE_PROPS, brandNewThing: {} }, VOCABULARY);
     const entry = palette.find((row) => row.asset === 'brandNewThing');
     expect(entry).toBeDefined();
     expect(entry?.group).toBe('other');
@@ -966,9 +980,9 @@ describe('the cursor ghost', () => {
     // for the ghost and once for the circuit it had just displaced.
     expect(GHOST_ID_SUFFIX.length).toBeGreaterThan(0);
     const circuit = withProps(GARDEN, []);
-    const before = realmRacersTrack(circuit);
+    const before = mortarOverdriveTrack(circuit);
     ghostPlacement(circuit, 'bench', 40, 30);
-    expect(realmRacersTrack(circuit)).toBe(before);
+    expect(mortarOverdriveTrack(circuit)).toBe(before);
   });
 
   it('carries the yaw the ghost is being turned to, before the piece exists', () => {
@@ -1000,13 +1014,13 @@ describe('the cursor ghost', () => {
 });
 
 describe('mapping a record entry to the piece the resolver placed', () => {
-  const catalog = REALM_RACERS_PROPS;
+  const catalog = MORTAR_OVERDRIVE_PROPS;
 
   it('skips the keys the resolver skips, so a selection never edits its neighbour', () => {
     // The resolver drops a catalog key nothing authors rather than throwing, so
     // a hand-pasted draft hands back a SHORTER list than it was given. Without
     // this map, clicking the third piece edited the fourth record entry.
-    const props: RallyProp[] = [
+    const props: MortarOverdriveProp[] = [
       { asset: 'bench', at: { x: 0, z: 0 } },
       { asset: 'notAThing', at: { x: 5, z: 5 } },
       { asset: 'postLantern', at: { x: 10, z: 10 } },
@@ -1016,7 +1030,7 @@ describe('mapping a record entry to the piece the resolver placed', () => {
     expect(placementIndexOf(props, catalog, 1)).toBe(-1);
     // And it really is the resolver's own order: the second placement is the
     // lantern, not the unknown key.
-    expect(realmRacersPlacements(withProps(GARDEN, props)).props[1].asset).toBe('postLantern');
+    expect(mortarOverdrivePlacements(withProps(GARDEN, props)).props[1].asset).toBe('postLantern');
   });
 
   it('answers for a record with no props at all', () => {
@@ -1049,7 +1063,7 @@ describe('the seed a new fill gets', () => {
 
 describe('the pond entry in the palette', () => {
   it('is not a catalog key, because it authors water rather than a prop', () => {
-    expect(POND_CHOICE in REALM_RACERS_PROPS).toBe(false);
+    expect(POND_CHOICE in MORTAR_OVERDRIVE_PROPS).toBe(false);
     expect(POND_CHOICE).toBe('pond');
   });
 });

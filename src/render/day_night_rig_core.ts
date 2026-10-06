@@ -10,7 +10,7 @@
 // Vitest drive midnight without a renderer.
 //
 // A render pure core: no Three, no DOM, no clock. The caller passes the phase
-// (the world's, or a Realm Racers circuit's authored hour), the realm, the
+// (the world's, or a Mortar Overdrive circuit's authored hour), the realm, the
 // moon's illumination and the fixed sun its pinned look stands under.
 
 import type { BiomeId } from '../sim/types';

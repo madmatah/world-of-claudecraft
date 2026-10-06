@@ -6,7 +6,7 @@
 import type { BiomeId } from '../sim/types';
 
 export type Surface = 'grass' | 'dirt' | 'stone' | 'wood' | 'snow' | 'water';
-export type RealmRacersAudioEvent = 'groundBlastFire' | 'groundBlastImpact' | 'bump' | 'scrape';
+export type MortarOverdriveAudioEvent = 'groundBlastFire' | 'groundBlastImpact' | 'bump' | 'scrape';
 
 /** Where a mount's engine audio currently is, for visuals that want to land on
  *  a specific moment of it. Kept structural rather than importing the sim-side
@@ -74,7 +74,7 @@ export interface SpatialAudioSink {
   isBuffered?(key: string): boolean;
   preload?(key: string): void;
   /** Listener pose each frame: camera position/orientation plus the local-player
-   *  anchor used by opt-in Realm Racers effects. The player coordinates are
+   *  anchor used by opt-in Mortar Overdrive effects. The player coordinates are
    *  optional so non-renderer callers retain the camera-relative default. The
    *  listener rides the camera and faces the chase pivot, but the anchor is
    *  the avatar itself, never that pivot: the pivot lags and leads by yards
@@ -124,8 +124,8 @@ export interface SpatialAudioSink {
     offRoad: boolean,
   ): void;
   stopVehicle(entityId: number): void;
-  realmRacersEvent(
-    kind: RealmRacersAudioEvent,
+  mortarOverdriveEvent(
+    kind: MortarOverdriveAudioEvent,
     x: number,
     y: number,
     z: number,
@@ -232,7 +232,7 @@ export interface SpatialAudioSink {
   /** Per-frame ambience state around the player; the engine cross-fades loops.
    *  `biome` is the full `BiomeId` union (covers both the grid-world biomes and
    *  the beach/desert/volcano/cave set), or null where no zone bed plays (a
-   *  Realm Racers circuit). `crowd` is the Sowfield crowd-murmur
+   *  Mortar Overdrive circuit). `crowd` is the Sowfield crowd-murmur
    *  level (0 away from the stadium, about 0.4 on the grounds, 1 while a Vale
    *  Cup match is live). */
   ambience(

@@ -117,7 +117,7 @@ describe('constrained renderer integration', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     // The memo is keyed on the realm and only ever taken while the cycle is
     // PINNED: `pinDay` is DAY_ONLY with no dev override in force and no circuit
-    // naming its own hour (`realm_racers_daylight_core.ts`), so a `/daynight`
+    // naming its own hour (`mortar_overdrive/daylight_core.ts`), so a `/daynight`
     // override and an authored circuit hour both fall through to the live rig
     // rather than being frozen at whatever the memo last cached.
     expect(source).toContain(

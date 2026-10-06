@@ -6006,28 +6006,28 @@ export const GUIDE_DEEDS: GuideDeed[] = [
     "feat": false
   },
   {
-    "id": "pvp_rr_first_race",
+    "id": "pvp_mortar_overdrive_first_race",
     "name": "Wheels on the Line",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_first_win",
+    "id": "pvp_mortar_overdrive_first_win",
     "name": "Chequered and Cheered",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_wins_10",
+    "id": "pvp_mortar_overdrive_wins_10",
     "name": "Podium Regular",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_wins_25",
+    "id": "pvp_mortar_overdrive_wins_25",
     "name": "Overdrive Ace",
     "category": "pvp",
     "renown": 0,
@@ -6035,35 +6035,35 @@ export const GUIDE_DEEDS: GuideDeed[] = [
     "rewardTitle": "Overdrive Ace"
   },
   {
-    "id": "pvp_rr_fast_lap",
+    "id": "pvp_mortar_overdrive_fast_lap",
     "name": "Flying Lap",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_clean_race",
+    "id": "pvp_mortar_overdrive_clean_race",
     "name": "Not a Scratch",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_comeback",
+    "id": "pvp_mortar_overdrive_comeback",
     "name": "From the Back of the Pack",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_rampart_lap",
+    "id": "pvp_mortar_overdrive_rampart_lap",
     "name": "Scorching Lap",
     "category": "pvp",
     "renown": 0,
     "feat": false
   },
   {
-    "id": "pvp_rr_lagoon_lap",
+    "id": "pvp_mortar_overdrive_lagoon_lap",
     "name": "Tidal Lap",
     "category": "pvp",
     "renown": 0,

@@ -5,7 +5,7 @@
 // game.
 //
 // The recovery anchors used to be edited here too. They are derived from the
-// curve now, so there is nothing left to refuse; `realm_racers_circuits.test.ts`
+// curve now, so there is nothing left to refuse; `mortar_overdrive_circuits.test.ts`
 // holds the derivation instead.
 
 import { describe, expect, it } from 'vitest';
@@ -21,10 +21,10 @@ import {
   paintSpan,
   toWidthBands,
 } from '../src/editor/circuit/handles_core';
-import type { RallyPoint } from '../src/sim/realm_racers_layout';
+import type { MortarOverdrivePoint } from '../src/sim/mortar_overdrive/layout';
 
 /** A square ring of `n` points, so every index is somewhere obvious. */
-function ring(n: number, radius = 100): RallyPoint[] {
+function ring(n: number, radius = 100): MortarOverdrivePoint[] {
   return Array.from({ length: n }, (_, i) => {
     const angle = (i / n) * Math.PI * 2;
     return { x: radius * Math.cos(angle), z: radius * Math.sin(angle) };
@@ -41,7 +41,7 @@ describe('circuit editor: the control-point ring', () => {
   });
 
   it('prefers the nearer of two overlapping handles', () => {
-    const points: RallyPoint[] = [
+    const points: MortarOverdrivePoint[] = [
       { x: 0, z: 0 },
       { x: 3, z: 0 },
       { x: 50, z: 50 },
@@ -52,7 +52,7 @@ describe('circuit editor: the control-point ring', () => {
   });
 
   it('finds the segment a click on the line belongs to, and where on it', () => {
-    const points: RallyPoint[] = [
+    const points: MortarOverdrivePoint[] = [
       { x: 0, z: 0 },
       { x: 100, z: 0 },
       { x: 100, z: 100 },

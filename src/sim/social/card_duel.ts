@@ -78,8 +78,8 @@ export function cardDuelMatchFor(ctx: SimContext, pid: number): CardDuelMatch | 
 }
 
 // At least one other QUEUEABLE HUMAN must be present to ever pair off the
-// queue. Fiesta and Realm Racers bots share the offline Sim's players map
-// (fiesta_bots.ts / realm_racers_bots.ts both reach Sim.addPlayer), but they
+// queue. Fiesta and Mortar Overdrive bots share the offline Sim's players map
+// (fiesta_bots.ts / mortar_overdrive/bots.ts both reach Sim.addPlayer), but they
 // never call joinCardDuelQueue, so counting them here would let the gate
 // read "available" while a bot match is live offline, and the human queues
 // into a FIFO that can never pair (finding: bots defeat the offline gate).
@@ -87,7 +87,7 @@ export function cardMinigameAvailable(ctx: SimContext, pid?: number): boolean {
   for (const [otherPid, meta] of ctx.players) {
     if (otherPid === pid) continue;
     if (meta.isFiestaBot) continue;
-    if (ctx.realmRacers.bots.has(otherPid)) continue;
+    if (ctx.mortarOverdrive.bots.has(otherPid)) continue;
     return true;
   }
   return false;

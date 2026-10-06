@@ -533,25 +533,25 @@ const MONOLITHS: MonolithRow[] = [
     // integration/world-quests-v0440 (the Eastbrook ferry, PR 4225, composes
     // with the branch's): exact count measured on the MERGED working tree
     // (wc -l after biome), never reconciled by arithmetic. Zero slack.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 18081). Exact count, zero slack.
-    // LOWERED 18310 -> 18295: the Realm Racers result banner and log choice
-    // moved to src/ui/realm_racers_result_notice_view.ts.
-    // LOWERED 18295 -> 18130: the Realm Racers event router, cast affordances and part
-    // construction moved to src/ui/hud/realm_racers/.
+    // LOWERED 18310 -> 18295: the Mortar Overdrive result banner and log choice
+    // moved to src/ui/hud/mortar_overdrive/result_notice_view.ts.
+    // LOWERED 18295 -> 18130: the Mortar Overdrive event router, cast affordances and part
+    // construction moved to src/ui/hud/mortar_overdrive/.
     // LOWERED 18130 -> 18127: the map zone focus lookup bag moved to
     // src/ui/hud/map/map_zone_focus_lookup.ts.
     // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
     // (Reuben's call): both parent pins for the record, the release 18081 and the
     // branch 18235; the two sides' additions compose to 18093 by wc -l on the merged
     // tree (after biome). Exact count, zero slack.
-    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // RE-PINNED at the release/v0.45.0 merge into feature/mortar-overdrive: both
     // parent pins for the record, the release 18093 and the branch 18127; the
     // two sides compose to 18137 by wc -l on the merged tree (after biome), +44
-    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    // LOWERED 18137 -> 18122: the Realm Racers helpers come in through one namespace
-    // import, the splash through a factory, and the notes on the rally helper calls
+    // over the release (the branch's own Mortar Overdrive hooks). Exact count, zero slack.
+    // LOWERED 18137 -> 18122: the Mortar Overdrive helpers come in through one namespace
+    // import, the splash through a factory, and the notes on the Mortar Overdrive helper calls
     // moved into those helpers' docs. Exact count, zero slack.
     ceiling: 18122,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
@@ -1004,15 +1004,15 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 12696 -> 12684 at the merge of release/v0.44.0 into the
     // Eastbrook ferry branch (PR 4225): the release's own extractions plus the
     // ferry's wiring, measured with wc -l on the merged tree. Exact count, zero slack.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 12684). Exact count, zero slack.
     // LOWERED 13270 -> 13265: the Ground Blast's Fired call now hands the
     // event to the pool (fire(shot, groundY)), which paid for the race
-    // preparation seam's wiring (realm_racers_prepare.ts). Exact count.
-    // LOWERED 13265 -> 13249: the circuit sky moved to realm_racers_sky.ts
+    // preparation seam's wiring (mortar_overdrive/prepare.ts). Exact count.
+    // LOWERED 13265 -> 13249: the circuit sky moved to mortar_overdrive/sky.ts
     // (its PMREM now rides the GPU queue) and the circuit preparation wiring
-    // to realm_racers_circuit_prepare.ts. Exact count.
+    // to mortar_overdrive/circuit_prepare.ts. Exact count.
     // LOWERED 13249 -> 13235: a remote racer's projection step (the age
     // formula, the gate and the reset) moved to stepRemoteRacerView in
     // remote_vehicle_display_core.ts, shared with the latency harness.
@@ -1028,7 +1028,7 @@ const MONOLITHS: MonolithRow[] = [
     // self_render_position_core.ts, shared with the latency harness. Exact
     // count.
     // LOWERED 13218 -> 13203: the oil-slick throw presentation moved to
-    // realm_racers_field_cues.ts with the rival oil spray and the missed-box
+    // mortar_overdrive/field_cues.ts with the rival oil spray and the missed-box
     // cue, which the renderer reaches through one event arm. Exact count.
     // LOWERED 13203 -> 13133 by the carry of PR 4229 (the shared spirit
     // veil): every translucent look moved onto the veil, deleting the lit
@@ -1041,14 +1041,14 @@ const MONOLITHS: MonolithRow[] = [
     // registered ghost_style_core.ts, one import in place of two names, and
     // the veil call takes the view slice. Exact count.
     // LOWERED 13129 -> 13050: a racing machine's per-view lean, road effects
-    // and engine mix moved to realm_racers_kart_presentation.ts behind the
+    // and engine mix moved to mortar_overdrive/kart_presentation.ts behind the
     // renderer host, the entity view taking its slice by extension. Exact
     // count.
-    // LOWERED 13050 -> 12673: the rest of the Realm Racers presentation (the
+    // LOWERED 13050 -> 12673: the rest of the Mortar Overdrive presentation (the
     // tracks, pools, sky and preparation seam, the own shot and oil drop, the
-    // rival projection and bump bang, the rally events, the circuit ambience
-    // and haze, the co-pilot views) moved to realm_racers_scene.ts behind the
-    // renderer host, reached as renderer.realmRacers. Exact count.
+    // rival projection and bump bang, the Mortar Overdrive events, the circuit ambience
+    // and haze, the co-pilot views) moved to mortar_overdrive/scene.ts behind the
+    // renderer host, reached as renderer.mortarOverdrive. Exact count.
     // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
     // (Reuben's call): both parent pins for the record, the release 12684 and the
     // branch 12782; the two sides' additions compose to 12687 by wc -l on the merged
@@ -1056,10 +1056,10 @@ const MONOLITHS: MonolithRow[] = [
     // RE-PINNED 12687 -> 12688 at the second release merge into the same branch,
     // after PR 3847 landed on the release (its renderer.ts wiring adds one line;
     // the release pin stays 12684): wc -l on the merged tree. Exact count, zero slack.
-    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // RE-PINNED at the release/v0.45.0 merge into feature/mortar-overdrive: both
     // parent pins for the record, the release 12688 and the branch 12673; the
     // two sides compose to 12686 by wc -l on the merged tree (after biome), 2
-    // under the release (the branch's extractions outweigh its Realm Racers
+    // under the release (the branch's extractions outweigh its Mortar Overdrive
     // hooks). Exact count, zero slack.
     ceiling: 12686,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
@@ -1273,13 +1273,13 @@ const MONOLITHS: MonolithRow[] = [
     // integration/world-quests-v0440 (the Eastbrook ferry, PR 4225, composes
     // with the branch's): exact count measured on the MERGED working tree
     // (wc -l after biome), never reconciled by arithmetic. Zero slack.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 11642). Exact count, zero slack.
-    // LOWERED 11785 -> 11762: the Realm Racers PlayerMeta fields, SimContext arms and tick
-    // phase moved to social/realm_racers.ts and social/realm_racers_context.ts.
-    // LOWERED 11762 -> 11727: the Realm Racers imports became one barrel import
-    // (realm_racers_context.ts, which also builds the fresh meta fields), and the
+    // LOWERED 11785 -> 11762: the Mortar Overdrive PlayerMeta fields, SimContext arms and tick
+    // phase moved to mortar_overdrive/race.ts and mortar_overdrive/context.ts.
+    // LOWERED 11762 -> 11727: the Mortar Overdrive imports became one barrel import
+    // (mortar_overdrive/context.ts, which also builds the fresh meta fields), and the
     // saved-pose, tick-phase and delegate notes moved to the functions they describe.
     ceiling: 11727,
     seam: 'a sim system module behind SimContext (src/sim/CLAUDE.md)',
@@ -1508,8 +1508,8 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 11140 -> 11033 when the wire v1 client stopped predicting karts:
     // the drive-impulse and blast-pop plumbing into the v1 extrapolator frame
     // left main.ts. wc -l on the tree. Exact count, zero slack.
-    // LOWERED 11033 -> 10993: Realm Racers wiring moved to src/game/realm_racers_client_wiring.ts.
-    // LOWERED 10993 -> 10978: the Rally window key joined the shared keyboard/pad table
+    // LOWERED 11033 -> 10993: Mortar Overdrive wiring moved to src/game/mortar_overdrive/client_wiring.ts.
+    // LOWERED 10993 -> 10978: the Mortar Overdrive window key joined the shared keyboard/pad table
     // (collection_actions_core.ts), the online camera heading moved to the client
     // wiring, and the recovery-snap note moved to consumeSelfPositionDiscontinuity.
     ceiling: 10978,
@@ -1766,22 +1766,22 @@ const MONOLITHS: MonolithRow[] = [
     // integration/world-quests-v0440 (the Eastbrook ferry, PR 4225, composes
     // with the branch's): exact count measured on the MERGED working tree
     // (wc -l after biome), never reconciled by arithmetic. Zero slack.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 9827). Exact count, zero slack.
-    // LOWERED 9920 -> 9910: the Realm Racers command bodies moved to
-    // server/realm_racers_commands.ts behind one case group.
-    // LOWERED 9910 -> 9832: the drive record, the rr/rrt keys and the rrkit key moved to
-    // server/realm_racers_drive_wire.ts and server/realm_racers_self_wire.ts.
+    // LOWERED 9920 -> 9910: the Mortar Overdrive command bodies moved to
+    // server/mortar_overdrive/commands.ts behind one case group.
+    // LOWERED 9910 -> 9832: the drive record, the mo/mot keys and the mokit key moved to
+    // server/mortar_overdrive/drive_wire.ts and server/mortar_overdrive/self_wire.ts.
     // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
     // (Reuben's call): both parent pins for the record, the release 9827 and the
     // branch 9965; the two sides' additions compose to 9840 by wc -l on the merged
     // tree (after biome). Exact count, zero slack.
-    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // RE-PINNED at the release/v0.45.0 merge into feature/mortar-overdrive: both
     // parent pins for the record, the release 9840 and the branch 9832; the
     // two sides compose to 9845 by wc -l on the merged tree (after biome), +5
-    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    // LOWERED 9845 -> 9742 at the Realm Racers lane zone fix (2026-10-03): the
+    // over the release (the branch's own Mortar Overdrive hooks). Exact count, zero slack.
+    // LOWERED 9845 -> 9742 at the Mortar Overdrive lane zone fix (2026-10-03): the
     // presence extraction moved presenceOf, instanceZoneName and the admin
     // live location to server/player_location.ts, where a racer on a circuit
     // lane reads the circuit's zone. wc -l after biome. Exact count, zero slack.
@@ -1960,23 +1960,23 @@ const MONOLITHS: MonolithRow[] = [
     // integration/world-quests-v0440 (the Eastbrook ferry, PR 4225, composes
     // with the branch's): exact count measured on the MERGED working tree
     // (wc -l after biome), never reconciled by arithmetic. Zero slack.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 5354). Exact count, zero slack.
-    // LOWERED 5491 -> 5487: the Realm Racers mirror's idle initializer reuses
-    // idleRealmRacersInfo() from src/net/realm_racers_self_wire.ts.
-    // LOWERED 5487 -> 5405: the drive decode, the Rally kit mirror and the
+    // LOWERED 5491 -> 5487: the Mortar Overdrive mirror's idle initializer reuses
+    // idleMortarOverdriveInfo() from src/net/mortar_overdrive/self_wire.ts.
+    // LOWERED 5487 -> 5405: the drive decode, the Mortar Overdrive kit mirror and the
     // recovery-snap latch moved to src/net sibling modules.
     // RE-PINNED at the 2026-09-28 release/v0.44.0 merge into feature/buried-hoards
     // (Reuben's call): both parent pins for the record, the release 5354 and the
     // branch 5426; the two sides' additions compose to 5356 by wc -l on the merged
     // tree (after biome). Exact count, zero slack.
-    // RE-PINNED at the release/v0.45.0 merge into feature/realm-racers: both
+    // RE-PINNED at the release/v0.45.0 merge into feature/mortar-overdrive: both
     // parent pins for the record, the release 5356 and the branch 5405; the
     // two sides compose to 5407 by wc -l on the merged tree (after biome), +51
-    // over the release (the branch's own Realm Racers hooks). Exact count, zero slack.
-    // LOWERED 5407 -> 5360: the Realm Racers mirrors, command sends, kit decode and
-    // discontinuity latch moved to src/net/realm_racers_wire_state.ts, a link in
+    // over the release (the branch's own Mortar Overdrive hooks). Exact count, zero slack.
+    // LOWERED 5407 -> 5360: the Mortar Overdrive mirrors, command sends, kit decode and
+    // discontinuity latch moved to src/net/mortar_overdrive/wire_state.ts, a link in
     // ClientWorld's class chain (the QuestWorldWireState pattern). Exact count.
     ceiling: 5360,
     seam: 'a src/net sibling module (the refactor/net-online split is the template)',
@@ -1993,10 +1993,10 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned 4850 -> 4720: the world quest minigame layer's three director
     // hooks were paid for by moving the note-event primitives (the Inst union,
     // NoteEvent/Theme, and the push* composition helpers) to music_notes.ts.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 4720). Exact count, zero slack.
-    // LOWERED 4849 -> 4728: the Realm Racers area-track layer moved to music_area_tracks.ts.
+    // LOWERED 4849 -> 4728: the Mortar Overdrive area-track layer moved to music_area_tracks.ts.
     // LOWERED 4728 -> 4724: the boss loop plus area tracks pair became the layer's applyFileTracks.
     ceiling: 4724,
     seam: 'a src/game sibling module (the refactor/game-music split is the template)',
@@ -2026,8 +2026,8 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 5194 -> 5188 at the merge of release/v0.44.0 into the
     // Eastbrook ferry branch (PR 4225): the release's own extractions plus the
     // ferry's wiring, measured with wc -l on the merged tree. Exact count, zero slack.
-    // LOWERED 5188 -> 5184 to the exact count on feature/realm-racers: the release's
-    // 5182 plus the Realm Racers band arm in groundHeight and its import.
+    // LOWERED 5188 -> 5184 to the exact count on feature/mortar-overdrive: the release's
+    // 5182 plus the Mortar Overdrive band arm in groundHeight and its import.
     ceiling: 5184,
     seam: 'zone/terrain data as content records; logic as sim sibling modules',
   },
@@ -2298,11 +2298,11 @@ const MONOLITHS: MonolithRow[] = [
     // 2486 to 2513 into the row's slack: the berth gate bookkeeping (setColliderGateOpen,
     // gridIndex-ordered reopen, lazy wishes) needs the grid's private state, net of the
     // decoration collider builder moving out to decoration_collider.ts. wc -l. Exact count.
-    // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
-    // release's ceiling plus this branch's Realm Racers hooks, measured with
+    // Re-pinned at the release/v0.44.0 sync into feature/mortar-overdrive: the
+    // release's ceiling plus this branch's Mortar Overdrive hooks, measured with
     // wc -l on the merged tree (release 2513). Exact count, zero slack.
-    // LOWERED 2560 -> 2524: the Realm Racers resolve and sight arms moved to realm_racers_collide.ts.
-    // LOWERED 2524 -> 2523: the Realm Racers collider arms come in through one namespace import.
+    // LOWERED 2560 -> 2524: the Mortar Overdrive resolve and sight arms moved to mortar_overdrive/collide.ts.
+    // LOWERED 2524 -> 2523: the Mortar Overdrive collider arms come in through one namespace import.
     ceiling: 2523,
     seam: 'per-zone collider data beside the zone content; shared logic stays here',
   },

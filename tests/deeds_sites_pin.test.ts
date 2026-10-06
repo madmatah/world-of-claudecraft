@@ -8,6 +8,7 @@ import { handleDeath } from '../src/sim/combat/damage';
 import { STATION_RADIUS } from '../src/sim/content/professions';
 import { DUNGEONS, instanceOrigin, MOBS, STATIONS } from '../src/sim/data';
 import {
+  type MortarOverdriveRaceDeedEntry,
   onArenaMatchEndForDeeds,
   onBellContactForDeeds,
   onBloatDetonatedForDeeds,
@@ -22,13 +23,12 @@ import {
   onFiestaTakedownForDeeds,
   onLockpickSuccessForDeeds,
   onMobKillCreditForDeeds,
+  onMortarOverdriveLapForDeeds,
+  onMortarOverdriveRaceEndForDeeds,
   onNpcTalkedForDeeds,
   onPlayerDeathForDeeds,
-  onRallyLapForDeeds,
-  onRallyRaceEndForDeeds,
   onRiteFinaleForDeeds,
   onWorldBossKilledForDeeds,
-  type RallyRaceDeedEntry,
   updateDeeds,
 } from '../src/sim/deeds';
 import { createMob } from '../src/sim/entity';
@@ -714,8 +714,10 @@ describe('encounter mechanical arms (onMobKillCreditForDeeds)', () => {
   });
 });
 
-describe('Realm Racers sites', () => {
-  function rallyEntry(over: Partial<RallyRaceDeedEntry> & { pid: number }): RallyRaceDeedEntry {
+describe('Mortar Overdrive sites', () => {
+  function mortarOverdriveEntry(
+    over: Partial<MortarOverdriveRaceDeedEntry> & { pid: number },
+  ): MortarOverdriveRaceDeedEntry {
     return {
       bot: false,
       finished: true,
@@ -727,210 +729,320 @@ describe('Realm Racers sites', () => {
     };
   }
 
-  it('pvp_rr_first_race: a non-bot who crosses the line on a rated heat; a bot, a practice lap, a forfeiter and an idler never earn it', () => {
+  it('pvp_mortar_overdrive_first_race: a non-bot who crosses the line on a rated heat; a bot, a practice lap, a forfeiter and an idler never earn it', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Racer');
-    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId })]);
-    expect(racer.deedsEarned.has('pvp_rr_first_race')).toBe(true);
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: racer.entityId }),
+    ]);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_first_race')).toBe(true);
 
     const botSim = makeSim();
     const bot = addMeta(botSim, 'Bot');
-    onRallyRaceEndForDeeds(botSim.ctx, false, [rallyEntry({ pid: bot.entityId, bot: true })]);
-    expect(bot.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    onMortarOverdriveRaceEndForDeeds(botSim.ctx, false, [
+      mortarOverdriveEntry({ pid: bot.entityId, bot: true }),
+    ]);
+    expect(bot.deedsEarned.has('pvp_mortar_overdrive_first_race')).toBe(false);
 
     const pracSim = makeSim();
     const practicer = addMeta(pracSim, 'Practicer');
-    onRallyRaceEndForDeeds(pracSim.ctx, true, [rallyEntry({ pid: practicer.entityId })]);
-    expect(practicer.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    onMortarOverdriveRaceEndForDeeds(pracSim.ctx, true, [
+      mortarOverdriveEntry({ pid: practicer.entityId }),
+    ]);
+    expect(practicer.deedsEarned.has('pvp_mortar_overdrive_first_race')).toBe(false);
 
     // A non-finisher never earns it: a pilot still on the grid when the clock
     // closed the heat, and a forfeiter, whom retireRacer hands over as one.
     const idleSim = makeSim();
     const idler = addMeta(idleSim, 'Idler');
-    onRallyRaceEndForDeeds(idleSim.ctx, false, [
-      rallyEntry({ pid: idler.entityId, finished: false }),
+    onMortarOverdriveRaceEndForDeeds(idleSim.ctx, false, [
+      mortarOverdriveEntry({ pid: idler.entityId, finished: false }),
     ]);
-    expect(idler.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    expect(idler.deedsEarned.has('pvp_mortar_overdrive_first_race')).toBe(false);
 
     // A finish is a finish with or without another human on the grid.
     const soloSim = makeSim();
     const solo = addMeta(soloSim, 'Solo');
-    onRallyRaceEndForDeeds(soloSim.ctx, false, [
-      rallyEntry({ pid: solo.entityId, humanRival: false }),
+    onMortarOverdriveRaceEndForDeeds(soloSim.ctx, false, [
+      mortarOverdriveEntry({ pid: solo.entityId, humanRival: false }),
     ]);
-    expect(solo.deedsEarned.has('pvp_rr_first_race')).toBe(true);
+    expect(solo.deedsEarned.has('pvp_mortar_overdrive_first_race')).toBe(true);
   });
 
-  it('pvp_rr_first_win / wins_10 / wins_25: the rrWins meter, moved by the caller before the hook runs', () => {
+  it('pvp_mortar_overdrive_first_win / wins_10 / wins_25: the mortarOverdriveWins meter, moved by the caller before the hook runs', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Racer');
-    // The meter deeds are non-manual: onRallyRaceEndForDeeds only marks the
-    // pid dirty (rrWins carries no narrow key), and updateDeeds's full pass is
+    // The meter deeds are non-manual: onMortarOverdriveRaceEndForDeeds only marks the
+    // pid dirty (mortarOverdriveWins carries no narrow key), and updateDeeds's full pass is
     // what actually reads it and grants, exactly as sim.tick() runs it every
     // tick in production.
-    racer.rrWins = 9;
-    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    racer.mortarOverdriveWins = 9;
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: racer.entityId, won: true }),
+    ]);
     updateDeeds(sim.ctx);
-    expect(racer.deedsEarned.has('pvp_rr_first_win')).toBe(true);
-    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(false);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_first_win')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_wins_10')).toBe(false);
 
-    racer.rrWins = 10;
-    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    racer.mortarOverdriveWins = 10;
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: racer.entityId, won: true }),
+    ]);
     updateDeeds(sim.ctx);
-    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_wins_10')).toBe(true);
 
-    racer.rrWins = 24;
-    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    racer.mortarOverdriveWins = 24;
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: racer.entityId, won: true }),
+    ]);
     updateDeeds(sim.ctx);
-    expect(racer.deedsEarned.has('pvp_rr_wins_25')).toBe(false);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_wins_25')).toBe(false);
 
-    racer.rrWins = 25;
-    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    racer.mortarOverdriveWins = 25;
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: racer.entityId, won: true }),
+    ]);
     updateDeeds(sim.ctx);
-    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(true);
-    expect(racer.deedsEarned.has('pvp_rr_wins_25')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_wins_10')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_wins_25')).toBe(true);
   });
 
-  it('pvp_rr_clean_race: needs a finish AND a clean run; either miss withholds it', () => {
+  it('pvp_mortar_overdrive_clean_race: needs a finish AND a clean run; either miss withholds it', () => {
     const sim = makeSim();
     const dnf = addMeta(sim, 'Retired');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: dnf.entityId, finished: false, clean: true }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: dnf.entityId, finished: false, clean: true }),
     ]);
-    expect(dnf.deedsEarned.has('pvp_rr_clean_race')).toBe(false);
+    expect(dnf.deedsEarned.has('pvp_mortar_overdrive_clean_race')).toBe(false);
 
     const dirty = addMeta(sim, 'Muddy');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: dirty.entityId, finished: true, clean: false }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: dirty.entityId, finished: true, clean: false }),
     ]);
-    expect(dirty.deedsEarned.has('pvp_rr_clean_race')).toBe(false);
+    expect(dirty.deedsEarned.has('pvp_mortar_overdrive_clean_race')).toBe(false);
 
     const spotless = addMeta(sim, 'Spotless');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: spotless.entityId, finished: true, clean: true }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: spotless.entityId, finished: true, clean: true }),
     ]);
-    expect(spotless.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+    expect(spotless.deedsEarned.has('pvp_mortar_overdrive_clean_race')).toBe(true);
   });
 
-  it('pvp_rr_comeback: needs the overall win AND the comeback flag; either miss withholds it', () => {
+  it('pvp_mortar_overdrive_comeback: needs the overall win AND the comeback flag; either miss withholds it', () => {
     const sim = makeSim();
     const runnerUp = addMeta(sim, 'RunnerUp');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: runnerUp.entityId, won: false, comeback: true }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: runnerUp.entityId, won: false, comeback: true }),
     ]);
-    expect(runnerUp.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    expect(runnerUp.deedsEarned.has('pvp_mortar_overdrive_comeback')).toBe(false);
 
     const luckyWinner = addMeta(sim, 'LuckyWinner');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: luckyWinner.entityId, won: true, comeback: false }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: luckyWinner.entityId, won: true, comeback: false }),
     ]);
-    expect(luckyWinner.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    expect(luckyWinner.deedsEarned.has('pvp_mortar_overdrive_comeback')).toBe(false);
 
     const hero = addMeta(sim, 'Hero');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: hero.entityId, won: true, comeback: true }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: hero.entityId, won: true, comeback: true }),
     ]);
-    expect(hero.deedsEarned.has('pvp_rr_comeback')).toBe(true);
+    expect(hero.deedsEarned.has('pvp_mortar_overdrive_comeback')).toBe(true);
 
     // Beating only house pilots: no win-based deed, however dramatic.
     const houseOnly = addMeta(sim, 'HouseOnly');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: houseOnly.entityId, won: true, comeback: true, humanRival: false }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({
+        pid: houseOnly.entityId,
+        won: true,
+        comeback: true,
+        humanRival: false,
+      }),
     ]);
-    expect(houseOnly.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    expect(houseOnly.deedsEarned.has('pvp_mortar_overdrive_comeback')).toBe(false);
   });
 
-  it('pvp_rr_clean_race stays solo-earnable: no other human needed', () => {
+  it('pvp_mortar_overdrive_clean_race stays solo-earnable: no other human needed', () => {
     const sim = makeSim();
     const solo = addMeta(sim, 'SoloClean');
-    onRallyRaceEndForDeeds(sim.ctx, false, [
-      rallyEntry({ pid: solo.entityId, finished: true, clean: true, humanRival: false }),
+    onMortarOverdriveRaceEndForDeeds(sim.ctx, false, [
+      mortarOverdriveEntry({ pid: solo.entityId, finished: true, clean: true, humanRival: false }),
     ]);
-    expect(solo.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+    expect(solo.deedsEarned.has('pvp_mortar_overdrive_clean_race')).toBe(true);
   });
 
-  it('pvp_rr_fast_lap: only the Express Tour, only under the threshold, never practice or a bot', () => {
+  it('pvp_mortar_overdrive_fast_lap: only the Express Tour, only under the threshold, never practice or a bot', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Flier');
     // Wrong circuit: the practice garden lap never counts, however fast.
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
     // Right circuit, too slow.
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', racer.entityId, 30);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'evergarden_express_tour',
+      racer.entityId,
+      30,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
     // A practice lap on the Express Tour circuit id never counts either.
-    onRallyLapForDeeds(sim.ctx, true, false, 'evergarden_express_tour', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      true,
+      false,
+      'evergarden_express_tour',
+      racer.entityId,
+      10,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
     // A bot's fast lap never counts.
     const bot = addMeta(sim, 'BotFlier');
-    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
-    onRallyLapForDeeds(sim.ctx, false, true, 'evergarden_express_tour', bot.entityId, 10);
-    expect(bot.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    sim.ctx.mortarOverdrive.bots.set(bot.entityId, 'ace');
+    onMortarOverdriveLapForDeeds(sim.ctx, false, true, 'evergarden_express_tour', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
     // Right circuit, fast enough, a human: grants.
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', racer.entityId, 25.9);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(true);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'evergarden_express_tour',
+      racer.entityId,
+      25.9,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(true);
     // And only its own deed: the Express Tour lap never credits the Rampart Run's.
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
   });
 
-  it('pvp_rr_lagoon_lap: only the Lagoon Run, only under its threshold, never practice or a bot', () => {
+  it('pvp_mortar_overdrive_lagoon_lap: only the Lagoon Run, only under its threshold, never practice or a bot', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Tidewalker');
     // Another circuit's fast lap never counts here, the other two flying-lap
     // circuits' included (on a racer of their own, who earns only theirs).
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
-    onRallyLapForDeeds(sim.ctx, false, false, 'nightbloom_moonwell_run', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'nightbloom_moonwell_run',
+      racer.entityId,
+      10,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     const other = addMeta(sim, 'Rampartwalker');
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', other.entityId, 10);
-    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', other.entityId, 10);
-    expect(other.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'evergarden_express_tour',
+      other.entityId,
+      10,
+    );
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'drakelands_rampart_run',
+      other.entityId,
+      10,
+    );
+    expect(other.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     // Its own threshold, not the Rampart Run's: a 24.9 s lap clears that one
     // and not this one.
-    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 24.9);
-    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'palmreach_lagoon_run',
+      racer.entityId,
+      24.9,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     // Right circuit, exactly at the threshold: the guard is exclusive.
-    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 24);
-    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 24);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     // A practice lap and a bot's lap never count.
-    onRallyLapForDeeds(sim.ctx, true, false, 'palmreach_lagoon_run', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(sim.ctx, true, false, 'palmreach_lagoon_run', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     const bot = addMeta(sim, 'BotTidewalker');
-    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
-    onRallyLapForDeeds(sim.ctx, false, true, 'palmreach_lagoon_run', bot.entityId, 10);
-    expect(bot.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(false);
+    sim.ctx.mortarOverdrive.bots.set(bot.entityId, 'ace');
+    onMortarOverdriveLapForDeeds(sim.ctx, false, true, 'palmreach_lagoon_run', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(false);
     // Right circuit, fast enough, a human: grants its own deed and no other.
-    onRallyLapForDeeds(sim.ctx, false, false, 'palmreach_lagoon_run', racer.entityId, 23.9);
-    expect(racer.deedsEarned.has('pvp_rr_lagoon_lap')).toBe(true);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'palmreach_lagoon_run',
+      racer.entityId,
+      23.9,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_lagoon_lap')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
   });
 
-  it('pvp_rr_rampart_lap: only the Rampart Run, only under its threshold, never practice or a bot', () => {
+  it('pvp_mortar_overdrive_rampart_lap: only the Rampart Run, only under its threshold, never practice or a bot', () => {
     const sim = makeSim();
     const racer = addMeta(sim, 'Scorcher');
     // Another circuit's fast lap never counts here, the Express Tour's included.
-    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
-    onRallyLapForDeeds(sim.ctx, false, false, 'nightbloom_moonwell_run', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'nightbloom_moonwell_run',
+      racer.entityId,
+      10,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
     // Its own threshold, not the Express Tour's: a 25.9 s lap clears that one
     // and not this one.
-    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 25.9);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'drakelands_rampart_run',
+      racer.entityId,
+      25.9,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
     // Right circuit, exactly at the threshold: the guard is exclusive.
-    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 25);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'drakelands_rampart_run',
+      racer.entityId,
+      25,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
     // A practice lap and a bot's lap never count.
-    onRallyLapForDeeds(sim.ctx, true, false, 'drakelands_rampart_run', racer.entityId, 10);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      true,
+      false,
+      'drakelands_rampart_run',
+      racer.entityId,
+      10,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
     const bot = addMeta(sim, 'BotScorcher');
-    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
-    onRallyLapForDeeds(sim.ctx, false, true, 'drakelands_rampart_run', bot.entityId, 10);
-    expect(bot.deedsEarned.has('pvp_rr_rampart_lap')).toBe(false);
+    sim.ctx.mortarOverdrive.bots.set(bot.entityId, 'ace');
+    onMortarOverdriveLapForDeeds(sim.ctx, false, true, 'drakelands_rampart_run', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(false);
     // Right circuit, fast enough, a human: grants its own deed and not the Express Tour's.
-    onRallyLapForDeeds(sim.ctx, false, false, 'drakelands_rampart_run', racer.entityId, 24.9);
-    expect(racer.deedsEarned.has('pvp_rr_rampart_lap')).toBe(true);
-    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    onMortarOverdriveLapForDeeds(
+      sim.ctx,
+      false,
+      false,
+      'drakelands_rampart_run',
+      racer.entityId,
+      24.9,
+    );
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_rampart_lap')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_mortar_overdrive_fast_lap')).toBe(false);
   });
 });
 

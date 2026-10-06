@@ -66,9 +66,9 @@ export const ko_KR: EnTranslations = {
       "difficulty": "난이도",
       "name": "이름",
       "spec": "전문화",
-      "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier",
-      "rallyKitCharges": "Weapon charges",
+      "mortarOverdriveCircuit": "Circuit",
+      "mortarOverdriveTier": "Rival tier",
+      "mortarOverdriveKitCharges": "Weapon charges",
       "bed": "경작지 ID (선택 사항)"
     },
     "difficulty": {
@@ -176,12 +176,12 @@ export const ko_KR: EnTranslations = {
         "label": "공격대 입장",
         "description": "니트락시스 투기장에 바로 입장합니다."
       },
-      "rally": {
+      "mortarOverdrive": {
         "label": "Race a circuit",
-        "description": "Start a Realm Racers race on the chosen circuit right now."
+        "description": "Start a Mortar Overdrive race on the chosen circuit right now."
       },
-      "rallykit": {
-        "label": "Fill the rally kit",
+      "mortarOverdriveKit": {
+        "label": "Fill the Mortar Overdrive kit",
         "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
@@ -1925,7 +1925,7 @@ export const ko_KR: EnTranslations = {
       "targetFriendlyNext": "아군 대상 순환",
       "targetPrev": "대상 역방향 순환",
       "discord": "Discord",
-      "rally": "렐름 레이서즈",
+      "mortarOverdrive": "박격 오버드라이브",
       "bgFlag": "전장 깃발 행동",
       "friendlyNameplates": "우호 이름표 전환",
       "sheathe": "무기 넣기/빼기",
@@ -2130,10 +2130,10 @@ export const ko_KR: EnTranslations = {
         "graveyard": "묘지"
       }
     },
-    "rally": {
+    "mortarOverdrive": {
       "kicker": "상록 정원 레이싱 협회",
-      "title": "렐름 레이서즈",
-      "close": "렐름 레이서즈 창 닫기",
+      "title": "박격 오버드라이브",
+      "close": "박격 오버드라이브 창 닫기",
       "pitch": "강철이 생울타리를 가른다. 라인을 찾고, 슬라이드를 믿으며, 모든 라이벌을 먼지에 남겨라.",
       "promiseCircuit": "정원 서킷",
       "promiseSlide": "핸드브레이크 슬라이드",
@@ -2217,8 +2217,8 @@ export const ko_KR: EnTranslations = {
       "drawReturn": "무승부. {seconds}초 뒤 돌아갑니다",
       "raceVoid": "RACE VOID",
       "voidReturn": "경기 무효. {seconds}초 뒤 돌아갑니다",
-      "logQueued": "렐름 레이서즈 대기 순번: {position}.",
-      "logUnqueued": "렐름 레이서즈 대기열에서 나왔습니다.",
+      "logQueued": "박격 오버드라이브 대기 순번: {position}.",
+      "logUnqueued": "박격 오버드라이브 대기열에서 나왔습니다.",
       "bannerLap": "{total}바퀴 중 {lap}바퀴",
       "bannerWin": "경기에서 승리했습니다!",
       "bannerLoss": "{name}님이 경기에서 승리했습니다.",
@@ -4088,10 +4088,10 @@ export const ko_KR: EnTranslations = {
       "temporalEcho": "시전자의 비전 피해가 단일 대상 피해의 {singlePct}%, 광역 피해의 {areaPct}%만큼 당신을 치유합니다. 에테르 쇄도와 에테르 화살은 개별 시간의 메아리에 4배 보너스를 적용합니다. 집단 메아리는 같은 양의 치유 예비량을 만들고, 체력이 60% 미만인 표식이 있는 아군에게 잃은 생명력에 따라 나눠 줍니다",
       "arcaneCharge": "비전 충전 {stacks}중첩: 에테르 쇄도의 피해가 {damagePct}% 증가하고 시전이 {castPct}% 빨라지며 마나가 {costMult}배 듭니다",
       "physicalReduction": "받는 물리 피해가 {pct}% 감소합니다",
-      "rallyGroundBlast": "이동 속도를 {pct}% 감소시킵니다. 피격 후 {gripSeconds}초 동안 기체의 접지력이 {gripPct}% 감소합니다.",
-      "rallyOffTrack": "이동 속도를 {pct}% 감소시킵니다. 기체의 접지력이 {gripPct}% 감소하고 저항이 도로 위의 {drag}배가 됩니다. 도로로 돌아올 때까지 지속됩니다.",
-      "rallyWard": "다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.",
-      "rallyGhost": "트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.",
+      "mortarOverdriveGroundBlast": "이동 속도를 {pct}% 감소시킵니다. 피격 후 {gripSeconds}초 동안 기체의 접지력이 {gripPct}% 감소합니다.",
+      "mortarOverdriveOffTrack": "이동 속도를 {pct}% 감소시킵니다. 기체의 접지력이 {gripPct}% 감소하고 저항이 도로 위의 {drag}배가 됩니다. 도로로 돌아올 때까지 지속됩니다.",
+      "mortarOverdriveWard": "다음에 맞는 그라운드 블래스트나 기름막을 흡수한 뒤 부서집니다. {seconds}초 동안 지속됩니다. 다른 기체와의 충돌은 막지 못합니다.",
+      "mortarOverdriveGhost": "트랙으로 복귀한 뒤 경쟁자의 기체가 당신을 통과합니다. 최소 {minSeconds}초 동안, 그리고 다시 운전할 수 있을 때까지 지속되며, 그 후 모든 경쟁자와 떨어지는 즉시 끝납니다. 연장은 최대 {marginSeconds}초입니다. 그라운드 블래스트와 기름막은 여전히 적중합니다.",
       "temporalHourglass": "피해에 면역이고 행동할 수 없습니다. 생명력을 회복하고 재사용 대기시간을 가속합니다. 우클릭으로 취소할 수 있습니다.",
       "tongues": "시전 시간을 {pct}% 증가시킵니다",
       "combustionCrit": "화염 주문이 항상 치명타로 적중합니다",
@@ -7101,7 +7101,7 @@ export const ko_KR: EnTranslations = {
       "combat": "전투",
       "talents": "특성",
       "arena": "투기장과 PvP",
-      "realmRacers": "렐름 레이서즈",
+      "mortarOverdrive": "박격 오버드라이브",
       "thornhollow": "쏜할로우 평원",
       "worldPvp": "월드 PvP",
       "deeds": "업적의 서",
@@ -8465,13 +8465,13 @@ export const ko_KR: EnTranslations = {
       "rewardsHeading": "경기가 주는 보상",
       "rewardsBody": "끝까지 치른 경기는 모두 명예를 줍니다. 승리는 더 많이, 패배나 무승부는 위로의 몫을 주며, 직접 넣은 결정타와 거든 처치마다 조금씩 더 붙으므로 깃발에서 떨어진 곳에서 싸우는 일도 값어치가 있습니다. 하루의 첫 승리는 그 위에 보너스를 얹어 주고, 그 보너스가 아직 남아 있는지는 패널이 알려 줍니다. 이 하루는 명예만의 하루라서, 왕국의 인스턴스 초기화가 아니라 자기만의 시계로 넘어갑니다. 같은 팀을 거듭 만나면 첫 경기 이후로는 경기 자체의 보상이 줄어들지만, 0으로 사라지지 않고 금세 바닥값에 자리 잡습니다. 몰수한 경기는 아무것도 주지 않습니다. 벌어들인 것은 어느 워페어 병참장교에게든 쓰세요."
     },
-    "realmRacersPage": {
-      "heading": "렐름 레이서즈",
+    "mortarOverdrivePage": {
+      "heading": "박격 오버드라이브",
       "intro": "상록 정원 레이싱 협회는 운전할 배짱만 있다면 누구나 참가할 수 있는 정원 서킷을 운영합니다: 그리드에는 네 명의 파일럿, 하나의 시그니처 무기, 그리고 대담한 라인만큼이나 깔끔한 라인에도 보상을 주는 생울타리로 둘러싸인 트랙이 있습니다.",
       "loreHeading": "상록 정원 레이싱 협회",
       "loreBody": "상록 정원의 정원장들은 생울타리 사이의 관리용 통로가 손수레보다 빠른 무언가를 위한 것이라고는 생각한 적이 없었지만, 시간이 남아돌고 빌린 탈것을 가진 한 관리인의 생각은 달랐습니다. 그 첫 무모한 도전에서 자라난 협회는 이제 제대로 된 서킷을 그리고, 그리드를 가득 채우며, 네 명의 파일럿이 준비될 때마다 깃발을 내립니다.",
       "howHeading": "플레이 방법",
-      "howQueueBody": "세계 어디서든 렐름 레이서즈 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.",
+      "howQueueBody": "세계 어디서든 박격 오버드라이브 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.",
       "howRaceBody": "평소 이동 키로 조향, 가속, 제동을 하고, 점프 키를 누르고 있으면 핸드브레이크로 좁은 코너를 미끄러져 지날 수 있습니다. 모든 파일럿은 그라운드 블래스트를 지니고 있는데, 이는 맞은 상대를 휘청이게 하는 전방 사격이므로 앞을 막는 라이벌은 결코 안전하지 않습니다. 마지막 랩 이후 먼저 결승선을 넘는 쪽이 승리하며, 레이스가 결정되는 순간 각자의 위치로 전체 순위가 매겨집니다.",
       "howLimitsBody": "트랙 양옆의 정원은 열려 있고 주행할 수 있어서, 넓게 나가거나 밀려나거나 화단을 미끄러져 지나가는 것도 레이스의 일부입니다. 대가는 속도뿐이죠. 다만 그것으로 이득을 봐서는 안 됩니다. 트랙을 벗어나 트랙보다 짧은 라인을 타면 진행위원이 벗어난 지점으로 되돌려 놓고, 정원에 멈춰 선 파일럿도 몇 초 뒤 트랙으로 복귀시킵니다.",
       "howPracticeBody": "아직 낯선 상대와 겨룰 준비가 되지 않았나요? 연습 주행은 같은 머신, 같은 조작감으로 전용 서킷 사본에서 직접 고른 상대와 달릴 수 있어, 실전 대기열에 서기 전에 라인을 익힐 수 있습니다.",
@@ -8483,7 +8483,7 @@ export const ko_KR: EnTranslations = {
       "circuitsCompetitionTitle": "대회 서킷",
       "circuitsCompetitionBody": "대기열 레이스는 연습용 순환로를 절대 달리지 않습니다. 대신 더 긴 대회용 서킷들로 이루어진 별도의 풀에서 뽑히며, 각각은 땅을 빌려온 게임 존의 테마로 꾸며져 있어 머신은 그대로여도 무대는 바뀝니다.",
       "rewardsHeading": "무엇을 위해 달리는가",
-      "rewardsBody": "렐름 레이서즈는 경험치도 전리품도 주지 않습니다: 이것은 그 자체를 위해, 그리고 그것이 주는 위상을 위해 하는 스포츠입니다. 그래도 등급전 히트에서의 순위는 업적의 서에 반영됩니다: 결승선 통과, 승리, 그리고 더 어려운 운전 업적들이 도전할 의지가 있는 파일럿을 그곳에서 기다립니다. 다만 승리는 적어도 한 명의 다른 플레이어가 함께 출발해 실제로 달렸을 때(결승선을 통과하거나 적어도 한 바퀴를 완주했을 때)만 인정됩니다: 협회 소속 파일럿이나 출발선을 한 번도 떠나지 않은 상대를 이기는 것은 연습일 뿐 기록이 아닙니다. 이 업적들은 명성을 주지 않지만, 충분히 많이 승리하면 달고 다닐 수 있는 장식용 칭호를 얻습니다."
+      "rewardsBody": "박격 오버드라이브는 경험치도 전리품도 주지 않습니다: 이것은 그 자체를 위해, 그리고 그것이 주는 위상을 위해 하는 스포츠입니다. 그래도 등급전 히트에서의 순위는 업적의 서에 반영됩니다: 결승선 통과, 승리, 그리고 더 어려운 운전 업적들이 도전할 의지가 있는 파일럿을 그곳에서 기다립니다. 다만 승리는 적어도 한 명의 다른 플레이어가 함께 출발해 실제로 달렸을 때(결승선을 통과하거나 적어도 한 바퀴를 완주했을 때)만 인정됩니다: 협회 소속 파일럿이나 출발선을 한 번도 떠나지 않은 상대를 이기는 것은 연습일 뿐 기록이 아닙니다. 이 업적들은 명성을 주지 않지만, 충분히 많이 승리하면 달고 다닐 수 있는 장식용 칭호를 얻습니다."
     },
     "factionsPage": {
       "heading": "진영과 평판",
@@ -13235,15 +13235,15 @@ export const ko_KR: EnTranslations = {
         "name": "태엽 충격 폭탄",
         "description": "대상 위치에 태엽 충격 폭탄을 던져 5미터 내의 적에게 120~160의 자연 피해를 입힙니다."
       },
-      "rally_ground_blast": {
+      "mortar_overdrive_ground_blast": {
         "name": "그라운드 블래스트",
         "description": "전방 최소 {minRange}미터, 기체 정면 기준 {coneDegrees}도 이내의 지면 지점에 포탄을 발사합니다. 포탄은 {minFlight}~{maxFlight}초 뒤에 착탄합니다. 착탄 지점에서 {radius}미터 내의 모든 경쟁자가 공중으로 띄워지며 밀려나는데, {coreRadius}미터 이내에서는 최대 위력이고 가장자리로 갈수록 약해집니다. 또한 {gripSeconds}초 동안 접지력을 {gripPct}% 잃고 {slowSeconds}초 동안 {slowPct}% 느려집니다. 레이스 보호막이 이 공격을 흡수합니다."
       },
-      "rally_nitro": {
+      "mortar_overdrive_nitro": {
         "name": "니트로",
         "description": "니트로를 태워 즉시 앞으로 {kick}미터/초만큼 가속합니다. {seconds}초 동안 최고 속도가 기체의 기본 상한보다 {speedPct}% 높아집니다."
       },
-      "rally_oil_slick": {
+      "mortar_overdrive_oil_slick": {
         "name": "기름막",
         "description": "기체 아래에 기름을 쏟습니다. 기름은 {seconds}초 동안 트랙에 남습니다. 그 위로 달려든 경쟁자는 옆으로 밀려나며(빠를수록 더 세게), {gripSeconds}초 동안 접지력을 {gripPct}% 잃습니다. 자신의 기름은 한 번 빠져나오기 전까지는 자신에게 효과가 없습니다. 레이스 보호막이 이를 흡수합니다."
       },

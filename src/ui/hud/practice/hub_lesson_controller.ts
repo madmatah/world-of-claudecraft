@@ -272,7 +272,7 @@ export class HubLessonController {
   onEvent(ev: {
     type: string;
     sourceId?: number;
-    // Nullable because some SimEvents (a Realm Racers shell that hit no one)
+    // Nullable because some SimEvents (a Mortar Overdrive shell that hit no one)
     // carry an explicit null target; only a heal2 ever reaches the lookup.
     targetId?: number | null;
     amount?: number;

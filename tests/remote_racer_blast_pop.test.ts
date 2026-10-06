@@ -21,24 +21,24 @@ import {
   startRemoteRacerHops,
   stepRemoteVehicleDisplay,
 } from '../src/render/remote_vehicle_display_core';
-import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
-import { GRAVITY } from '../src/sim/player_motion';
+import { mortarOverdriveCompetitionCircuits } from '../src/sim/content/mortar_overdrive/circuits';
 import {
   GROUND_BLAST_POP_VELOCITY,
   resolveGroundBlastImpact,
-} from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+} from '../src/sim/mortar_overdrive/ground_blast';
+import { MORTAR_OVERDRIVE_GRID_SIZE } from '../src/sim/mortar_overdrive/layout';
 import {
-  realmRacersFireGroundBlast,
-  realmRacersStartMatch,
-  updateRealmRacers,
-} from '../src/sim/social/realm_racers';
+  mortarOverdriveFireGroundBlast,
+  mortarOverdriveStartMatch,
+  updateMortarOverdrive,
+} from '../src/sim/mortar_overdrive/race';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
+import { GRAVITY } from '../src/sim/player_motion';
 import { DT, type SimEvent, TICK_RATE } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, teleport } from './mortar_overdrive_util';
 
-type HitEvent = SimEvent & { type: 'realmRacersGroundBlastHit' };
+type HitEvent = SimEvent & { type: 'mortarOverdriveGroundBlastHit' };
 
 const FRAME_S = 1 / 60;
 /** How far the mirrored height trails the drawn frame: a 100 ms snapshot
@@ -54,20 +54,20 @@ function required<T>(value: T | null | undefined, label: string): T {
  *  height lift over its pre-hit height every tick from the Hit on. */
 function simArc(offset: number): { hit: HitEvent; lift: number[]; rivalId: number } {
   const sim = makeWorld();
-  const circuit = realmRacersCompetitionCircuits()[0];
-  const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+  const circuit = mortarOverdriveCompetitionCircuits()[0];
+  const pids = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
     addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40 - i),
   );
-  realmRacersStartMatch(sim.ctx, pids, undefined, circuit.id);
+  mortarOverdriveStartMatch(sim.ctx, pids, undefined, circuit.id);
   sim.tick();
-  const live = required(sim.realmRacers.match, 'match');
-  const track = realmRacersTrack(circuit);
+  const live = required(sim.mortarOverdrive.match, 'match');
+  const track = mortarOverdriveTrack(circuit);
   pids.slice(2).forEach((pid, i) => {
     const away = track.pointAt(track.length * (0.4 + i * 0.2));
     teleport(sim, pid, away.x, away.z);
   });
   live.phase = 'racing';
-  updateRealmRacers(sim.ctx);
+  updateMortarOverdrive(sim.ctx);
   const [a, b] = pids;
   const caster = required(sim.entities.get(a), 'caster');
   const rival = required(sim.entities.get(b), 'rival');
@@ -75,11 +75,11 @@ function simArc(offset: number): { hit: HitEvent; lift: number[]; rivalId: numbe
   rival.facing = 0;
   teleport(sim, b, caster.pos.x, caster.pos.z + 14);
   caster.castAim = { x: rival.pos.x + offset, y: rival.pos.y, z: rival.pos.z };
-  realmRacersFireGroundBlast(sim.ctx, caster);
+  mortarOverdriveFireGroundBlast(sim.ctx, caster);
   const baseY = rival.pos.y;
   let hit: HitEvent | null = null;
   for (let tick = 0; tick < 40 && !hit; tick++) {
-    for (const ev of sim.tick()) if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
+    for (const ev of sim.tick()) if (ev.type === 'mortarOverdriveGroundBlastHit') hit = ev;
   }
   const lift = [rival.pos.y - baseY];
   for (let tick = 0; tick < 80; tick++) {

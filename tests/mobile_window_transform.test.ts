@@ -97,7 +97,7 @@ function splitTopLevel(v: string): string[] {
 }
 
 // The `inset` family re-pins `left`/`right` without ever writing the longhand
-// (the #realm-racers-window bug shipped exactly this way), so expand the
+// (the #mortar-overdrive-window bug shipped exactly this way), so expand the
 // shorthands to their horizontal edges before merging. Logical `inline`
 // properties map to left/right directly: every shipped locale is LTR.
 function horizontalInsets(body: string): { left: string | null; right: string | null } {

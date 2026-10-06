@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
-<!-- World of ClaudeCraft Realm Racers circuit editor (dev tool, English-only
+<!-- World of ClaudeCraft Mortar Overdrive circuit editor (dev tool, English-only
      like the music editor and the perf overlay; never part of a production
-     build). Draws a circuit against the REAL spline (realmRacersTrack) and the
-     REAL readout (src/sim/realm_racers_circuit_metrics.ts), so every metric on
+     build). Draws a circuit against the REAL spline (mortarOverdriveTrack) and the
+     REAL readout (src/sim/mortar_overdrive/circuit_metrics.ts), so every metric on
      screen is the one a content test runs over shipped circuits.
 
      Plan-first workbench: the 2D plan IS the bench, full bleed. A menu bar and
@@ -17,7 +17,7 @@
 
      Open under npm run dev: http://localhost:PORT/circuit_editor.html
      Copy record copies a TypeScript literal to paste into
-     src/sim/content/realm_racers_circuits.ts; Save draft writes a scratch file
+     src/sim/content/mortar_overdrive/circuits.ts; Save draft writes a scratch file
      to tmp/circuit-drafts/ and never touches the curated module. -->
 <head>
   <meta charset="utf-8" />
@@ -684,7 +684,7 @@
         <div id="metricsHead"><h3>readout</h3></div>
         <div id="metricsBody"></div>
       </div>
-      <!-- The 3D dock. It renders the draft through buildRealmRacersTrack, the
+      <!-- The 3D dock. It renders the draft through buildMortarOverdriveTrack, the
            same builder the game runs, so a later dressing or theme pass shows up
            here for free. -->
       <div id="dock" hidden>

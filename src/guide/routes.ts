@@ -203,14 +203,14 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     descKey: 'guide.worldPvpPage.introZones',
   },
   {
-    id: 'realm-racers',
-    sub: 'realm-racers',
-    navKey: 'guide.nav.realmRacers',
+    id: 'mortar-overdrive',
+    sub: 'mortar-overdrive',
+    navKey: 'guide.nav.mortarOverdrive',
     // Filed with arena/thornhollow/world-pvp: the release's sidebar regroup
     // retired the old catch-all 'compendium' this page was authored into, and a
-    // rally is a competitive activity.
+    // Mortar Overdrive is a competitive activity.
     group: 'compete',
-    descKey: 'guide.realmRacersPage.intro',
+    descKey: 'guide.mortarOverdrivePage.intro',
   },
   {
     id: 'deeds',

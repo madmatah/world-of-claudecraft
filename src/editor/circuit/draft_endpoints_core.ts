@@ -1,7 +1,7 @@
 // What the dev server answers when something asks for a saved draft.
 //
 // The read endpoints exist so a running game can race a circuit that was drawn
-// in the editor without a source edit (`/dev rallydraft`), and the editor's own
+// in the editor without a source edit (`/dev overdrivedraft`), and the editor's own
 // draft manager lists and discards them. This module is handed a READER and has
 // no writer at all, which is what makes "a GET never writes" structural rather
 // than a promise. The DELETE arm does not change that: it DECIDES, naming the id

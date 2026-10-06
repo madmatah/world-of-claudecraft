@@ -257,7 +257,7 @@ export function placeFeastAction(
     return;
   }
   // A racer's table would stand on the shared circuit past the race.
-  if (p.castingAbility || isConsuming(p) || meta.realmRacersMatchId !== null) {
+  if (p.castingAbility || isConsuming(p) || meta.mortarOverdriveMatchId !== null) {
     ctx.error(meta.entityId, 'You are busy.');
     return;
   }

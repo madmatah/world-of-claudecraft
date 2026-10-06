@@ -16,6 +16,11 @@ import { isAbilityMomentRecorded } from './ability_sfx_coverage';
 import { resumeWhenAllowed } from './audio_unlock';
 import { isMeleeAudioId, meleeAudioSample } from './fury_audio_core';
 import {
+  MORTAR_OVERDRIVE_EVENT_SFX,
+  MORTAR_OVERDRIVE_VEHICLE_SFX,
+  type MortarOverdriveSfxEvent,
+} from './mortar_overdrive/sfx';
+import {
   advanceInterruptibleMountEngine,
   advanceMountEngine,
   type MountEngineEntry,
@@ -24,11 +29,6 @@ import {
   mountEngineIdleAudible,
   mountEngineLoopActive,
 } from './mount_engine_state';
-import {
-  REALM_RACERS_EVENT_SFX,
-  REALM_RACERS_VEHICLE_SFX,
-  type RealmRacersSfxEvent,
-} from './realm_racers_sfx';
 import {
   SFX_CATALOG_HASH,
   SFX_CLIPS,
@@ -57,7 +57,7 @@ const MAX_VOICES = 24; // concurrent one-shot sources (frame-budget guard)
 const ABILITY_VOICES = 8;
 const ABILITY_GAIN = 0.34;
 // Time constant a live loop's playback RATE glides over, on the same principle
-// as its gain. The rally vehicle bed is the only caller that moves a running
+// as its gain. The Mortar Overdrive vehicle bed is the only caller that moves a running
 // loop's rate, and its source signal is the drive state, which reaches the
 // client in 20 Hz snapshot steps with no interpolation. Assigned raw, that
 // stepped the pitch audibly: measured against the real driving kernel, coming
@@ -72,16 +72,16 @@ export const MAX_DISTANCE = 46; // hard cutoff: beyond this, sources are silent/
 // The race camera can trail its machine by 22 yd. Keep nearby cannon fire in
 // the panner's full-volume zone instead of compensating for camera falloff with
 // an unsafe source gain that also applies when the camera is close.
-const REALM_RACERS_GROUND_BLAST_REF_DISTANCE = 24;
+const MORTAR_OVERDRIVE_GROUND_BLAST_REF_DISTANCE = 24;
 // With the conformed clip at -6 dBTP and its +5 dB catalog trim, 1.25 keeps a
 // close shot below unity through the 0.85 sampled-clip master. Disable jitter
 // for this cue too: its random +10% gain branch would consume that headroom.
-const REALM_RACERS_GROUND_BLAST_GAIN = 1.25;
+const MORTAR_OVERDRIVE_GROUND_BLAST_GAIN = 1.25;
 // Groundshaker impact loudness knob. With the current -7.2 dBTP asset, +5 dB
 // catalog trim, max impact strength, and 0.85 sample master, 1.5 is the safe
 // upper target. Keep shell-impact jitter disabled so it cannot consume that
 // remaining peak headroom.
-const REALM_RACERS_GROUND_BLAST_IMPACT_GAIN = 1.5;
+const MORTAR_OVERDRIVE_GROUND_BLAST_IMPACT_GAIN = 1.5;
 const POINT_AMBIENCE_GAIN = 0.18;
 const COOLDOWN_ENTRY_TTL = 60;
 const COOLDOWN_PRUNE_INTERVAL = 30;
@@ -162,9 +162,9 @@ const SUMMON_CROSSFADE_SEC = 0.45;
 const RIFT_AMBIENCE_GAIN = 0.4;
 const HOARD_AMBIENCE_GAIN = 0.12;
 
-// Realm Racers vehicle bed. These are PER-CALL targets, so they move the race
+// Mortar Overdrive vehicle bed. These are PER-CALL targets, so they move the race
 // mix and nothing else: vehicle() has one caller in the whole game
-// (src/render/realm_racers_audio.ts). The catalog trims are the wrong knob for
+// (src/render/mortar_overdrive/audio.ts). The catalog trims are the wrong knob for
 // the same job, because foot_stone / foot_dirt are every character's footstep.
 //
 // Raised over the first pass (engine 0.1/0.22/0.12, skid 0.16, roll 0.11/0.06),
@@ -190,7 +190,7 @@ const HOARD_AMBIENCE_GAIN = 0.12;
 // full load the engine alone commands 1.63, well below unity after the asset's
 // -7.2 dB true-peak ceiling and the 0.85 sampled-clip master, and it leaves the
 // per-vehicle budget below more room for the tyre layers than 2.2 did.
-const REALM_RACERS_ENGINE_GAIN = 1.7;
+const MORTAR_OVERDRIVE_ENGINE_GAIN = 1.7;
 const VEHICLE_ENGINE_IDLE = 0.26;
 const VEHICLE_ENGINE_SPEED = 0.48;
 const VEHICLE_ENGINE_LOAD = 0.22;
@@ -210,7 +210,7 @@ const VEHICLE_ROLL_ROAD = 0.12;
 // ceiling and 0.85 sampled master. Preserve the validated engine level and
 // duck tyre/surface contact only when all three layers would exceed this
 // budget. A vehicle-only limiter catches aggregate peaks from nearby racers
-// without changing any sound outside Realm Racers.
+// without changing any sound outside Mortar Overdrive.
 const VEHICLE_MIX_TARGET_BUDGET = 2.25;
 const FOOTSTEP_CUES: Partial<Record<string, string>> = {
   grass: 'foot_grass',
@@ -659,9 +659,9 @@ class Sfx {
   }
 
   /** Translate a world source around the camera so WebAudio sees the same
-   *  relative vector it would see from the local player. Realm Racers effects
+   *  relative vector it would see from the local player. Mortar Overdrive effects
    *  opt into this individually; every other game sound remains camera-based. */
-  private realmRacersPlayerAnchoredPosition(
+  private mortarOverdrivePlayerAnchoredPosition(
     x: number,
     y: number,
     z: number,
@@ -1022,7 +1022,7 @@ class Sfx {
     const positional = x !== undefined && y !== undefined && z !== undefined;
     let slot = this.loops.get(id);
     // Rebuild on a positional flip too: a live slot's panner is wired at
-    // creation, so a caller that stops passing coordinates (the rally engine
+    // creation, so a caller that stops passing coordinates (the Mortar Overdrive engine
     // when a machine becomes the viewed pilot's) would otherwise keep playing
     // through the stale panner it was built with.
     if (
@@ -1319,9 +1319,9 @@ class Sfx {
     let ids = this.vehicleLoopIds.get(entityId);
     if (!ids) {
       ids = {
-        engine: `realm-racers-engine-${entityId}`,
-        skid: `realm-racers-skid-${entityId}`,
-        roll: `realm-racers-roll-${entityId}`,
+        engine: `mortar-overdrive-engine-${entityId}`,
+        skid: `mortar-overdrive-skid-${entityId}`,
+        roll: `mortar-overdrive-roll-${entityId}`,
       };
       this.vehicleLoopIds.set(entityId, ids);
     }
@@ -1347,14 +1347,16 @@ class Sfx {
     const speed = Math.min(1, Math.max(0, speedFraction));
     const load = Math.min(1, Math.max(0, effort));
     const slide = Math.min(1, Math.max(0, (Math.abs(slip) - 2) / 10));
-    const rollKey = offRoad ? REALM_RACERS_VEHICLE_SFX.rollDirt : REALM_RACERS_VEHICLE_SFX.rollRoad;
+    const rollKey = offRoad
+      ? MORTAR_OVERDRIVE_VEHICLE_SFX.rollDirt
+      : MORTAR_OVERDRIVE_VEHICLE_SFX.rollRoad;
     const engineTarget =
-      REALM_RACERS_ENGINE_GAIN *
+      MORTAR_OVERDRIVE_ENGINE_GAIN *
       (VEHICLE_ENGINE_IDLE + speed * VEHICLE_ENGINE_SPEED + load * VEHICLE_ENGINE_LOAD);
     const skidTarget = slide * VEHICLE_SKID_GAIN;
     const rollTarget = speed * (offRoad ? VEHICLE_ROLL_DIRT : VEHICLE_ROLL_ROAD);
     const mixedContactTarget =
-      skidTarget * (this.entry(REALM_RACERS_VEHICLE_SFX.skid)?.gain ?? 1) +
+      skidTarget * (this.entry(MORTAR_OVERDRIVE_VEHICLE_SFX.skid)?.gain ?? 1) +
       rollTarget * (this.entry(rollKey)?.gain ?? 1);
     const contactScale =
       mixedContactTarget > 0
@@ -1374,13 +1376,13 @@ class Sfx {
     const vehicleOutput = this.vehicleLimiter ?? this.master ?? undefined;
     this.loop(
       ids.engine,
-      REALM_RACERS_VEHICLE_SFX.engine,
+      MORTAR_OVERDRIVE_VEHICLE_SFX.engine,
       engineTarget,
       engineX,
       engineY,
       engineZ,
       self ? undefined : MAX_DISTANCE,
-      // immediate: false. The rally bed fades in like any other ambience loop;
+      // immediate: false. The Mortar Overdrive bed fades in like any other ambience loop;
       // only the engine-mount windup splice (mountEngine) needs the snap.
       false,
       VEHICLE_ENGINE_IDLE_RATE +
@@ -1391,7 +1393,7 @@ class Sfx {
     if (slide > 0)
       this.loop(
         ids.skid,
-        REALM_RACERS_VEHICLE_SFX.skid,
+        MORTAR_OVERDRIVE_VEHICLE_SFX.skid,
         skidTarget * contactScale,
         x,
         y,
@@ -1425,23 +1427,32 @@ class Sfx {
     this.vehicleLoopIds.delete(entityId);
   }
 
-  realmRacersEvent(kind: RealmRacersSfxEvent, x: number, y: number, z: number, impact = 1): void {
+  mortarOverdriveEvent(
+    kind: MortarOverdriveSfxEvent,
+    x: number,
+    y: number,
+    z: number,
+    impact = 1,
+  ): void {
     const strength = Math.min(1, Math.max(0.2, impact));
     const contactGain = (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25;
-    const key = REALM_RACERS_EVENT_SFX[kind];
+    const key = MORTAR_OVERDRIVE_EVENT_SFX[kind];
     const [audioX, audioY, audioZ] =
-      kind === 'groundBlastImpact' ? this.realmRacersPlayerAnchoredPosition(x, y, z) : [x, y, z];
+      kind === 'groundBlastImpact'
+        ? this.mortarOverdrivePlayerAnchoredPosition(x, y, z)
+        : [x, y, z];
     this.playAt(key, audioX, audioY, audioZ, {
       gain:
         kind === 'groundBlastFire'
-          ? REALM_RACERS_GROUND_BLAST_GAIN
+          ? MORTAR_OVERDRIVE_GROUND_BLAST_GAIN
           : kind === 'groundBlastImpact'
-            ? contactGain * REALM_RACERS_GROUND_BLAST_IMPACT_GAIN
+            ? contactGain * MORTAR_OVERDRIVE_GROUND_BLAST_IMPACT_GAIN
             : contactGain,
       rate: kind === 'scrape' ? 1.2 : 0.9 + strength * 0.2,
       cooldown: kind === 'scrape' ? 0.16 : 0.04,
       jitter: kind !== 'groundBlastFire' && kind !== 'groundBlastImpact',
-      refDistance: kind === 'groundBlastFire' ? REALM_RACERS_GROUND_BLAST_REF_DISTANCE : undefined,
+      refDistance:
+        kind === 'groundBlastFire' ? MORTAR_OVERDRIVE_GROUND_BLAST_REF_DISTANCE : undefined,
       release: kind === 'scrape' ? 0.18 : undefined,
     });
   }
@@ -2042,7 +2053,7 @@ class Sfx {
   /** Cross-fade the global ambience loops to match the player's surroundings.
    *  These are continuous background beds, kept well under the foreground
    *  footstep/jump/combat one-shots so movement always reads clearly over them.
-   *  A null `biome` (a Realm Racers circuit) matches no zone bed. */
+   *  A null `biome` (a Mortar Overdrive circuit) matches no zone bed. */
   ambience(
     biome: BiomeId | null,
     inDungeon: boolean,

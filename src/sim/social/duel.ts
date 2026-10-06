@@ -11,10 +11,10 @@
 // on Sim and are read through the seam.
 
 import { ownedNecromancyUndead } from '../combat/necromancy';
+import { inMortarOverdriveHeat } from '../mortar_overdrive/seat';
 import type { DuelState } from '../sim';
 import type { SimContext } from '../sim_context';
 import { DT, dist2d, type Entity } from '../types';
-import { inRealmRacersHeat } from './realm_racers_seat';
 
 const DUEL_COUNTDOWN = 3;
 const DUEL_FORFEIT_DISTANCE = 60;
@@ -25,13 +25,13 @@ export function duelRequest(ctx: SimContext, targetPid: number, pid?: number): v
   const targetE = ctx.entities.get(targetPid);
   if (!r || !target || !targetE) return;
   if (targetPid === r.meta.entityId) return;
-  // A Realm Racers seat owns its pilot until the race returns them, and a grid
+  // A Mortar Overdrive seat owns its pilot until the race returns them, and a grid
   // (or a bystander at its fence) is well inside duel range.
-  if (inRealmRacersHeat(ctx, r.meta.entityId)) {
+  if (inMortarOverdriveHeat(ctx, r.meta.entityId)) {
     ctx.error(r.meta.entityId, 'You are busy.');
     return;
   }
-  if (inRealmRacersHeat(ctx, targetPid)) {
+  if (inMortarOverdriveHeat(ctx, targetPid)) {
     ctx.error(r.meta.entityId, `${target.name} is busy right now.`);
     return;
   }
@@ -81,11 +81,11 @@ export function duelAccept(ctx: SimContext, pid?: number): void {
   const other = ctx.players.get(invite.fromPid);
   if (!other) return;
   // The same seat rule, for a challenge issued before either side was seated.
-  if (inRealmRacersHeat(ctx, r.meta.entityId)) {
+  if (inMortarOverdriveHeat(ctx, r.meta.entityId)) {
     ctx.error(r.meta.entityId, 'You are busy.');
     return;
   }
-  if (inRealmRacersHeat(ctx, invite.fromPid)) {
+  if (inMortarOverdriveHeat(ctx, invite.fromPid)) {
     ctx.error(r.meta.entityId, `${other.name} is busy right now.`);
     return;
   }

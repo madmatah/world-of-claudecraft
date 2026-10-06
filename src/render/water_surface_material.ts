@@ -3,7 +3,7 @@
 // The shader itself lives in `water.ts`, whose surfaces come from
 // `waterBodies()`, i.e. from the lakes declared on the active content's ZONES.
 // An instanced band is not a zone, so it declares no lake and `waterLevelAt` is
-// -Infinity across it: the rally's basin would be a flat translucent plane next
+// -Infinity across it: the Mortar Overdrive's basin would be a flat translucent plane next
 // to an Evergarden lake with ripples, shore foam, sun glints and wakes. This
 // module is the THIN ADAPTER that hands a band the same material, with its own
 // surface origin and, when its circuit theme asks, its own depth palette.
@@ -44,8 +44,8 @@ export interface WaterSurfaceMaterialOptions {
    * The two ends of the depth ramp, if this surface wants its own.
    *
    * Absent leaves the world's shipped pair, which every overworld body and the
-   * shipped rally pools use, so this is invisible until something asks. What
-   * asks is a Realm Racers circuit THEME: a coastal circuit's pools have to read
+   * shipped Mortar Overdrive pools use, so this is invisible until something asks. What
+   * asks is a Mortar Overdrive circuit THEME: a coastal circuit's pools have to read
    * as its own sea rather than as the Evergarden's pond, and the colour ramp is
    * the whole of that difference (the ripples, the fresnel and the foam are the
    * same water everywhere, deliberately).

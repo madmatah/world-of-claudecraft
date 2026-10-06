@@ -43,7 +43,7 @@
 //
 // The authoritative discontinuity is read off the client exactly where main.ts
 // reads it (`consumeSelfPositionDiscontinuity`, which covers a completed
-// unstuck AND a Realm Racers recovery), after the event drain.
+// unstuck AND a Mortar Overdrive recovery), after the event drain.
 //
 // More clients can join the same server (`addPeer`), each over its own link
 // with its own frame pipeline on the shared clock: the rig for measuring what
@@ -278,7 +278,7 @@ export interface ClientFrameInfo {
   selfMotion: SelfRenderPrediction | null;
   /** The drawn self pose. */
   drawn: Readonly<{ x: number; y: number; z: number }>;
-  /** The pose the HUD's ground-aim clamp measures from: renderer.realmRacers.selfAimPose
+  /** The pose the HUD's ground-aim clamp measures from: renderer.mortarOverdrive.selfAimPose
    *  (displayedAimPose), null while the display is not predicted, where the
    *  HUD falls back to the mirrored player. */
   aimPose: Readonly<{ pos: { x: number; y: number; z: number }; facing: number }> | null;
@@ -679,7 +679,7 @@ function createClientRig(params: ClientRigParams): ClientRig {
     }
 
     // main.ts reads the renderer's PREVIOUS frame for the driving heading
-    // (renderer.realmRacers.selfMotionFacing, the drive view on either wire).
+    // (renderer.mortarOverdrive.selfMotionFacing, the drive view on either wire).
     const predictedDrivingFacing = selfRender.drive.steersHeading ? selfRender.drive.facing : null;
     if (driving) {
       cameraFacing = cameraFollowFacing(

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Postgres is mocked before the server/game import the harness pulls in
 // (tests/CLAUDE.md, Server tests): the same factory as
-// tests/realm_racers_v2_prediction.test.ts.
+// tests/mortar_overdrive_v2_prediction.test.ts.
 const calls = vi.hoisted(() => ({ consume: [] as number[][], epochs: [] as number[][] }));
 vi.mock('../server/db', () => ({
   pool: { query: vi.fn(async () => ({ rows: [] })) },

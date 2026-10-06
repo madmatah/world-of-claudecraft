@@ -1,5 +1,5 @@
 // The local pilot's own Ground Blast shell, launched on the input frame
-// (own_shot_launch_core.ts + RealmRacersGroundBlastVisuals.launchOwn): the
+// (own_shot_launch_core.ts + MortarOverdriveGroundBlastVisuals.launchOwn): the
 // same aim clamp and flight the sim applies, adopted by the server's Fired
 // event as exactly one shell, faded out with no crater when the server never
 // confirms it, on a window derived from the prediction's own lead.
@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
+import { MortarOverdriveGroundBlastVisuals } from '../src/render/mortar_overdrive/ground_blast';
 import {
   claimOwnShotLaunch,
   createOwnShotLedger,
@@ -18,23 +19,22 @@ import {
   recordOwnShotLaunch,
   shellProgress,
 } from '../src/render/own_shot_launch_core';
-import { RealmRacersGroundBlastVisuals } from '../src/render/realm_racers_ground_blast';
-import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
+import { mortarOverdriveCompetitionCircuits } from '../src/sim/content/mortar_overdrive/circuits';
 import {
   GROUND_BLAST_MUZZLE_NOSE_YD,
   resolveGroundBlastAim,
-} from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+} from '../src/sim/mortar_overdrive/ground_blast';
+import { MORTAR_OVERDRIVE_GRID_SIZE } from '../src/sim/mortar_overdrive/layout';
 import {
-  realmRacersFireGroundBlast,
-  realmRacersStartMatch,
-  updateRealmRacers,
-} from '../src/sim/social/realm_racers';
+  mortarOverdriveFireGroundBlast,
+  mortarOverdriveStartMatch,
+  updateMortarOverdrive,
+} from '../src/sim/mortar_overdrive/race';
 import { DT, type SimEvent } from '../src/sim/types';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, teleport } from './mortar_overdrive_util';
 
 vi.mock('../src/render/textures', () => ({
-  rallyGroundBlastMarkerTexture: () => {
+  mortarOverdriveGroundBlastMarkerTexture: () => {
     const texture = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
     texture.needsUpdate = true;
     return texture;
@@ -46,13 +46,13 @@ const OWNER = 7;
 const RIVAL = 9;
 const flat = (): number => 0;
 
-function named(v: RealmRacersGroundBlastVisuals, name: string): THREE.Mesh {
+function named(v: MortarOverdriveGroundBlastVisuals, name: string): THREE.Mesh {
   const mesh = v.group.getObjectByName(name) as THREE.Mesh | undefined;
   if (!mesh) throw new Error(`no ${name}`);
   return mesh;
 }
 
-function materialsOf(v: RealmRacersGroundBlastVisuals): Map<THREE.Material, number> {
+function materialsOf(v: MortarOverdriveGroundBlastVisuals): Map<THREE.Material, number> {
   const out = new Map<THREE.Material, number>();
   v.group.traverse((object) => {
     const mat = (object as THREE.Mesh).material as THREE.Material | undefined;
@@ -61,8 +61,8 @@ function materialsOf(v: RealmRacersGroundBlastVisuals): Map<THREE.Material, numb
   return out;
 }
 
-function launched(leadMs: number): RealmRacersGroundBlastVisuals {
-  const v = new RealmRacersGroundBlastVisuals();
+function launched(leadMs: number): MortarOverdriveGroundBlastVisuals {
+  const v = new MortarOverdriveGroundBlastVisuals();
   v.prepare();
   expect(v.launchOwn(0, 0, 0, { x: 0, z: 30 }, leadMs, flat, OWNER)).toBe(true);
   return v;
@@ -72,16 +72,16 @@ describe('the own-shot launch plan is the sim shot', () => {
   it('clamps and times exactly as the server does, from the drawn nose', () => {
     // A real server shot from the same pose at the same aim.
     const sim = makeWorld();
-    const circuit = realmRacersCompetitionCircuits()[0];
-    const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    const circuit = mortarOverdriveCompetitionCircuits()[0];
+    const pids = Array.from({ length: MORTAR_OVERDRIVE_GRID_SIZE }, (_, i) =>
       addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40 - i),
     );
-    realmRacersStartMatch(sim.ctx, pids, undefined, circuit.id);
+    mortarOverdriveStartMatch(sim.ctx, pids, undefined, circuit.id);
     sim.tick();
-    const live = sim.realmRacers.match;
+    const live = sim.mortarOverdrive.match;
     if (!live) throw new Error('no match');
     live.phase = 'racing';
-    updateRealmRacers(sim.ctx);
+    updateMortarOverdrive(sim.ctx);
     const caster = sim.entities.get(pids[0]);
     if (!caster) throw new Error('no caster');
     teleport(sim, pids[0], caster.pos.x, caster.pos.z);
@@ -89,12 +89,12 @@ describe('the own-shot launch plan is the sim shot', () => {
     // Off the cone and past the range, so both clamps bite.
     const requested = { x: caster.pos.x + 60, z: caster.pos.z + 50 };
     caster.castAim = { ...requested, y: caster.pos.y };
-    realmRacersFireGroundBlast(sim.ctx, caster);
+    mortarOverdriveFireGroundBlast(sim.ctx, caster);
     const fired = sim
       .tick()
       .find(
-        (e): e is SimEvent & { type: 'realmRacersGroundBlastFired' } =>
-          e.type === 'realmRacersGroundBlastFired',
+        (e): e is SimEvent & { type: 'mortarOverdriveGroundBlastFired' } =>
+          e.type === 'mortarOverdriveGroundBlastFired',
       );
     const pose = { x: caster.pos.x, z: caster.pos.z, facing: caster.facing };
     const plan = planOwnShotLaunch(pose, requested, 180);
@@ -155,7 +155,7 @@ describe('the own shell in the pooled Ground Blast visuals', () => {
     expect(shell.position.z).toBeCloseTo(GROUND_BLAST_MUZZLE_NOSE_YD, 9);
     expect(named(v, 'marker0').position.z).toBeCloseTo(30, 9);
     // Nothing without a lead: the event draws the shell as before.
-    const offline = new RealmRacersGroundBlastVisuals();
+    const offline = new MortarOverdriveGroundBlastVisuals();
     expect(offline.launchOwn(0, 0, 0, { x: 0, z: 30 }, null, flat, OWNER)).toBe(false);
     expect(offline.inFlight).toBe(0);
   });
@@ -230,7 +230,7 @@ describe('the own shell at a high lead, on a second press, and on uneven ground'
     if (!plan) throw new Error('no plan');
     const window = ownShotConfirmWindowS(leadMs);
     expect(plan.flightSeconds).toBeGreaterThanOrEqual(window + OWN_SHOT_UNCONFIRMED_FADE_S);
-    const v = new RealmRacersGroundBlastVisuals();
+    const v = new MortarOverdriveGroundBlastVisuals();
     v.prepare();
     v.launchOwn(0, 0, 0, { x: 0, z: 1 }, leadMs, flat, OWNER);
     let t = 0;
@@ -282,7 +282,7 @@ describe('the own-shot launch is wired behind the local gate', () => {
     const castAt = hudTs.indexOf('castAt: (id, point, barSlot) => {');
     const cast = hudTs.indexOf('this.sim.castAbilityAt(id, point);', castAt);
     const predict = hudTs.indexOf(
-      'realmRacersHud.predictRallyGroundBlastFire(this, id, point);',
+      'moHud.predictMortarOverdriveGroundBlastFire(this, id, point);',
       castAt,
     );
     expect(castAt).toBeGreaterThan(0);
@@ -290,19 +290,21 @@ describe('the own-shot launch is wired behind the local gate', () => {
     expect(predict).toBeGreaterThan(cast);
     expect(hudTs.slice(castAt, predict)).not.toContain('},');
     const hud = readFileSync(
-      new URL('../src/ui/hud/realm_racers/realm_racers_cast_feedback.ts', import.meta.url),
+      new URL('../src/ui/hud/mortar_overdrive/cast_feedback.ts', import.meta.url),
       'utf8',
     );
-    const gate = hud.indexOf('if (rallyCastFeedbackAllowed(hud, id, REALM_RACERS_ABILITY_ID)) {');
+    const gate = hud.indexOf(
+      'if (mortarOverdriveCastFeedbackAllowed(hud, id, MORTAR_OVERDRIVE_ABILITY_ID)) {',
+    );
     const call = hud.indexOf(
-      '(hud as RallyCastHost).renderer.realmRacers.predictOwnGroundBlastFire(point);',
+      '(hud as MortarOverdriveCastHost).renderer.mortarOverdrive.predictOwnGroundBlastFire(point);',
     );
     expect(gate).toBeGreaterThan(0);
     expect(call).toBeGreaterThan(gate);
     expect(hud.slice(gate, call)).not.toContain('}');
-    // The launch is the rally scene's, reached as renderer.realmRacers.
+    // The launch is the Mortar Overdrive scene's, reached as renderer.mortarOverdrive.
     const scene = readFileSync(
-      new URL('../src/render/realm_racers_scene.ts', import.meta.url),
+      new URL('../src/render/mortar_overdrive/scene.ts', import.meta.url),
       'utf8',
     );
     const body = scene.slice(scene.indexOf('predictOwnGroundBlastFire(point'));

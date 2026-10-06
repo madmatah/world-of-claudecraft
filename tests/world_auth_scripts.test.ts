@@ -111,7 +111,7 @@ const AUTHENTICATED_NODE_CLIENTS = [
     authSend: 'this.send(worldAuthMessage(token, characterId));',
   },
   {
-    path: 'scripts/realm_racers_e2e.mjs',
+    path: 'scripts/mortar_overdrive_e2e.mjs',
     authSend: 'this.send(worldAuthMessage(token, characterId));',
   },
   {
@@ -173,7 +173,7 @@ function nodeWebSocketSources(dir = SCRIPTS_ROOT): Array<[string, string]> {
 
 describe('standalone world WebSocket auth', () => {
   it('keeps the Node discriminator fresh with the authoritative world layout epoch', () => {
-    // The release carried the epoch to 45; the Realm Racers layout change is
+    // The release carried the epoch to 45; the Mortar Overdrive layout change is
     // the next one on top of it, so the merged world layout is a fresh epoch.
     expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(46);
     expect(ONLINE_WORLD_AUTH_TYPE).toBe(`auth-world-${ONLINE_WORLD_LAYOUT_VERSION}`);

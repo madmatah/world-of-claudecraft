@@ -1,7 +1,10 @@
 import { DRUID_FORM_ENTRY } from '../../../sim/combat/druid_form_entry';
 import { NATURES_BOON_ABILITIES } from '../../../sim/combat/druid_natures_boon';
 import { abilityBelongsToForm, hasFormRequirement } from '../../../sim/combat/form_requirement';
-import { REALM_RACERS_ABILITIES, REALM_RACERS_BAR_SLOTS } from '../../../sim/content/realm_racers';
+import {
+  MORTAR_OVERDRIVE_ABILITIES,
+  MORTAR_OVERDRIVE_BAR_SLOTS,
+} from '../../../sim/content/mortar_overdrive/kit';
 import { classTalentChoiceAbilityGroups } from '../../../sim/content/talents';
 import { ABILITIES, ITEMS } from '../../../sim/data';
 import type { PlayerClass } from '../../../sim/types';
@@ -51,7 +54,7 @@ import { isUsableTrinketId } from './trinket_slot_core';
 
 export { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
 
-export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'rally';
+export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'mortarOverdrive';
 
 const FORM_TOGGLE_IDS = new Set(['bear_form', 'cat_form', 'travel_form']);
 // Buttons that seed onto EVERY form kit bar:
@@ -69,10 +72,12 @@ const FORM_BAR_ALWAYS_IDS = new Set([
   ...NATURES_BOON_ABILITIES,
 ]);
 
-// The bar slots the rally kit reserves, derived once at import: `actionForSlot`
+// The bar slots the Mortar Overdrive kit reserves, derived once at import: `actionForSlot`
 // asks per slot and per frame, so the membership test must not rebuild a list
 // each time.
-const RALLY_PINNED_SLOTS: ReadonlySet<number> = new Set(Object.values(REALM_RACERS_BAR_SLOTS));
+const MORTAR_OVERDRIVE_PINNED_SLOTS: ReadonlySet<number> = new Set(
+  Object.values(MORTAR_OVERDRIVE_BAR_SLOTS),
+);
 
 export interface ActionBarControllerDeps {
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -82,7 +87,7 @@ export interface ActionBarControllerDeps {
   talentSpec(): string | null;
   knownAbilityIds(): readonly string[];
   hasAura(kind: string): boolean;
-  isInRealmRacers?(): boolean;
+  isInMortarOverdrive?(): boolean;
   showAttackButton(): boolean;
   // A broader owner-presentation hold, including the first snapshot after reconnect.
   readOnly?(): boolean;
@@ -329,7 +334,7 @@ export class ActionBarController {
   }
 
   resolveActiveForm(): HotbarForm {
-    if (this.deps.isInRealmRacers?.()) return 'rally';
+    if (this.deps.isInMortarOverdrive?.()) return 'mortarOverdrive';
     if (this.deps.playerClass === 'druid') {
       if (this.deps.hasAura('form_bear')) return 'bear';
       if (this.deps.hasAura('form_cat')) {
@@ -427,7 +432,7 @@ export class ActionBarController {
       knownAbilityIds,
       autoPlaceAbilityIds,
       // Also strips every PINNED kit ability out of the assignable rows, which is
-      // what MIGRATES a bar seeded by an earlier build: those put the rally
+      // what MIGRATES a bar seeded by an earlier build: those put the Mortar Overdrive
       // weapon in row slot 1 and the drawn pickup effect in the first free slot
       // behind it, and either would otherwise now appear twice.
       (id) => !this.isAbilityPlacementAllowed(id) || this.activityKitSlotFor(id) !== null,
@@ -610,7 +615,7 @@ export class ActionBarController {
    * leftmost key cost that key twice over, once answering "Invalid attack
    * target." and once showing an attack icon over a key that fired the weapon.
    * The pickup effects joined it as pins for a different reason, recorded with
-   * the table in `sim/content/realm_racers.ts`: auto-placement fills the first
+   * the table in `sim/content/mortar_overdrive/kit.ts`: auto-placement fills the first
    * EMPTY slot, so every effect a pilot drew landed under the same key.
    *
    * Scope note: the pin table is per activity, so a future activity kit of the
@@ -618,8 +623,8 @@ export class ActionBarController {
    * own slot table.
    */
   private activityKitSlotFor(id: string, form: HotbarForm = this.activeFormState): number | null {
-    if (form !== 'rally') return null;
-    return REALM_RACERS_BAR_SLOTS[id] ?? null;
+    if (form !== 'mortarOverdrive') return null;
+    return MORTAR_OVERDRIVE_BAR_SLOTS[id] ?? null;
   }
 
   /** The kit ability pinned to `barSlot` and actually in the racer's hands, or
@@ -628,16 +633,18 @@ export class ActionBarController {
     barSlot: number,
     form: HotbarForm = this.activeFormState,
   ): string | null {
-    if (form !== 'rally') return null;
-    return this.deps.knownAbilityIds().find((id) => REALM_RACERS_BAR_SLOTS[id] === barSlot) ?? null;
+    if (form !== 'mortarOverdrive') return null;
+    return (
+      this.deps.knownAbilityIds().find((id) => MORTAR_OVERDRIVE_BAR_SLOTS[id] === barSlot) ?? null
+    );
   }
 
   /** Whether the kit RESERVES `barSlot`, held or not. A reserved slot stays
    *  empty rather than falling through, which is what keeps each effect on its
    *  own key instead of sliding left into the first gap. */
   private isActivityKitSlot(barSlot: number, form: HotbarForm = this.activeFormState): boolean {
-    if (form !== 'rally') return false;
-    return RALLY_PINNED_SLOTS.has(barSlot);
+    if (form !== 'mortarOverdrive') return false;
+    return MORTAR_OVERDRIVE_PINNED_SLOTS.has(barSlot);
   }
 
   isAttackSlotFixed(): boolean {
@@ -710,10 +717,10 @@ export class ActionBarController {
     if (!this.isAbilityPlacementAllowed(id)) return false;
     // An ability the kit already pins to its own key is not placed a second time
     // in the assignable rows; anything else the kit grants still is.
-    if (form === 'rally') {
-      return !!REALM_RACERS_ABILITIES[id] && this.activityKitSlotFor(id, form) === null;
+    if (form === 'mortarOverdrive') {
+      return !!MORTAR_OVERDRIVE_ABILITIES[id] && this.activityKitSlotFor(id, form) === null;
     }
-    if (REALM_RACERS_ABILITIES[id]) return false;
+    if (MORTAR_OVERDRIVE_ABILITIES[id]) return false;
     if (this.isStealthForm(form)) return false;
     const def = ABILITIES[id];
     if (form === 'bear' || form === 'cat') {
@@ -731,7 +738,7 @@ export class ActionBarController {
   }
 
   private abilityDef(id: string) {
-    return ABILITIES[id] ?? REALM_RACERS_ABILITIES[id];
+    return ABILITIES[id] ?? MORTAR_OVERDRIVE_ABILITIES[id];
   }
 
   private isAbilityPlacementAllowed(id: string): boolean {
@@ -884,7 +891,7 @@ export class ActionBarController {
         // Storage can be unavailable in private browsing modes.
       }
     }
-    if (this.activeFormState === 'rally') {
+    if (this.activeFormState === 'mortarOverdrive') {
       if (parsed.every((action) => action === null)) {
         this.actionState = buildDefaultFormBar(
           this.formKitAbilityIds(this.activeFormState),

@@ -15,9 +15,9 @@ vi.mock('../src/game/sfx', () => ({ sfx: sfxMock }));
 
 import { GameAudio, UI_CUES } from '../src/game/audio';
 import {
-  playRealmRacersResultAudio,
-  realmRacersResultAudioOutcome,
-} from '../src/game/realm_racers_audio_routing';
+  mortarOverdriveResultAudioOutcome,
+  playMortarOverdriveResultAudio,
+} from '../src/game/mortar_overdrive/audio_routing';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -71,10 +71,10 @@ describe('sampled GameAudio facade', () => {
       ['invitePrompt', 'ui_duel_challenge'],
       ['partyInvite', 'quest_ready'],
       ['duelCountdownTick', 'ui_duel_countdown'],
-      ['realmRacersFound', 'ui_duel_challenge'],
-      ['realmRacersCountdownTick', 'ui_fiesta_word_0'],
-      ['realmRacersGo', 'ui_fiesta_word_3'],
-      ['realmRacersLap', 'ui_fiesta_score_mine'],
+      ['mortarOverdriveFound', 'ui_duel_challenge'],
+      ['mortarOverdriveCountdownTick', 'ui_fiesta_word_0'],
+      ['mortarOverdriveGo', 'ui_fiesta_word_3'],
+      ['mortarOverdriveLap', 'ui_fiesta_score_mine'],
       ['duelStart', 'ui_duel_start'],
       ['duelEnd', 'ui_duel_end'],
       ['readyCheck', 'ui_ready_check'],
@@ -110,24 +110,24 @@ describe('sampled GameAudio facade', () => {
 
   it('uses the quest completion sting for victory and the death sting for defeat', () => {
     const audio = new GameAudio();
-    audio.realmRacersResult(true);
-    audio.realmRacersResult(false);
+    audio.mortarOverdriveResult(true);
+    audio.mortarOverdriveResult(false);
     expect(sfxMock.playUi.mock.calls.map(([key]) => key)).toEqual(['ui_quest_done', 'ui_death']);
   });
 
   it('routes live race results by outcome and keeps draws and recovery gates silent', () => {
-    const hud = readFileSync(
-      join(ROOT, 'src/ui/hud/realm_racers/realm_racers_event_router.ts'),
+    const hud = readFileSync(join(ROOT, 'src/ui/hud/mortar_overdrive/event_router.ts'), 'utf8');
+    const mortarOverdriveUi = readFileSync(
+      join(ROOT, 'src/ui/hud/mortar_overdrive/composer.ts'),
       'utf8',
     );
-    const rallyUi = readFileSync(join(ROOT, 'src/ui/realm_racers.ts'), 'utf8');
-    expect(rallyUi).toContain('this.deps.countdownTick()');
-    expect(hud).toContain('audio.realmRacersGo()');
-    expect(hud).toContain('audio.realmRacersLap()');
+    expect(mortarOverdriveUi).toContain('this.deps.countdownTick()');
+    expect(hud).toContain('audio.mortarOverdriveGo()');
+    expect(hud).toContain('audio.mortarOverdriveLap()');
     const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7) =>
-      realmRacersResultAudioOutcome(
+      mortarOverdriveResultAudioOutcome(
         {
-          type: 'realmRacersResult',
+          type: 'mortarOverdriveResult',
           won,
           forfeited,
           winnerName,
@@ -148,7 +148,7 @@ describe('sampled GameAudio facade', () => {
     const audio = new GameAudio();
     for (const event of [
       {
-        type: 'realmRacersResult' as const,
+        type: 'mortarOverdriveResult' as const,
         won: true,
         forfeited: false,
         winnerName: 'Me',
@@ -159,7 +159,7 @@ describe('sampled GameAudio facade', () => {
         pid: 7,
       },
       {
-        type: 'realmRacersResult' as const,
+        type: 'mortarOverdriveResult' as const,
         won: false,
         forfeited: true,
         winnerName: 'Rival',
@@ -170,7 +170,7 @@ describe('sampled GameAudio facade', () => {
         pid: 7,
       },
       {
-        type: 'realmRacersResult' as const,
+        type: 'mortarOverdriveResult' as const,
         won: false,
         forfeited: false,
         winnerName: '',
@@ -181,10 +181,10 @@ describe('sampled GameAudio facade', () => {
         pid: 7,
       },
     ]) {
-      playRealmRacersResultAudio(event, 7, audio);
+      playMortarOverdriveResultAudio(event, 7, audio);
     }
     expect(sfxMock.playUi.mock.calls.map(([key]) => key)).toEqual(['ui_quest_done', 'ui_death']);
-    expect(`${hud}\n${rallyUi}`).not.toContain('realmRacersCheckpoint');
+    expect(`${hud}\n${mortarOverdriveUi}`).not.toContain('mortarOverdriveCheckpoint');
   });
 
   it('rate-limits the error cue so spamming a failure does not spam the sound', () => {

@@ -3,7 +3,7 @@
 // constant inside the kernel (src/sim/vehicle_motion.ts), so a second machine
 // is a new record plus its art and audio rather than a kernel change.
 //
-// Exactly one profile ships today (the machine the Realm Racers loans its
+// Exactly one profile ships today (the machine the Mortar Overdrive loans its
 // pilots). The shape is what carries the extensibility; the roster fills in
 // later. A profile key names the ROLE a machine plays in an activity, never the
 // machine itself: the model it wears is the `key` field below, so retiring or
@@ -95,7 +95,7 @@ export interface VehicleProfile {
  * are feel numbers, arrived at in the seat; they are not defended as physics.
  */
 export const VEHICLE_PROFILES: Record<string, VehicleProfile> = {
-  rally_loaner: {
+  mo_loaner: {
     key: 'terrorspark_groundshaker',
     maxSpeed: 60,
     // A quarter of a second to fall from road speed to the garden's ceiling:
@@ -134,11 +134,11 @@ export const VEHICLE_PROFILES: Record<string, VehicleProfile> = {
     airSteerFraction: 0.25,
     bodyRadius: 1.7,
     mass: 1,
-    weaponAbilityId: 'rally_ground_blast',
+    weaponAbilityId: 'mortar_overdrive_ground_blast',
   },
 };
 
-export const DEFAULT_VEHICLE_PROFILE_KEY = 'rally_loaner';
+export const DEFAULT_VEHICLE_PROFILE_KEY = 'mo_loaner';
 
 /** The profile behind a drive state's key, falling back to the default so a
  *  stale key from an old wire record can never crash the movement kernel. */

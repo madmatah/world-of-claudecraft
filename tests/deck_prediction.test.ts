@@ -185,7 +185,7 @@ describe('the deck-aware prediction step', () => {
       mountKey: '',
       mountCastRemaining: 0,
       mountCastKey: '',
-      drive: createVehicleDrive('rally_loaner'),
+      drive: createVehicleDrive('mo_loaner'),
     });
     let clockReads = 0;
     const clockFor = (ct: number) => {
@@ -237,7 +237,7 @@ describe('the deck-aware prediction step', () => {
       mountKey: '',
       mountCastRemaining: 0,
       mountCastKey: '',
-      drive: createVehicleDrive('rally_loaner'),
+      drive: createVehicleDrive('mo_loaner'),
     };
     const at = deckToWorld(pose, -1.8, 4, { x: 0, z: 0 });
     const direct: MotionState = {
@@ -246,7 +246,7 @@ describe('the deck-aware prediction step', () => {
       pos: { x: at.x, y: DECK, z: at.z },
       prevPos: { x: at.x, y: DECK, z: at.z },
       facing: normAngle(0.3 + pose.rot),
-      drive: createVehicleDrive('rally_loaner'),
+      drive: createVehicleDrive('mo_loaner'),
     };
     const input = mi({ forward: true });
     stepPlayerMotion(deps, direct as Entity, input);

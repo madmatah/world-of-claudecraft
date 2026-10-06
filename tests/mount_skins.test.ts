@@ -124,7 +124,7 @@ describe('rider skin (the one seam every presentation site reads)', () => {
     const driving = { mountSkinId: 'goblin_rocket_sled', drive: {} };
     expect(riderSkin(driving)).toBeNull();
     // The race machine presents as itself, look and sound alike.
-    const machine = vehicleProfile('rally_loaner').key;
+    const machine = vehicleProfile('mo_loaner').key;
     expect(mountPresentationKey(machine, riderSkin(driving))).toBe(machine);
     expect(mountVisualSpecFor(machine, riderSkin(driving))).toBe(mountVisualSpec(machine));
     // The stored choice is never written.

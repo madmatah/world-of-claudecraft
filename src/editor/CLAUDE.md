@@ -46,7 +46,7 @@ viewport, the 2D canvas/view/model trio).
   reports "seen" so broken storage never loops the auto-start.
 
 ## A second, separate tool lives here
-`circuit/` is the Realm Racers **circuit editor** (`circuit_editor.html`), not part of
+`circuit/` is the Mortar Overdrive **circuit editor** (`circuit_editor.html`), not part of
 the map editor: its own entry, its own cores, its own `CLAUDE.md`. It shares this
 directory because it is the same kind of thing (a dev authoring tool over real engine
 data), not because the two compose. Nothing in `app.ts` imports it.

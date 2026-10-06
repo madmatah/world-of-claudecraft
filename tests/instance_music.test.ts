@@ -6,8 +6,8 @@ import {
   type InstanceMusicEntity,
   type InstanceMusicInput,
   instanceMusicDecision,
-  isRealmRacersAreaTrack,
-  realmRacersAreaTrackAt,
+  isMortarOverdriveAreaTrack,
+  mortarOverdriveAreaTrackAt,
 } from '../src/game/instance_music';
 import {
   AREA_TRACK_GROUP,
@@ -16,13 +16,13 @@ import {
   isAreaTrackId,
   ZONE_STREAM_URLS,
 } from '../src/game/music_tracks';
-import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_CIRCUIT_LIST } from '../src/sim/content/mortar_overdrive/circuits';
 import { DELVE_X_MIN, DUNGEONS, instanceOrigin, ZONES } from '../src/sim/data';
 import {
-  REALM_RACERS_LANES,
-  REALM_RACERS_ORIGIN,
-  realmRacersLaneOrigin,
-} from '../src/sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_LANES,
+  MORTAR_OVERDRIVE_ORIGIN,
+  mortarOverdriveLaneOrigin,
+} from '../src/sim/mortar_overdrive/layout';
 
 const eastbrookFixture = ZONES.find((zone) => zone.id === 'eastbrook_vale');
 if (!eastbrookFixture) throw new Error('eastbrook_vale fixture is missing');
@@ -39,7 +39,7 @@ function input(overrides: Partial<InstanceMusicInput> = {}): InstanceMusicInput 
     zone: eastbrook,
     inDungeon: false,
     entities: [],
-    realmRacersMatchId: null,
+    mortarOverdriveMatchId: null,
     riftFloor: null,
     ...overrides,
   };
@@ -85,15 +85,15 @@ describe('instance music policy', () => {
     expect(port.update).toHaveBeenLastCalledWith('dungeon_hollow_crypt', false);
   });
 
-  it('gives the Realm Racers circuit its own race track instead of the dungeon crawl cue', () => {
+  it('gives the Mortar Overdrive circuit its own race track instead of the dungeon crawl cue', () => {
     const onCircuit = input({
       // the circuit sits on the flat instance plane, so the HUD reports inDungeon
-      playerPos: { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z },
+      playerPos: { x: MORTAR_OVERDRIVE_ORIGIN.x, z: MORTAR_OVERDRIVE_ORIGIN.z },
       inDungeon: true,
     });
 
     const racing = instanceMusicDecision(onCircuit);
-    expect(racing.areaTrack).toBe('realm_racers_evergarden');
+    expect(racing.areaTrack).toBe('mortar_overdrive_evergarden');
 
     const port = {
       resetForDungeonEntry: vi.fn(),
@@ -102,20 +102,20 @@ describe('instance music policy', () => {
       setAreaTrack: vi.fn(),
     };
     new InstanceMusicController(port).update(onCircuit);
-    expect(port.setAreaTrack).toHaveBeenCalledWith('realm_racers_evergarden');
+    expect(port.setAreaTrack).toHaveBeenCalledWith('mortar_overdrive_evergarden');
   });
 
   it('covers the private practice copies and drops the track back in the world', () => {
     const practiceSlot = instanceMusicDecision(
-      input({ playerPos: realmRacersLaneOrigin(3), inDungeon: true }),
+      input({ playerPos: mortarOverdriveLaneOrigin(3), inDungeon: true }),
     );
-    expect(practiceSlot.areaTrack).toBe('realm_racers_evergarden');
+    expect(practiceSlot.areaTrack).toBe('mortar_overdrive_evergarden');
 
     // default fixture position: the Eastbrook hub, nowhere near the band
     expect(instanceMusicDecision(input()).areaTrack).toBeNull();
   });
 
-  it('restarts the Realm Racers track when a new race begins without leaving the circuit', () => {
+  it('restarts the Mortar Overdrive track when a new race begins without leaving the circuit', () => {
     const port = {
       resetForDungeonEntry: vi.fn(),
       update: vi.fn(),
@@ -124,18 +124,18 @@ describe('instance music policy', () => {
     };
     const controller = new InstanceMusicController(port);
     const onCircuit = input({
-      playerPos: { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z },
+      playerPos: { x: MORTAR_OVERDRIVE_ORIGIN.x, z: MORTAR_OVERDRIVE_ORIGIN.z },
       inDungeon: true,
-      realmRacersMatchId: 41,
+      mortarOverdriveMatchId: 41,
     });
 
     controller.update(onCircuit);
     controller.update(onCircuit);
-    controller.update({ ...onCircuit, realmRacersMatchId: 42 });
+    controller.update({ ...onCircuit, mortarOverdriveMatchId: 42 });
 
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'realm_racers_evergarden', true);
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'realm_racers_evergarden');
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'realm_racers_evergarden', true);
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'mortar_overdrive_evergarden', true);
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'mortar_overdrive_evergarden');
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'mortar_overdrive_evergarden', true);
   });
 });
 
@@ -243,17 +243,20 @@ describe('instance music policy: the authoritative in-combat flag', () => {
   });
 });
 
-describe('Realm Racers music: the track comes off the circuit, not the band', () => {
+describe('Mortar Overdrive music: the track comes off the circuit, not the band', () => {
   it('plays each circuit its own authored track, on every lane it stands on', () => {
     // The point of the per-circuit field: a themed circuit brings its zone's
     // music with it, so this reads the RECORD rather than expecting one id.
-    for (const lane of REALM_RACERS_LANES) {
+    for (const lane of MORTAR_OVERDRIVE_LANES) {
       const decision = instanceMusicDecision(
-        input({ playerPos: realmRacersLaneOrigin(lane.index), inDungeon: true }),
+        input({ playerPos: mortarOverdriveLaneOrigin(lane.index), inDungeon: true }),
       );
       expect(decision.areaTrack, `lane ${lane.index}`).toBe(lane.circuit.musicTrack);
       expect(
-        realmRacersAreaTrackAt(REALM_RACERS_ORIGIN.x, realmRacersLaneOrigin(lane.index).z),
+        mortarOverdriveAreaTrackAt(
+          MORTAR_OVERDRIVE_ORIGIN.x,
+          mortarOverdriveLaneOrigin(lane.index).z,
+        ),
       ).toBe(lane.circuit.musicTrack);
     }
   });
@@ -265,7 +268,7 @@ describe('Realm Racers music: the track comes off the circuit, not the band', ()
     // download both, and you never cross from one circuit to another without a
     // race start. So the rule is one group per track, not one per circuit.
     const trackOfGroup = new Map<string, AreaTrackId>();
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    for (const circuit of MORTAR_OVERDRIVE_CIRCUIT_LIST) {
       expect(isAreaTrackId(circuit.musicTrack), `${circuit.id} track is shipped`).toBe(true);
       const track = circuit.musicTrack as AreaTrackId;
       expect(AREA_TRACK_URLS[track], `${circuit.id} url`).toBeTruthy();
@@ -274,17 +277,17 @@ describe('Realm Racers music: the track comes off the circuit, not the band', ()
       const owner = trackOfGroup.get(group);
       expect(owner ?? track, `group ${group} carries both ${owner} and ${track}`).toBe(track);
       trackOfGroup.set(group, track);
-      expect(isRealmRacersAreaTrack(track)).toBe(true);
+      expect(isMortarOverdriveAreaTrack(track)).toBe(true);
     }
-    expect(isRealmRacersAreaTrack(null)).toBe(false);
+    expect(isMortarOverdriveAreaTrack(null)).toBe(false);
   });
 
   it('answers nothing off the band', () => {
-    expect(realmRacersAreaTrackAt(0, 0)).toBeNull();
+    expect(mortarOverdriveAreaTrackAt(0, 0)).toBeNull();
     expect(
-      realmRacersAreaTrackAt(
-        REALM_RACERS_ORIGIN.x,
-        realmRacersLaneOrigin(REALM_RACERS_LANES.length).z,
+      mortarOverdriveAreaTrackAt(
+        MORTAR_OVERDRIVE_ORIGIN.x,
+        mortarOverdriveLaneOrigin(MORTAR_OVERDRIVE_LANES.length).z,
       ),
     ).toBeNull();
   });

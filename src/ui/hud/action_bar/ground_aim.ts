@@ -1,6 +1,6 @@
-import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
+import { MORTAR_OVERDRIVE_ABILITIES } from '../../../sim/content/mortar_overdrive/kit';
 import { ABILITIES } from '../../../sim/data';
-import { resolveGroundBlastAim } from '../../../sim/realm_racers_ground_blast';
+import { resolveGroundBlastAim } from '../../../sim/mortar_overdrive/ground_blast';
 import type { ResolvedAbility } from '../../../sim/sim';
 import type { AbilityEffect, Entity } from '../../../sim/types';
 
@@ -45,7 +45,7 @@ export const XHB_ONLY_AIM_SLOT = -1;
  * Touch uses the dedicated precise-targeting preference. Desktop remains
  * governed by the player's ground-reticle preference.
  *
- * A Realm Racers weapon overrides BOTH, so `abilityId` is passed wherever the
+ * A Mortar Overdrive weapon overrides BOTH, so `abilityId` is passed wherever the
  * caller knows which ability is about to cast: placing the shell is the entire
  * weapon, so it always aims. The reticle-off fallback (drop it on your target's
  * feet, else your own) has no meaning for a shot whose skill is leading a
@@ -58,7 +58,7 @@ export function shouldUseGroundAim(
   touchPrecise: boolean,
   abilityId?: string,
 ): boolean {
-  if (abilityId !== undefined && REALM_RACERS_ABILITIES[abilityId]) return true;
+  if (abilityId !== undefined && MORTAR_OVERDRIVE_ABILITIES[abilityId]) return true;
   return mobileTouch ? touchPrecise : desktopPreference;
 }
 
@@ -90,7 +90,7 @@ export function commitGroundAim(state: GroundAimState): {
 /**
  * Where a ground-targeted cast may actually land, from where the player asked.
  *
- * Most abilities are limited by range alone. A Realm Racers weapon is also
+ * Most abilities are limited by range alone. A Mortar Overdrive weapon is also
  * limited by a forward CONE and a minimum range, and those rules live in the sim
  * leaf that RE-CLAMPS the aim server-side: running the identical function here
  * is what guarantees the circle a pilot commits to is the crater they get. A
@@ -106,7 +106,7 @@ export function clampAimToRange(
   point: AimPoint;
   clamped: boolean;
 } {
-  if (abilityId !== undefined && REALM_RACERS_ABILITIES[abilityId]) {
+  if (abilityId !== undefined && MORTAR_OVERDRIVE_ABILITIES[abilityId]) {
     const aim = resolveGroundBlastAim(
       { x: caster.pos.x, z: caster.pos.z, facing: caster.facing },
       point,
@@ -128,22 +128,22 @@ export function clampAimToRange(
 }
 
 /**
- * May the client play INSTANT local feedback for this rally cast? Online,
+ * May the client play INSTANT local feedback for this Mortar Overdrive cast? Online,
  * every audible and visible cue otherwise waits a full round trip for the
  * server (the shell's Fired event, the readout's oil patch), which reads as
  * the kit responding late.
  *
- * `expectedAbilityId` names the ONE rally ability the caller's feedback is
+ * `expectedAbilityId` names the ONE Mortar Overdrive ability the caller's feedback is
  * built for (the shell's muzzle report, the oil drop's patch), so a future
- * rally ability can never inherit another's cue. The remaining inputs mirror
+ * Mortar Overdrive ability can never inherit another's cue. The remaining inputs mirror
  * the client-visible half of the sim's refusal set
- * (src/sim/social/realm_racers.ts): a live caster, the activity lock
+ * (src/sim/mortar_overdrive/race.ts): a live caster, the activity lock
  * (controls locked or out of charges), no running cooldown, the racing
  * phase, and a pilot whose own race is not over (a finished or retired pilot
  * keeps the wheel but is done acting). The server stays the judge either
  * way: a wrong local yes costs one cosmetic cue that quietly expires.
  */
-export function localRallyCastFeedbackAllowed(
+export function localMortarOverdriveCastFeedbackAllowed(
   abilityId: string,
   expectedAbilityId: string,
   casterDead: boolean,
@@ -214,7 +214,7 @@ export function abilityAoeRadius(res: { effects: readonly AbilityEffect[] }): nu
     (eff) =>
       eff.type === 'aoeDamage' ||
       eff.type === 'groundAoE' ||
-      eff.type === 'realmRacersGroundBlast' ||
+      eff.type === 'mortarOverdriveGroundBlast' ||
       eff.type === 'temporalHourglass',
   );
   if (effect?.type === 'temporalHourglass') return effect.captureRadius;

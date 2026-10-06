@@ -27,16 +27,16 @@ describe('character view visibility hysteresis', () => {
     },
   );
 
-  it('pins renderer wiring through the Realm Racers exception to the previous RANGE verdict and exact ranges', () => {
+  it('pins renderer wiring through the Mortar Overdrive exception to the previous RANGE verdict and exact ranges', () => {
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toMatch(
-      /isOutsideRealmRacersDrawRange\(\s*participantIds,\s*p\.id,\s*id,\s*v\.inDrawRange,\s*d2,\s*this\.entityViewCreateRangeSq,\s*this\.entityViewDestroyRangeSq,\s*\)/,
+      /isOutsideMortarOverdriveDrawRange\(\s*participantIds,\s*p\.id,\s*id,\s*v\.inDrawRange,\s*d2,\s*this\.entityViewCreateRangeSq,\s*this\.entityViewDestroyRangeSq,\s*\)/,
     );
-    const realmRacersCore = readFileSync(
-      new URL('../src/render/realm_racers_visibility_core.ts', import.meta.url),
+    const mortarOverdriveCore = readFileSync(
+      new URL('../src/render/mortar_overdrive/visibility_core.ts', import.meta.url),
       'utf8',
     );
-    expect(realmRacersCore).toMatch(
+    expect(mortarOverdriveCore).toMatch(
       /characterViewOutsideHysteresis\(\s*wasVisible,\s*distanceSq,\s*createRangeSq,\s*destroyRangeSq,?\s*\)/,
     );
     expect(renderer).toMatch(/v\.inDrawRange = inDrawRange;/);
@@ -52,7 +52,7 @@ describe('character view visibility hysteresis', () => {
   it('pins that the renderer never feeds the drawn flag back into the hysteresis', () => {
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).not.toMatch(/characterViewOutsideHysteresis\(\s*v\.group\.visible/);
-    expect(renderer).not.toMatch(/isOutsideRealmRacersDrawRange\([^)]*v\.group\.visible/);
+    expect(renderer).not.toMatch(/isOutsideMortarOverdriveDrawRange\([^)]*v\.group\.visible/);
   });
 
   it('re-shows a rig in the 80 to 96 band whose range verdict survived a hide', () => {
@@ -74,13 +74,13 @@ describe('character view visibility hysteresis', () => {
   // the wardstone view would exist forever but never draw. The renderer's `if`
   // must short-circuit on the exemption so this function's own create-radius
   // verdict is overridden for that one class of object; this pins that it does.
-  // The hysteresis call itself sits inside isOutsideRealmRacersDrawRange (the
-  // Realm Racers co-pilot exception, pinned above), so the short-circuit is
+  // The hysteresis call itself sits inside isOutsideMortarOverdriveDrawRange (the
+  // Mortar Overdrive co-pilot exception, pinned above), so the short-circuit is
   // matched against that wrapper rather than the bare call.
   it('pins that renderer wiring short-circuits on a distance-cull exemption', () => {
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toMatch(
-      /isDistanceCullExemptObject\(e\)\s*\|\|\s*!isOutsideRealmRacersDrawRange\(/,
+      /isDistanceCullExemptObject\(e\)\s*\|\|\s*!moRender\.isOutsideMortarOverdriveDrawRange\(/,
     );
   });
 });

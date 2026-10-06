@@ -187,7 +187,7 @@ describe('the reconciliation self block aboard', () => {
     applyReconSelfWire(target, passenger, 2);
     expect(target.reconDrive).toBeNull();
     e.ferryRide = null;
-    e.drive = createVehicleDrive('rally_loaner');
+    e.drive = createVehicleDrive('mo_loaner');
     const driver = reconciliationSelfWire({ ...session, driveReconWireVersion: 1 }, e);
     expect(driver).not.toHaveProperty('rdk');
     expect(driver).toHaveProperty('rdv');

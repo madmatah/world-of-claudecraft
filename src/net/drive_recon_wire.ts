@@ -5,7 +5,7 @@
 // it would replay wrong. DOM-free and ClientWorld-free.
 
 import { DEFAULT_VEHICLE_PROFILE_KEY, VEHICLE_PROFILES } from '../sim/content/vehicles';
-import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
+import type { MortarOverdriveSlickRecon } from '../sim/mortar_overdrive';
 import type { VehicleDrive } from '../sim/types';
 import { createVehicleDrive } from '../sim/vehicle_motion';
 
@@ -14,7 +14,7 @@ export interface DriveRecon {
   vy: number;
   onGround: boolean;
   /** The pilot's standing with the oil (`og`/`oc`/`ou`), all zero or none at rest. */
-  slick: RallySlickRecon;
+  slick: MortarOverdriveSlickRecon;
 }
 
 function finite(value: unknown): value is number {

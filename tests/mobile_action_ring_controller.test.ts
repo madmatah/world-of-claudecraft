@@ -139,7 +139,7 @@ describe('buildMobileActionRing aiming ownership', () => {
 describe('buildMobileActionRing primary button', () => {
   const blast: ActionBarAbility = {
     def: {
-      id: 'rally_ground_blast',
+      id: 'mortar_overdrive_ground_blast',
       offGcd: true,
       cooldown: 4.5,
       requiresTarget: false,
@@ -160,7 +160,7 @@ describe('buildMobileActionRing primary button', () => {
     const ring = buildMobileActionRing(kitDeps());
     const primary = ring?.view.tick(world(null)).slots[0];
     expect(primary?.kind).toBe('ability');
-    expect(primary?.abilityId).toBe('rally_ground_blast');
+    expect(primary?.abilityId).toBe('mortar_overdrive_ground_blast');
   });
 
   it('casts slot 0 on a tap while a kit owns it, never the attack toggle', () => {

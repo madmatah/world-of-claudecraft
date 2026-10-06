@@ -337,8 +337,8 @@ export const BIND_ACTIONS: BindAction[] = [
   },
   {
     // Shift+KeyR: bare KeyR belongs to Autorun, Shift+KeyY to Cosmetics.
-    id: 'rally',
-    label: 'Realm Racers',
+    id: 'mortarOverdrive',
+    label: 'Mortar Overdrive',
     category: 'Interface',
     kind: 'edge',
     defaults: ['Shift+KeyR'],

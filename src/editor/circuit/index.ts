@@ -12,7 +12,7 @@
 // the split above a comment rather than a contract.
 //
 // The readout every drag is measured against is not here either. It lives in
-// `src/sim/realm_racers_circuit_metrics.ts`, because it is the same validation a
+// `src/sim/mortar_overdrive/circuit_metrics.ts`, because it is the same validation a
 // content test runs over every shipped circuit and a copy of it in a dev tool
 // would be a rule the game does not share.
 
@@ -343,6 +343,7 @@ export {
   hitTestPondHandle,
   hitTestPonds,
   hitTestPropHandle,
+  MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX,
   movedProp,
   nextSeed,
   nudgeKeyOf,
@@ -369,7 +370,6 @@ export {
   propPalette,
   propProjectionHint,
   propWithHandleAt,
-  RALLY_PLACEMENT_SCALE_MAX,
   removedAt,
   replacedAt,
   rotatedProp,

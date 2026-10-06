@@ -8666,9 +8666,9 @@ export const TARGETS = [
     },
   },
   {
-    key: 'realm-racers-race',
-    label: 'Realm Racers: the in-race view once the match starts',
-    when: ['ui/realm_racers', 'sim/social/realm_racers'],
+    key: 'mortar-overdrive-race',
+    label: 'Mortar Overdrive: the in-race view once the match starts',
+    when: ['ui/hud/mortar_overdrive/', 'sim/mortar_overdrive/'],
     variants: [
       { key: 'desktop', charClass: 'warrior', charName: 'Thorgar' },
       { key: 'mobile', charClass: 'warrior', charName: 'Thorgar', mobile: true },
@@ -8678,8 +8678,8 @@ export const TARGETS = [
     // before shows the queue window still centered over the circuit, the after
     // shows it gone with the race strip (and its forfeit control) in its place.
     //
-    // The rally needs two racers. Practice bots exist now
-    // (src/sim/social/realm_racers_bots.ts), but the shot stages a second local
+    // The Mortar Overdrive needs two racers. Practice bots exist now
+    // (src/sim/mortar_overdrive/bots.ts), but the shot stages a second local
     // player instead: both are queued, the FIFO pairs them on the next tick,
     // and the countdown phase is where the covering window was worst.
     async capture(page) {
@@ -8687,16 +8687,16 @@ export const TARGETS = [
         const game = window.__game;
         const sim = game?.sim;
         if (!sim || !game?.hud) return { ok: false, reason: 'offline world is unavailable' };
-        game.hud.toggleRealmRacers?.();
+        game.hud.toggleMortarOverdrive?.();
         const rival = sim.addPlayer('warrior', 'Briar');
-        sim.realmRacersQueueJoin(sim.playerId);
-        sim.realmRacersQueueJoin(rival);
+        sim.mortarOverdriveQueueJoin(sim.playerId);
+        sim.mortarOverdriveQueueJoin(rival);
         for (let i = 0; i < 20; i++) sim.tick();
-        return { ok: sim.realmRacersInfo.match !== null, reason: 'the rally never paired' };
+        return { ok: sim.mortarOverdriveInfo.match !== null, reason: 'the race never paired' };
       });
       if (!staged.ok) throw new Error(staged.reason);
-      const lit = await pollForSize(page, '#realm-racers-hud');
-      if (!lit) throw new Error('#realm-racers-hud did not appear');
+      const lit = await pollForSize(page, '#mortar-overdrive-hud');
+      if (!lit) throw new Error('#mortar-overdrive-hud did not appear');
       return {};
     },
   },

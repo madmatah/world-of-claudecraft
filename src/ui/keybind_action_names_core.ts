@@ -62,7 +62,7 @@ export const BIND_ACTION_LABEL_KEYS: Partial<Record<string, TranslationKey>> = {
   targetFriendlyNext: 'hudChrome.keybinds.targetFriendlyNext',
   targetPrev: 'hudChrome.keybinds.targetPrev',
   discord: 'hudChrome.keybinds.discord',
-  rally: 'hudChrome.keybinds.rally',
+  mortarOverdrive: 'hudChrome.keybinds.mortarOverdrive',
   bgFlag: 'hudChrome.keybinds.bgFlag',
   sheathe: 'hudChrome.keybinds.sheathe',
   hideInterface: 'hudChrome.keybinds.hideInterface',

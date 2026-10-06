@@ -233,12 +233,12 @@ const FANOUT_ARMS: readonly string[] = [
   'this.dungeonFinderWindow.relocalize|',
   'this.dungeonFinderProposalPopup.relocalize|',
   'this.bgProposalPopup.relocalize|',
-  'this.realmRacersUi.relocalize|',
+  'this.mortarOverdriveUi.relocalize|',
   // Not a relocalize: the pickup splash is a one-second moment whose label was
   // resolved at show(), so the fan-out TAKES IT DOWN rather than repainting it
-  // (RealmRacersPickupSplash.clear documents this caller). It has no repaint
+  // (MortarOverdrivePickupSplash.clear documents this caller). It has no repaint
   // signature, so half 2 below never sees it; this row is its whole pin.
-  'this.realmRacersSplash.clear|',
+  'this.mortarOverdriveSplash.clear|',
   'this.questDialog.relocalize|',
   'this.calendarWindow.relocalize|',
   'this.mailboxWindow.relocalize|',
@@ -462,45 +462,45 @@ const ANSWERED: readonly AnsweredSurface[] = [
     why: 'the view core signature (queue state, role counts and party ids) joined with the open pane name',
   },
   {
-    file: 'realm_racers_window.ts',
+    file: 'hud/mortar_overdrive/race_window.ts',
     memos: ['lastWindowSig'],
-    // Same arm, one hop: RealmRacersUi composes the window and its relocalize()
+    // Same arm, one hop: MortarOverdriveUi composes the window and its relocalize()
     // forwards, like the panels below.
-    answer: 'this.realmRacersUi.relocalize',
-    why: 'the queue state, race phase and result that gate the localized Rally window rebuild, forwarded by the Rally composer that owns it',
+    answer: 'this.mortarOverdriveUi.relocalize',
+    why: 'the queue state, race phase and result that gate the localized Mortar Overdrive window rebuild, forwarded by the Mortar Overdrive composer that owns it',
   },
   {
-    file: 'realm_racers_strip_painter.ts',
+    file: 'hud/mortar_overdrive/strip_painter.ts',
     memos: ['lastHudSig', 'paintedCells'],
     // Same arm, one hop, like the window.
-    answer: 'this.realmRacersUi.relocalize',
-    why: 'the race phase and controls that gate the localized race-strip skeleton, plus the values each cell last painted (reset by that rebuild), forwarded by the Rally composer that owns it',
+    answer: 'this.mortarOverdriveUi.relocalize',
+    why: 'the race phase and controls that gate the localized race-strip skeleton, plus the values each cell last painted (reset by that rebuild), forwarded by the Mortar Overdrive composer that owns it',
   },
   {
-    file: 'realm_racers_standings_painter.ts',
+    file: 'hud/mortar_overdrive/standings_painter.ts',
     memos: ['lastSig'],
-    // Same arm, one hop: RealmRacersUi owns this panel and its relocalize()
+    // Same arm, one hop: MortarOverdriveUi owns this panel and its relocalize()
     // forwards, exactly as LockpickController does for LockpickWindow. Handing
     // Hud a second reference to a panel one of its painters owns would buy
     // nothing but a way for the two arms to drift apart.
-    answer: 'this.realmRacersUi.relocalize',
-    why: 'the standings order, laps and viewer marker that gate the localized leaderboard rebuild, forwarded by the Rally painter that owns the panel',
+    answer: 'this.mortarOverdriveUi.relocalize',
+    why: 'the standings order, laps and viewer marker that gate the localized leaderboard rebuild, forwarded by the Mortar Overdrive painter that owns the panel',
   },
   {
-    file: 'realm_racers_podium_painter.ts',
+    file: 'hud/mortar_overdrive/podium_painter.ts',
     memos: ['lastReturnIn', 'lastReturnResult', 'lastSig'],
-    // Same arm, one hop, for the same reason the standings panel is: the Rally
+    // Same arm, one hop, for the same reason the standings panel is: the Mortar Overdrive
     // painter owns the ceremony and its relocalize() forwards to it.
-    answer: 'this.realmRacersUi.relocalize',
-    why: 'the classification that gates the localized end-of-race ceremony, plus the return headline latch reset by that rebuild, forwarded by the Rally painter that owns it',
+    answer: 'this.mortarOverdriveUi.relocalize',
+    why: 'the classification that gates the localized end-of-race ceremony, plus the return headline latch reset by that rebuild, forwarded by the Mortar Overdrive painter that owns it',
   },
   {
-    file: 'hud/realm_racers/realm_racers_lobby_painter.ts',
+    file: 'hud/mortar_overdrive/lobby_painter.ts',
     memos: ['lastSig'],
-    // Same arm, one hop, like the podium: the Rally painter owns the lobby
+    // Same arm, one hop, like the podium: the Mortar Overdrive painter owns the lobby
     // curtain and its relocalize() forwards to it.
-    answer: 'this.realmRacersUi.relocalize',
-    why: 'the match and grid shape that gate the localized lobby skeleton, forwarded by the Rally painter that owns it',
+    answer: 'this.mortarOverdriveUi.relocalize',
+    why: 'the match and grid shape that gate the localized lobby skeleton, forwarded by the Mortar Overdrive painter that owns it',
   },
   {
     file: 'hud/action_bar/mobile_action_ring_painter.ts',

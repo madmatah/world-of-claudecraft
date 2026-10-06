@@ -9,10 +9,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDeedRuntime } from '../src/sim/deeds';
 import { createMobScanCounters } from '../src/sim/mob/scan_counters';
+import { createMortarOverdriveState } from '../src/sim/mortar_overdrive/race';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import { createSimContext, type SimContextHost } from '../src/sim/sim_context';
-import { createRealmRacersState } from '../src/sim/social/realm_racers';
 import { SpatialGrid } from '../src/sim/spatial';
 import { DEFAULT_STORAGE_PRICES } from '../src/sim/storage_prices';
 import type { Entity, SimEvent } from '../src/sim/types';
@@ -271,11 +271,11 @@ const CALLBACK_KEYS = [
   'currentWorldQuestRotation',
   'hasActiveWorldQuest',
   'completeWorldQuestEscort',
-  // Realm Racers hooks (social/realm_racers.ts).
-  'realmRacersFireGroundBlast',
-  'realmRacersSpendPickupEffect',
-  'realmRacersDevRace',
-  'realmRacersDevGrantKit',
+  // Mortar Overdrive hooks (mortar_overdrive/race.ts).
+  'mortarOverdriveFireGroundBlast',
+  'mortarOverdriveSpendPickupEffect',
+  'mortarOverdriveDevRace',
+  'mortarOverdriveDevGrantKit',
 ] as const;
 
 // A fully-spied fake host. `clock` is mutable so a test can prove the context reads
@@ -396,7 +396,7 @@ function makeFakeHost() {
     nextCommissionOrderId: 1,
     bankerIds: [],
     guildBanks: new Map(),
-    realmRacers: createRealmRacersState(),
+    mortarOverdrive: createMortarOverdriveState(),
     deedDirtyPids: new Set<number>(),
     deedDirtyKeys: new Map<number, Set<string>>(),
     worldBossEntityIds: [],
@@ -654,11 +654,11 @@ function makeFakeHost() {
     bgOnPlayerDamaged: vi.fn(),
     bgOnPlayerHealed: vi.fn(),
     bgCancelFlagAura: vi.fn(() => false),
-    // Realm Racers hooks.
-    realmRacersFireGroundBlast: vi.fn(),
-    realmRacersSpendPickupEffect: vi.fn(),
-    realmRacersDevRace: vi.fn(),
-    realmRacersDevGrantKit: vi.fn(),
+    // Mortar Overdrive hooks.
+    mortarOverdriveFireGroundBlast: vi.fn(),
+    mortarOverdriveSpendPickupEffect: vi.fn(),
+    mortarOverdriveDevRace: vi.fn(),
+    mortarOverdriveDevGrantKit: vi.fn(),
   };
   return { host, rng, entities, clock };
 }

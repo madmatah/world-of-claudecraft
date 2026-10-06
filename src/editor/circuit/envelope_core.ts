@@ -3,7 +3,7 @@
 //
 // This is a CONVENIENCE, not a rule. The rules (road inside the wall, wall
 // inside the region, region inside the band and inside the lane's depth budget)
-// live in `src/sim/realm_racers_circuit_metrics.ts`, because the game depends on
+// live in `src/sim/mortar_overdrive/circuit_metrics.ts`, because the game depends on
 // them; what this module owns is only the question the operator would otherwise
 // answer by hand every time they redraw: given a road this big, what numbers
 // should the two boxes carry?
@@ -16,16 +16,19 @@
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
 import type {
-  RealmRacersCircuit,
-  RealmRacersPerimeter,
-} from '../../sim/content/realm_racers_circuits';
+  MortarOverdriveCircuit,
+  MortarOverdrivePerimeter,
+} from '../../sim/content/mortar_overdrive';
 import {
-  type RallyPoint,
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_ORIGIN,
-} from '../../sim/realm_racers_layout';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../../sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+  MORTAR_OVERDRIVE_ORIGIN,
+  type MortarOverdrivePoint,
+} from '../../sim/mortar_overdrive/layout';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../../sim/mortar_overdrive/spline';
 import { fitStrokeToControlPoints } from './stroke_fit_core';
 
 /**
@@ -42,11 +45,11 @@ const REGION_OVER_PERIMETER = 1;
 
 /** The widest and deepest a wall may be: the instance volume's ceiling, less the
  *  yard that keeps the wall strictly inside it. */
-export const MAX_PERIMETER_HALF_X = REALM_RACERS_MAX_REGION_HALF_X - REGION_OVER_PERIMETER;
-export const MAX_PERIMETER_HALF_Z = REALM_RACERS_MAX_REGION_HALF_Z - REGION_OVER_PERIMETER;
+export const MAX_PERIMETER_HALF_X = MORTAR_OVERDRIVE_MAX_REGION_HALF_X - REGION_OVER_PERIMETER;
+export const MAX_PERIMETER_HALF_Z = MORTAR_OVERDRIVE_MAX_REGION_HALF_Z - REGION_OVER_PERIMETER;
 
 export interface EnvelopeSuggestion {
-  perimeter: RealmRacersPerimeter;
+  perimeter: MortarOverdrivePerimeter;
   /**
    * Which ceiling clamped the suggestion, if any. `band` is the x window between
    * the neighbouring instance bands; `lane` is the depth budget between two
@@ -71,7 +74,7 @@ export interface EnvelopeSuggestion {
 export function suggestEnvelope(
   roadHalfX: number,
   roadHalfZ: number,
-  existing?: RealmRacersPerimeter,
+  existing?: MortarOverdrivePerimeter,
 ): EnvelopeSuggestion {
   const clampedBy: ('band' | 'lane')[] = [];
 
@@ -111,17 +114,17 @@ export function suggestEnvelope(
  * Returns the same object when there is nothing to do, so a load that changes
  * nothing cannot look like an edit to the undo stack.
  */
-export function circuitWithCeilingVolume(circuit: RealmRacersCircuit): RealmRacersCircuit {
+export function circuitWithCeilingVolume(circuit: MortarOverdriveCircuit): MortarOverdriveCircuit {
   if (
-    circuit.regionHalfX === REALM_RACERS_MAX_REGION_HALF_X &&
-    circuit.regionHalfZ === REALM_RACERS_MAX_REGION_HALF_Z
+    circuit.regionHalfX === MORTAR_OVERDRIVE_MAX_REGION_HALF_X &&
+    circuit.regionHalfZ === MORTAR_OVERDRIVE_MAX_REGION_HALF_Z
   ) {
     return circuit;
   }
   return {
     ...circuit,
-    regionHalfX: REALM_RACERS_MAX_REGION_HALF_X,
-    regionHalfZ: REALM_RACERS_MAX_REGION_HALF_Z,
+    regionHalfX: MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+    regionHalfZ: MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
   };
 }
 
@@ -134,10 +137,10 @@ export function circuitWithCeilingVolume(circuit: RealmRacersCircuit): RealmRace
  * the tool's own buttons.
  */
 export function fittedCircuit(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   roadHalfX: number,
   roadHalfZ: number,
-): { circuit: RealmRacersCircuit; suggestion: EnvelopeSuggestion } {
+): { circuit: MortarOverdriveCircuit; suggestion: EnvelopeSuggestion } {
   const suggestion = suggestEnvelope(roadHalfX, roadHalfZ, circuit.perimeter);
   return {
     circuit: circuitWithCeilingVolume({ ...circuit, perimeter: suggestion.perimeter }),
@@ -179,17 +182,17 @@ const FOLD_TOLERANCE = 0.5;
  * is the same kind of object a drawn one is: a handful of draggable control
  * points, not a thousand samples nobody can edit.
  */
-export function suggestGroundOutline(circuit: RealmRacersCircuit): RallyPoint[] {
-  const samples = realmRacersTrack(circuit).samples;
-  const sides: RallyPoint[][] = [[], []];
+export function suggestGroundOutline(circuit: MortarOverdriveCircuit): MortarOverdrivePoint[] {
+  const samples = mortarOverdriveTrack(circuit).samples;
+  const sides: MortarOverdrivePoint[][] = [[], []];
   for (const sample of samples) {
-    const offset = rallyGardenEdgeOffsetAt(circuit, sample.s) + GROUND_MARGIN;
-    const x = sample.x - REALM_RACERS_ORIGIN.x;
-    const z = sample.z - REALM_RACERS_ORIGIN.z;
+    const offset = mortarOverdriveGardenEdgeOffsetAt(circuit, sample.s) + GROUND_MARGIN;
+    const x = sample.x - MORTAR_OVERDRIVE_ORIGIN.x;
+    const z = sample.z - MORTAR_OVERDRIVE_ORIGIN.z;
     sides[0].push({ x: x - sample.tz * offset, z: z + sample.tx * offset });
     sides[1].push({ x: x + sample.tz * offset, z: z - sample.tx * offset });
   }
-  const area = (ring: readonly RallyPoint[]): number => {
+  const area = (ring: readonly MortarOverdrivePoint[]): number => {
     let sum = 0;
     for (let i = 0; i < ring.length; i++) {
       const a = ring[i];
@@ -210,13 +213,13 @@ export function suggestGroundOutline(circuit: RealmRacersCircuit): RallyPoint[] 
   // was built at, which the real projection answers: no geometry of its own, and
   // it drops a point that strayed within the margin of ANOTHER stretch too,
   // which is the same defect one bend further round.
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const kept = outer.filter((point) => {
     const projection = track.project(
-      point.x + REALM_RACERS_ORIGIN.x,
-      point.z + REALM_RACERS_ORIGIN.z,
+      point.x + MORTAR_OVERDRIVE_ORIGIN.x,
+      point.z + MORTAR_OVERDRIVE_ORIGIN.z,
     );
-    const offset = rallyGardenEdgeOffsetAt(circuit, projection.s) + GROUND_MARGIN;
+    const offset = mortarOverdriveGardenEdgeOffsetAt(circuit, projection.s) + GROUND_MARGIN;
     return Math.abs(projection.lateral) >= offset - FOLD_TOLERANCE;
   });
   return fitStrokeToControlPoints(kept.length >= 8 ? kept : outer);

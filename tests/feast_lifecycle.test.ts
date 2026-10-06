@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { startMortarOverdrivePractice } from '../src/sim/mortar_overdrive/bots';
 import { Sim } from '../src/sim/sim';
 import { endArenaMatch, startArenaMatch, updateArena } from '../src/sim/social/arena';
 import {
@@ -8,9 +9,8 @@ import {
   startBgMatch,
   updateBattleground,
 } from '../src/sim/social/battleground';
-import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { startYumiMatch } from '../src/sim/social/yumi';
-import { addAt, makeWorld } from './realm_racers_util';
+import { addAt, makeWorld } from './mortar_overdrive_util';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
 function must<T>(value: T | null | undefined): T {
@@ -140,11 +140,11 @@ describe('feast ownership follows its match lifecycle', () => {
   });
 });
 
-describe('feasts and a Realm Racers heat', () => {
+describe('feasts and a Mortar Overdrive heat', () => {
   it('refuses a table on the shared circuit and keeps the feast in the bags', () => {
     const sim = makeWorld();
     const pid = addAt(sim, 'warrior', 'Aster');
-    expect(startRealmRacersPractice(sim, 'driver', pid)).toBe(true);
+    expect(startMortarOverdrivePractice(sim, 'driver', pid)).toBe(true);
     sim.addItem('harvest_feast', 1, pid);
     const from = sim.events.length;
     sim.placeFeast(pid);

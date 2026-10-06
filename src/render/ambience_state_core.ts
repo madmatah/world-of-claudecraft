@@ -3,19 +3,19 @@
 // weather that biome carries, and whether the player is at the water's edge).
 // Sampled at the AVATAR eye, never at the Action Cam's shifted aim, so a
 // shoulder offset cannot flip rain, water or dungeon state early at an edge.
-// A Realm Racers circuit samples as nowhere a bed plays (no biome, no
+// A Mortar Overdrive circuit samples as nowhere a bed plays (no biome, no
 // dungeon), so its music, engines and effects are the whole mix.
 // Pure and allocation-free: the renderer owns one state and refills it per
 // frame. Extracted from renderer.ts updateCamera.
 
 import { DUNGEON_X_THRESHOLD } from '../sim/data';
-import { realmRacersLaneAt } from '../sim/realm_racers_layout';
+import { mortarOverdriveLaneAt } from '../sim/mortar_overdrive/layout';
 import type { BiomeId } from '../sim/types';
 import { groundHeight, waterLevelAt, zoneBiomeAt } from '../sim/world';
 
 export interface AmbienceState {
   inDungeon: boolean;
-  /** Null where no bed plays at all: a Realm Racers circuit. */
+  /** Null where no bed plays at all: a Mortar Overdrive circuit. */
   biome: BiomeId | null;
   precip: 'snow' | 'rain' | null;
   nearWater: boolean;
@@ -49,7 +49,7 @@ export function sampleAmbienceInto(
   seed: number,
   weatherOn: boolean,
 ): AmbienceState {
-  if (realmRacersLaneAt(x, z)) {
+  if (mortarOverdriveLaneAt(x, z)) {
     out.inDungeon = false;
     out.biome = null;
     out.precip = null;

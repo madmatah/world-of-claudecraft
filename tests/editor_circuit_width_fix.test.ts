@@ -9,11 +9,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { suggestWidthBands } from '../src/editor/circuit/width_fix_core';
-import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_MIN_HALF_WIDTH } from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import type { MortarOverdriveCircuit } from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_MIN_HALF_WIDTH } from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 /** A lobed shape: `lobes` tight corners at the tips, evenly spaced round the
  *  lap, so "reports every corner" has more than one corner to report. */
@@ -29,7 +29,7 @@ function circuit(
   id: string,
   controlPoints: readonly { x: number; z: number }[],
   halfWidth: number,
-): RealmRacersCircuit {
+): MortarOverdriveCircuit {
   return {
     ...GARDEN,
     id,
@@ -44,8 +44,8 @@ function circuit(
   };
 }
 
-const applied = (base: RealmRacersCircuit, widthBands: { s: number; halfWidth: number }[]) =>
-  realmRacersCircuitMetrics({ ...base, id: `${base.id}_applied`, widthBands });
+const applied = (base: MortarOverdriveCircuit, widthBands: { s: number; halfWidth: number }[]) =>
+  mortarOverdriveCircuitMetrics({ ...base, id: `${base.id}_applied`, widthBands });
 
 const cornerCodes = (metrics: { problems: readonly { code: string }[] }) =>
   metrics.problems.filter(
@@ -57,7 +57,7 @@ describe('circuit editor corner repair', () => {
     // Four tight lobes against a wide road: the shape that made fixing by hand
     // a loop of "fix one, meet the next".
     const drawn = circuit('widthfix_four_lobes', flower(4, 110, 26), 13);
-    expect(cornerCodes(realmRacersCircuitMetrics(drawn))).toHaveLength(4);
+    expect(cornerCodes(mortarOverdriveCircuitMetrics(drawn))).toHaveLength(4);
     const fix = suggestWidthBands(drawn);
     expect(fix.remaining).toEqual([]);
     expect(cornerCodes(applied(drawn, fix.widthBands))).toEqual([]);
@@ -67,7 +67,7 @@ describe('circuit editor corner repair', () => {
   it('is safe to run twice: the second pass finds nothing left to do', () => {
     const drawn = circuit('widthfix_idempotent', flower(4, 110, 26), 13);
     const first = suggestWidthBands(drawn);
-    const once: RealmRacersCircuit = {
+    const once: MortarOverdriveCircuit = {
       ...drawn,
       id: 'widthfix_idempotent_once',
       widthBands: first.widthBands,
@@ -90,8 +90,8 @@ describe('circuit editor corner repair', () => {
   it('only ever narrows: no sample comes back with more road than it had', () => {
     const drawn = circuit('widthfix_monotone', flower(3, 100, 30), 12);
     const fix = suggestWidthBands(drawn);
-    const before = realmRacersTrack(drawn).samples;
-    const after = realmRacersTrack({
+    const before = mortarOverdriveTrack(drawn).samples;
+    const after = mortarOverdriveTrack({
       ...drawn,
       id: 'widthfix_monotone_after',
       widthBands: fix.widthBands,
@@ -106,7 +106,7 @@ describe('circuit editor corner repair', () => {
     const fix = suggestWidthBands(drawn);
     for (const band of fix.widthBands) {
       expect(band.halfWidth, `band at s=${band.s}`).toBeGreaterThanOrEqual(
-        REALM_RACERS_MIN_HALF_WIDTH,
+        MORTAR_OVERDRIVE_MIN_HALF_WIDTH,
       );
     }
   });
@@ -134,7 +134,7 @@ describe('circuit editor corner repair', () => {
     // not all the way clear of the warning tier.
     const drawn = circuit('widthfix_partial', flower(4, 96, 30), 11);
     const fix = suggestWidthBands(drawn);
-    const before = realmRacersCircuitMetrics(drawn).problems.map((p) => p.code);
+    const before = mortarOverdriveCircuitMetrics(drawn).problems.map((p) => p.code);
     expect(before).toContain('corner_folds_road');
     const after = applied(drawn, fix.widthBands).problems.map((p) => p.code);
     expect(after).not.toContain('corner_folds_road');
@@ -144,7 +144,7 @@ describe('circuit editor corner repair', () => {
   it('keeps the authored profile away from the corners it had to touch', () => {
     // One tight corner must not flatten the road the operator shaped everywhere
     // else: the repair is local, or it is a rewrite wearing a repair's name.
-    const shaped: RealmRacersCircuit = {
+    const shaped: MortarOverdriveCircuit = {
       ...circuit('widthfix_local', flower(1, 110, 22), 12),
       widthBands: [
         { s: 0, halfWidth: 13 },
@@ -155,8 +155,8 @@ describe('circuit editor corner repair', () => {
       ],
     };
     const fix = suggestWidthBands(shaped);
-    const before = realmRacersTrack(shaped);
-    const after = realmRacersTrack({
+    const before = mortarOverdriveTrack(shaped);
+    const after = mortarOverdriveTrack({
       ...shaped,
       id: 'widthfix_local_after',
       widthBands: fix.widthBands,
@@ -179,7 +179,7 @@ describe('circuit editor corner repair', () => {
     // there: the road at the chicane came back WIDER than the operator drew it.
     // The four-lobes shape the one-pass test proves is constrained, with a
     // hand-authored chicane parked between two of its corners.
-    const shaped: RealmRacersCircuit = {
+    const shaped: MortarOverdriveCircuit = {
       ...circuit('widthfix_subcell', flower(4, 110, 26), 13),
       widthBands: [
         { s: 0, halfWidth: 13 },
@@ -193,8 +193,8 @@ describe('circuit editor corner repair', () => {
     // The rebuild really ran: the corner constrains the road, so this is not
     // the leave-it-alone early return hiding the defect.
     expect(fix.narrowedYards).toBeGreaterThan(0);
-    const before = realmRacersTrack(shaped);
-    const after = realmRacersTrack({
+    const before = mortarOverdriveTrack(shaped);
+    const after = mortarOverdriveTrack({
       ...shaped,
       id: 'widthfix_subcell_after',
       widthBands: fix.widthBands,

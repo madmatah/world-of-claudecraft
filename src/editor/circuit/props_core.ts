@@ -3,7 +3,7 @@
 // or ellipse becomes a scatter or a pond.
 //
 // It authors, it never resolves. Where a piece ENDS UP is
-// `src/sim/realm_racers_props_resolve.ts` and nothing else, including here: the
+// `src/sim/mortar_overdrive/props_resolve.ts` and nothing else, including here: the
 // page commits the record and reads the placements back off the one resolver,
 // so the tool cannot draw a fountain anywhere but where the game puts it. That
 // is the whole defect class the resolver exists for, and a second placement
@@ -14,23 +14,29 @@
 // just the previous value.
 
 import type {
-  RallyPond,
-  RallyProp,
-  RallyPropAt,
-  RallyScatter,
-  RealmRacersCircuit,
-} from '../../sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
+  MortarOverdriveCircuit,
+  MortarOverdrivePond,
+  MortarOverdriveProp,
+  MortarOverdrivePropAt,
+  MortarOverdriveScatter,
+} from '../../sim/content/mortar_overdrive';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
 import { polygonContainsPoint } from '../../sim/geometry2d';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
-import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
-import type { RallyPlacedPond, RallyPlacedProp } from '../../sim/realm_racers_props_resolve';
-import { rallyFootprintRadius, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
+import type {
+  MortarOverdrivePlacedPond,
+  MortarOverdrivePlacedProp,
+  MortarOverdrivePoint,
+} from '../../sim/mortar_overdrive';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../../sim/mortar_overdrive/layout';
 import {
-  REALM_RACERS_PROJECTION_ENVELOPE,
-  REALM_RACERS_PROJECTION_WINDOW,
-  realmRacersTrack,
-} from '../../sim/realm_racers_spline';
+  mortarOverdriveFootprintRadius,
+  mortarOverdrivePlacements,
+} from '../../sim/mortar_overdrive/props_resolve';
+import {
+  MORTAR_OVERDRIVE_PROJECTION_ENVELOPE,
+  MORTAR_OVERDRIVE_PROJECTION_WINDOW,
+  mortarOverdriveTrack,
+} from '../../sim/mortar_overdrive/spline';
 import {
   NORTH_UP_YAW,
   NUDGE_STEP_BIG_YD,
@@ -60,14 +66,14 @@ export type PropFrame = 'track' | 'absolute';
  * anchored to the facing stretch. So the tool stops authoring track-space
  * exactly where the projection stops being an answer.
  */
-export const PROP_TRACK_SPACE_BAND = REALM_RACERS_PROJECTION_ENVELOPE;
+export const PROP_TRACK_SPACE_BAND = MORTAR_OVERDRIVE_PROJECTION_ENVELOPE;
 
 /**
  * The palette entry that places WATER rather than a catalog piece.
  *
  * Ponds live in the same list because placing one is the same gesture, and a
  * mode of their own is what the deleted water paint already was. It is not a
- * catalog key and never reaches a record: the pond gesture authors a `RallyPond`.
+ * catalog key and never reaches a record: the pond gesture authors a `MortarOverdrivePond`.
  */
 export const POND_CHOICE = 'pond';
 
@@ -86,7 +92,7 @@ export type DressingSelection = {
 };
 
 /** The frame a prop is authored in. */
-export function propFrameOf(prop: RallyProp): PropFrame {
+export function propFrameOf(prop: MortarOverdriveProp): PropFrame {
   return 's' in prop.at ? 'track' : 'absolute';
 }
 
@@ -112,7 +118,7 @@ export function propFrameOf(prop: RallyProp): PropFrame {
  * wrong road.
  */
 export interface AuthoredPlacement {
-  at: RallyPropAt;
+  at: MortarOverdrivePropAt;
   hint: number;
 }
 
@@ -125,14 +131,18 @@ export interface AuthoredPlacement {
  * the origin goes on for the call and comes straight back off.
  */
 export function authorPlacement(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   x: number,
   z: number,
   frame: PropFrame | 'auto' = 'auto',
   hint?: number,
 ): AuthoredPlacement {
-  const track = realmRacersTrack(circuit);
-  const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z, hint);
+  const track = mortarOverdriveTrack(circuit);
+  const projection = track.project(
+    x + MORTAR_OVERDRIVE_ORIGIN.x,
+    z + MORTAR_OVERDRIVE_ORIGIN.z,
+    hint,
+  );
   const near = stayedNear(projection.index, hint, track.samples.length);
   const trackside = Math.abs(projection.lateral) <= PROP_TRACK_SPACE_BAND && near;
   const useTrack = frame === 'auto' ? trackside : frame === 'track';
@@ -158,16 +168,16 @@ export function authorPlacement(
 function stayedNear(index: number, hint: number | undefined, count: number): boolean {
   if (hint === undefined || !Number.isFinite(hint)) return true;
   const gap = Math.abs(index - Math.round(hint));
-  return Math.min(gap, count - gap) <= REALM_RACERS_PROJECTION_WINDOW;
+  return Math.min(gap, count - gap) <= MORTAR_OVERDRIVE_PROJECTION_WINDOW;
 }
 
 /** The projection index a track-space prop sits at, for a drag to start from. */
 export function propProjectionHint(
-  circuit: RealmRacersCircuit,
-  prop: RallyProp,
+  circuit: MortarOverdriveCircuit,
+  prop: MortarOverdriveProp,
 ): number | undefined {
   if (!('s' in prop.at)) return undefined;
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const fraction = ((prop.at.s % 1) + 1) % 1;
   return Math.round((fraction * track.length) / track.step) % track.samples.length;
 }
@@ -200,13 +210,13 @@ export function propProjectionHint(
  * has got to instead of to where it began.
  */
 export function movedProp(
-  circuit: RealmRacersCircuit,
-  prop: RallyProp,
+  circuit: MortarOverdriveCircuit,
+  prop: MortarOverdriveProp,
   x: number,
   z: number,
   hint?: number,
   pressFrame: PropFrame = propFrameOf(prop),
-): { prop: RallyProp; hint: number } {
+): { prop: MortarOverdriveProp; hint: number } {
   const frame = pressFrame === 'absolute' ? 'absolute' : 'auto';
   const placement = authorPlacement(circuit, x, z, frame, hint);
   return { prop: { ...prop, at: placement.at }, hint: placement.hint };
@@ -220,11 +230,11 @@ export function movedProp(
  * formula this module refuses to hold.
  */
 export function convertedProp(
-  circuit: RealmRacersCircuit,
-  prop: RallyProp,
+  circuit: MortarOverdriveCircuit,
+  prop: MortarOverdriveProp,
   placedX: number,
   placedZ: number,
-): RallyProp {
+): MortarOverdriveProp {
   const frame: PropFrame = propFrameOf(prop) === 'track' ? 'absolute' : 'track';
   const hint = propProjectionHint(circuit, prop);
   return { ...prop, at: authorPlacement(circuit, placedX, placedZ, frame, hint).at };
@@ -233,12 +243,16 @@ export function convertedProp(
 /** One rotation tick, in the wheel/keypress direction. A piece that was facing
  *  the racing direction takes its CURRENT angle as the start, which is what the
  *  caller reads off the resolver, so `'tangent'` never rotates back to zero. */
-export function rotatedProp(prop: RallyProp, placedYaw: number, deltaY: number): RallyProp {
+export function rotatedProp(
+  prop: MortarOverdriveProp,
+  placedYaw: number,
+  deltaY: number,
+): MortarOverdriveProp {
   return { ...prop, yaw: rotateStep(placedYaw, deltaY) };
 }
 
 /** Face the racing direction where it stands. */
-export function tangentProp(prop: RallyProp): RallyProp {
+export function tangentProp(prop: MortarOverdriveProp): MortarOverdriveProp {
   return { ...prop, yaw: 'tangent' };
 }
 
@@ -248,11 +262,11 @@ export function tangentProp(prop: RallyProp): RallyProp {
  *  themselves seat them at 7 to 11, so a circuit needs building-sized scales
  *  the map editor's furniture never does. The export validator has accepted
  *  up to 50 all along; this lifts the interactive clamp to the same ceiling. */
-export const RALLY_PLACEMENT_SCALE_MAX = 50;
+export const MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX = 50;
 
 /** One scale tick, clamped to the circuit tool's own bounds. */
-export function scaledProp(prop: RallyProp, deltaY: number): RallyProp {
-  const scale = scaleStep(prop.scale ?? 1, deltaY, RALLY_PLACEMENT_SCALE_MAX);
+export function scaledProp(prop: MortarOverdriveProp, deltaY: number): MortarOverdriveProp {
+  const scale = scaleStep(prop.scale ?? 1, deltaY, MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX);
   return { ...prop, scale };
 }
 
@@ -260,7 +274,10 @@ export function scaledProp(prop: RallyProp, deltaY: number): RallyProp {
  *  and the same two decimals `scaleStep` lands on, so a dragged corner and a
  *  tapped `+` cannot leave the record in two different shapes. */
 export function clampPropScale(scale: number): number {
-  const clamped = Math.min(RALLY_PLACEMENT_SCALE_MAX, Math.max(PLACEMENT_SCALE_MIN, scale));
+  const clamped = Math.min(
+    MORTAR_OVERDRIVE_PLACEMENT_SCALE_MAX,
+    Math.max(PLACEMENT_SCALE_MIN, scale),
+  );
   return Math.round(clamped * 100) / 100;
 }
 
@@ -285,7 +302,7 @@ export const PROP_ROTATE_HANDLE_GAP = 2.5;
 
 /** The corner of a footprint, in the piece's own frame: the box's own corner, or
  *  the point of a circle at 45 degrees, which is the same distance out. */
-function propGripLocal(footprint: RallyPlacedProp['footprint']): RallyPoint {
+function propGripLocal(footprint: MortarOverdrivePlacedProp['footprint']): MortarOverdrivePoint {
   if (footprint.kind === 'circle') {
     const reach = footprint.r / Math.SQRT2;
     return { x: reach, z: reach };
@@ -302,16 +319,18 @@ function propGripLocal(footprint: RallyPlacedProp['footprint']): RallyPoint {
  * when dragged. The rotate ring on the facing axis doubles as the only mark on
  * the plan that says which way a piece is pointing.
  */
-export function propHandlePoints(placed: RallyPlacedProp): Record<PropHandle, RallyPoint> {
+export function propHandlePoints(
+  placed: MortarOverdrivePlacedProp,
+): Record<PropHandle, MortarOverdrivePoint> {
   const cos = Math.cos(placed.yaw);
   const sin = Math.sin(placed.yaw);
-  const at = (localX: number, localZ: number): RallyPoint => ({
+  const at = (localX: number, localZ: number): MortarOverdrivePoint => ({
     x: placed.x + localX * cos - localZ * sin,
     z: placed.z + localX * sin + localZ * cos,
   });
   const grip = propGripLocal(placed.footprint);
   return {
-    rotate: at(rallyFootprintRadius(placed.footprint) + PROP_ROTATE_HANDLE_GAP, 0),
+    rotate: at(mortarOverdriveFootprintRadius(placed.footprint) + PROP_ROTATE_HANDLE_GAP, 0),
     scale: at(grip.x, grip.z),
   };
 }
@@ -323,7 +342,7 @@ export function propHandlePoints(placed: RallyPlacedProp): Record<PropHandle, Ra
  * declared first" would make one of them unreachable.
  */
 export function hitTestPropHandle(
-  placed: RallyPlacedProp,
+  placed: MortarOverdrivePlacedProp,
   x: number,
   z: number,
   tolerance: number,
@@ -364,13 +383,13 @@ export function hitTestPropHandle(
  * follows the pointer because the piece grew to meet it.
  */
 export function propWithHandleAt(
-  prop: RallyProp,
-  placed: RallyPlacedProp,
+  prop: MortarOverdriveProp,
+  placed: MortarOverdrivePlacedProp,
   handle: PropHandle,
   x: number,
   z: number,
   free = false,
-): RallyProp {
+): MortarOverdriveProp {
   const dx = x - placed.x;
   const dz = z - placed.z;
   if (handle === 'rotate') {
@@ -427,12 +446,12 @@ export const DUPLICATE_OFFSET_YD = 2;
  * becomes circuit-local where it landed.
  */
 export function duplicatedProp(
-  circuit: RealmRacersCircuit,
-  prop: RallyProp,
+  circuit: MortarOverdriveCircuit,
+  prop: MortarOverdriveProp,
   placedX: number,
   placedZ: number,
   hint?: number,
-): RallyProp {
+): MortarOverdriveProp {
   return movedProp(
     circuit,
     prop,
@@ -445,7 +464,7 @@ export function duplicatedProp(
 /** The same pond again, beside itself. Its own seed comes along: a copy that
  *  reseeded itself would be a differently shaped piece of water, which is not
  *  what "duplicate" says. */
-export function duplicatedPond(pond: RallyPond): RallyPond {
+export function duplicatedPond(pond: MortarOverdrivePond): MortarOverdrivePond {
   return { ...pond, x: pond.x + DUPLICATE_OFFSET_YD, z: pond.z + DUPLICATE_OFFSET_YD };
 }
 
@@ -460,29 +479,29 @@ export function duplicatedPond(pond: RallyPond): RallyPond {
  * line, which at least is on the circuit.
  */
 export function selectionFocusPoint(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   selection: DressingSelection,
-): RallyPoint | null {
+): MortarOverdrivePoint | null {
   if (selection.kind === 'pond') {
     const pond = circuit.ponds?.[selection.index];
     return pond ? { x: pond.x, z: pond.z } : null;
   }
   if (selection.kind === 'prop') {
     const placed =
-      realmRacersPlacements(circuit).props[
-        placementIndexOf(circuit.props, REALM_RACERS_PROPS, selection.index)
+      mortarOverdrivePlacements(circuit).props[
+        placementIndexOf(circuit.props, MORTAR_OVERDRIVE_PROPS, selection.index)
       ];
     return placed ? { x: placed.x, z: placed.z } : null;
   }
   const scatter = circuit.scatters?.[selection.index];
   if (!scatter) return null;
-  const track = realmRacersTrack(circuit);
+  const track = mortarOverdriveTrack(circuit);
   const point = track.pointAt(spanMidpoint(scatter.span) * track.length);
-  return { x: point.x - REALM_RACERS_ORIGIN.x, z: point.z - REALM_RACERS_ORIGIN.z };
+  return { x: point.x - MORTAR_OVERDRIVE_ORIGIN.x, z: point.z - MORTAR_OVERDRIVE_ORIGIN.z };
 }
 
 /** The middle of a lap window, the short way round. */
-function spanMidpoint(span: RallyScatter['span']): number {
+function spanMidpoint(span: MortarOverdriveScatter['span']): number {
   if (!span) return 0;
   const length = (((span.s1 - span.s0) % 1) + 1) % 1;
   return (((span.s0 + length / 2) % 1) + 1) % 1;
@@ -496,7 +515,7 @@ function spanMidpoint(span: RallyScatter['span']): number {
  * machine, and the catalog owns the shape either way. An explicit footprint the
  * operator typed into the inspector survives untouched until they cycle it.
  */
-export function toggledCollide(prop: RallyProp): RallyProp {
+export function toggledCollide(prop: MortarOverdriveProp): MortarOverdriveProp {
   if (prop.collide !== 'none') return { ...prop, collide: 'none' };
   return {
     asset: prop.asset,
@@ -515,7 +534,7 @@ export function toggledCollide(prop: RallyProp): RallyProp {
  * the entry after the one the operator clicked.
  */
 export function placedPropIndices(
-  props: readonly RallyProp[] | undefined,
+  props: readonly MortarOverdriveProp[] | undefined,
   catalog: Readonly<Record<string, unknown>>,
 ): number[] {
   const out: number[] = [];
@@ -527,7 +546,7 @@ export function placedPropIndices(
 
 /** Where a record prop sits in the resolver's list, or -1. */
 export function placementIndexOf(
-  props: readonly RallyProp[] | undefined,
+  props: readonly MortarOverdriveProp[] | undefined,
   catalog: Readonly<Record<string, unknown>>,
   recordIndex: number,
 ): number {
@@ -555,13 +574,13 @@ export const GHOST_ID_SUFFIX = '__ghost';
  * honest to draw for it.
  */
 export function ghostPlacement(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   asset: string,
   x: number,
   z: number,
   yaw?: number | 'tangent',
-): RallyPlacedProp | null {
-  const pending: RallyProp = { asset, at: authorPlacement(circuit, x, z).at };
+): MortarOverdrivePlacedProp | null {
+  const pending: MortarOverdriveProp = { asset, at: authorPlacement(circuit, x, z).at };
   if (yaw !== undefined) pending.yaw = yaw;
   const placed = ghostRowPlacements(circuit, [pending]);
   return placed[placed.length - 1] ?? null;
@@ -576,12 +595,12 @@ export function ghostPlacement(
  * separate derivation `ghostPlacement` exists to refuse, only twelve times over.
  */
 export function ghostRowPlacements(
-  circuit: RealmRacersCircuit,
-  pending: readonly RallyProp[],
-): RallyPlacedProp[] {
+  circuit: MortarOverdriveCircuit,
+  pending: readonly MortarOverdriveProp[],
+): MortarOverdrivePlacedProp[] {
   if (pending.length === 0) return [];
   const standing = (circuit.props ?? []).length;
-  const resolved = realmRacersPlacements({
+  const resolved = mortarOverdrivePlacements({
     ...circuit,
     props: [...(circuit.props ?? []), ...pending],
     id: `${circuit.id}${GHOST_ID_SUFFIX}`,
@@ -589,7 +608,7 @@ export function ghostRowPlacements(
   // Counted off the START of the pending block rather than taken as "the tail":
   // the resolver SKIPS a catalog key nothing authors, so a row of an unknown key
   // would otherwise hand back the circuit's own last props as the preview.
-  const known = placedPropIndices(circuit.props, REALM_RACERS_PROPS).length;
+  const known = placedPropIndices(circuit.props, MORTAR_OVERDRIVE_PROPS).length;
   const before = Math.min(known, standing);
   return resolved.props.slice(before);
 }
@@ -601,7 +620,7 @@ export function ghostRowPlacements(
  * reloadable to the same circuit, and a seed nobody chose is still a number the
  * operator can edit afterwards.
  */
-export function nextSeed(circuit: RealmRacersCircuit): number {
+export function nextSeed(circuit: MortarOverdriveCircuit): number {
   return (circuit.scatters?.length ?? 0) + (circuit.ponds?.length ?? 0) + circuit.id.length;
 }
 
@@ -629,14 +648,14 @@ export function removedAt<T>(list: readonly T[] | undefined, index: number): T[]
  * the piece drawn last, on top, is the one picked up.
  */
 export function hitTestPlaced(
-  placed: readonly RallyPlacedProp[],
+  placed: readonly MortarOverdrivePlacedProp[],
   x: number,
   z: number,
   minRadius = 0,
 ): number {
   for (let i = placed.length - 1; i >= 0; i--) {
     const prop = placed[i];
-    const radius = Math.max(minRadius, rallyFootprintRadius(prop.footprint));
+    const radius = Math.max(minRadius, mortarOverdriveFootprintRadius(prop.footprint));
     if (Math.hypot(prop.x - x, prop.z - z) <= radius) return i;
   }
   return -1;
@@ -646,7 +665,11 @@ export function hitTestPlaced(
  *  wobble and all, rather than against the authored ellipse: the outline is
  *  what is drawn, and a shape that grabs somewhere it is not drawn reads as a
  *  broken tool. */
-export function hitTestPonds(ponds: readonly RallyPlacedPond[], x: number, z: number): number {
+export function hitTestPonds(
+  ponds: readonly MortarOverdrivePlacedPond[],
+  x: number,
+  z: number,
+): number {
   for (let i = ponds.length - 1; i >= 0; i--) {
     if (polygonContainsPoint(ponds[i].outline, x, z)) return i;
   }
@@ -659,11 +682,13 @@ export type PondHandle = 'rx' | 'rz' | 'rot';
 export const POND_HANDLES: readonly PondHandle[] = ['rx', 'rz', 'rot'];
 
 /** Where each handle sits, circuit-local. */
-export function pondHandlePoints(pond: RallyPond): Record<PondHandle, RallyPoint> {
+export function pondHandlePoints(
+  pond: MortarOverdrivePond,
+): Record<PondHandle, MortarOverdrivePoint> {
   const rot = pond.rot ?? 0;
   const cos = Math.cos(rot);
   const sin = Math.sin(rot);
-  const at = (localX: number, localZ: number): RallyPoint => ({
+  const at = (localX: number, localZ: number): MortarOverdrivePoint => ({
     x: pond.x + localX * cos - localZ * sin,
     z: pond.z + localX * sin + localZ * cos,
   });
@@ -679,7 +704,7 @@ export function pondHandlePoints(pond: RallyPond): Record<PondHandle, RallyPoint
  *  same axis, so at a low zoom the tolerance reaches both at once and
  *  first-in-list made the rotate handle unreachable. */
 export function hitTestPondHandle(
-  pond: RallyPond,
+  pond: MortarOverdrivePond,
   x: number,
   z: number,
   tolerance: number,
@@ -702,11 +727,11 @@ export function hitTestPondHandle(
  *  pointer in the pond's OWN frame, so a rotated pond still resizes along the
  *  axis the handle is on rather than along the world's. */
 export function pondWithHandleAt(
-  pond: RallyPond,
+  pond: MortarOverdrivePond,
   handle: PondHandle,
   x: number,
   z: number,
-): RallyPond {
+): MortarOverdrivePond {
   const rot = pond.rot ?? 0;
   const dx = x - pond.x;
   const dz = z - pond.z;
@@ -730,7 +755,7 @@ export function pondFromDrag(
   x1: number,
   z1: number,
   seed: number,
-): RallyPond {
+): MortarOverdrivePond {
   return {
     x: (x0 + x1) / 2,
     z: (z0 + z1) / 2,
@@ -751,7 +776,7 @@ export interface DressingRect {
 /**
  * The scatter a dragged rectangle describes.
  *
- * A `RallyScatter` is a SIDE plus a lap window, never a box: the resolver fills
+ * A `MortarOverdriveScatter` is a SIDE plus a lap window, never a box: the resolver fills
  * one side of the road over a stretch of lap, which is what makes a fill
  * survive a centerline edit. So the rectangle is read for those two things and
  * then thrown away, and the readout is what tells the operator how many pieces
@@ -762,13 +787,13 @@ export interface DressingRect {
  * wrapping span rather than as the whole loop.
  */
 export function scatterFromRect(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   rect: DressingRect,
   asset: string,
   spacing: number,
   seed: number,
-): RallyScatter {
-  const track = realmRacersTrack(circuit);
+): MortarOverdriveScatter {
+  const track = mortarOverdriveTrack(circuit);
   const minX = Math.min(rect.x0, rect.x1);
   const maxX = Math.max(rect.x0, rect.x1);
   const minZ = Math.min(rect.z0, rect.z1);
@@ -783,7 +808,7 @@ export function scatterFromRect(
   const fractions: number[] = [];
   let lateral = 0;
   for (const [x, z] of corners) {
-    const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
+    const projection = track.project(x + MORTAR_OVERDRIVE_ORIGIN.x, z + MORTAR_OVERDRIVE_ORIGIN.z);
     fractions.push(projection.s / track.length);
     lateral += projection.lateral;
   }

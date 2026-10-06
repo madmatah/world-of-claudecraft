@@ -128,7 +128,7 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
       toggleHarvestJournal() {},
       togglePerfecting() {},
       toggleLootExplorer() {},
-      toggleRealmRacers() {},
+      toggleMortarOverdrive() {},
     };
     const petWorld = {
       setPetMode() {},
@@ -182,7 +182,7 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
     // never checks it; pin the offer and the dispatch arm directly.
     expect(panel).toContain("{ value: 'escape', label: t('hudChrome.controller.menuAction') }");
     expect(body).toContain("if (id === 'escape') {");
-    // The game-menu arm also waits out the Realm Racers lobby curtain.
+    // The game-menu arm also waits out the Mortar Overdrive lobby curtain.
     expect(body).toContain('if (!hud.closeAll() && !hud.lobbyHold.shown) hud.toggleOptionsMenu();');
   });
 

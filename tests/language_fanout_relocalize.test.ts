@@ -32,10 +32,10 @@ import { CalendarWindow, type CalendarWindowDeps } from '../src/ui/calendar_wind
 import { CardDuelWindow, type CardDuelWindowDeps } from '../src/ui/card_duel_window';
 import { DelveTrackerController } from '../src/ui/hud/delve/delve_tracker_controller';
 import { LockpickWindow } from '../src/ui/hud/delve/lockpick_window';
+import { MortarOverdriveUi } from '../src/ui/hud/mortar_overdrive/composer';
 import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
 import { MailboxWindow, type MailboxWindowDeps } from '../src/ui/mailbox_window';
 import { makeWriterFacet } from '../src/ui/painter_host';
-import { RealmRacersUi } from '../src/ui/realm_racers';
 import { SocialWindow, type SocialWindowDeps } from '../src/ui/social_window';
 import { TutorialOverlay } from '../src/ui/tutorial';
 import type { DelveRunInfo, IWorld, LockpickView } from '../src/world_api';
@@ -91,30 +91,30 @@ function mount(id: string, display = 'none'): HTMLElement {
   return el;
 }
 
-function realmRacersWorld(): IWorld {
+function mortarOverdriveWorld(): IWorld {
   return {
-    realmRacersInfo: {
+    mortarOverdriveInfo: {
       queued: false,
       queuePosition: 0,
       queueSize: 0,
       match: null,
     },
-    joinRealmRacersQueue: () => {},
-    leaveRealmRacersQueue: () => {},
-    forfeitRealmRacers: () => {},
-    resetRealmRacersPosition: () => {},
-    startRealmRacersPractice: () => {},
+    joinMortarOverdriveQueue: () => {},
+    leaveMortarOverdriveQueue: () => {},
+    forfeitMortarOverdrive: () => {},
+    resetMortarOverdrivePosition: () => {},
+    startMortarOverdrivePractice: () => {},
   } as unknown as IWorld;
 }
 
-function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
-  const root = mount('realm-racers-window');
+function openMortarOverdrive(): { ui: MortarOverdriveUi; root: HTMLElement } {
+  const root = mount('mortar-overdrive-window');
   const layer = mount('ui');
   const noop = (): void => {};
-  const ui = new RealmRacersUi({
+  const ui = new MortarOverdriveUi({
     root: () => root,
     layer: () => layer,
-    world: () => realmRacersWorld(),
+    world: () => mortarOverdriveWorld(),
     closeOthers: noop,
     captureFocus: () => null,
     restoreFocus: noop,
@@ -842,21 +842,21 @@ describe('#2529 tutorial: the coachmark card re-localizes mid-step', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. Realm Racers
+// 8. Mortar Overdrive
 // ---------------------------------------------------------------------------
 
-describe('Realm Racers: an open queue window re-localizes on demand', () => {
+describe('Mortar Overdrive: an open queue window re-localizes on demand', () => {
   it('holds the old locale through update(), then rebuilds once on relocalize()', () => {
     setLanguage('en');
-    const english = t('hudChrome.rally.join');
+    const english = t('hudChrome.mortarOverdrive.join');
     setLanguage('zh_CN');
-    const chinese = t('hudChrome.rally.join');
+    const chinese = t('hudChrome.mortarOverdrive.join');
     expect(chinese).not.toBe(english);
     setLanguage('en');
 
-    const { ui, root } = openRealmRacers();
+    const { ui, root } = openMortarOverdrive();
     const action = (): HTMLElement =>
-      root.querySelector<HTMLElement>('[data-rally-join]') as HTMLElement;
+      root.querySelector<HTMLElement>('[data-mortar-overdrive-join]') as HTMLElement;
     expect(action().textContent).toBe(english);
 
     setLanguage('zh_CN');
@@ -867,7 +867,7 @@ describe('Realm Racers: an open queue window re-localizes on demand', () => {
     const rebuilt = action();
     expect(rebuilt.textContent).toBe(chinese);
     ui.update();
-    expect(action(), 'the Rally window rebuilt twice on unchanged data').toBe(rebuilt);
+    expect(action(), 'the Mortar Overdrive window rebuilt twice on unchanged data').toBe(rebuilt);
   });
 });
 
@@ -935,9 +935,9 @@ describe('#2529 a closed surface paints nothing when the fan-out reaches it', ()
       },
     ],
     [
-      'Realm Racers',
+      'Mortar Overdrive',
       () => {
-        const { ui, root } = openRealmRacers();
+        const { ui, root } = openMortarOverdrive();
         ui.close();
         root.innerHTML = '';
         ui.relocalize();

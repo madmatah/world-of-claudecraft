@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
+import { MORTAR_OVERDRIVE_ABILITY_ID } from '../src/sim/content/mortar_overdrive/kit';
 import { ABILITIES } from '../src/sim/data';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
   resolveGroundBlastAim,
-} from '../src/sim/realm_racers_ground_blast';
+} from '../src/sim/mortar_overdrive/ground_blast';
 import type { AbilityEffect, Entity } from '../src/sim/types';
 import {
   abilityAoeRadius,
@@ -15,7 +15,7 @@ import {
   createGroundAimState,
   DEFAULT_GROUND_AOE_RADIUS,
   enterGroundAim,
-  localRallyCastFeedbackAllowed,
+  localMortarOverdriveCastFeedbackAllowed,
   shouldUseGroundAim,
   smartSeedPoint,
   withinMinRange,
@@ -39,7 +39,7 @@ describe('ground_aim', () => {
     expect(shouldUseGroundAim(false, true, false)).toBe(true);
   });
 
-  it('always aims a Realm Racers weapon, whatever the host or the preference', () => {
+  it('always aims a Mortar Overdrive weapon, whatever the host or the preference', () => {
     // Placing the shell IS the weapon: the reticle-off fallback (your target's
     // feet, else your own) has no meaning for it, and on the circuit there is no
     // selected target to fall back to.
@@ -49,13 +49,13 @@ describe('ground_aim', () => {
         // off mobile and the precise-touch toggle on it, so both hosts are swept
         // with their own switch in both positions.
         expect(
-          shouldUseGroundAim(mobileTouch, preference, preference, REALM_RACERS_ABILITY_ID),
+          shouldUseGroundAim(mobileTouch, preference, preference, MORTAR_OVERDRIVE_ABILITY_ID),
         ).toBe(true);
       }
     }
   });
 
-  it('holds a Realm Racers aim inside its forward cone, mirroring the sim', () => {
+  it('holds a Mortar Overdrive aim inside its forward cone, mirroring the sim', () => {
     // Facing +z, aiming 90 degrees out to the side: the barrel is bolted to the
     // chassis, so the circle slides back onto the cone edge instead of going
     // where the cursor asked. The clamp is the sim's own function, so what the
@@ -65,14 +65,14 @@ describe('ground_aim', () => {
       casterAt(0, 0),
       point,
       GROUND_BLAST_MAX_RANGE,
-      REALM_RACERS_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
     );
     const mirror = resolveGroundBlastAim({ x: 0, z: 0, facing: 0 }, point);
     expect(aim.clamped).toBe(true);
     expect(aim.point).toEqual({ x: mirror.x, z: mirror.z });
     expect(Math.atan2(aim.point.x, aim.point.z)).toBeCloseTo(GROUND_BLAST_AIM_CONE_RAD, 9);
     // The same request under any OTHER ability id keeps the plain range clamp,
-    // so the cone is the rally weapon's rule and nobody else's.
+    // so the cone is the Mortar Overdrive weapon's rule and nobody else's.
     const plain = clampAimToRange(casterAt(0, 0), point, GROUND_BLAST_MAX_RANGE, 'flamestrike');
     expect(plain.point).toEqual(point);
   });
@@ -184,14 +184,14 @@ describe('ground_aim', () => {
   });
 });
 
-describe('localRallyCastFeedbackAllowed', () => {
-  // The gate mirrors the client-visible half of the sim's rally refusal set.
+describe('localMortarOverdriveCastFeedbackAllowed', () => {
+  // The gate mirrors the client-visible half of the sim's Mortar Overdrive refusal set.
   // Every dimension gets its own negative case: a gate that only ever ran
   // fully-open would pass while refusing nothing.
   const allowed = (over: Partial<Record<string, unknown>> = {}) =>
-    localRallyCastFeedbackAllowed(
-      (over.abilityId as string) ?? REALM_RACERS_ABILITY_ID,
-      REALM_RACERS_ABILITY_ID,
+    localMortarOverdriveCastFeedbackAllowed(
+      (over.abilityId as string) ?? MORTAR_OVERDRIVE_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
       (over.casterDead as boolean) ?? false,
       (over.activityLocked as boolean) ?? false,
       (over.cooldownRemaining as number) ?? 0,
@@ -204,9 +204,9 @@ describe('localRallyCastFeedbackAllowed', () => {
   });
 
   it('refuses each client-visible reason the sim refuses on', () => {
-    // The shell ONLY: a future position-targeted rally ability must not
+    // The shell ONLY: a future position-targeted Mortar Overdrive ability must not
     // inherit the Ground Blast's muzzle report.
-    expect(allowed({ abilityId: 'rally_nitro' })).toBe(false);
+    expect(allowed({ abilityId: 'mortar_overdrive_nitro' })).toBe(false);
     expect(allowed({ abilityId: 'flamestrike' })).toBe(false);
     expect(allowed({ casterDead: true })).toBe(false);
     expect(allowed({ activityLocked: true })).toBe(false);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type VehicleProfile, vehicleProfile } from '../src/sim/content/vehicles';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../src/sim/mortar_overdrive/layout';
 import { type PlayerMotionDeps, stepPlayerMotion } from '../src/sim/player_motion';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
 import { DT, type Entity, type MoveInput, type VehicleDrive } from '../src/sim/types';
 import {
   addVehicleSlip,
@@ -21,7 +21,7 @@ import {
 // kernel composes it with collision: the wall scrape and the handbrake reaching
 // the model through the shared movement entry point.
 
-const LOANER = vehicleProfile('rally_loaner');
+const LOANER = vehicleProfile('mo_loaner');
 
 const controls = (over: Partial<VehicleStepInput> = {}): VehicleStepInput => ({
   throttle: 0,
@@ -66,13 +66,13 @@ const mi = (over: Partial<MoveInput> = {}): MoveInput => ({
   ...over,
 });
 
-// A pilot standing on the rally's instanced floor, where the kernel's
+// A pilot standing on the Mortar Overdrive's instanced floor, where the kernel's
 // horizontal step routes through PlayerMotionDeps.resolveMove and is therefore
 // stubbable without a world.
 function pilot(): Entity {
   return {
-    pos: { x: REALM_RACERS_ORIGIN.x, y: 0, z: REALM_RACERS_ORIGIN.z },
-    prevPos: { x: REALM_RACERS_ORIGIN.x, y: 0, z: REALM_RACERS_ORIGIN.z },
+    pos: { x: MORTAR_OVERDRIVE_ORIGIN.x, y: 0, z: MORTAR_OVERDRIVE_ORIGIN.z },
+    prevPos: { x: MORTAR_OVERDRIVE_ORIGIN.x, y: 0, z: MORTAR_OVERDRIVE_ORIGIN.z },
     facing: 0,
     onGround: true,
     jumping: false,
@@ -84,7 +84,7 @@ function pilot(): Entity {
     sitting: false,
     maxHp: 100,
     mountKey: 'terrorspark_groundshaker',
-    drive: createVehicleDrive('rally_loaner'),
+    drive: createVehicleDrive('mo_loaner'),
   } as unknown as Entity;
 }
 
@@ -104,7 +104,7 @@ function kernelDeps(
 
 describe('the vehicle driving model', () => {
   it('spools up to nearly top speed under full throttle, gradually and without exceeding it', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     let ticksTo90 = -1;
     for (let tick = 0; tick < 20 * 12; tick++) {
       advanceVehicleDrive(drive, LOANER, controls({ throttle: 1 }));
@@ -119,7 +119,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('brakes to a stop in a short distance and never overshoots into reverse', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 12, { throttle: 1 });
     const entrySpeed = drive.speed;
     let distance = 0;
@@ -142,7 +142,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('reverses from a standstill, capped at the profile reverse speed', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 10, { throttle: -1 });
     expect(drive.speed).toBeLessThan(0);
     expect(drive.speed).toBeGreaterThanOrEqual(-LOANER.reverseMax);
@@ -150,7 +150,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('coasts down monotonically and settles at a standstill', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 12, { throttle: 1 });
     let previous = drive.speed;
     for (let tick = 0; tick < 20 * 30; tick++) {
@@ -174,7 +174,7 @@ describe('the vehicle driving model', () => {
     // wheel is held at full lock first: the steering command now RAMPS, so a
     // reading taken before it arrives would measure the ramp, not the taper.
     const yawAt = (speed: number): number => {
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       drive.speed = speed;
       // Held long enough for both the wheel and the yaw response to settle.
       for (let tick = 0; tick < 20 + Math.ceil(1 / LOANER.steerRate / DT); tick++) {
@@ -196,7 +196,7 @@ describe('the vehicle driving model', () => {
   // carries flags), so the analog axis is reconstructed here, sim-side and
   // deterministically, which is what both hosts then predict in lockstep.
   it('ramps the steering command at the profile rate instead of applying it whole', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     expect(drive.steerAngle).toBe(0);
 
     const perTick = LOANER.steerRate * DT;
@@ -221,7 +221,7 @@ describe('the vehicle driving model', () => {
   // number of ticks, because the wheel cannot reach centre sooner than that and
   // so neither can the yaw it drives.
   it('cannot flip the yaw across a direction change faster than the wheel can travel', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 12, { throttle: 1 });
     run(drive, 10, { throttle: 1, steer: 1 });
     const entryYaw = drive.yawRate;
@@ -252,7 +252,7 @@ describe('the vehicle driving model', () => {
   it('reads the whole steering curve from the profile, not from the kernel', () => {
     const at = (over: Partial<VehicleProfile>, speed: number): number => {
       const profile: VehicleProfile = { ...LOANER, ...over };
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       drive.speed = speed;
       for (let tick = 0; tick < 20 + Math.ceil(1 / profile.steerRate / DT); tick++) {
         advanceVehicleDrive(drive, profile, controls({ steer: 1 }));
@@ -284,7 +284,7 @@ describe('the vehicle driving model', () => {
     // speed both saturate it, and a saturated comparison says nothing about
     // grip at all.
     const slide = (handbrake: boolean): { kept: number; travelOff: number } => {
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       run(drive, 20 * 12, { throttle: 1 });
       let facing = run(drive, 12, { throttle: 1, steer: 1, handbrake });
       // Releasing the key is not the same as the wheel being straight: it
@@ -313,7 +313,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('bleeds a slide away at the profile grip rate once the steering is neutral', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     drive.speed = 20;
     drive.slip = 6;
     advanceVehicleDrive(drive, LOANER, controls());
@@ -329,7 +329,7 @@ describe('the vehicle driving model', () => {
 
   it('reads the surface: a loose, draggy runoff slows a machine and holds its slide', () => {
     const settled = (gripMult: number, dragMult: number): { speed: number; kept: number } => {
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       drive.gripMult = gripMult;
       drive.dragMult = dragMult;
       run(drive, 20 * 12, { throttle: 1 });
@@ -348,7 +348,7 @@ describe('the vehicle driving model', () => {
     expect(runoff.kept).toBeGreaterThan(road.kept * 1.4);
 
     // Back on the road, the same state recovers rather than staying punished.
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     drive.gripMult = 0.45;
     drive.dragMult = 3;
     run(drive, 20 * 12, { throttle: 1 });
@@ -365,7 +365,7 @@ describe('the vehicle driving model', () => {
     // 22 yd/s between two frames, which reads as hitting a wall rather than as
     // ground going soft; capDecel is what turns that into a fall the player can
     // see and correct.
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 12, { throttle: 1 });
     const roadSpeed = drive.speed;
     const ceiling = LOANER.maxSpeed * 0.6;
@@ -391,16 +391,16 @@ describe('the vehicle driving model', () => {
 
     // On a clean road the rate is INERT: the engine never exceeds its own
     // ceiling, so nothing about ordinary driving passes through this arm.
-    const clean = createVehicleDrive('rally_loaner');
+    const clean = createVehicleDrive('mo_loaner');
     run(clean, 20 * 12, { throttle: 1 });
     expect(clean.speed).toBe(roadSpeed);
     expect(clean.speed).toBeLessThanOrEqual(LOANER.maxSpeed);
   });
 
   it('caps the top speed when a snare bites, without taxing the engine twice', () => {
-    const snared = createVehicleDrive('rally_loaner');
+    const snared = createVehicleDrive('mo_loaner');
     run(snared, 20 * 20, { throttle: 1, auraMult: 0.48 });
-    const clean = createVehicleDrive('rally_loaner');
+    const clean = createVehicleDrive('mo_loaner');
     run(clean, 20 * 20, { throttle: 1 });
     expect(snared.speed).toBeLessThanOrEqual(LOANER.maxSpeed * 0.48);
     expect(snared.speed).toBeGreaterThan(LOANER.maxSpeed * 0.48 * 0.85);
@@ -409,15 +409,15 @@ describe('the vehicle driving model', () => {
     // The engine itself is NOT scaled, deliberately: a snare caps a runner's
     // speed rather than their acceleration, and scaling both would let a heavy
     // surface out-drag the engine and strand a snared machine outright.
-    const cleanStart = createVehicleDrive('rally_loaner');
-    const snaredStart = createVehicleDrive('rally_loaner');
+    const cleanStart = createVehicleDrive('mo_loaner');
+    const snaredStart = createVehicleDrive('mo_loaner');
     advanceVehicleDrive(cleanStart, LOANER, controls({ throttle: 1 }));
     advanceVehicleDrive(snaredStart, LOANER, controls({ throttle: 1, auraMult: 0.48 }));
     expect(snaredStart.speed).toBeCloseTo(cleanStart.speed, 9);
 
     // The worst band in the game (harshest snare on the draggiest surface)
     // still moves a machine off a standstill and keeps it moving.
-    const worst = createVehicleDrive('rally_loaner');
+    const worst = createVehicleDrive('mo_loaner');
     worst.gripMult = 0.35;
     worst.dragMult = 4;
     run(worst, 20 * 20, { throttle: 1, auraMult: 0.4 });
@@ -425,7 +425,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('keeps its momentum airborne: no throttle, no grip, the velocity vector preserved', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 12, { throttle: 1 });
     run(drive, 20, { throttle: 1, steer: 1 }); // enter the air mid-drift
     const facing = 0;
@@ -444,7 +444,7 @@ describe('the vehicle driving model', () => {
 
   it('is deterministic and draws nothing from a clock or an rng', () => {
     const trace = (): string => {
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       const out: number[] = [];
       for (let tick = 0; tick < 200; tick++) {
         const yaw = advanceVehicleDrive(
@@ -466,15 +466,15 @@ describe('the vehicle driving model', () => {
 
   it('takes every handling number from the profile, never from the module', () => {
     const brisk: VehicleProfile = { ...LOANER, engineAccel: LOANER.engineAccel * 2 };
-    const stock = createVehicleDrive('rally_loaner');
-    const quick = createVehicleDrive('rally_loaner');
+    const stock = createVehicleDrive('mo_loaner');
+    const quick = createVehicleDrive('mo_loaner');
     run(stock, 10, { throttle: 1 });
     run(quick, 10, { throttle: 1 }, brisk);
     expect(quick.speed).toBeGreaterThan(stock.speed * 1.8);
 
     const gripless: VehicleProfile = { ...LOANER, roadGrip: LOANER.roadGrip / 4 };
-    const held = createVehicleDrive('rally_loaner');
-    const loose = createVehicleDrive('rally_loaner');
+    const held = createVehicleDrive('mo_loaner');
+    const loose = createVehicleDrive('mo_loaner');
     held.speed = 20;
     loose.speed = 20;
     held.slip = 6;
@@ -485,7 +485,7 @@ describe('the vehicle driving model', () => {
   });
 
   it('zeroes the motion on reset without touching the surface under the machine', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     run(drive, 20 * 5, { throttle: 1, steer: 1, handbrake: true });
     drive.gripMult = 0.5;
     drive.dragMult = 3;
@@ -502,7 +502,7 @@ describe('the vehicle driving model', () => {
 describe('the vehicle arm of the movement kernel', () => {
   it('slides along a wall it scrapes and stops dead against one it hits head on', () => {
     // A wall lying across +z: the solver keeps the x component and clamps z.
-    const wallZ = REALM_RACERS_ORIGIN.z + 0.5;
+    const wallZ = MORTAR_OVERDRIVE_ORIGIN.z + 0.5;
     const deps = kernelDeps((_fx, _fz, nx, nz) => ({ x: nx, z: Math.min(nz, wallZ) }));
 
     const scraper = pilot();
@@ -512,9 +512,9 @@ describe('the vehicle arm of the movement kernel', () => {
     const drive = scraper.drive as VehicleDrive;
     // The drive velocity is exactly what the sweep achieved, re-derived: the
     // into-the-wall half is gone, the along-the-wall half survives.
-    const achievedX = (scraper.pos.x - REALM_RACERS_ORIGIN.x) / DT;
-    const achievedZ = (scraper.pos.z - REALM_RACERS_ORIGIN.z) / DT;
-    const check = createVehicleDrive('rally_loaner');
+    const achievedX = (scraper.pos.x - MORTAR_OVERDRIVE_ORIGIN.x) / DT;
+    const achievedZ = (scraper.pos.z - MORTAR_OVERDRIVE_ORIGIN.z) / DT;
+    const check = createVehicleDrive('mo_loaner');
     applyAchievedVehicleVelocity(check, scraper.facing, achievedX, achievedZ);
     expect(drive.speed).toBeCloseTo(check.speed, 9);
     expect(drive.slip).toBeCloseTo(check.slip, 9);
@@ -555,7 +555,7 @@ describe('the vehicle arm of the movement kernel', () => {
   });
 
   it('turns the machine on a contact spin, and lets it decay rather than steering it back', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     drive.speed = 30;
     drive.spin = 2.4;
     // No steering input at all: every degree here comes from the spin.
@@ -585,10 +585,10 @@ describe('the vehicle arm of the movement kernel', () => {
   });
 
   it('puts a spun machine sideways: the body turns under a velocity that does not', () => {
-    const spun = createVehicleDrive('rally_loaner');
+    const spun = createVehicleDrive('mo_loaner');
     spun.speed = 30;
     spun.spin = 1.2;
-    const straight = createVehicleDrive('rally_loaner');
+    const straight = createVehicleDrive('mo_loaner');
     straight.speed = 30;
     for (let tick = 0; tick < 6; tick++) {
       advanceVehicleDrive(spun, LOANER, controls());
@@ -605,7 +605,7 @@ describe('the vehicle arm of the movement kernel', () => {
   });
 
   it('holds a spin off the grid: the start lock zeroes it with the rest of the motion', () => {
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     expect(drive.spin).toBe(0);
     drive.spin = 2;
     drive.speed = 10;
@@ -618,7 +618,7 @@ describe('the vehicle arm of the movement kernel', () => {
     // modifier: nothing that shoves a machine sideways can deliver anything to
     // one already sitting at `maxSlip`, which is where a pilot attacking a
     // corner lives. Oil raises it; the road takes it back.
-    const drive = createVehicleDrive('rally_loaner');
+    const drive = createVehicleDrive('mo_loaner');
     expect(drive.slipCap).toBe(1);
     expect(vehicleMaxSlip(LOANER, drive)).toBe(LOANER.maxSlip);
 

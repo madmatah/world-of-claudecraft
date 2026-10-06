@@ -106,7 +106,7 @@ export interface InputCallbacks {
       | 'targetAuras'
       | 'social'
       | 'arena'
-      | 'rally'
+      | 'mortarOverdrive'
       | 'bgFlag'
       | 'dungeonFinder'
       | 'leaderboard'
@@ -180,7 +180,7 @@ export interface InputDebugState {
  * How far in and out the chase camera may be pulled. Exported because the
  * WORLD has to be built around the far end of it: anything a camera can reach
  * through is something a player will end up looking from inside, which is what
- * sizes the Realm Racers dressing ring (`realm_racers_track_core.ts`).
+ * sizes the Mortar Overdrive dressing ring (`mortar_overdrive/track_core.ts`).
  */
 const CAMERA_ZOOM_MIN = 3;
 export const CAMERA_ZOOM_MAX = 22;
@@ -1327,8 +1327,8 @@ export class Input {
       case 'mount':
         this.cb.onUiKey('mount');
         return;
-      case 'rally':
-        this.cb.onUiKey('rally');
+      case 'mortarOverdrive':
+        this.cb.onUiKey('mortarOverdrive');
         return;
       case 'bgFlag':
         this.cb.onUiKey('bgFlag');

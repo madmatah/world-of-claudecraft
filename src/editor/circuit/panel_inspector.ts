@@ -8,9 +8,13 @@
 // the ponds and the undo stack gets one step per change, exactly as a canvas
 // gesture does.
 
-import type { RallyPond, RallyProp, RallyScatter } from '../../sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
-import { realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
+import type {
+  MortarOverdrivePond,
+  MortarOverdriveProp,
+  MortarOverdriveScatter,
+} from '../../sim/content/mortar_overdrive';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
+import { mortarOverdrivePlacements } from '../../sim/mortar_overdrive/props_resolve';
 import {
   detailLine,
   fieldRow,
@@ -75,9 +79,9 @@ export class InspectorPanel {
     const record = this.host.record();
     const prop = (record.props ?? [])[index];
     if (!prop) return;
-    const placedIndex = placementIndexOf(record.props, REALM_RACERS_PROPS, index);
-    const placed = realmRacersPlacements(record).props[placedIndex];
-    const edit = (next: RallyProp): void =>
+    const placedIndex = placementIndexOf(record.props, MORTAR_OVERDRIVE_PROPS, index);
+    const placed = mortarOverdrivePlacements(record).props[placedIndex];
+    const edit = (next: MortarOverdriveProp): void =>
       this.host.commitDressing({ props: replacedAt(record.props, index, next) });
 
     if ('s' in prop.at) {
@@ -152,7 +156,7 @@ export class InspectorPanel {
     const record = this.host.record();
     const scatter = (record.scatters ?? [])[index];
     if (!scatter) return;
-    const edit = (next: RallyScatter): void =>
+    const edit = (next: MortarOverdriveScatter): void =>
       this.host.commitDressing({ scatters: replacedAt(record.scatters, index, next) });
     this.row(
       'spacing (yd)',
@@ -193,7 +197,7 @@ export class InspectorPanel {
     const record = this.host.record();
     const pond = (record.ponds ?? [])[index];
     if (!pond) return;
-    const edit = (next: RallyPond): void =>
+    const edit = (next: MortarOverdrivePond): void =>
       this.host.commitDressing({ ponds: replacedAt(record.ponds, index, next) });
     this.row('x', String(pond.x), (raw) => edit({ ...pond, x: numberOr(raw, pond.x) }), {
       step: '0.5',

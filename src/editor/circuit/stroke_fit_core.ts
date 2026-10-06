@@ -12,7 +12,7 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
 
 export interface StrokeFitOptions {
   /** Uniform spacing the raw stroke is resampled at, yards. */
@@ -39,13 +39,17 @@ const TOLERANCE_GROWTH = 1.6;
 /** Attempts before the fit falls back on a plain uniform decimation. */
 const TOLERANCE_ATTEMPTS = 12;
 
-function distance(a: RallyPoint, b: RallyPoint): number {
+function distance(a: MortarOverdrivePoint, b: MortarOverdrivePoint): number {
   return Math.hypot(b.x - a.x, b.z - a.z);
 }
 
 /** Distance from `p` to the infinite line through `a` and `b`, or to `a` when
  *  the two are the same point. */
-export function perpendicularDistance(p: RallyPoint, a: RallyPoint, b: RallyPoint): number {
+export function perpendicularDistance(
+  p: MortarOverdrivePoint,
+  a: MortarOverdrivePoint,
+  b: MortarOverdrivePoint,
+): number {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
   const length = Math.hypot(dx, dz);
@@ -54,7 +58,10 @@ export function perpendicularDistance(p: RallyPoint, a: RallyPoint, b: RallyPoin
 }
 
 /** Ramer-Douglas-Peucker over an OPEN polyline: both ends are kept. */
-function simplifyOpen(points: readonly RallyPoint[], tolerance: number): RallyPoint[] {
+function simplifyOpen(
+  points: readonly MortarOverdrivePoint[],
+  tolerance: number,
+): MortarOverdrivePoint[] {
   if (points.length <= 2) return [...points];
   let worst = 0;
   let worstIndex = 0;
@@ -79,7 +86,10 @@ function simplifyOpen(points: readonly RallyPoint[], tolerance: number): RallyPo
  * its own, and a duplicate point would give it a zero-length span to read a
  * tangent from.
  */
-export function resampleClosed(points: readonly RallyPoint[], step: number): RallyPoint[] {
+export function resampleClosed(
+  points: readonly MortarOverdrivePoint[],
+  step: number,
+): MortarOverdrivePoint[] {
   const ring = dedupe(points);
   if (ring.length < 3 || step <= 0) return ring;
   const spans: number[] = [];
@@ -92,7 +102,7 @@ export function resampleClosed(points: readonly RallyPoint[], step: number): Ral
   if (total < step) return ring;
   const count = Math.max(3, Math.round(total / step));
   const spacing = total / count;
-  const out: RallyPoint[] = [];
+  const out: MortarOverdrivePoint[] = [];
   let cursor = 0;
   let walked = 0;
   for (let i = 0; i < count; i++) {
@@ -111,8 +121,8 @@ export function resampleClosed(points: readonly RallyPoint[], step: number): Ral
 
 /** Drops points a pointer emitted twice in the same place, and a trailing point
  *  that only closes the ring the caller is about to close anyway. */
-function dedupe(points: readonly RallyPoint[]): RallyPoint[] {
-  const out: RallyPoint[] = [];
+function dedupe(points: readonly MortarOverdrivePoint[]): MortarOverdrivePoint[] {
+  const out: MortarOverdrivePoint[] = [];
   for (const point of points) {
     if (!Number.isFinite(point.x) || !Number.isFinite(point.z)) continue;
     const last = out[out.length - 1];
@@ -125,9 +135,9 @@ function dedupe(points: readonly RallyPoint[]): RallyPoint[] {
 
 /** Keeps every `stride`th point, which is what a stroke with no corners at all
  *  (a circle) leaves behind once RDP has nothing to drop. */
-function decimate(points: readonly RallyPoint[], target: number): RallyPoint[] {
+function decimate(points: readonly MortarOverdrivePoint[], target: number): MortarOverdrivePoint[] {
   if (points.length <= target) return [...points];
-  const out: RallyPoint[] = [];
+  const out: MortarOverdrivePoint[] = [];
   for (let i = 0; i < target; i++) out.push(points[Math.floor((i * points.length) / target)]);
   return out;
 }
@@ -138,9 +148,9 @@ function decimate(points: readonly RallyPoint[], target: number): RallyPoint[] {
  * and an operator can undo, redo and compare.
  */
 export function fitStrokeToControlPoints(
-  stroke: readonly RallyPoint[],
+  stroke: readonly MortarOverdrivePoint[],
   options: StrokeFitOptions = {},
-): RallyPoint[] {
+): MortarOverdrivePoint[] {
   const resampleStep = options.resampleStep ?? DEFAULTS.resampleStep;
   const minPoints = options.minPoints ?? DEFAULTS.minPoints;
   const maxPoints = options.maxPoints ?? DEFAULTS.maxPoints;
@@ -159,7 +169,7 @@ export function fitStrokeToControlPoints(
   const tail = [...resampled.slice(far), resampled[0]];
 
   let tolerance = options.tolerance ?? DEFAULTS.tolerance;
-  let fitted: RallyPoint[] = [];
+  let fitted: MortarOverdrivePoint[] = [];
   for (let attempt = 0; attempt < TOLERANCE_ATTEMPTS; attempt++) {
     const a = simplifyOpen(head, tolerance);
     const b = simplifyOpen(tail, tolerance);

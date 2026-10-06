@@ -30,7 +30,7 @@ interface MutableState {
   level: number;
   spec: string | null;
   auras: string[];
-  inRally: boolean;
+  inMortarOverdrive: boolean;
   showAttackButton: boolean;
 }
 
@@ -58,7 +58,7 @@ function makeHarness(
     level: 20,
     spec: null,
     auras: [],
-    inRally: false,
+    inMortarOverdrive: false,
     showAttackButton: true,
   };
   const controller = new ActionBarController({
@@ -69,7 +69,7 @@ function makeHarness(
     talentSpec: () => state.spec,
     knownAbilityIds: () => state.known,
     hasAura: (kind) => state.auras.includes(kind),
-    isInRealmRacers: () => state.inRally,
+    isInMortarOverdrive: () => state.inMortarOverdrive,
     showAttackButton: () => state.showAttackButton,
   });
   controller.replaceActions(initialBar);
@@ -382,38 +382,38 @@ describe('ActionBarController form persistence', () => {
     expect(harness.controller.actions).toEqual(bar());
   });
 
-  it('keeps the Rally page ahead of every class stealth page', () => {
+  it('keeps the Mortar Overdrive page ahead of every class stealth page', () => {
     const rogue = makeHarness('rogue', ['stealth'], bar('stealth'));
-    rogue.state.inRally = true;
+    rogue.state.inMortarOverdrive = true;
     rogue.state.auras = ['stealth'];
     const druid = makeHarness('druid', ['cat_form', 'prowl'], bar('cat_form'));
-    druid.state.inRally = true;
+    druid.state.inMortarOverdrive = true;
     druid.state.auras = ['form_cat', 'stealth'];
 
-    expect(rogue.controller.resolveActiveForm()).toBe('rally');
-    expect(druid.controller.resolveActiveForm()).toBe('rally');
+    expect(rogue.controller.resolveActiveForm()).toBe('mortarOverdrive');
+    expect(druid.controller.resolveActiveForm()).toBe('mortarOverdrive');
   });
 
-  it('gives the Rally its own one-button page and restores the class page afterward', () => {
+  it('gives the Mortar Overdrive its own one-button page and restores the class page afterward', () => {
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
     harness.controller.syncKnownAbilities();
-    harness.state.known.push('rally_ground_blast');
+    harness.state.known.push('mortar_overdrive_ground_blast');
     harness.controller.syncKnownAbilities();
 
-    harness.state.inRally = true;
+    harness.state.inMortarOverdrive = true;
     harness.controller.syncActiveForm();
-    expect(harness.controller.activeForm).toBe('rally');
+    expect(harness.controller.activeForm).toBe('mortarOverdrive');
     // The weapon IS slot 0, so the assignable rows behind it stay empty: the
     // machine's one button sits under the leftmost key rather than beside an
     // attack toggle that means nothing on a circuit.
     expect(harness.controller.actionForSlot(0)).toEqual({
       type: 'ability',
-      id: 'rally_ground_blast',
+      id: 'mortar_overdrive_ground_blast',
     });
     expect(harness.controller.isAttackSlotFixed()).toBe(false);
     expect(harness.controller.actions).toEqual(bar());
 
-    harness.state.inRally = false;
+    harness.state.inMortarOverdrive = false;
     harness.controller.syncActiveForm();
     expect(harness.controller.actions).toEqual(bar('sinister_strike'));
     // ...and the attack toggle comes straight back off the circuit.
@@ -425,40 +425,45 @@ describe('ActionBarController form persistence', () => {
     // Touch has no row of slot keys: the ring's primary button is the only way
     // to reach slot 0, so a race weapon pinned there needs that button.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_ground_blast');
+    harness.state.known.push('mortar_overdrive_ground_blast');
     harness.controller.syncKnownAbilities();
     expect(harness.controller.touchPrimary()).toBe('attack');
     harness.state.showAttackButton = false;
     expect(harness.controller.touchPrimary()).toBeNull();
 
-    harness.state.inRally = true;
+    harness.state.inMortarOverdrive = true;
     harness.controller.syncActiveForm();
     // The Interface setting hides the attack toggle only, never the weapon.
     expect(harness.controller.touchPrimary()).toBe('kit');
     harness.state.showAttackButton = true;
     expect(harness.controller.touchPrimary()).toBe('kit');
 
-    harness.state.inRally = false;
+    harness.state.inMortarOverdrive = false;
     harness.controller.syncActiveForm();
     expect(harness.controller.touchPrimary()).toBe('attack');
   });
 
-  it('migrates a Rally page seeded by an earlier build off the duplicate row slot', () => {
+  it('migrates a Mortar Overdrive page seeded by an earlier build off the duplicate row slot', () => {
     // Bars persisted before the weapon owned slot 0 carry it in row slot 1, so
     // without the strip a returning pilot sees the same shell twice. A pickup
     // effect auto-placed by the pre-pin build is stripped for the same reason.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_ground_blast', 'rally_nitro');
-    harness.state.inRally = true;
+    harness.state.known.push('mortar_overdrive_ground_blast', 'mortar_overdrive_nitro');
+    harness.state.inMortarOverdrive = true;
     harness.controller.syncActiveForm();
-    harness.controller.replaceActions(bar('rally_ground_blast', 'rally_nitro'));
+    harness.controller.replaceActions(
+      bar('mortar_overdrive_ground_blast', 'mortar_overdrive_nitro'),
+    );
     harness.controller.syncKnownAbilities();
     expect(harness.controller.actions).toEqual(bar());
     expect(harness.controller.actionForSlot(0)).toEqual({
       type: 'ability',
-      id: 'rally_ground_blast',
+      id: 'mortar_overdrive_ground_blast',
     });
-    expect(harness.controller.actionForSlot(2)).toEqual({ type: 'ability', id: 'rally_nitro' });
+    expect(harness.controller.actionForSlot(2)).toEqual({
+      type: 'ability',
+      id: 'mortar_overdrive_nitro',
+    });
   });
 
   it('gives each pickup effect its own key instead of the first free slot', () => {
@@ -466,45 +471,52 @@ describe('ActionBarController form persistence', () => {
     // nitro and an oil slick both answered to the key behind the weapon, one
     // after the other, and which effect a key fired depended on the draw order.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_ground_blast');
-    harness.state.inRally = true;
+    harness.state.known.push('mortar_overdrive_ground_blast');
+    harness.state.inMortarOverdrive = true;
     harness.controller.syncActiveForm();
     harness.controller.syncKnownAbilities();
 
-    harness.state.known.push('rally_nitro');
+    harness.state.known.push('mortar_overdrive_nitro');
     harness.controller.syncKnownAbilities();
-    expect(harness.controller.actionForSlot(2)).toEqual({ type: 'ability', id: 'rally_nitro' });
+    expect(harness.controller.actionForSlot(2)).toEqual({
+      type: 'ability',
+      id: 'mortar_overdrive_nitro',
+    });
     // The oil slick's key is RESERVED while nothing fills it: the nitro must not
     // slide left into the gap ahead of it.
     expect(harness.controller.actionForSlot(1)).toBeNull();
     expect(harness.controller.actions).toEqual(bar());
 
-    harness.state.known = ['sinister_strike', 'rally_ground_blast', 'rally_oil_slick'];
+    harness.state.known = [
+      'sinister_strike',
+      'mortar_overdrive_ground_blast',
+      'mortar_overdrive_oil_slick',
+    ];
     harness.controller.syncKnownAbilities();
     expect(harness.controller.actionForSlot(1)).toEqual({
       type: 'ability',
-      id: 'rally_oil_slick',
+      id: 'mortar_overdrive_oil_slick',
     });
     expect(harness.controller.actionForSlot(2)).toBeNull();
     expect(harness.controller.actions).toEqual(bar());
   });
 
-  it('keeps a stored row shortcut off a reserved Rally key and gives it back afterward', () => {
-    // Rows 1 and 2 of the rally page are the effects' keys, so an item shortcut
+  it('keeps a stored row shortcut off a reserved Mortar Overdrive key and gives it back afterward', () => {
+    // Rows 1 and 2 of the Mortar Overdrive page are the effects' keys, so an item shortcut
     // persisted there stays hidden for the race rather than firing under a key
     // the pilot reads as nitro.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_ground_blast');
+    harness.state.known.push('mortar_overdrive_ground_blast');
     const withPotion = bar();
     withPotion[0] = { type: 'item', id: 'lesser_healing_potion' };
     harness.controller.replaceActions(withPotion);
 
-    harness.state.inRally = true;
+    harness.state.inMortarOverdrive = true;
     harness.controller.syncActiveForm();
     harness.controller.replaceActions(withPotion);
     expect(harness.controller.actionForSlot(1)).toBeNull();
 
-    harness.state.inRally = false;
+    harness.state.inMortarOverdrive = false;
     harness.controller.syncActiveForm();
     harness.controller.replaceActions(withPotion);
     expect(harness.controller.actionForSlot(1)).toEqual({

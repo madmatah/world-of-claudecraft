@@ -375,7 +375,7 @@ export function buildBladeGrass(
 
 /**
  * The carpet's own cluster and material, for a STATIC scatter that is NOT the
- * player-centred pool: a Realm Racers circuit, which lies outside every terrain
+ * player-centred pool: a Mortar Overdrive circuit, which lies outside every terrain
  * chunk and so never gets the pool at all.
  *
  * The blades, the sway and the lighting are the ones above, deliberately: the

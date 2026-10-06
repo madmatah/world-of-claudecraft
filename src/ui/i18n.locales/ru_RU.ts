@@ -12575,35 +12575,35 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.keybinds.petTaunt': 'Питомец: провокация',
   'hudChrome.keybinds.petDefensive': 'Питомец: защита',
   'hudChrome.keybinds.petAggressive': 'Питомец: агрессия',
-  'guide.nav.realmRacers': 'Гонки Королевства',
-  'guide.realmRacersPage.heading': 'Гонки Королевства',
-  'guide.realmRacersPage.intro':
+  'guide.nav.mortarOverdrive': 'Мортирный форсаж',
+  'guide.mortarOverdrivePage.heading': 'Мортирный форсаж',
+  'guide.mortarOverdrivePage.intro':
     'Гоночное общество Вечного Сада устраивает садовую трассу для всех, у кого хватит смелости сесть за руль: четыре пилота на старте, одно фирменное оружие и трасса вдоль живых изгородей, которая вознаграждает и чистую линию, и смелый манёвр.',
-  'guide.realmRacersPage.loreHeading': 'Гоночное общество Вечного Сада',
-  'guide.realmRacersPage.loreBody':
+  'guide.mortarOverdrivePage.loreHeading': 'Гоночное общество Вечного Сада',
+  'guide.mortarOverdrivePage.loreBody':
     'Главные садовники Вечного Сада никогда не задумывали служебные дорожки между изгородями для чего-то быстрее тачки, но у смотрителя с избытком свободного времени и одолженным ездовым животным нашлось другое мнение. Общество, выросшее из того первого безрассудного пари, теперь размечает настоящую трассу, собирает полный старт и опускает флаг всякий раз, когда четыре пилота готовы ехать.',
-  'guide.realmRacersPage.howHeading': 'Как играть',
-  'guide.realmRacersPage.howQueueBody':
-    'Встаньте в очередь на заезд из окна Гонок Королевства откуда угодно в мире. Как только полный старт из четырёх пилотов готов, все занимают места на стартовой линии вместе, и начинается отсчёт.',
-  'guide.realmRacersPage.howRaceBody':
+  'guide.mortarOverdrivePage.howHeading': 'Как играть',
+  'guide.mortarOverdrivePage.howQueueBody':
+    'Встаньте в очередь на заезд из окна Мортирного форсажа откуда угодно в мире. Как только полный старт из четырёх пилотов готов, все занимают места на стартовой линии вместе, и начинается отсчёт.',
+  'guide.mortarOverdrivePage.howRaceBody':
     'Рулите, газуйте и тормозите обычными клавишами движения, а удержание кнопки прыжка даёт ручной тормоз, чтобы пройти узкий поворот в скольжении. У каждого пилота есть Наземный взрыв — выстрел вперёд, который сбивает с толку того, кого настигает, так что соперник на вашем пути никогда не в безопасности. Побеждает тот, кто первым пересечёт линию после последнего круга, а всё поле ранжируется по тому, на каком месте находится каждый пилот, когда исход заезда решён.',
-  'guide.realmRacersPage.howLimitsBody':
+  'guide.mortarOverdrivePage.howLimitsBody':
     'Сад по обе стороны трассы открыт и проезжаем, поэтому выезд на широкую траекторию, толчок соперника или скольжение через клумбу это часть гонки: платите вы только скоростью. Чего делать нельзя, так это выигрывать этим расстояние. Покинете трассу и проедете короче самой трассы, и распорядители вернут вас туда, где вы её покинули, а пилота, застывшего в саду, вернут на трассу через несколько секунд.',
-  'guide.realmRacersPage.howPracticeBody':
+  'guide.mortarOverdrivePage.howPracticeBody':
     'Ещё не готовы гоняться с незнакомцами? Тренировка запускает ту же машину и то же управление на приватной копии трассы против выбранных вами самими соперников, чтобы вы выучили линию до того, как встанете в очередь на настоящий заезд.',
-  'guide.realmRacersPage.machineHeading': 'Одолженная машина',
-  'guide.realmRacersPage.machineBody':
+  'guide.mortarOverdrivePage.machineHeading': 'Одолженная машина',
+  'guide.mortarOverdrivePage.machineBody':
     'Каждый пилот в этот день едет на собственной одолженной машине Общества: никто не приводит на старт своё ездовое животное, и никто не остаётся смотреть из боксов только потому, что оно ему не досталось. Машина быстро осваивается и обретает настоящий вес, стоит только нащупать предел поворота.',
-  'guide.realmRacersPage.circuitsHeading': 'Трассы',
-  'guide.realmRacersPage.circuitsPracticeTitle': 'Тренировочный полигон Вечного Сада',
-  'guide.realmRacersPage.circuitsPracticeBody':
+  'guide.mortarOverdrivePage.circuitsHeading': 'Трассы',
+  'guide.mortarOverdrivePage.circuitsPracticeTitle': 'Тренировочный полигон Вечного Сада',
+  'guide.mortarOverdrivePage.circuitsPracticeBody':
     'Трасса, на которой каждый пилот осваивает машину: более короткий садовый круг, приватный для того, кто на нём тренируется, и никак не влияющий на остальных.',
-  'guide.realmRacersPage.circuitsCompetitionTitle': 'Трассы соревнований',
-  'guide.realmRacersPage.circuitsCompetitionBody':
+  'guide.mortarOverdrivePage.circuitsCompetitionTitle': 'Трассы соревнований',
+  'guide.mortarOverdrivePage.circuitsCompetitionBody':
     'Заезд из очереди никогда не идёт по тренировочному кругу. Вместо этого он выбирается из отдельного пула более длинных трасс соревнований, каждая из которых оформлена в теме игровой зоны, у которой она позаимствовала свою землю, так что арена меняется, даже когда машина остаётся прежней.',
-  'guide.realmRacersPage.rewardsHeading': 'Ради чего вы гоняете',
-  'guide.realmRacersPage.rewardsBody':
-    'Гонки Королевства не дают ни опыта, ни трофеев: это спорт ради самого спорта и ради статуса, который он даёт. Тем не менее место в рейтинговом заезде всё же засчитывается в Книгу деяний: пересечение финишной черты, победы и горстка более сложных подвигов вождения ждут там пилота, готового их добиться. Победа засчитывается, только если вместе с вами на старт вышел хотя бы один другой игрок и действительно гонялся, финишировав или пройдя хотя бы один круг: обогнать пилотов Общества или соперника, так и не тронувшегося со старта, значит потренироваться, а не поставить рекорд. Эти деяния не приносят Известности, но достаточно долгая череда побед приносит декоративное звание, которое можно носить.',
+  'guide.mortarOverdrivePage.rewardsHeading': 'Ради чего вы гоняете',
+  'guide.mortarOverdrivePage.rewardsBody':
+    'Мортирный форсаж не даёт ни опыта, ни трофеев: это спорт ради самого спорта и ради статуса, который он даёт. Тем не менее место в рейтинговом заезде всё же засчитывается в Книгу деяний: пересечение финишной черты, победы и горстка более сложных подвигов вождения ждут там пилота, готового их добиться. Победа засчитывается, только если вместе с вами на старт вышел хотя бы один другой игрок и действительно гонялся, финишировав или пройдя хотя бы один круг: обогнать пилотов Общества или соперника, так и не тронувшегося со старта, значит потренироваться, а не поставить рекорд. Эти деяния не приносят Известности, но достаточно долгая череда побед приносит декоративное звание, которое можно носить.',
   'entities.npcs.chronicler_saul.name': 'Летописец Саул',
   'entities.npcs.chronicler_saul.title': 'Летопись Истврукской долины',
   'entities.npcs.chronicler_saul.greeting':
@@ -15714,133 +15714,136 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.auraOverlay.procs.aetherRush': 'Эфирный натиск',
   'itemUi.vendor.buyStack': 'Купить {count}',
   'itemUi.vendor.buyStackAria': 'Купить {count} {item} за {price}',
-  'hudChrome.keybinds.rally': 'Гонки Королевства',
-  'hudChrome.rally.kicker': 'Гоночное общество Вечного Сада',
-  'hudChrome.rally.title': 'Гонки Королевства',
-  'hudChrome.rally.close': 'Закрыть окно Гонок Королевства',
-  'hudChrome.rally.pitch':
+  'hudChrome.keybinds.mortarOverdrive': 'Мортирный форсаж',
+  'hudChrome.mortarOverdrive.kicker': 'Гоночное общество Вечного Сада',
+  'hudChrome.mortarOverdrive.title': 'Мортирный форсаж',
+  'hudChrome.mortarOverdrive.close': 'Закрыть окно Мортирного форсажа',
+  'hudChrome.mortarOverdrive.pitch':
     'Сталь сквозь живые изгороди. Найди траекторию, доверься скольжению и оставь соперников в пыли.',
-  'hudChrome.rally.promiseCircuit': 'Садовая трасса',
-  'hudChrome.rally.promiseSlide': 'Скольжение с ручником',
-  'hudChrome.rally.promiseRival': 'Живые соперники',
-  'hudChrome.rally.howToPlayTitle': 'Как играть',
-  'hudChrome.rally.howToPlay':
+  'hudChrome.mortarOverdrive.promiseCircuit': 'Садовая трасса',
+  'hudChrome.mortarOverdrive.promiseSlide': 'Скольжение с ручником',
+  'hudChrome.mortarOverdrive.promiseRival': 'Живые соперники',
+  'hudChrome.mortarOverdrive.howToPlayTitle': 'Как играть',
+  'hudChrome.mortarOverdrive.howToPlay':
     'Газ, тормоз и руль на клавишах движения, а удержание кнопки прыжка даёт ручной тормоз, чтобы пройти узкий поворот в скольжении. Побеждает тот, кто первым пересечёт финиш.',
-  'hudChrome.rally.orRace': 'или',
-  'hudChrome.rally.handbrake': 'Ручник',
-  'hudChrome.rally.join': 'Встать в очередь на гонку',
-  'hudChrome.rally.leave': 'Покинуть очередь',
-  'hudChrome.rally.forfeit': 'Сойти с гонки',
-  'hudChrome.rally.forfeitConfirm': 'Подтвердить',
-  'hudChrome.rally.waiting': 'Пилотов в ожидании стартовой решётки: {count}.',
-  'hudChrome.rally.queueNeedsRealm':
+  'hudChrome.mortarOverdrive.orRace': 'или',
+  'hudChrome.mortarOverdrive.handbrake': 'Ручник',
+  'hudChrome.mortarOverdrive.join': 'Встать в очередь на гонку',
+  'hudChrome.mortarOverdrive.leave': 'Покинуть очередь',
+  'hudChrome.mortarOverdrive.forfeit': 'Сойти с гонки',
+  'hudChrome.mortarOverdrive.forfeitConfirm': 'Подтвердить',
+  'hudChrome.mortarOverdrive.waiting': 'Пилотов в ожидании стартовой решётки: {count}.',
+  'hudChrome.mortarOverdrive.queueNeedsRealm':
     'Для гонок из очереди нужны другие пилоты на сетевом сервере. Вместо этого пройдите тренировочный круг.',
-  'hudChrome.rally.queued': 'Позиция в очереди: {position} из {count}. Ваш танк готовят.',
-  'hudChrome.rally.racingAgainst': 'Гонка началась. Вы идёте {position} из {total}.',
-  'hudChrome.rally.practice': 'Тренировка',
-  'hudChrome.rally.practiceIntro':
+  'hudChrome.mortarOverdrive.queued': 'Позиция в очереди: {position} из {count}. Ваш танк готовят.',
+  'hudChrome.mortarOverdrive.racingAgainst': 'Гонка началась. Вы идёте {position} из {total}.',
+  'hudChrome.mortarOverdrive.practice': 'Тренировка',
+  'hudChrome.mortarOverdrive.practiceIntro':
     'Личная трасса, целиком ваша. Выберите соперников, изучите управление и дайте старт, когда будете готовы.',
-  'hudChrome.rally.practiceUnavailable':
+  'hudChrome.mortarOverdrive.practiceUnavailable':
     'Все тренировочные трассы сейчас заняты. Попробуйте через несколько минут.',
-  'hudChrome.rally.practiceCircuit':
+  'hudChrome.mortarOverdrive.practiceCircuit':
     'Вы поедете по трассе {circuit}: на ней каждый пилот осваивает машину. Для соревнований трасса выбирается отдельно.',
-  'hudChrome.rally.practiceTierLegend': 'Выберите соперников',
-  'hudChrome.rally.practiceControlsLegend': 'Ваше управление',
-  'hudChrome.rally.practicePlay': 'Начать гонку',
-  'hudChrome.rally.practiceBack': 'Назад',
-  'hudChrome.rally.practiceTouchNote':
+  'hudChrome.mortarOverdrive.practiceTierLegend': 'Выберите соперников',
+  'hudChrome.mortarOverdrive.practiceControlsLegend': 'Ваше управление',
+  'hudChrome.mortarOverdrive.practicePlay': 'Начать гонку',
+  'hudChrome.mortarOverdrive.practiceBack': 'Назад',
+  'hudChrome.mortarOverdrive.practiceTouchNote':
     'На сенсорном экране левый стик рулит и разгоняет, а кнопка прыжка работает как ручной тормоз.',
-  'hudChrome.rally.tierRookie': 'Новичок',
-  'hudChrome.rally.tierDriver': 'Пилот',
-  'hudChrome.rally.tierAce': 'Ас',
-  'hudChrome.rally.tierRookieHint': 'Ещё разучивает траекторию. Обгоняется с первого круга.',
-  'hudChrome.rally.tierDriverHint': 'Знает трассу и тормозит поздно. Честная борьба.',
-  'hudChrome.rally.tierAceHint': 'Берёт каждый апекс и скользит в шпильке. Выложитесь полностью.',
-  'hudChrome.rally.controlThrottle': 'Газ',
-  'hudChrome.rally.controlThrottleHint':
+  'hudChrome.mortarOverdrive.tierRookie': 'Новичок',
+  'hudChrome.mortarOverdrive.tierDriver': 'Пилот',
+  'hudChrome.mortarOverdrive.tierAce': 'Ас',
+  'hudChrome.mortarOverdrive.tierRookieHint':
+    'Ещё разучивает траекторию. Обгоняется с первого круга.',
+  'hudChrome.mortarOverdrive.tierDriverHint': 'Знает трассу и тормозит поздно. Честная борьба.',
+  'hudChrome.mortarOverdrive.tierAceHint':
+    'Берёт каждый апекс и скользит в шпильке. Выложитесь полностью.',
+  'hudChrome.mortarOverdrive.controlThrottle': 'Газ',
+  'hudChrome.mortarOverdrive.controlThrottleHint':
     'Удерживайте для разгона. У машины настоящая инерция, скорость набирается постепенно.',
-  'hudChrome.rally.controlBrake': 'Тормоз и задний ход',
-  'hudChrome.rally.controlBrakeHint':
+  'hudChrome.mortarOverdrive.controlBrake': 'Тормоз и задний ход',
+  'hudChrome.mortarOverdrive.controlBrakeHint':
     'Удерживайте, чтобы замедлиться, и ещё раз с места, чтобы сдать назад.',
-  'hudChrome.rally.controlSteer': 'Руль',
-  'hudChrome.rally.controlSteerHint':
+  'hudChrome.mortarOverdrive.controlSteer': 'Руль',
+  'hudChrome.mortarOverdrive.controlSteerHint':
     'Направьте нос в поворот. На средней скорости машина поворачивает охотнее всего.',
-  'hudChrome.rally.controlHandbrake': 'Ручной тормоз',
-  'hudChrome.rally.controlHandbrakeHint':
+  'hudChrome.mortarOverdrive.controlHandbrake': 'Ручной тормоз',
+  'hudChrome.mortarOverdrive.controlHandbrakeHint':
     'Намеренно срывает сцепление, чтобы пройти узкий поворот в скольжении.',
-  'hudChrome.rally.racingAgainstBot':
+  'hudChrome.mortarOverdrive.racingAgainstBot':
     'Тренировочная гонка началась. Вы идёте {position} из {total}.',
-  'hudChrome.rally.won': 'Победа. У Вечного Сада новый чемпион.',
-  'hudChrome.rally.lost':
+  'hudChrome.mortarOverdrive.won': 'Победа. У Вечного Сада новый чемпион.',
+  'hudChrome.mortarOverdrive.lost':
     'Вы финишируете {position} из {total}. Следующая стартовая решётка уже ждёт.',
-  'hudChrome.rally.standingsYou': 'ВЫ',
-  'hudChrome.rally.standingsFinished': 'Финиш',
-  'hudChrome.rally.standingsRetired': 'Сход',
-  'hudChrome.rally.lobbyReadyCount': 'Готово пилотов: {ready} из {total}',
-  'hudChrome.rally.lobbyReady': 'Готов',
-  'hudChrome.rally.lobbyWaiting': 'Ожидание',
-  'hudChrome.rally.lobbyPreparing': 'Подготовка трассы',
-  'hudChrome.rally.lobbyPrepared': 'Трасса готова',
-  'hudChrome.rally.lobbyStartsBy':
+  'hudChrome.mortarOverdrive.standingsYou': 'ВЫ',
+  'hudChrome.mortarOverdrive.standingsFinished': 'Финиш',
+  'hudChrome.mortarOverdrive.standingsRetired': 'Сход',
+  'hudChrome.mortarOverdrive.lobbyReadyCount': 'Готово пилотов: {ready} из {total}',
+  'hudChrome.mortarOverdrive.lobbyReady': 'Готов',
+  'hudChrome.mortarOverdrive.lobbyWaiting': 'Ожидание',
+  'hudChrome.mortarOverdrive.lobbyPreparing': 'Подготовка трассы',
+  'hudChrome.mortarOverdrive.lobbyPrepared': 'Трасса готова',
+  'hudChrome.mortarOverdrive.lobbyStartsBy':
     'Гонка начнётся, когда все пилоты будут готовы, но не позже чем через {time}.',
-  'hudChrome.rally.circuitName_evergarden_practice': 'Тренировочный полигон Вечного Сада',
-  'hudChrome.rally.circuitName_evergarden_express_tour': 'Экспресс-тур Вечного Сада',
-  'hudChrome.rally.circuitName_nightbloom_moonwell_run': 'Гонка у Лунного Родника Ночецветья',
-  'hudChrome.rally.circuitName_drakelands_rampart_run':
+  'hudChrome.mortarOverdrive.circuitName_evergarden_practice': 'Тренировочный полигон Вечного Сада',
+  'hudChrome.mortarOverdrive.circuitName_evergarden_express_tour': 'Экспресс-тур Вечного Сада',
+  'hudChrome.mortarOverdrive.circuitName_nightbloom_moonwell_run':
+    'Гонка у Лунного Родника Ночецветья',
+  'hudChrome.mortarOverdrive.circuitName_drakelands_rampart_run':
     'Гонка вдоль крепостного вала Земель Драконов',
-  'hudChrome.rally.circuitName_palmreach_lagoon_run': 'Гонка по лагуне Пальмового Берега',
-  'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
-  'hudChrome.rally.draw': 'Одновременный финиш. Судьи гонки объявили ничью.',
-  'hudChrome.rally.position': 'Позиция {position}/{total}',
-  'hudChrome.rally.lap': 'Круг {lap}/{total}',
-  'hudChrome.rally.time': '{minutes}:{seconds}',
-  'hudChrome.rally.speed': 'Скорость {speed}',
-  'hudChrome.rally.wrongWay': 'Не в ту сторону',
-  'hudChrome.rally.offTrack': 'ВЕРНИТЕСЬ НА ТРАССУ: {seconds}',
-  'hudChrome.rally.cutReturned': 'Срезано. Вы возвращены туда, где покинули трассу.',
-  'hudChrome.rally.reset': 'Вернуться на трассу',
-  'hudChrome.rally.pickupCharge': 'Снаряды заряжены',
-  'hudChrome.rally.pickupNitro': 'Нитро готово',
-  'hudChrome.rally.pickupWard': 'Щит активен',
-  'hudChrome.rally.pickupSlick': 'Масло готово',
-  'hudChrome.rally.wardHeld': 'ЩИТ',
-  'hudChrome.rally.wardBroken': 'Щит разрушен',
-  'hudChrome.auraEffect.rallyWard':
+  'hudChrome.mortarOverdrive.circuitName_palmreach_lagoon_run': 'Гонка по лагуне Пальмового Берега',
+  'hudChrome.mortarOverdrive.podiumTime': '{minutes}:{seconds}.{tenths}',
+  'hudChrome.mortarOverdrive.draw': 'Одновременный финиш. Судьи гонки объявили ничью.',
+  'hudChrome.mortarOverdrive.position': 'Позиция {position}/{total}',
+  'hudChrome.mortarOverdrive.lap': 'Круг {lap}/{total}',
+  'hudChrome.mortarOverdrive.time': '{minutes}:{seconds}',
+  'hudChrome.mortarOverdrive.speed': 'Скорость {speed}',
+  'hudChrome.mortarOverdrive.wrongWay': 'Не в ту сторону',
+  'hudChrome.mortarOverdrive.offTrack': 'ВЕРНИТЕСЬ НА ТРАССУ: {seconds}',
+  'hudChrome.mortarOverdrive.cutReturned': 'Срезано. Вы возвращены туда, где покинули трассу.',
+  'hudChrome.mortarOverdrive.reset': 'Вернуться на трассу',
+  'hudChrome.mortarOverdrive.pickupCharge': 'Снаряды заряжены',
+  'hudChrome.mortarOverdrive.pickupNitro': 'Нитро готово',
+  'hudChrome.mortarOverdrive.pickupWard': 'Щит активен',
+  'hudChrome.mortarOverdrive.pickupSlick': 'Масло готово',
+  'hudChrome.mortarOverdrive.wardHeld': 'ЩИТ',
+  'hudChrome.mortarOverdrive.wardBroken': 'Щит разрушен',
+  'hudChrome.auraEffect.mortarOverdriveWard':
     'Поглощает следующий Наземный взрыв или масляное пятно, которое вас настигнет, и разрушается. Действует {seconds} сек. Не защищает от столкновений с другими машинами.',
-  'hudChrome.auraEffect.rallyGhost':
+  'hudChrome.auraEffect.mortarOverdriveGhost':
     'После возврата на трассу машины соперников проезжают сквозь вас. Длится не меньше {minSeconds} сек. и пока вы снова не сможете ехать, затем заканчивается, как только вы отъедете от всех соперников, но не позже чем через {marginSeconds} сек. Наземный взрыв и масляные пятна по-прежнему действуют на вас.',
-  'hudChrome.auraEffect.rallyGroundBlast':
+  'hudChrome.auraEffect.mortarOverdriveGroundBlast':
     'Снижает скорость передвижения на {pct}%. После попадания сцепление вашей машины снижено на {gripPct}% на {gripSeconds} сек.',
-  'hudChrome.auraEffect.rallyOffTrack':
+  'hudChrome.auraEffect.mortarOverdriveOffTrack':
     'Снижает скорость передвижения на {pct}%. Сцепление вашей машины снижено на {gripPct}%, а сопротивление становится {drag}-кратным по сравнению с дорогой. Действует, пока вы не вернётесь на дорогу.',
-  'entities.abilities.rally_nitro.name': 'Нитро',
-  'entities.abilities.rally_nitro.description':
+  'entities.abilities.mortar_overdrive_nitro.name': 'Нитро',
+  'entities.abilities.mortar_overdrive_nitro.description':
     'Сжигает нитро: машина мгновенно получает толчок вперёд на {kick} м/с. На {seconds} сек. её максимальная скорость становится на {speedPct}% выше обычного предела.',
-  'entities.abilities.rally_oil_slick.name': 'Масляное пятно',
-  'entities.abilities.rally_oil_slick.description':
+  'entities.abilities.mortar_overdrive_oil_slick.name': 'Масляное пятно',
+  'entities.abilities.mortar_overdrive_oil_slick.description':
     'Выливает масло под машину. Пятно остаётся на трассе {seconds} сек. Соперника, заехавшего в него, сносит вбок (тем сильнее, чем выше его скорость), и он теряет {gripPct}% сцепления на {gripSeconds} сек. Ваше собственное масло не действует на вас, пока вы из него не выедете. Гоночный щит поглощает его.',
-  'hudChrome.rally.countdown': 'Двигатели заблокированы. Старт через {seconds}',
-  'hudChrome.rally.go': 'Старт!',
-  'hudChrome.rally.finalLap': 'Последний круг',
-  'hudChrome.rally.chase': 'Флаг через {seconds}',
-  'hudChrome.rally.wonReturn': 'Победа! Возвращение через {seconds}',
-  'hudChrome.rally.lostReturn': 'Финиш. Возвращение через {seconds}',
-  'hudChrome.rally.drawReturn': 'Ничья. Возвращение через {seconds}',
-  'hudChrome.rally.voidReturn': 'Гонка аннулирована. Возвращение через {seconds}',
-  'hudChrome.rally.logQueued': 'Позиция в очереди Гонок Королевства: {position}.',
-  'hudChrome.rally.logUnqueued': 'Вы покинули очередь Гонок Королевства.',
-  'hudChrome.rally.bannerLap': 'Круг {lap} из {total}',
-  'hudChrome.rally.bannerWin': 'Вы победили в гонке!',
-  'hudChrome.rally.bannerLoss': '{name} побеждает в гонке.',
-  'hudChrome.rally.bannerDraw': 'Гонка завершилась ничьей.',
-  'hudChrome.rally.logWin': 'Победа. Вы первым пересекли финишную черту.',
-  'hudChrome.rally.logLoss': '{name} первым пересекает финишную черту.',
-  'hudChrome.rally.logForfeit': 'Вы сошли с гонки. Побеждает {name}.',
-  'hudChrome.rally.bannerForfeit': 'Вы сошли с гонки.',
-  'hudChrome.rally.logForfeitRaceOn': 'Вы сошли с гонки. Гонка продолжается без вас.',
-  'hudChrome.rally.mobileLabel': 'Гонки',
-  'entities.abilities.rally_ground_blast.name': 'Наземный взрыв',
-  'entities.abilities.rally_ground_blast.description':
+  'hudChrome.mortarOverdrive.countdown': 'Двигатели заблокированы. Старт через {seconds}',
+  'hudChrome.mortarOverdrive.go': 'Старт!',
+  'hudChrome.mortarOverdrive.finalLap': 'Последний круг',
+  'hudChrome.mortarOverdrive.chase': 'Флаг через {seconds}',
+  'hudChrome.mortarOverdrive.wonReturn': 'Победа! Возвращение через {seconds}',
+  'hudChrome.mortarOverdrive.lostReturn': 'Финиш. Возвращение через {seconds}',
+  'hudChrome.mortarOverdrive.drawReturn': 'Ничья. Возвращение через {seconds}',
+  'hudChrome.mortarOverdrive.voidReturn': 'Гонка аннулирована. Возвращение через {seconds}',
+  'hudChrome.mortarOverdrive.logQueued': 'Позиция в очереди Мортирного форсажа: {position}.',
+  'hudChrome.mortarOverdrive.logUnqueued': 'Вы покинули очередь Мортирного форсажа.',
+  'hudChrome.mortarOverdrive.bannerLap': 'Круг {lap} из {total}',
+  'hudChrome.mortarOverdrive.bannerWin': 'Вы победили в гонке!',
+  'hudChrome.mortarOverdrive.bannerLoss': '{name} побеждает в гонке.',
+  'hudChrome.mortarOverdrive.bannerDraw': 'Гонка завершилась ничьей.',
+  'hudChrome.mortarOverdrive.logWin': 'Победа. Вы первым пересекли финишную черту.',
+  'hudChrome.mortarOverdrive.logLoss': '{name} первым пересекает финишную черту.',
+  'hudChrome.mortarOverdrive.logForfeit': 'Вы сошли с гонки. Побеждает {name}.',
+  'hudChrome.mortarOverdrive.bannerForfeit': 'Вы сошли с гонки.',
+  'hudChrome.mortarOverdrive.logForfeitRaceOn': 'Вы сошли с гонки. Гонка продолжается без вас.',
+  'hudChrome.mortarOverdrive.mobileLabel': 'Гонки',
+  'entities.abilities.mortar_overdrive_ground_blast.name': 'Наземный взрыв',
+  'entities.abilities.mortar_overdrive_ground_blast.description':
     'Выстреливает снарядом в точку на земле не ближе {minRange} м впереди, в пределах {coneDegrees}° от носа машины. Снаряд долетает за время от {minFlight} до {maxFlight} сек. Каждого соперника в радиусе {radius} м от места падения подбрасывает и отбрасывает: в пределах {coreRadius} м с полной силой, к краю слабее. Кроме того, они теряют {gripPct}% сцепления на {gripSeconds} сек. и замедляются на {slowPct}% на {slowSeconds} сек. Гоночный щит поглощает попадание.',
   // Craft Cast System Phase 6 M16 non-Latin fills
   'abilityUi.cast.crafting': 'Изготовление',

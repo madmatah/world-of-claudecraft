@@ -721,16 +721,16 @@ Exact-phrase and coined-token searches against the major game wikis.
 | Cocoon / Cocooned | Vysska's cast and the wrapped player's stun | KEEP. Single common English words. |
 | Draining Silk | her feeding's damage line | KEEP. No match. |
 
-### Realm Racers names (web-verified 2026-10-05)
+### Mortar Overdrive names (web-verified 2026-10-05)
 
 Exact-phrase and coined-token searches against the major game wikis and the
-storefronts. Ids stay frozen (`pvp_rr_wins_25`; house pilots have no id beyond
-their slot in `REALM_RACERS_BOT_NAMES`), so only the display strings moved.
+storefronts. Ids stay frozen (`pvp_mortar_overdrive_wins_25`; house pilots have no id beyond
+their slot in `MORTAR_OVERDRIVE_BOT_NAMES`), so only the display strings moved.
 
 | Name | Where | Verdict |
 |---|---|---|
-| Circuit Legend | REJECTED: the `pvp_rr_wins_25` deed name and its title | An exact racing achievement title in Circuit Superstars, in the same role (a title for racing milestones). Replaced. |
-| Overdrive Ace | the `pvp_rr_wins_25` deed name and its title | KEEP. No match for the exact phrase. Chosen to replace the above. |
+| Circuit Legend | REJECTED: the `pvp_mortar_overdrive_wins_25` deed name and its title | An exact racing achievement title in Circuit Superstars, in the same role (a title for racing milestones). Replaced. |
+| Overdrive Ace | the `pvp_mortar_overdrive_wins_25` deed name and its title | KEEP. No match for the exact phrase. Chosen to replace the above. |
 | Thornwake | REJECTED: the surname of the house pilot Nessa | The title of a 2026 Steam game. Replaced. |
 | Brakewell | the house pilot Nessa Brakewell | KEEP. A rare real English surname; no game character carries it. |
 | Drakelands Rampart Run | the third competition circuit | KEEP. The only neighbour is World of Warcraft's "Ramparts Racer" achievement, and the one word shared is the generic English "rampart"; generic fantasy English is allowed under the bar. |

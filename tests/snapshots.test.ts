@@ -67,15 +67,15 @@ import {
 } from '../src/sim/combat/priest/presentation';
 import { CLUE_HUNTS } from '../src/sim/content/clue_hunts';
 import { FARM_PATCHES } from '../src/sim/content/farm_patches';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
+import {
+  MORTAR_OVERDRIVE_ABILITY_ID,
+  MORTAR_OVERDRIVE_WEAPON_CHARGES,
+  resolveMortarOverdriveKit,
+} from '../src/sim/content/mortar_overdrive/kit';
 import { RETIRED_MOUNT_SKIN_IDS } from '../src/sim/content/mount_skins';
 import { MOUNT_RACE_START_PLATFORM, type MountKey } from '../src/sim/content/mounts';
 import { CRAFT_RING, STATION_RADIUS } from '../src/sim/content/professions';
-import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_WEAPON_CHARGES,
-  resolveRealmRacersKit,
-} from '../src/sim/content/realm_racers';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { COMBO_RECIPES } from '../src/sim/content/recipes';
 import { TREASURE_SITES } from '../src/sim/content/treasure_maps';
 import { NORTH_WATCH_CANNON } from '../src/sim/content/vehicle_stations';
@@ -84,12 +84,12 @@ import { IGNIVAR_JUDGMENT_CAST_ID } from '../src/sim/encounters/ignivar';
 import { createGroundObject, createMob } from '../src/sim/entity';
 import { emptySaleLog } from '../src/sim/market_sale_log';
 import { createCannonEncounter } from '../src/sim/minigames/cannon_encounter';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 import { MOUNT_RACE_COUNTDOWN_TICKS } from '../src/sim/mount_race';
 import { petOf, serializePet, summonPet } from '../src/sim/pet/pet_commands';
 import { livePlaytimeSeconds } from '../src/sim/playtime';
 import { spawnHillNow } from '../src/sim/pvp';
 import { interactObjectCreditKey } from '../src/sim/quests/interact_object_credit';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { noteRelicItemFind, noteRelicObtain } from '../src/sim/reliquary';
 import { Sim } from '../src/sim/sim';
 import {
@@ -178,19 +178,19 @@ function feedEventFrame(client: ClientWorld, frame: unknown): void {
   (client as any).onMessage(JSON.stringify(frame));
 }
 
-describe('Realm Racers self-wire round-trip', () => {
-  it('preserves the frozen participant grid and the live standings through rr', () => {
+describe('Mortar Overdrive self-wire round-trip', () => {
+  it('preserves the frozen participant grid and the live standings through mo', () => {
     const server = new GameServer();
     const wires = ['GridA', 'GridB', 'GridC', 'GridD'].map(() => fakeWs());
     const sessions = ['GridA', 'GridB', 'GridC', 'GridD'].map((name, i) =>
       joinServer(server, wires[i], 91 + i, name),
     );
-    for (const session of sessions) server.sim.realmRacersQueueJoin(session.pid);
+    for (const session of sessions) server.sim.mortarOverdriveQueueJoin(session.pid);
     server.sim.tick();
     broadcast(server);
 
     const pids = sessions.map((session) => session.pid);
-    const expected = server.sim.realmRacersInfoFor(pids[0]);
+    const expected = server.sim.mortarOverdriveInfoFor(pids[0]);
     expect(expected.match?.participantIds).toEqual(pids);
     // Grid IDENTITY and live ORDER are separate fields, and both have to cross
     // the wire: the renderer's match pins read the first, the strip the second.
@@ -199,9 +199,9 @@ describe('Realm Racers self-wire round-trip', () => {
     const client = bareClient(pids[0]);
     (client as unknown as SnapshotApplier).applySnapshot(lastSnap(wires[0].sent));
 
-    expect(client.realmRacersInfo).toEqual(expected);
-    expect(client.realmRacersInfo.match?.participantIds).toEqual(pids);
-    expect(client.realmRacersInfo.match?.standings).toEqual(expected.match?.standings);
+    expect(client.mortarOverdriveInfo).toEqual(expected);
+    expect(client.mortarOverdriveInfo.match?.participantIds).toEqual(pids);
+    expect(client.mortarOverdriveInfo.match?.standings).toEqual(expected.match?.standings);
   });
 });
 
@@ -1925,7 +1925,7 @@ describe('delta snapshots', () => {
     const target = joinServer(spectateServer, targetWs, 5, 'Observed');
     (spectateServer as any).enterSpectate(moderator, target);
     // The observed body is a seated racer: the spectator receives it as self.
-    spectateServer.sim.entities.get(target.pid)!.drive = createVehicleDrive('rally_loaner');
+    spectateServer.sim.entities.get(target.pid)!.drive = createVehicleDrive('mo_loaner');
     moderatorWs.sent.length = 0;
 
     broadcast(spectateServer);
@@ -1936,7 +1936,7 @@ describe('delta snapshots', () => {
       expect(self).not.toHaveProperty(key);
     }
     // Without a recon block the spectator's mirror keeps the rounded drive.
-    expect(self.drv).toMatchObject({ k: 'rally_loaner', sp: 0 });
+    expect(self.drv).toMatchObject({ k: 'mo_loaner', sp: 0 });
   });
 
   it('ships the drive recon in a v2 driver own record only, and keeps drv for everyone else', () => {
@@ -1967,7 +1967,7 @@ describe('delta snapshots', () => {
     raceServer.sim.grid.refresh(raceServer.sim.entities.values());
     raceServer.sim.playerGrid.refresh((raceServer as any).sim.playerEntities());
     for (const pid of [driver.pid, rival.pid, v1Driver.pid, older.pid]) {
-      const drive = createVehicleDrive('rally_loaner');
+      const drive = createVehicleDrive('mo_loaner');
       drive.speed = 41.123456789;
       drive.slip = -1.987654321;
       raceServer.sim.entities.get(pid)!.drive = drive;
@@ -1977,10 +1977,10 @@ describe('delta snapshots', () => {
 
     const own = lastSnap(v2Ws.sent);
     expect(own.self).not.toHaveProperty('drv');
-    expect(own.self.rdv).toEqual({ k: 'rally_loaner', sp: 41.123456789, sl: -1.987654321, yr: 0 });
+    expect(own.self.rdv).toEqual({ k: 'mo_loaner', sp: 41.123456789, sl: -1.987654321, yr: 0 });
     // The rival projection reads the rounded drv off every OTHER racer's record.
     const rivalRecord = own.ents.find((w: { id: number }) => w.id === rival.pid);
-    expect(rivalRecord?.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12, sl: -1.99 });
+    expect(rivalRecord?.drv).toMatchObject({ k: 'mo_loaner', sp: 41.12, sl: -1.99 });
     expect(rivalRecord).not.toHaveProperty('rdv');
     const seenByRival = lastSnap(rivalWs.sent).ents.find(
       (w: { id: number }) => w.id === driver.pid,
@@ -1989,16 +1989,16 @@ describe('delta snapshots', () => {
     // A v1 pilot keeps the rounded self drive and never receives the recon.
     const legacy = lastSnap(v1Ws.sent).self;
     expect(legacy).not.toHaveProperty('rdv');
-    expect(legacy.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12 });
+    expect(legacy.drv).toMatchObject({ k: 'mo_loaner', sp: 41.12 });
     // So does a v2 client that never advertised the drive recon: its full
     // recon pose rides, its drive stays the rounded `drv` it can decode.
     const olderSnap = lastSnap(olderWs.sent);
     expect(olderSnap.self).not.toHaveProperty('rdv');
     expect(olderSnap.self).toHaveProperty('rpx');
-    expect(olderSnap.self.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12 });
+    expect(olderSnap.self.drv).toMatchObject({ k: 'mo_loaner', sp: 41.12 });
     const olderClient = bareClient(older.pid, { movementWireVersion: 2 });
     (olderClient as any).applySnapshot(olderSnap);
-    expect(olderClient.player.drive).toMatchObject({ profileKey: 'rally_loaner', speed: 41.12 });
+    expect(olderClient.player.drive).toMatchObject({ profileKey: 'mo_loaner', speed: 41.12 });
     expect(olderClient.reconDrive).toBeNull();
 
     // The v2 mirror rebuilds its drive from the recon at full precision.
@@ -5745,25 +5745,25 @@ describe('vehicle drive state over the wire', () => {
     (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
     expect(client.entities.get(e.id)?.drive?.controlsLocked).toBe(false);
 
-    // A rally weapon's charge pool crosses as a COUNT, so the mirror derives the
+    // A Mortar Overdrive weapon's charge pool crosses as a COUNT, so the mirror derives the
     // FIXED kind from the kit the server said the racer is holding. Without it
     // the client cannot tell an empty race budget from a pool mid-recharge, and
     // it would keep offering an aiming mode for a shot the server then refuses.
-    const rallyClient = bareClient(e.id);
-    (rallyClient as any).applySnapshot({
+    const mortarOverdriveClient = bareClient(e.id);
+    (mortarOverdriveClient as any).applySnapshot({
       t: 'snap',
       ents: [],
       // Both keys on the SAME snapshot, which is the ordering trap: `achg`
-      // decodes above `rrkit`, so a mirror that read the kit at the count would
+      // decodes above `mokit`, so a mirror that read the kit at the count would
       // miss the very first frame after a racer is seated.
       self: {
         ...wireEntity(e),
-        rrkit: { active: true, w: REALM_RACERS_ABILITY_ID, c: REALM_RACERS_WEAPON_CHARGES },
-        achg: { [REALM_RACERS_ABILITY_ID]: 0, fireball: 0 },
+        mokit: { active: true, w: MORTAR_OVERDRIVE_ABILITY_ID, c: MORTAR_OVERDRIVE_WEAPON_CHARGES },
+        achg: { [MORTAR_OVERDRIVE_ABILITY_ID]: 0, fireball: 0 },
       },
     });
-    const mirrored = rallyClient.player.abilityCharges;
-    expect(mirrored?.[REALM_RACERS_ABILITY_ID]).toMatchObject({ charges: 0, fixed: true });
+    const mirrored = mortarOverdriveClient.player.abilityCharges;
+    expect(mirrored?.[MORTAR_OVERDRIVE_ABILITY_ID]).toMatchObject({ charges: 0, fixed: true });
     // ...and only that one: an ordinary recharge pool at zero is a TIMER, and
     // marking it fixed would grey a slot that is about to come back.
     expect(mirrored?.fireball?.fixed).toBeUndefined();
@@ -6013,6 +6013,10 @@ const ALL_DELTA_KEYS = [
   'mntOwn',
   'mntRace',
   'mntRtd',
+  'mo',
+  'moc',
+  'mokit',
+  'mot',
   'mst',
   'ncd',
   'offhandWeapon',
@@ -6024,10 +6028,6 @@ const ALL_DELTA_KEYS = [
   'qlog',
   'reliq',
   'renown',
-  'rr',
-  'rrc',
-  'rrkit',
-  'rrt',
   'rxp',
   'salv',
   'scb',
@@ -6152,6 +6152,8 @@ const TERSE_TO_IWORLD: Record<string, string> = {
   mntOwn: 'ownedMounts',
   mntRace: 'mountRaceView',
   mntRtd: 'ridingTrained',
+  mo: 'mortarOverdriveInfo',
+  mot: 'mortarOverdriveTrackside',
   mres: 'maxResource',
   mst: 'activeMobileStationCrafts',
   party: 'partyInfo',
@@ -6161,8 +6163,6 @@ const TERSE_TO_IWORLD: Record<string, string> = {
   qdone: 'questsDone',
   qlog: 'questLog',
   res: 'resource',
-  rr: 'realmRacersInfo',
-  rrt: 'realmRacersTrackside',
   rtype: 'resourceType',
   rxp: 'restedXp',
   salv: 'lastSalvageResult',
@@ -6587,13 +6587,16 @@ function dirtyEveryDeltaField(): {
     materialItemId: 'spider_leg',
     count: 2,
   };
-  // The Rally kit flag is a heavy delta derived from the active match id AND
+  // The Mortar Overdrive kit flag is a heavy delta derived from the active match id AND
   // from the kit the racer was actually granted (it names the weapon in their
   // slot, so a mirror never guesses which ability a pilot holds). This fixture
   // owns codec coverage rather than gameplay validity, so seed both source
   // fields exactly as the seating path writes them.
-  meta.realmRacersMatchId = 99;
-  meta.known = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, REALM_RACERS_WEAPON_CHARGES);
+  meta.mortarOverdriveMatchId = 99;
+  meta.known = resolveMortarOverdriveKit(
+    MORTAR_OVERDRIVE_ABILITY_ID,
+    MORTAR_OVERDRIVE_WEAPON_CHARGES,
+  );
 
   // Realm-wide world-boss liveness (`wba`), intentionally separate from the
   // viewer's personal loot lockout. Spawn through the real Sim primitive while
@@ -6754,13 +6757,13 @@ describe('full self-state snapshot delta fixture', () => {
     broadcast(server);
     const snap = lastSnap(fc.sent);
     expect(snap).not.toBeNull();
-    // `rrt` is the one key whose non-null value is POSITION-exclusive with the
-    // rest of this fixture: a body cannot stand at the bank and at a rally
+    // `mot` is the one key whose non-null value is POSITION-exclusive with the
+    // rest of this fixture: a body cannot stand at the bank and at a Mortar Overdrive
     // fence at once, so it gets its own dedicated first-snapshot test below.
-    // `rrc` is non-null only for a pilot seated in a live heat, which this
-    // fixture fakes for `rrkit` without one; its round trip is pinned in
-    // tests/realm_racers_online.test.ts.
-    const positionExclusive = new Set(['rrt', 'rrc']);
+    // `moc` is non-null only for a pilot seated in a live heat, which this
+    // fixture fakes for `mokit` without one; its round trip is pinned in
+    // tests/mortar_overdrive_online.test.ts.
+    const positionExclusive = new Set(['mot', 'moc']);
     for (const key of ALL_DELTA_KEYS) {
       // `de` is capability-only and this fixture joins WITHOUT the
       // entry-facing capability on purpose (its mirror assertions pin the
@@ -6796,10 +6799,10 @@ describe('full self-state snapshot delta fixture', () => {
     const racer = joinServer(server, racerClient, 91, 'Pilot');
     const fc = fakeWs();
     const watcher = joinServer(server, fc, 92, 'Watcher');
-    server.sim.realmRacersPracticeStart('rookie', racer.pid);
-    const practice = server.sim.realmRacers.practices[0];
+    server.sim.mortarOverdrivePracticeStart('rookie', racer.pid);
+    const practice = server.sim.mortarOverdrive.practices[0];
     expect(practice).toBeTruthy();
-    const sample = realmRacersTrack(REALM_RACERS_PRACTICE_CIRCUIT).pointAt(10);
+    const sample = mortarOverdriveTrack(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT).pointAt(10);
     const body = server.sim.entities.get(watcher.pid);
     if (!body) throw new Error('missing watcher entity');
     body.pos = { ...body.pos, x: sample.x + practice.origin.x, z: sample.z + practice.origin.z };
@@ -6807,15 +6810,15 @@ describe('full self-state snapshot delta fixture', () => {
     fc.sent.length = 0;
     broadcast(server);
     const snap = lastSnap(fc.sent);
-    expect(snap.self.rrt).toMatchObject({
-      circuitId: REALM_RACERS_PRACTICE_CIRCUIT.id,
+    expect(snap.self.mot).toMatchObject({
+      circuitId: MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.id,
       phase: 'loading',
       countdownTicks: 0,
       elapsed: 0,
     });
     const client = bareClient(watcher.pid);
     (client as any).applySnapshot(snap);
-    expect(client.realmRacersTrackside?.circuitId).toBe(REALM_RACERS_PRACTICE_CIRCUIT.id);
+    expect(client.mortarOverdriveTrackside?.circuitId).toBe(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.id);
 
     // Walking away clears the mirror on the next delta.
     body.pos = { ...body.pos, x: 0, z: 0 };
@@ -6823,7 +6826,7 @@ describe('full self-state snapshot delta fixture', () => {
     fc.sent.length = 0;
     broadcast(server);
     (client as any).applySnapshot(lastSnap(fc.sent));
-    expect(client.realmRacersTrackside).toBeNull();
+    expect(client.mortarOverdriveTrackside).toBeNull();
   });
 
   it('mirrors every dirtied self value onto the correct decode target', () => {
@@ -7158,8 +7161,8 @@ describe('full self-state snapshot delta fixture', () => {
     expect(client.talentSpec).toBe('arms');
     expect(client.loadouts).toEqual([{ name: 'PvP', alloc: { spec: 'arms', rows: {} }, bar: [] }]);
     expect(client.activeLoadout).toBe(0);
-    expect(client.realmRacersInfo).toEqual(server.sim.realmRacersInfoFor(leader.pid));
-    expect(client.known.map((known) => known.def.id)).toEqual(['rally_ground_blast']);
+    expect(client.mortarOverdriveInfo).toEqual(server.sim.mortarOverdriveInfoFor(leader.pid));
+    expect(client.known.map((known) => known.def.id)).toEqual(['mortar_overdrive_ground_blast']);
     // hbl -> the login action-bar restore (self-only, resolved once on the first
     // self payload). A stored server document arrives as a 'server' restore
     // carrying every profile (the `forms` mirror is for pre-profile bundles and
@@ -7525,9 +7528,9 @@ describe('delta-key contract pins (anti-drift)', () => {
     // shared crit core scb (server/self_scalar_wire.ts), at the third
     // release/v0.44.0 base merge, for 111.
     // The release's faction currency stock facCur and the treasure map tmap
-    // make 113. This branch's Realm Racers state, temporary-kit and track keys
-    // (rr/rrkit/rrt), at the release/v0.44.0 merge into feature/realm-racers,
-    // make 116, and the heat's per-tick clock key rrc, split out of rr so the
+    // make 113. This branch's Mortar Overdrive state, temporary-kit and track keys
+    // (mo/mokit/mot), at the release/v0.44.0 merge into feature/mortar-overdrive,
+    // make 116, and the heat's per-tick clock key moc, split out of mo so the
     // standings stop resending every racing tick, makes 117.
     expect(ALL_DELTA_KEYS).toHaveLength(117);
     expect(new Set(ALL_DELTA_KEYS).size).toBe(117);
@@ -7701,8 +7704,8 @@ describe('delta-key contract pins (anti-drift)', () => {
     // The World PvP readout wpvp and the King of the Hill readout hill make 109.
     // The release batch's pending Town Focus and Spell Crit core keys make 111.
     // The release's faction currency stock facCur and treasure map tmap make 113.
-    // This branch's Realm Racers keys (rr/rrkit/rrt) make 116, and the heat's
-    // per-tick clock key rrc makes 117.
+    // This branch's Mortar Overdrive keys (mo/mokit/mot) make 116, and the heat's
+    // per-tick clock key moc makes 117.
     expect(scraped.size).toBe(117);
     expect([...scraped].sort()).toEqual([...ALL_DELTA_KEYS].sort());
   });
@@ -7792,12 +7795,12 @@ describe('delta-key contract pins (anti-drift)', () => {
     // reliq fans out to three IWorld members (firstFind / marks / recent), so it
     // is asserted directly and must never grow a single-target rename entry.
     expect('reliq' in TERSE_TO_IWORLD).toBe(false);
-    // rrkit selects a temporary client-side ability resolver rather than
+    // mokit selects a temporary client-side ability resolver rather than
     // mirroring one IWorld member, so it is asserted directly in the round trip.
-    expect('rrkit' in TERSE_TO_IWORLD).toBe(false);
-    // rrc is the per-tick clock half of realmRacersInfo, folded into the same
-    // member `rr` decodes onto, so it never names a member of its own.
-    expect('rrc' in TERSE_TO_IWORLD).toBe(false);
+    expect('mokit' in TERSE_TO_IWORLD).toBe(false);
+    // moc is the per-tick clock half of mortarOverdriveInfo, folded into the same
+    // member `mo` decodes onto, so it never names a member of its own.
+    expect('moc' in TERSE_TO_IWORLD).toBe(false);
     // sorted-membership pin: adding or renaming an entry must be a deliberate,
     // reviewable change landing in alphabetical order
     expect(Object.keys(TERSE_TO_IWORLD)).toEqual([...Object.keys(TERSE_TO_IWORLD)].sort());

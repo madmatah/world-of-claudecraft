@@ -7,7 +7,7 @@ import {
   OWN_SHOT_FEEDBACK_MATCH_YD,
   OWN_SHOT_FEEDBACK_WINDOW_MS,
 } from '../src/render/own_shot_feedback_core';
-import { GROUND_BLAST_RADIUS } from '../src/sim/realm_racers_ground_blast';
+import { GROUND_BLAST_RADIUS } from '../src/sim/mortar_overdrive/ground_blast';
 
 describe('own shot feedback latch', () => {
   it('suppresses the own Fired event exactly once per local report', () => {

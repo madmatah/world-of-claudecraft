@@ -90,7 +90,7 @@ const POOL_RADIUS = LAMP_POOL_RADIUS;
 const POOL_OPACITY = LAMP_POOL_OPACITY;
 // The night-light-field numbers (reach, brightness, waver) and the anchor
 // arithmetic live in `streetlamp_light_site.ts`, with the calibration written
-// out there. They moved when a Realm Racers circuit began dressing with these
+// out there. They moved when a Mortar Overdrive circuit began dressing with these
 // same fixtures: a lamp on a verge has to light the track exactly as a lamp on
 // a road lights the road, and two copies of that answer is how they stop.
 

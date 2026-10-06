@@ -727,41 +727,41 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 3, '.removeAttribute': 3 },
     reflowAllow: {},
   },
-  // The Realm Racers standings panel is a keyed pool (one row node per pid,
+  // The Mortar Overdrive standings panel is a keyed pool (one row node per pid,
   // held for the race, the auras_painter shape): each row's skeleton is minted
   // ONCE in rowFor (.className + .innerHTML), and every repaint write (placing,
   // name, lap, movement cues) is facet-routed behind the core's data signature.
   {
-    file: 'realm_racers_standings_painter.ts',
+    file: 'hud/mortar_overdrive/standings_painter.ts',
     allow: { '.className': 1, '.innerHTML': 1 },
     reflowAllow: {},
   },
-  // The Realm Racers podium builds its text-free skeleton in ONE innerHTML
+  // The Mortar Overdrive podium builds its text-free skeleton in ONE innerHTML
   // write behind the classification signature (once per race END, never per
   // frame) and takes its two ARIA attributes once at ensure(); the names, the
   // times and the per-second return countdown are all facet-routed.
   {
-    file: 'realm_racers_podium_painter.ts',
+    file: 'hud/mortar_overdrive/podium_painter.ts',
     allow: { '.innerHTML': 1, '.setAttribute': 2 },
     reflowAllow: {},
   },
-  // The Realm Racers race strip rebuilds its text-free skeleton in ONE innerHTML
+  // The Mortar Overdrive race strip rebuilds its text-free skeleton in ONE innerHTML
   // write per structural sig (once per race phase); the off-screen circuit
   // announcer takes its class, two ARIA attributes and its data marker once at
   // ensureAnnouncer(). Every per-frame write (placing, lap, time, speed, the
   // status lines, the reset control's disabled state, the forfeit arm) is
   // facet-routed.
   {
-    file: 'realm_racers_strip_painter.ts',
+    file: 'hud/mortar_overdrive/strip_painter.ts',
     allow: { '.innerHTML': 1, '.setAttribute': 2, '.className': 1, '.dataset': 1 },
     reflowAllow: {},
   },
-  // The Realm Racers lobby curtain (hud/realm_racers/) rebuilds its text-free
+  // The Mortar Overdrive lobby curtain (hud/mortar_overdrive/) rebuilds its text-free
   // skeleton in ONE innerHTML write per structural sig (once per lobby) and takes
   // its dialog role once at ensureRoot(); every name, status, count,
   // the bar width, its aria values and the dialog's name are facet-routed.
   {
-    file: 'hud/realm_racers/realm_racers_lobby_painter.ts',
+    file: 'hud/mortar_overdrive/lobby_painter.ts',
     allow: { '.innerHTML': 1, '.setAttribute': 1 },
     reflowAllow: {},
   },

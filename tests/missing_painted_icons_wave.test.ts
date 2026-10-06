@@ -495,9 +495,9 @@ describe('missing painted ability integration', () => {
       'clockwork_shock_bomb',
       'hamstring_bite',
       'lunge',
-      'rally_ground_blast',
-      'rally_nitro',
-      'rally_oil_slick',
+      'mortar_overdrive_ground_blast',
+      'mortar_overdrive_nitro',
+      'mortar_overdrive_oil_slick',
     ]);
     expect(sorted([...ABILITY_IMAGE_IDS].filter((id) => !Object.hasOwn(ABILITIES, id)))).toEqual([
       ...PRESERVED_IMAGE_BACKED_MODIFIER_IDS,
@@ -699,7 +699,7 @@ describe('missing painted deed and Heroic weapon integration', () => {
     // the pending side on the exploration crest.
     // 319 at the 2026-09-28 release/v0.44.0 merge into Buried Hoards: the
     // Coinsack Scurrier catch (cmb_coinsack_caught) joins the pending side.
-    // 326 with the seven Realm Racers placing deeds, appended after the
+    // 326 with the seven Mortar Overdrive placing deeds, appended after the
     // release's deeds and pending on the deed_cat_pvp crest.
     // 327 with the Drakelands Rampart Run's flying lap, on the same crest, and
     // 328 with the Palmreach Lagoon Run's.

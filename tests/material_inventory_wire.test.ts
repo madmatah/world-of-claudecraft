@@ -9,7 +9,7 @@ describe('mixed material inventory wire', () => {
   it('requires the combined material-source and expanded-ability client and server epoch', () => {
     // Epoch 42 at the release/v0.43.0 merge into feature/world-quests (past both
     // parents; tests/bank_wire_epoch.test.ts holds the history). Epoch 46 at the
-    // release/v0.44.0 sync into feature/realm-racers (one past the release).
+    // release/v0.44.0 sync into feature/mortar-overdrive (one past the release).
     expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(46);
     expect(ONLINE_WORLD_AUTH_TYPE).toBe('auth-world-46');
   });

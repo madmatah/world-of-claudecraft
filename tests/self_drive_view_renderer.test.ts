@@ -3,19 +3,22 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/game/audio', () => ({ audio: {} }));
-// The rally scene's shell pool mints its marker texture at construction, which
+// The Mortar Overdrive scene's shell pool mints its marker texture at construction, which
 // needs a DOM canvas; the rest of the textures module is the real one.
 vi.mock('../src/render/textures', async (importOriginal) => {
   const THREE = await import('three');
   return {
     ...(await importOriginal<typeof import('../src/render/textures')>()),
-    rallyGroundBlastMarkerTexture: () =>
+    mortarOverdriveGroundBlastMarkerTexture: () =>
       new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1),
   };
 });
 
 import { addCameraShake, createCameraFeel } from '../src/render/camera_feel_core';
-import { RealmRacersScene, SLICK_DROP_MEAN_TICK_WAIT_SEC } from '../src/render/realm_racers_scene';
+import {
+  MortarOverdriveScene,
+  SLICK_DROP_MEAN_TICK_WAIT_SEC,
+} from '../src/render/mortar_overdrive/scene';
 import { Renderer } from '../src/render/renderer';
 import type { ReconciledDrive } from '../src/render/self_drive_view_core';
 import {
@@ -32,14 +35,14 @@ import { stripComments } from './helpers/strip_comments';
 const MEAN_TICK_WAIT_SEC = 0.025;
 
 /** The renderer members the drive view's consumers read (a prototype fixture:
- *  no Renderer builds headless), with the rally scene built over it the way
+ *  no Renderer builds headless), with the Mortar Overdrive scene built over it the way
  *  the renderer builds it over itself. */
 interface RendererHarness {
   selfRender: SelfRenderPositionState;
   selfRenderPosition: { x: number; y: number; z: number };
   sim: {
     player: Entity;
-    realmRacersInfo: { match: { circuitId: string } | null };
+    mortarOverdriveInfo: { match: { circuitId: string } | null };
   };
   time: number;
   readonly selfMotionLeadMs: number | null;
@@ -54,7 +57,7 @@ const mirror: Entity = {
   onGround: true,
   auras: [],
   ghost: false,
-  drive: createVehicleDrive('rally_loaner'),
+  drive: createVehicleDrive('mo_loaner'),
 } as unknown as Entity;
 
 const predictedKart: ReconciledDrive = {
@@ -62,22 +65,22 @@ const predictedKart: ReconciledDrive = {
   velocityX: 30,
   velocityZ: -12,
   onGround: true,
-  state: createVehicleDrive('rally_loaner'),
+  state: createVehicleDrive('mo_loaner'),
 };
 
 function harness(): {
   renderer: RendererHarness;
-  scene: RealmRacersScene;
+  scene: MortarOverdriveScene;
   dropProvisionalSlick: ReturnType<typeof vi.fn>;
 } {
   const renderer = Object.create(Renderer.prototype) as RendererHarness;
   renderer.selfRenderPosition = { x: 0, y: 0, z: 0 };
   renderer.selfRender = createSelfRenderPositionState(renderer.selfRenderPosition);
-  renderer.sim = { player: mirror, realmRacersInfo: { match: { circuitId: 'probe' } } };
+  renderer.sim = { player: mirror, mortarOverdriveInfo: { match: { circuitId: 'probe' } } };
   renderer.time = 5;
-  const scene = new RealmRacersScene(renderer);
+  const scene = new MortarOverdriveScene(renderer);
   const dropProvisionalSlick = vi.fn();
-  scene.track = { dropProvisionalSlick } as unknown as RealmRacersScene['track'];
+  scene.track = { dropProvisionalSlick } as unknown as MortarOverdriveScene['track'];
   return { renderer, scene, dropProvisionalSlick };
 }
 
@@ -152,15 +155,15 @@ describe('renderer self-kart consumers on wire v2', () => {
 });
 
 describe('renderer self-kart reads go through the drive view', () => {
-  // The self kart's consumers live in the renderer and in the two rally
+  // The self kart's consumers live in the renderer and in the two Mortar Overdrive
   // modules the renderer drives (the scene and the kart presentation), which
   // read the same drive view through their renderer host (`h.selfRender`).
   const read = (path: string): string =>
     stripComments(readFileSync(new URL(path, import.meta.url), 'utf8'));
   const sources = {
     renderer: read('../src/render/renderer.ts'),
-    scene: read('../src/render/realm_racers_scene.ts'),
-    kart: read('../src/render/realm_racers_kart_presentation.ts'),
+    scene: read('../src/render/mortar_overdrive/scene.ts'),
+    kart: read('../src/render/mortar_overdrive/kart_presentation.ts'),
   };
   type Source = keyof typeof sources;
   const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -228,19 +231,16 @@ describe('renderer self-kart reads go through the drive view', () => {
     expect(count('renderer', 'this.selfRender.drive.')).toBe(6);
     expect(count('scene', 'h.selfRender.drive.')).toBe(9);
     expect(count('kart', 'h.selfRender.drive.')).toBe(2);
-    // The two rally modules read it on the renderer's own frame: the rival
+    // The two Mortar Overdrive modules read it on the renderer's own frame: the rival
     // step before the body is placed, the road effects after the mount pass.
     expect(
       count(
         'renderer',
-        'this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
+        'this.mortarOverdrive.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
       ),
     ).toBe(1);
     expect(
-      count(
-        'renderer',
-        'realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
-      ),
+      count('renderer', 'moKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);'),
     ).toBe(1);
   });
 });

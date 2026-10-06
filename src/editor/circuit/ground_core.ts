@@ -15,8 +15,8 @@
 // Pure core: DOM-free, deterministic, no clock, no rng. Every function returns a
 // NEW list; nothing here mutates its input.
 
-import { REALM_RACERS_MIN_GROUND_POINTS } from '../../sim/realm_racers_ground';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
+import { MORTAR_OVERDRIVE_MIN_GROUND_POINTS } from '../../sim/mortar_overdrive/ground';
 import { hitTestControlPoint, nearestSegment } from './handles_core';
 
 /**
@@ -28,7 +28,7 @@ import { hitTestControlPoint, nearestSegment } from './handles_core';
  */
 export type GroundHit =
   | { kind: 'handle'; index: number }
-  | { kind: 'insert'; index: number; at: RallyPoint };
+  | { kind: 'insert'; index: number; at: MortarOverdrivePoint };
 
 /**
  * Which of the two, or neither.
@@ -40,7 +40,7 @@ export type GroundHit =
  * which is every working zoom.
  */
 export function groundHitAt(
-  outline: readonly RallyPoint[],
+  outline: readonly MortarOverdrivePoint[],
   x: number,
   z: number,
   handleTolerance: number,
@@ -64,9 +64,9 @@ export function groundHitAt(
  * nothing is not an alternative route to the same place.
  */
 export function groundPointRemoved(
-  outline: readonly RallyPoint[],
+  outline: readonly MortarOverdrivePoint[],
   index: number,
-): readonly RallyPoint[] | null {
+): readonly MortarOverdrivePoint[] | null {
   if (index < 0 || index >= outline.length) return null;
   if (outline.length <= MIN_GROUND_POINTS) return null;
   return outline.filter((_, i) => i !== index);
@@ -80,4 +80,4 @@ export function groundPointRemoved(
  * both accept three. Borrowing the road's number here made a nine-handle
  * proposal deletable exactly once and refused a shape the record allows.
  */
-export const MIN_GROUND_POINTS = REALM_RACERS_MIN_GROUND_POINTS;
+export const MIN_GROUND_POINTS = MORTAR_OVERDRIVE_MIN_GROUND_POINTS;

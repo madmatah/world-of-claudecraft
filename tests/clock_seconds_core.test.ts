@@ -14,9 +14,9 @@ const CONSUMERS = [
   'src/ui/hud/professions/harvest_journal_window.ts',
   'src/ui/gather_node_tooltip_controller.ts',
   'src/ui/dungeon_finder_window.ts',
-  // The Realm Racers race strip's elapsed clock and the podium's race times.
-  'src/ui/realm_racers_strip_painter.ts',
-  'src/ui/realm_racers_podium_painter.ts',
+  // The Mortar Overdrive race strip's elapsed clock and the podium's race times.
+  'src/ui/hud/mortar_overdrive/strip_painter.ts',
+  'src/ui/hud/mortar_overdrive/podium_painter.ts',
 ];
 
 afterEach(() => setLanguage('en'));

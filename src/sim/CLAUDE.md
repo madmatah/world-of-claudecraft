@@ -41,7 +41,7 @@ talk only to the **`SimContext` seam** (`sim_context.ts`).
 - `character_state.ts`: the persisted character-save shapes, a TYPE-ONLY leaf extracted from `sim.ts` (`CharacterState`/`PetState` and the `Saved*` sparse forms; `sim.ts` keeps a public re-export so every importer stands). No runtime code, so a change here is a save-compat decision first.
 - `data.ts`: merges `content/*` into the flat tables (`ABILITIES`, `MOBS`, `NPCS`, `QUESTS`, `ITEMS`, `CAMPS`, `DUNGEONS`) and owns world-layout consts (`WORLD_SIZE`, `instanceOrigin`, `arenaOrigin`, `zoneAt`, `dungeonAt`).
 - `entity.ts`: `createPlayer/createMob/createNpc/createGroundObject` + `recalcPlayerStats` (the ONE place derived stats are computed from class/level/gear/auras/talent `mods`).
-- `player_motion.ts`: the pure player-movement kernel (`stepPlayerMotion`: turn integration, wish vector, slope gates, swept static collision, the vertical pass) plus `moveSpeedMult`/`auraSpeedMult`/`jumpMult`/`isSwimming` and the locomotion-feel constants. An entity carrying a `drive` state (`VehicleDrive`, a seated rally pilot) takes the VEHICLE branch at the top of the same entry point, composing the pure model in `vehicle_motion.ts` with the same collision and vertical pass; keeping it behind this one entry point is what keeps the online self-extrapolator in lockstep. It also carries the parkour arms (air control, coyote time, ledge momentum, and the standable-prop support/mantle pass fed by `colliders.ts` `supportHeightAt`; behavior pinned by `tests/parkour.test.ts`). `Sim.updatePlayerMovement` wraps it behind `PlayerMotionDeps` (fiesta speed, delve-aware `resolveMove`, cast/damage callbacks); the online display-only self extrapolator (`src/render/self_motion.ts`) binds pure/no-op deps so BOTH hosts run the same math, pinned by `tests/player_motion.test.ts` (client-dep-shape vs live-Sim parity, bit for bit). Changing movement here means keeping that parity test green.
+- `player_motion.ts`: the pure player-movement kernel (`stepPlayerMotion`: turn integration, wish vector, slope gates, swept static collision, the vertical pass) plus `moveSpeedMult`/`auraSpeedMult`/`jumpMult`/`isSwimming` and the locomotion-feel constants. An entity carrying a `drive` state (`VehicleDrive`, a seated Mortar Overdrive pilot) takes the VEHICLE branch at the top of the same entry point, composing the pure model in `vehicle_motion.ts` with the same collision and vertical pass; keeping it behind this one entry point is what keeps the online self-extrapolator in lockstep. It also carries the parkour arms (air control, coyote time, ledge momentum, and the standable-prop support/mantle pass fed by `colliders.ts` `supportHeightAt`; behavior pinned by `tests/parkour.test.ts`). `Sim.updatePlayerMovement` wraps it behind `PlayerMotionDeps` (fiesta speed, delve-aware `resolveMove`, cast/damage callbacks); the online display-only self extrapolator (`src/render/self_motion.ts`) binds pure/no-op deps so BOTH hosts run the same math, pinned by `tests/player_motion.test.ts` (client-dep-shape vs live-Sim parity, bit for bit). Changing movement here means keeping that parity test green.
 - `entity_roster.ts`: roster ops the coordinator drives: `addEntity`/`dropEntity`/`rebucket`, despawn decay, the delayed-event drain, and the ground-AoE tick. Keeps only the delve release arm (`releaseSpiritInDelve`); the general death/release system is `spirit.ts` (see the module table).
 - `ignivar_raid_ids.ts` / `ignivar_raid_progression.ts`: pure room IDs and linked-room mapping in the leaf module; the progression module owns the SimContext mutation that opens Ignivar's inner gate.
 - `rng.ts`: `class Rng` (mulberry32) + stateless `hash2/noise2/fbm2` for terrain.
@@ -70,7 +70,7 @@ plausibly covers means the table needs a new row in the same change.
 
 | Module | Owns |
 |--------|------|
-| `player_movement_modes.ts` | exclusive locomotion order before ordinary walking: vehicle freeze, rift lift strip, deliberate-input AFK clear, Realm Racers start/recovery lock, Valkyr, race countdown, leap and ledge climb |
+| `player_movement_modes.ts` | exclusive locomotion order before ordinary walking: vehicle freeze, rift lift strip, deliberate-input AFK clear, Mortar Overdrive start/recovery lock, Valkyr, race countdown, leap and ledge climb |
 | `combat/damage.ts` | `dealDamage`, `handleDeath`, `grantXp` (+ lifetime-XP; milestone unlocks absorbed into `deeds.ts`) |
 | `combat/heal.ts` | `applyHeal`, healing threat/taken-mult, hex/crit-vuln mults, heal-absorb |
 | `combat/threat_modifiers.ts` | aura, talent, and known-passive threat multipliers through `SimContext` |
@@ -98,7 +98,7 @@ plausibly covers means the table needs a new row in the same change.
 | `mob/social_aggro.ts` + `mob/yells.ts` | flee-for-help rally pull (`rallyFleeingAllies`) and the same-template social pull on a fresh aggro (`socialPullSameTemplate`, per-family radius table); boss bark broadcast (`MobTemplate.yells`) |
 | `mob/dungeon_pack_aggro.ts` | authored dungeon-pack unit pull (`aggroDungeonPackmates`): mobs sharing a placement-claimed `dungeonPackId` engage together on any player or pet pull, including the non-social taunt path |
 | `encounters/nythraxis.ts` | the whole Nythraxis raid encounter (per-tick driver, reset/wipe/init, dialogue scheduler, adds + boss mechanics, the Aldric transition + wardstones, the relic/grave-vision quest chain, the encounter CC-immunity predicates) |
-| `social/realm_racers.ts` (+ `realm_racers_bots.ts`, `realm_racers_busy.ts`, `realm_racers_loading.ts`, `realm_racers_seat.ts` (the import-free `inRealmRacersHeat` leaf the battleground, World PvP and duel modules ask), and `realm_racers_context.ts`, the lazy `SimContext` bindings, the tick phase the coordinator calls, the fresh meta fields, and the coordinator's one Realm Racers import) | the Realm Racers match lifecycle: queue, seat, the loading lobby (a race opens in `loading` and every pilot is held until each human sends ready or `REALM_RACERS_LOADING_MAX_TICKS` runs out; house pilots are ready from the seat; the countdown then starts on one tick for the whole field), countdown, race, classification and return; the house pilots; seat eligibility |
+| `mortar_overdrive/race.ts` (+ `mortar_overdrive/bots.ts`, `mortar_overdrive/busy.ts`, `mortar_overdrive/loading.ts`, `mortar_overdrive/seat.ts` (the import-free `inMortarOverdriveHeat` leaf the battleground, World PvP and duel modules ask), and `mortar_overdrive/context.ts`, the lazy `SimContext` bindings, the tick phase the coordinator calls, the fresh meta fields, and the coordinator's one Mortar Overdrive import) | the Mortar Overdrive match lifecycle: queue, seat, the loading lobby (a race opens in `loading` and every pilot is held until each human sends ready or `MORTAR_OVERDRIVE_LOADING_MAX_TICKS` runs out; house pilots are ready from the seat; the countdown then starts on one tick for the whole field), countdown, race, classification and return; the house pilots; seat eligibility |
 | `world_boss.ts` | hourly world bosses: spawn/scale/announce, contributor tracking, personal loot (`rollWorldBossLoot`), per-boss loot lockouts |
 | `spirit.ts` (+ `spirit_run_triggers.ts`, the ghost run's door/rift/passage trigger set, same order as the living arm of the player tick) | death/release/resurrection: graveyards + spirit healers, the ghost run, `releasePlayerSpirit`/`resurrectAtCorpse`/`resurrectAtSpiritHealer`, plus the two `/unstuck` outcomes `moveToGraveyardForUnstuck`/`reviveAtGraveyardForUnstuck` (sickness rules live in the `resurrection.ts` leaf). Every resurrection runs through the one shared `reviveAt`, which is also where the pet the death took is handed back (`pet/pet_owner_revive.ts`) |
 | `pet/` | the pet system: `pet_ai.ts` (`updatePet`, follow, ranged attack, target pick), `pet_commands.ts` (the command surface + `petOf`/`summonPet`/tame/despawn/`syncPetLevel`/`serializePet`/`restorePet` and the delve pet-park round-trip), `pet_scaling.ts` (owner-to-pet stat inheritance for hunter beasts + the heel-speed floor), `pet_selection.ts` (pure owner/pet identity shared with the HUD mirrors), `pet_taunt_gate.ts` (the shared force-taunt eligibility gate), `warlock_pet_skills.ts` + `warlock_pet_growth.ts` (signature warlock-pet utility; authored per-level visual scale) |
@@ -150,7 +150,7 @@ plausibly covers means the table needs a new row in the same change.
 | `portals.ts` | paired overworld portals between zone bands no road connects (pure `PORTALS` data checked per live player and per released spirit right after dungeon door triggers; the teleport recipe mirrors `enterDungeon`); no entities, no rng draws |
 | `interactions/` | quest-scripted world interactables (`firebottle_hut.ts`: the reusable firebottle vs murloc huts, with the per-player reburn cooldown on `QuestProgress`); a new scripted interactable lands here as its own module |
 | `dev_commands.ts` + `dev/` | the `ctx.devCommands` gated `/dev` cheat surface: `handleDevChat` (re-exported by `social/chat.ts` for the chat router), `spawnMobsForDev`/`despawnMobsForDev` (dev-spawned mobs are torn down in `removePlayer`), `resetCombatForDev`; pinned by `tests/dev_commands.test.ts`. `dev/` holds the dev-only playtest harnesses (`dev_displace.ts` is the one dev teleport every `/dev tp`, `/dev town`, and mount-quest jump runs, session teardown plus rebucket; `town_teleport.ts` is the pure `/dev town` resolver over the active world's zone hubs, a CLOSED destination set, pinned by `tests/dev_town_teleport.test.ts`) (one production-reachable exception: `bestEpicGearFor` also feeds the practice dummy reference vitals in `mob/practice_dummies.ts`): `bis_gear.ts` (`/dev bis`: applies the selected spec's frozen top-parse loadout from `parse_bis_loadouts.ts`, with the deterministic epic scorer as the spec-less fallback and as the balance probes' frozen reference kit via `equipReferenceEpicKitForDev`, draws no rng) and `cascade_playtest.ts` (ALLOW_DEV_COMMANDS-gated manual-playtest metrics: pure observation, never feeds a gameplay decision or the wire) |
-| `realm_racers_drafts.ts` | `ctx.devCommands` gated: makes a circuit DRAWN in the circuit editor raceable for one session. Validates it through `realm_racers_circuit_metrics.ts` (a broken drawing is refused by name, never seated) and puts it in the `realm_racers_draft_registry.ts` overlay, which `realmRacersCircuitById` and the lane table consult. The sim never fetches: the client hands it a plain record (`src/game/realm_racers_draft_dev.ts`). Pinned by `tests/realm_racers_drafts.test.ts` |
+| `mortar_overdrive/drafts.ts` | `ctx.devCommands` gated: makes a circuit DRAWN in the circuit editor raceable for one session. Validates it through `mortar_overdrive/circuit_metrics.ts` (a broken drawing is refused by name, never seated) and puts it in the `mortar_overdrive/draft_registry.ts` overlay, which `mortarOverdriveCircuitById` and the lane table consult. The sim never fetches: the client hands it a plain record (`src/game/mortar_overdrive/draft_dev.ts`). Pinned by `tests/mortar_overdrive_drafts.test.ts` |
 | `targeting.ts` | player target selection + raid markers |
 | `market.ts` | the World Market (`Market` class) |
 | `mail/post_office.ts` | player mail (send/take/read/delete, the mailbox anchor gate); every read rides the per-recipient `MailIndex` buckets, every observable mutation advances the book revision the server's `mail` snapshot gate polls (`mailRevFor`, null away from a pillar) |
@@ -206,7 +206,7 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
   `readyArenaFighter`'s `clearPrep` arm and by a Fiesta down, and reached from every
   `readyArenaFighter(..., { clearPrep: true })` site and every call of its
   `resetForArena` wrapper, so every instanced match's seat and end wipes: arena,
-  Fiesta, Protect Yumi, Thornhollow Fields, Realm Racers (the Vale Cup's seat and
+  Fiesta, Protect Yumi, Thornhollow Fields, Mortar Overdrive (the Vale Cup's seat and
   teardown were on this list too until it retired with release/v0.41.0); the three
   caller sets are pinned in `tests/resurrection.test.ts`).
 - `ride_height.ts`: the waterline ride height slope gating reads for wading and
@@ -267,34 +267,38 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
 - `vehicle_motion.ts`: the arcade driving model behind the `p.drive` branch of
   `player_motion.ts`: throttle/brake, steering authority, grip and drift, every number
   read from a `content/vehicles.ts` profile.
-- `realm_racers_track_limits.ts`: the track-limits REFEREE: an excursion may not gain
+- The Mortar Overdrive modules below (and the race lifecycle in the table above) live in
+  `mortar_overdrive/`, whose own `CLAUDE.md` holds the file map; its `index.ts` barrel is
+  for code outside `src/sim/`. The rest of the sim imports them deep (`race.ts` imports the
+  sim core back), and the authored records are in `content/mortar_overdrive/`.
+- `mortar_overdrive/track_limits.ts`: the track-limits REFEREE: an excursion may not gain
   arc on the ground it drove, so cutting the inside and cutting the outside of a
   re-entrant shape are the same call and neither needs a barrier. It replaced a whole
-  family of derived containment devices, which is why the Realm Racers garden is open
-  and drivable to the perimeter on both sides; `social/realm_racers.ts` owns the
+  family of derived containment devices, which is why the Mortar Overdrive garden is open
+  and drivable to the perimeter on both sides; `mortar_overdrive/race.ts` owns the
   consequences, this owns the verdict.
-- `realm_racers_ground.ts`: the shape of the LAND: a circuit's authored `groundOutline`
+- `mortar_overdrive/ground.ts`: the shape of the LAND: a circuit's authored `groundOutline`
   read as the same closed centripetal Catmull-Rom the centerline is, memoized per record
   identity. Absent means the rectangle the ground has always been (`regionHalf*` plus
-  `REALM_RACERS_LAWN_OVERSHOOT`), which is what let the field arrive without either shipped
+  `MORTAR_OVERDRIVE_LAWN_OVERSHOOT`), which is what let the field arrive without either shipped
   circuit changing; the two grew later, when the instance volume became the ceiling on every
   circuit, so that rectangle is now the ceiling plus the overshoot on both. The renderer cuts
   its lawn along what this returns and puts the theme's water outside it, and the readout
   measures the road against it (`road_outside_ground_outline`). It also answers
-  `realmRacersOnGround`, which every DERIVED fill on a circuit asks before it places a piece
+  `mortarOverdriveOnGround`, which every DERIVED fill on a circuit asks before it places a piece
   (the seeded scatters here, the meadow mask and the flower beds render-side): all of them are
   generated over the perimeter BOX, and a box is not a shape, so without it an island wore a
   rectangle of grass standing on the sea. The water outside is DECORATION: it stops nobody,
   and the perimeter box is still the one thing that does.
-- `realm_racers_props_resolve.ts`: the ONE place a circuit's hand-placed scenery turns
+- `mortar_overdrive/props_resolve.ts`: the ONE place a circuit's hand-placed scenery turns
   into positions: authored `props` in either track-space or circuit-local coordinates,
   seeded `scatters`, and the free-form `ponds` outline. The renderer instances what it
-  returns and `realm_racers_colliders.ts` appends what it marks solid, so neither
+  returns and `mortar_overdrive/colliders.ts` appends what it marks solid, so neither
   re-derives a placement, which is the defect class the whole seam exists for. Every
   point comes out of `hash2`, never `ctx.rng`: content resolves at import time on three
-  hosts. Footprints and heights come from `content/realm_racers_props.ts`, the sim-side
-  catalog whose keys `src/render/realm_racers_prop_visuals.ts` mirrors.
-- `realm_racers_pickups.ts`: the pickup boxes: a circuit's authored `pickupRows` resolved
+  hosts. Footprints and heights come from `content/mortar_overdrive/props.ts`, the sim-side
+  catalog whose keys `src/render/mortar_overdrive/prop_visuals.ts` mirrors.
+- `mortar_overdrive/pickups.ts`: the pickup boxes: a circuit's authored `pickupRows` resolved
   into four boxes across the road at that arc, memoized per circuit like the rest of the
   derived geometry, plus the per-race take/respawn step over a plain state the match owns.
   The take is the NEAREST box in reach with the lowest index on a tie, which is a rule
@@ -302,18 +306,18 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
   together than the catch radius, so a pass down the middle really is inside both
   (`pickup_row_lanes_overlap` is the readout warning that names such a row). Since 22b the
   phase draws EXACTLY ONE value per box that changes hands (the weighted effect draw, taken
-  at the take), so a tick with no take still draws nothing; `social/realm_racers.ts` owns the
+  at the take), so a tick with no take still draws nothing; `mortar_overdrive/race.ts` owns the
   consequences, this owns where the boxes are and which of them changed hands.
-- `realm_racers_pickup_effects.ts`: what a box GIVES: the effect vocabulary, which two of the
+- `mortar_overdrive/pickup_effects.ts`: what a box GIVES: the effect vocabulary, which two of the
   four a racer HOLDS rather than receives (nitro and oil are one-charge abilities in the kit,
   spent when the pilot chooses; the refill and the ward are instant), the three
   position-weighted tables a take draws from (leader / midfield / backmarker, ranked among
   the racers STILL DRIVING), and the nitro tuning. Plain data plus one cumulative walk over
   it; the draw takes a roll in [0, 1) rather than reaching for randomness, so the single
-  `ctx.rng` draw stays at the one site in the rally tick that owns it, and the stacking
+  `ctx.rng` draw stays at the one site in the Mortar Overdrive tick that owns it, and the stacking
   fallback (a full slot draws the refill instead) is decided AFTER the draw so the tables
   keep their meaning.
-- `realm_racers_slicks.ts`: the oil a spent `slick` leaves under the machine: the patch
+- `mortar_overdrive/slicks.ts`: the oil a spent `slick` leaves under the machine: the patch
   record, its lifetime, the concurrent-patch CAP the renderer's pool is sized from, the
   per-tick step that sweeps the expired ones and reports who drove through one, and how hard
   the oil throws them. It spares the machine that dropped it only until that machine has
@@ -334,25 +338,25 @@ those rather than a roster here. The ones whose CONTRACT you cannot infer from t
   ceiling is not a modifier: a machine attacking a corner already sits at `maxSlip`, so
   before that the shove delivered nothing at all to the only pilots worth shoving, and no
   value of `_PUSH` could have fixed it.
-- `realm_racers_zone.ts`: which world zone a circuit belongs to, for every surface that
+- `mortar_overdrive/zone.ts`: which world zone a circuit belongs to, for every surface that
   names where a player is (the minimap label, the map window, the continent highlight,
   the Discord presence): its theme's zone, and the default theme's between lanes. The
   band is on the instance plane, where `zoneAt` answers a lane with whatever zone band
   its z shares. A sibling of the lane leaf because it reads the `data.ts` zone table.
-- `realm_racers_readout_clock.ts`: the per-tick half of the match readout (the clocks
-  and the speed), split off for the server's `rrc` self key and folded back on the
-  client, so the heavy `rr` (standings, boxes, oil) resends only on a real change and
-  presentation still reads the one `RealmRacersMatchInfo` the offline Sim builds.
-- `realm_racers_draft_registry.ts`: the session-only DRAFT circuit overlay: a table
-  with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
-  `realm_racers_layout.ts` consult it and either importing something that imported it
+- `mortar_overdrive/readout_clock.ts`: the per-tick half of the match readout (the clocks
+  and the speed), split off for the server's `moc` self key and folded back on the
+  client, so the heavy `mo` (standings, boxes, oil) resends only on a real change and
+  presentation still reads the one `MortarOverdriveMatchInfo` the offline Sim builds.
+- `mortar_overdrive/draft_registry.ts`: the session-only DRAFT circuit overlay: a table
+  with NO runtime imports at all, because both `content/mortar_overdrive/circuits.ts` and
+  `mortar_overdrive/layout.ts` consult it and either importing something that imported it
   back would be a cycle through a module that builds its table at import time. Empty
   unless a dev command filled it, so nothing deterministic observes it. It is
   CONTENT, so it is process-wide rather than per-`Sim`, and OFFLINE HOSTS ONLY in
   practice: the server never runs a dev command. Two derived caches key off a
   circuit id and both hold their entry only while the RECORD is the same object
-  (`memoizePerCircuit` in `realm_racers_spline.ts`, the cache in
-  `realm_racers_colliders.ts`); a THIRD such cache is the signal to stop adding
+  (`memoizePerCircuit` in `mortar_overdrive/spline.ts`, the cache in
+  `mortar_overdrive/colliders.ts`); a THIRD such cache is the signal to stop adding
   identity guards one at a time and give this table a generation counter instead.
 
 ## The SimContext seam (final shape)

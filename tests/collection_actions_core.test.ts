@@ -19,7 +19,7 @@ it.each([
   ['harvestJournal', 'toggleHarvestJournal'],
   ['perfecting', 'togglePerfecting'],
   ['lootExplorer', 'toggleLootExplorer'],
-  ['rally', 'toggleRealmRacers'],
+  ['mortarOverdrive', 'toggleMortarOverdrive'],
 ])('dispatches %s through its original toggle', (action, method) => {
   const toggle = vi.fn();
   expect(dispatchCollectionAction(action, { [method]: toggle } as never)).toBe(true);

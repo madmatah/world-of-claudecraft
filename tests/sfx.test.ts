@@ -9,15 +9,15 @@ import {
 } from '../src/game/sfx';
 import { SFX_CLIPS, type SfxEntry } from '../src/game/sfx_manifest.generated';
 import {
-  playRealmRacersEventAudio,
-  playRealmRacersScrapeAudio,
-  syncRealmRacersVehicleAudio,
-} from '../src/render/realm_racers_audio';
+  playMortarOverdriveEventAudio,
+  playMortarOverdriveScrapeAudio,
+  syncMortarOverdriveVehicleAudio,
+} from '../src/render/mortar_overdrive/audio';
 import {
-  realmRacersScrapeAudioCue,
-  realmRacersSpatialAudioCue,
-  realmRacersVehicleAudioAction,
-} from '../src/render/realm_racers_audio_core';
+  mortarOverdriveScrapeAudioCue,
+  mortarOverdriveSpatialAudioCue,
+  mortarOverdriveVehicleAudioAction,
+} from '../src/render/mortar_overdrive/audio_core';
 import { MOUNT_SKIN_IDS, RETIRED_MOUNT_SKIN_IDS } from '../src/sim/content/mount_skins';
 import { MOUNT_KEYS } from '../src/sim/content/mounts';
 import type { VehicleDrive } from '../src/sim/types';
@@ -122,7 +122,7 @@ let gainScheduleCalls: GainScheduleCall[] = [];
 let linearRampCalls: Array<{ value: number; time: number }> = [];
 let playbackRateCalls: Array<{ value: number; time: number; constant: number }> = [];
 const WOOD_BUFFER = { duration: 0.37 };
-const RALLY_GROUND_BLAST_BUFFER = { duration: 3 };
+const MORTAR_OVERDRIVE_GROUND_BLAST_BUFFER = { duration: 3 };
 const GROUND_SHAKER_IMPACT_BUFFER = { duration: 3.08 };
 const ARCANE_IMPACT_BUFFER = { duration: 0.5 };
 
@@ -302,9 +302,9 @@ beforeEach(() => {
   buffers.set('foot_wood', WOOD_BUFFER);
   buffers.set('foot_stone', { duration: 0.5 });
   buffers.set('foot_dirt', { duration: 0.5 });
-  buffers.set('proj_groundshaker', RALLY_GROUND_BLAST_BUFFER);
-  buffers.set('proj_groundshaker:1', RALLY_GROUND_BLAST_BUFFER);
-  buffers.set('proj_groundshaker:2', RALLY_GROUND_BLAST_BUFFER);
+  buffers.set('proj_groundshaker', MORTAR_OVERDRIVE_GROUND_BLAST_BUFFER);
+  buffers.set('proj_groundshaker:1', MORTAR_OVERDRIVE_GROUND_BLAST_BUFFER);
+  buffers.set('proj_groundshaker:2', MORTAR_OVERDRIVE_GROUND_BLAST_BUFFER);
   buffers.set('impact_groundshaker', GROUND_SHAKER_IMPACT_BUFFER);
   buffers.set('impact_arcane', ARCANE_IMPACT_BUFFER);
   buffers.set('impact_shadow', { duration: 0.7 });
@@ -760,7 +760,7 @@ describe('mount running audio', () => {
 });
 
 const vehicleDrive = (): VehicleDrive => ({
-  profileKey: 'rally_loaner',
+  profileKey: 'mo_loaner',
   speed: 0,
   slip: 0,
   steerAngle: 0,
@@ -775,7 +775,7 @@ const vehicleDrive = (): VehicleDrive => ({
   controlsLocked: false,
 });
 
-describe('Realm Racers vehicle loops', () => {
+describe('Mortar Overdrive vehicle loops', () => {
   beforeEach(() => sfx.setListener(0, 0, 0, 0, 0, 1));
 
   it('keeps one engine source and raises its pitch with speed', () => {
@@ -785,25 +785,25 @@ describe('Realm Racers vehicle loops', () => {
         loops: Map<string, { src: FakeSource }>;
       }
     ).loops;
-    const first = loops.get('realm-racers-engine-77')?.src;
+    const first = loops.get('mortar-overdrive-engine-77')?.src;
     expect(first).toBeDefined();
     const lowRate = first?.playbackRate.value ?? 0;
     sfx.vehicle(77, false, 3, 0, 0, 0.85, 0.8, 5, false);
-    const second = loops.get('realm-racers-engine-77')?.src;
+    const second = loops.get('mortar-overdrive-engine-77')?.src;
     expect(second).toBe(first);
     expect(second?.playbackRate.targets.at(-1) ?? 0).toBeGreaterThan(lowRate);
-    expect(sfx.hasLoop('realm-racers-skid-77')).toBe(true);
+    expect(sfx.hasLoop('mortar-overdrive-skid-77')).toBe(true);
     const buffers = (sfx as unknown as { buffers: Map<string, { duration: number }> }).buffers;
-    expect(loops.get('realm-racers-engine-77')?.src.buffer).toBe(
+    expect(loops.get('mortar-overdrive-engine-77')?.src.buffer).toBe(
       buffers.get('move_groundshaker_engine'),
     );
-    expect(loops.get('realm-racers-skid-77')?.src.buffer).toBe(
+    expect(loops.get('mortar-overdrive-skid-77')?.src.buffer).toBe(
       buffers.get('mount_run_stalkglider_snail'),
     );
-    expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_stone'));
+    expect(loops.get('mortar-overdrive-roll-77')?.src.buffer).toBe(buffers.get('foot_stone'));
 
     sfx.vehicle(77, false, 3, 0, 0, 0.85, 0.8, 0, true);
-    expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_dirt'));
+    expect(loops.get('mortar-overdrive-roll-77')?.src.buffer).toBe(buffers.get('foot_dirt'));
   });
 
   it('pins the validated engine response to speed and acceleration load', () => {
@@ -813,7 +813,7 @@ describe('Realm Racers vehicle loops', () => {
         loops: Map<string, { src: FakeSource; gain: FakeGain }>;
       }
     ).loops;
-    const engine = loops.get('realm-racers-engine-85');
+    const engine = loops.get('mortar-overdrive-engine-85');
     // A fresh loop opens AT its rate; every later change is a commanded ramp
     // target, which is what the formula is pinned against from here on.
     expect(engine?.src.playbackRate.value).toBeCloseTo(0.35, 6);
@@ -838,7 +838,7 @@ describe('Realm Racers vehicle loops', () => {
       sfx as unknown as {
         loops: Map<string, { src: FakeSource }>;
       }
-    ).loops.get('realm-racers-engine-93');
+    ).loops.get('mortar-overdrive-engine-93');
     const opened = engine?.src.playbackRate.value ?? 0;
     expect(engine?.src.playbackRate.targets).toHaveLength(0);
 
@@ -873,10 +873,10 @@ describe('Realm Racers vehicle loops', () => {
         speedFraction: number,
       ) => calls.push(speedFraction),
       stopVehicle: () => {},
-      realmRacersEvent: () => {},
+      mortarOverdriveEvent: () => {},
     };
     for (const state of [straight, drifting]) {
-      syncRealmRacersVehicleAudio(
+      syncMortarOverdriveVehicleAudio(
         sink,
         94,
         false,
@@ -889,7 +889,7 @@ describe('Realm Racers vehicle loops', () => {
         0,
       );
     }
-    // rally_loaner tops out at 60 yd/s.
+    // mo_loaner tops out at 60 yd/s.
     expect(calls[0]).toBeCloseTo(30 / 60, 6);
     expect(calls[1]).toBeCloseTo(Math.hypot(30, 24) / 60, 6);
     expect(calls[1]).toBeGreaterThan(calls[0]);
@@ -902,9 +902,9 @@ describe('Realm Racers vehicle loops', () => {
       vehicleLimiter: FakeCompressor;
       master: FakeGain;
     };
-    const engine = internals.loops.get('realm-racers-engine-86');
-    const skid = internals.loops.get('realm-racers-skid-86');
-    const roll = internals.loops.get('realm-racers-roll-86');
+    const engine = internals.loops.get('mortar-overdrive-engine-86');
+    const skid = internals.loops.get('mortar-overdrive-skid-86');
+    const roll = internals.loops.get('mortar-overdrive-roll-86');
     const targets = [engine, skid, roll].map((loop) => loop?.gain.gain.targets.at(-1) ?? 0);
     expect(targets[0]).toBeCloseTo(1.7 * (0.26 + 0.48 + 0.22), 6);
     expect(targets.reduce((sum, target) => sum + target, 0)).toBeCloseTo(2.25, 6);
@@ -928,11 +928,11 @@ describe('Realm Racers vehicle loops', () => {
   it('does not duck tyre contact while the vehicle mix remains under budget', () => {
     sfx.vehicle(87, false, 2, 0, 0, 0.2, 0, 3, false);
     const loops = (sfx as unknown as { loops: Map<string, { gain: FakeGain }> }).loops;
-    expect(loops.get('realm-racers-skid-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
+    expect(loops.get('mortar-overdrive-skid-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
       0.042 * SFX_CLIPS.mount_run_stalkglider_snail.gain,
       6,
     );
-    expect(loops.get('realm-racers-roll-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
+    expect(loops.get('mortar-overdrive-roll-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
       0.2 * 0.12 * SFX_CLIPS.foot_stone.gain,
       6,
     );
@@ -951,15 +951,15 @@ describe('Realm Racers vehicle loops', () => {
     // The pilot's own engine carries no listener-relative direction at all, so
     // nothing can steer it into one ear. Rival engines stay world-positioned:
     // distance and panning are how you hear where the other racers are.
-    expect(loops.get('realm-racers-engine-83')?.panner).toBeNull();
+    expect(loops.get('mortar-overdrive-engine-83')?.panner).toBeNull();
     // Losing the panner must not also lose the vehicle bus: the pilot engine is
     // the loudest layer in the mix and the limiter is what holds it under unity.
-    expect(loops.get('realm-racers-engine-83')?.output).toBe(internals.vehicleLimiter);
-    expect(loops.get('realm-racers-roll-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
-    expect(loops.get('realm-racers-skid-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
-    expect(loops.get('realm-racers-engine-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
-    expect(loops.get('realm-racers-roll-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
-    expect(loops.get('realm-racers-skid-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+    expect(loops.get('mortar-overdrive-engine-83')?.output).toBe(internals.vehicleLimiter);
+    expect(loops.get('mortar-overdrive-roll-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
+    expect(loops.get('mortar-overdrive-skid-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
+    expect(loops.get('mortar-overdrive-engine-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+    expect(loops.get('mortar-overdrive-roll-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+    expect(loops.get('mortar-overdrive-skid-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
   });
 
   it('holds the pilot engine steady through a corner whichever way the chase pivot swings', () => {
@@ -975,7 +975,7 @@ describe('Realm Racers vehicle loops', () => {
         sfx as unknown as {
           loops: Map<string, { panner: FakePanner | null }>;
         }
-      ).loops.get('realm-racers-engine-91');
+      ).loops.get('mortar-overdrive-engine-91');
 
     sfx.setListener(0, 5, 0, 0, 0, 1, 4, 2, -3);
     sfx.vehicle(91, true, 0, 2, 0, 0.9, 0.8, 0, false);
@@ -1000,7 +1000,7 @@ describe('Realm Racers vehicle loops', () => {
         sfx as unknown as {
           loops: Map<string, { panner: FakePanner | null }>;
         }
-      ).loops.get('realm-racers-engine-92');
+      ).loops.get('mortar-overdrive-engine-92');
 
     sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
     sfx.vehicle(92, false, 18, 3, 26, 0.5, 0.4, 0, false);
@@ -1015,7 +1015,7 @@ describe('Realm Racers vehicle loops', () => {
 
   it('tears every loop down on race exit and on leaving audible range', () => {
     const drive: VehicleDrive = {
-      profileKey: 'rally_loaner',
+      profileKey: 'mo_loaner',
       speed: 30,
       slip: 4,
       steerAngle: 0,
@@ -1029,20 +1029,28 @@ describe('Realm Racers vehicle loops', () => {
       collisionImpact: 0,
       controlsLocked: false,
     };
-    expect(syncRealmRacersVehicleAudio(sfx, 78, true, false, drive, true, 2, 0, 0, 6)).toBe(true);
-    expect(realmRacersVehicleAudioAction(true, false, true)).toBe('stop');
-    expect(syncRealmRacersVehicleAudio(sfx, 78, true, true, null, true, 2, 0, 0, 0)).toBe(false);
-    expect(sfx.hasLoop('realm-racers-engine-78')).toBe(false);
-    expect(sfx.hasLoop('realm-racers-skid-78')).toBe(false);
-    expect(sfx.hasLoop('realm-racers-roll-78')).toBe(false);
+    expect(syncMortarOverdriveVehicleAudio(sfx, 78, true, false, drive, true, 2, 0, 0, 6)).toBe(
+      true,
+    );
+    expect(mortarOverdriveVehicleAudioAction(true, false, true)).toBe('stop');
+    expect(syncMortarOverdriveVehicleAudio(sfx, 78, true, true, null, true, 2, 0, 0, 0)).toBe(
+      false,
+    );
+    expect(sfx.hasLoop('mortar-overdrive-engine-78')).toBe(false);
+    expect(sfx.hasLoop('mortar-overdrive-skid-78')).toBe(false);
+    expect(sfx.hasLoop('mortar-overdrive-roll-78')).toBe(false);
 
-    expect(syncRealmRacersVehicleAudio(sfx, 79, false, false, drive, true, 2, 0, 0, 0)).toBe(true);
-    expect(sfx.hasLoop('realm-racers-engine-79')).toBe(true);
-    expect(realmRacersVehicleAudioAction(true, true, false)).toBe('stop');
-    expect(syncRealmRacersVehicleAudio(sfx, 79, false, true, drive, false, 2, 0, 0, 0)).toBe(false);
-    expect(sfx.hasLoop('realm-racers-engine-79')).toBe(false);
-    expect(realmRacersVehicleAudioAction(false, false, true)).toBe('none');
-    expect(realmRacersVehicleAudioAction(false, true, true)).toBe('run');
+    expect(syncMortarOverdriveVehicleAudio(sfx, 79, false, false, drive, true, 2, 0, 0, 0)).toBe(
+      true,
+    );
+    expect(sfx.hasLoop('mortar-overdrive-engine-79')).toBe(true);
+    expect(mortarOverdriveVehicleAudioAction(true, true, false)).toBe('stop');
+    expect(syncMortarOverdriveVehicleAudio(sfx, 79, false, true, drive, false, 2, 0, 0, 0)).toBe(
+      false,
+    );
+    expect(sfx.hasLoop('mortar-overdrive-engine-79')).toBe(false);
+    expect(mortarOverdriveVehicleAudioAction(false, false, true)).toBe('none');
+    expect(mortarOverdriveVehicleAudioAction(false, true, true)).toBe('run');
   });
 
   it('mixes the bed over the race music and still leaves the bus headroom', () => {
@@ -1054,9 +1062,9 @@ describe('Realm Racers vehicle loops', () => {
 
     // full tilt: top speed, full throttle load, drifting, off the racing surface
     sfx.vehicle(80, false, 0, 0, 0, 1, 1, 12, true);
-    const engine = loopTarget('realm-racers-engine-80');
-    const skid = loopTarget('realm-racers-skid-80');
-    const roll = loopTarget('realm-racers-roll-80');
+    const engine = loopTarget('mortar-overdrive-engine-80');
+    const skid = loopTarget('mortar-overdrive-skid-80');
+    const roll = loopTarget('mortar-overdrive-roll-80');
 
     // the engine is the bed: it must clear the race music, which plays at a flat
     // 0.5 x the music slider (music.ts) and, unlike this, never fades with distance
@@ -1075,19 +1083,19 @@ describe('Realm Racers vehicle loops', () => {
       (sfx as unknown as { loops: Map<string, { target: number }> }).loops.get(id)?.target ?? 0;
 
     sfx.vehicle(81, false, 0, 0, 0, 0, 0, 0, false);
-    expect(loopTarget('realm-racers-engine-81')).toBeGreaterThan(0);
-    expect(sfx.hasLoop('realm-racers-skid-81')).toBe(false);
+    expect(loopTarget('mortar-overdrive-engine-81')).toBeGreaterThan(0);
+    expect(sfx.hasLoop('mortar-overdrive-skid-81')).toBe(false);
 
     sfx.vehicle(82, false, 0, 0, 0, 1, 0, 0, false);
-    const onRoad = loopTarget('realm-racers-roll-82');
+    const onRoad = loopTarget('mortar-overdrive-roll-82');
     sfx.vehicle(82, false, 0, 0, 0, 1, 0, 0, true);
-    expect(loopTarget('realm-racers-roll-82')).toBeGreaterThan(onRoad);
+    expect(loopTarget('mortar-overdrive-roll-82')).toBeGreaterThan(onRoad);
   });
 
   it('maps live shell/contact events and scrape telemetry to the intended one-shots', () => {
     expect(
-      realmRacersSpatialAudioCue({
-        type: 'realmRacersGroundBlastFired',
+      mortarOverdriveSpatialAudioCue({
+        type: 'mortarOverdriveGroundBlastFired',
         sourceId: 1,
         x: 2,
         z: 3,
@@ -1097,8 +1105,8 @@ describe('Realm Racers vehicle loops', () => {
       }),
     ).toEqual({ kind: 'groundBlastFire', x: 2, z: 3, heightOffset: 1 });
     expect(
-      realmRacersSpatialAudioCue({
-        type: 'realmRacersGroundBlastHit',
+      mortarOverdriveSpatialAudioCue({
+        type: 'mortarOverdriveGroundBlastHit',
         sourceId: 1,
         targetId: null,
         x: 4,
@@ -1107,8 +1115,8 @@ describe('Realm Racers vehicle loops', () => {
       }),
     ).toEqual({ kind: 'groundBlastImpact', x: 4, z: 5, heightOffset: 0, impact: 0.7 });
     expect(
-      realmRacersSpatialAudioCue({
-        type: 'realmRacersBump',
+      mortarOverdriveSpatialAudioCue({
+        type: 'mortarOverdriveBump',
         aId: 1,
         bId: 2,
         x: 6,
@@ -1119,22 +1127,22 @@ describe('Realm Racers vehicle loops', () => {
     // Oil borrows the scrape voice rather than a sample of its own, at tyre
     // height and with the impact already normalized at the emit site.
     expect(
-      realmRacersSpatialAudioCue({
-        type: 'realmRacersSlicked',
+      mortarOverdriveSpatialAudioCue({
+        type: 'mortarOverdriveSlicked',
         targetId: 3,
         x: 10,
         z: 11,
         impact: 0.6,
       }),
     ).toEqual({ kind: 'scrape', x: 10, z: 11, heightOffset: 0.3, impact: 0.6 });
-    expect(realmRacersScrapeAudioCue(8, 9, 0.4)).toEqual({
+    expect(mortarOverdriveScrapeAudioCue(8, 9, 0.4)).toEqual({
       kind: 'scrape',
       x: 8,
       z: 9,
       heightOffset: 0.5,
       impact: 0.4,
     });
-    expect(realmRacersSpatialAudioCue({ type: 'realmRacersGo' })).toBeNull();
+    expect(mortarOverdriveSpatialAudioCue({ type: 'mortarOverdriveGo' })).toBeNull();
 
     const before = sources.length;
     const ground = (x: number, z: number): number => x + z;
@@ -1145,8 +1153,8 @@ describe('Realm Racers vehicle loops', () => {
     const shellPannerIndex = panners.length;
     // An extreme random value proves groundBlastFire bypasses the generic +10% gain jitter.
     vi.mocked(Math.random).mockReturnValue(1);
-    playRealmRacersEventAudio(sfx, ground, {
-      type: 'realmRacersGroundBlastFired',
+    playMortarOverdriveEventAudio(sfx, ground, {
+      type: 'mortarOverdriveGroundBlastFired',
       sourceId: 1,
       x: 2,
       z: 3,
@@ -1165,8 +1173,8 @@ describe('Realm Racers vehicle loops', () => {
     const impactGainIndex = gains.length;
     const impactPannerIndex = panners.length;
     vi.mocked(Math.random).mockReturnValue(1);
-    playRealmRacersEventAudio(sfx, ground, {
-      type: 'realmRacersGroundBlastHit',
+    playMortarOverdriveEventAudio(sfx, ground, {
+      type: 'mortarOverdriveGroundBlastHit',
       sourceId: 1,
       targetId: null,
       x: 4,
@@ -1186,8 +1194,8 @@ describe('Realm Racers vehicle loops', () => {
 
     const bumpGainIndex = gains.length;
     const bumpPannerIndex = panners.length;
-    playRealmRacersEventAudio(sfx, ground, {
-      type: 'realmRacersBump',
+    playMortarOverdriveEventAudio(sfx, ground, {
+      type: 'mortarOverdriveBump',
       aId: 1,
       bId: 2,
       x: 6,
@@ -1201,12 +1209,12 @@ describe('Realm Racers vehicle loops', () => {
     nowT += 1;
     const scrapeGainIndex = gains.length;
     const scrapePannerIndex = panners.length;
-    playRealmRacersScrapeAudio(sfx, ground, 8, 9, 0.4);
+    playMortarOverdriveScrapeAudio(sfx, ground, 8, 9, 0.4);
     expect(gains[scrapeGainIndex]?.gain.ramps).toContain(0.55 * SFX_CLIPS.impact_arcane.gain);
     expect(panners[scrapePannerIndex]?.refDistance).toBe(5);
-    playRealmRacersEventAudio(sfx, ground, { type: 'realmRacersGo' });
+    playMortarOverdriveEventAudio(sfx, ground, { type: 'mortarOverdriveGo' });
     expect(sources.slice(before).map((source) => source.buffer)).toEqual([
-      RALLY_GROUND_BLAST_BUFFER,
+      MORTAR_OVERDRIVE_GROUND_BLAST_BUFFER,
       GROUND_SHAKER_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,

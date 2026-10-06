@@ -4216,15 +4216,15 @@ export function runEffects(
         ctx.enterCombat(p, target);
         break;
       }
-      // The Realm Racers moves. Both route to the
-      // realm_racers module through the seam and silently no-op unless the
+      // The Mortar Overdrive moves. Both route to the
+      // mortar_overdrive module through the seam and silently no-op unless the
       // caster is seated in a live race.
-      case 'realmRacersGroundBlast': {
-        ctx.realmRacersFireGroundBlast(p);
+      case 'mortarOverdriveGroundBlast': {
+        ctx.mortarOverdriveFireGroundBlast(p);
         break;
       }
-      case 'realmRacersPickupEffect': {
-        ctx.realmRacersSpendPickupEffect(p, eff.effect);
+      case 'mortarOverdrivePickupEffect': {
+        ctx.mortarOverdriveSpendPickupEffect(p, eff.effect);
         break;
       }
       case 'sunder': {

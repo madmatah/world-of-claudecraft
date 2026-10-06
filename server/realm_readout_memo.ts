@@ -5,8 +5,8 @@
 // pass, instead of once per online viewer. Server-host state only; draws no
 // rng, so it cannot perturb sim determinism. Payload-agnostic: the tenants
 // (the dungeon-finder board dfb, the bg ladder, the who roster) each sit on
-// their own GameServer memo field, except the idle Realm Racers `rr`, which
-// server/realm_racers_self_wire.ts keeps in a WeakMap keyed by the Sim.
+// their own GameServer memo field, except the idle Mortar Overdrive `mo`, which
+// server/mortar_overdrive/self_wire.ts keeps in a WeakMap keyed by the Sim.
 export interface RealmReadoutMemo<T> {
   tick: number; // the sim tick the cached object/string were built for (-1 = never)
   shared: T | null;

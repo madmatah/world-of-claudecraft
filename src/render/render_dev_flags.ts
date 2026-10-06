@@ -87,14 +87,14 @@
 //                  per-query cost and is fingerprint-grade, and it joins the
 //                  context's enabled extension set, so a session under this
 //                  flag is not a warm-cache twin of one without it.
-//   ?drivepredict=0 - stands a seated Realm Racers pilot down on movement
+//   ?drivepredict=0 - stands a seated Mortar Overdrive pilot down on movement
 //                  wire v2 (self_prediction.ts `predictDrivers`), drawing the
 //                  kart from the interpolated mirror instead of predicting it
 //                  (`=off` reads the same). Driver prediction is ON by default;
 //                  this is the A/B arm for a playtest. It reads no tier and no
 //                  frame rate.
-//   ?contactkick=0 - does not draw a Realm Racers contact bump at the seen
-//                  touch (realm_racers_contact_kick_core.ts): the karts move
+//   ?contactkick=0 - does not draw a Mortar Overdrive contact bump at the seen
+//                  touch (mortar_overdrive/contact_kick_core.ts): the karts move
 //                  only when the server's contact reaches the screen, as
 //                  before (`=off` reads the same). ON by default; the A/B arm
 //                  for a playtest. Display-only either way; reads no tier and

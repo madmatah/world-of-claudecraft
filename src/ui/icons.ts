@@ -2527,11 +2527,16 @@ function r(
 }
 
 const ABILITY_RECIPES: Record<string, IconRecipe> = {
-  // Realm Racers temporary vehicle kit
-  rally_ground_blast: r('storm', 'sky', ['bolt', { p: 'lightning', ...BR }], ['motion', 'arcs']),
+  // Mortar Overdrive temporary vehicle kit
+  mortar_overdrive_ground_blast: r(
+    'storm',
+    'sky',
+    ['bolt', { p: 'lightning', ...BR }],
+    ['motion', 'arcs'],
+  ),
   // The two held pickup effects: a speed burst and a spill under the machine.
-  rally_nitro: r('storm', 'sky', ['arrow', { p: 'flame', ...BR }], ['motion']),
-  rally_oil_slick: r('shadow', 'venom', ['droplet', { p: 'droplet', ...BR }], ['drips']),
+  mortar_overdrive_nitro: r('storm', 'sky', ['arrow', { p: 'flame', ...BR }], ['motion']),
+  mortar_overdrive_oil_slick: r('shadow', 'venom', ['droplet', { p: 'droplet', ...BR }], ['drips']),
   // Talents 2.0 ground-targeted spells (each aimed AoE gets a distinct recipe;
   // grouped here so the family reads together, order within the map is cosmetic).
   flamestrike: r('fire', 'ember', ['meteor', { p: 'sunburst', ...BIG }], ['glow']),
@@ -3710,15 +3715,20 @@ const ITEM_RECIPES: Record<string, IconRecipe> = {
 
 // generic per-aura-kind fallbacks for auras not applied by a known ability
 const AURA_RECIPES: Record<string, IconRecipe> = {
-  // The rally ward: the one-shot shield a pickup box can grant. It is not an
+  // The Mortar Overdrive ward: the one-shot shield a pickup box can grant. It is not an
   // ability (nothing casts it), so it lives with the auras, which is where the
   // pickup splash reaches for it.
   // Keyed `aura_<kind>`, which is how the buff bar resolves an aura with no
   // ability record behind it; the pickup splash asks for the same id so the two
   // surfaces can never draw different wards.
-  aura_rally_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
+  aura_mortar_overdrive_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
   // The recovery ghost: a pale machine rivals pass through until it is clear.
-  aura_rally_ghost: r('arcane', 'silverWhite', ['boot', { p: 'eye', ...TR }], ['motion']),
+  aura_mortar_overdrive_ghost: r(
+    'arcane',
+    'silverWhite',
+    ['boot', { p: 'eye', ...TR }],
+    ['motion'],
+  ),
   aura_dot: r('shadow', 'shadowPurple', ['skull'], ['drips']),
   aura_hot: r('nature', 'leafGreen', ['heart'], ['sparkle']),
   aura_slow: r('frost', 'ice', ['boot', { p: 'snowflake', ...TR }]),
@@ -4992,12 +5002,12 @@ export const ABILITY_ART_PENDING = new Set<string>([
   // Buried Hoards: the Clockwork Shock Bomb's thrown cast draws its glyph until
   // its skill painting ships (the item itself already ships painted art).
   'clockwork_shock_bomb',
-  // Realm Racers: the three pickup-driven rally abilities. Each ships with an authored
-  // procedural recipe (rally_ground_blast / rally_nitro / rally_oil_slick in ABILITY_RECIPES);
+  // Mortar Overdrive: the three pickup-driven Mortar Overdrive abilities. Each ships with an authored
+  // procedural recipe (mortar_overdrive_ground_blast / mortar_overdrive_nitro / mortar_overdrive_oil_slick in ABILITY_RECIPES);
   // commissioned in docs/achievements/icon-brief.md.
-  'rally_ground_blast',
-  'rally_nitro',
-  'rally_oil_slick',
+  'mortar_overdrive_ground_blast',
+  'mortar_overdrive_nitro',
+  'mortar_overdrive_oil_slick',
 ]);
 
 /** Static URL of an ability's image icon, or null if it uses a recipe. */
@@ -5628,19 +5638,19 @@ export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
   'cmb_coinsack_caught',
   // The ferry round trip (exp_harbor_to_harbor): procedural exploration crest until commissioned.
   'exp_harbor_to_harbor',
-  // Realm Racers: the seven placing-based deeds are 'pvp', so they fall back to the
+  // Mortar Overdrive: the seven placing-based deeds are 'pvp', so they fall back to the
   // deed_cat_pvp crest. Commissioned in docs/achievements/icon-brief.md, not yet committed.
-  'pvp_rr_first_race',
-  'pvp_rr_first_win',
-  'pvp_rr_wins_10',
-  'pvp_rr_wins_25',
-  'pvp_rr_fast_lap',
-  'pvp_rr_clean_race',
-  'pvp_rr_comeback',
+  'pvp_mortar_overdrive_first_race',
+  'pvp_mortar_overdrive_first_win',
+  'pvp_mortar_overdrive_wins_10',
+  'pvp_mortar_overdrive_wins_25',
+  'pvp_mortar_overdrive_fast_lap',
+  'pvp_mortar_overdrive_clean_race',
+  'pvp_mortar_overdrive_comeback',
   // The Drakelands Rampart Run's flying lap: the same pvp crest until commissioned.
-  'pvp_rr_rampart_lap',
+  'pvp_mortar_overdrive_rampart_lap',
   // The Palmreach Lagoon Run's flying lap: the same pvp crest until commissioned.
-  'pvp_rr_lagoon_lap',
+  'pvp_mortar_overdrive_lagoon_lap',
 ]);
 /** Static URL of a deed crest's painted art, or null when the crest id has no committed image. */
 export function deedImageUrl(crestId: string): string | null {

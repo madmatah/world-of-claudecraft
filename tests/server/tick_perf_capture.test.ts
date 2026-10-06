@@ -326,7 +326,7 @@ describe('tick perf capture lifecycle', () => {
       'sim.delves',
       'sim.valecup',
       'sim.battleground',
-      'sim.realmRacers',
+      'sim.mortarOverdrive',
       'sim.worldPvp',
       'sim.hill',
       'sim.dfinder',

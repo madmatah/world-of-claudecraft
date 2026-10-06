@@ -23,10 +23,10 @@ Everything else is a sibling module in one of these families:
   Event/minigame scenes follow the same pattern: `jail_scene.ts`,
   `yumi_*.ts`, `battleground*.ts` (Thornhollow Fields:
   kit-module field from the pure `battleground_core.ts` manifest, entity props
-  in `battleground_props.ts`). The Realm
-  Racers circuit adds one rule of its own: every id, colour and size its build
+  in `battleground_props.ts`). The Mortar
+  Overdrive circuit adds one rule of its own: every id, colour and size its build
   would otherwise hardcode belongs to the circuit's THEME record
-  (`realm_racers_themes.ts`, keyed by the sim-side `theme` string), so one
+  (`mortar_overdrive/themes.ts`, keyed by the sim-side `theme` string), so one
   themed circuit per zone is a data exercise. A theme carries the AMBIANCE (the
   ground tint, the sky it flies plus its light and fog, the kerb and grid
   colours) and the kit of the one piece a record cannot place by hand (the start
@@ -44,34 +44,36 @@ Everything else is a sibling module in one of these families:
   last derived thing standing on a circuit, so it wore one kit around a rectangle
   and made every circuit read as a box. It survives as collision only, and what
   a circuit's edge LOOKS like is a `fences` list on the record, resolved by
-  `src/sim/realm_racers_fences.ts` and cut into modules by `rallyFencePieces`
-  from the kits in `realm_racers_barrier_visuals.ts`. A theme is VISUALS ONLY,
+  `src/sim/mortar_overdrive/fences.ts` and cut into modules by `mortarOverdriveFencePieces`
+  from the kits in `mortar_overdrive/barrier_visuals.ts`. A theme is VISUALS ONLY,
   never a handling or track-limits knob. A circuit also owns its HOUR: the
-  record's `timeOfDay` resolves through `realm_racers_daylight_core.ts` and the
+  record's `timeOfDay` resolves through `mortar_overdrive/daylight_core.ts` and the
   whole rig (`updateAmbience`) is built from that phase instead of the world
   clock, so a race is lit by a design rather than by when the queue popped. It
   is graded on EVERY tier, the Lambert one included, because on a circuit the
   darkness is something a pilot reads the road through: the tier that skips the
   cycle would otherwise be the tier that can see. The lamps that make a dark hour
   raceable are authored props wearing the world's own streetlamp fixtures
-  (`realm_racers_lamps.ts`), each joining the night light field from its authored
+  (`mortar_overdrive/lamps.ts`), each joining the night light field from its authored
   socket, and the field runs in the band because the band's ground IS the world's
   splat material. There is one record per world-map ZONE, and nothing of a
   circuit's kit is preloaded: a circuit fetches what it wears (its theme's arch,
   banner and reed plus the barrier kits its record authors,
-  `realmRacersCircuitKitUrls`) when ITS build starts, the race preparation's
+  `mortarOverdriveCircuitKitUrls`) when ITS build starts, the race preparation's
   commitment to it, and its preparation waits for those fills under the lobby or
   arrival cover; the manifest guard walks the whole registry
-  (`REALM_RACERS_THEME_ASSET_URLS`, `REALM_RACERS_BARRIER_ASSET_URLS`), and a
+  (`MORTAR_OVERDRIVE_THEME_ASSET_URLS`, `MORTAR_OVERDRIVE_BARRIER_ASSET_URLS`), and a
   boot lane of worn kits would pin parsed scenes all session on a map that never
-  clears, for a player who may never race (`tests/realm_racers_boot_cost.test.ts`).
-  The renderer reaches the whole rally presentation
-  through `realm_racers_scene.ts` (`renderer.realmRacers`: the tracks, the
+  clears, for a player who may never race (`tests/mortar_overdrive_boot_cost.test.ts`).
+  Every Mortar Overdrive render module lives in `mortar_overdrive/` (file map in its own
+  `CLAUDE.md`, public surface in its `index.ts` barrel). The renderer reaches the whole
+  Mortar Overdrive presentation
+  through `mortar_overdrive/scene.ts` (`renderer.mortarOverdrive`: the tracks, the
   Ground Blast and oil-spray pools, the theme sky, their preparation seam, the
-  race's instant feedback and the rally events) and the per-view
-  `realm_racers_kart_presentation.ts`; both take the renderer untyped as their
-  host, welded to its private members in `tests/realm_racers_scene.test.ts`
-  and `tests/realm_racers_kart_presentation.test.ts`, and renderer.ts keeps
+  race's instant feedback and the Mortar Overdrive events) and the per-view
+  `mortar_overdrive/kart_presentation.ts`; both take the renderer untyped as their
+  host, welded to its private members in `tests/mortar_overdrive_scene.test.ts`
+  and `tests/mortar_overdrive_kart_presentation.test.ts`, and renderer.ts keeps
   one delegate per call site. Rift portals: `door_portal.ts` also builds the
   bespoke world-rift gate GLB with its rank-tinted energy membrane
   (`buildRiftGateBody`), and `rift_rank.ts` is the floating C/B/A/S rank badge
@@ -319,14 +321,14 @@ NEW subsystem's warm-up must land as a manifest entry, in the right lane:
   their own preparation owner declares `excludeFromParentCompile`
   (`compile_exclusion.ts`), and both compile arms skip it when its PARENT is
   the compiled root; a compile of the group itself (its owner's gate) is
-  unaffected. The Realm Racers tracks and Ground Blast pool use it, since the
+  unaffected. The Mortar Overdrive tracks and Ground Blast pool use it, since the
   race preparation seam is their one owner. A caller may LIFT an owner for one
-  call: the blocking arrival's scene compile passes `rallyArrivalLifts(x, z)`
-  (`realm_racers_prepare_core.ts`), which lifts the rally owner when the
-  landing point is in the rally band (landing there is a rally trigger, and
+  call: the blocking arrival's scene compile passes `mortarOverdriveArrivalLifts(x, z)`
+  (`mortar_overdrive/prepare_core.ts`), which lifts the Mortar Overdrive owner when the
+  landing point is in the Mortar Overdrive band (landing there is a Mortar Overdrive trigger, and
   that compile is awaited under the loading screen, online too) and nothing
   anywhere else. Pinned by
-  `tests/compile_arms.test.ts` and `tests/realm_racers_boot_compile.test.ts`.
+  `tests/compile_arms.test.ts` and `tests/mortar_overdrive_boot_compile.test.ts`.
 - Shared machinery: `compile_gate.ts` (fail-soft async shader-compile gating
   that also BOUNDS in-flight driver links during snapshot bursts, plus the
   `SerialGateLane` for gates that arrive in a burst), `linked_program_touch.ts`
@@ -964,9 +966,9 @@ GPU work signs. Each rule names its seam and its guard.
   `reveal-soft-deadline`, `submit-stop`, `attach-watchdog`, `touch-unproven` (programs a
   world gate's touch tail found unproven by any settle, the ones a walk mark used to
   bless and block on), `prepare` (an in-game trigger's verdict, proven 1/1 or not 0/1,
-  keyed `realm-racers-prepare:<reason>:<client>` by `realm_racers_prepare.ts`, the clients
-  being `groundBlast`, `rallyCommon` and `rallyCircuit:<id>` from
-  `realm_racers_circuit_prepare.ts`), plus the
+  keyed `mortar-overdrive-prepare:<reason>:<client>` by `mortar_overdrive/prepare.ts`, the clients
+  being `groundBlast`, `mortarOverdriveCommon` and `mortarOverdriveCircuit:<id>` from
+  `mortar_overdrive/circuit_prepare.ts`), plus the
   `arrival` mark one per teleport-class landing), and the
   reveal counters. The CPU side of the same picture is `perfStats().buildLedger`
   (`build_ledger_core.ts`: main-thread ms per view build class and per zone feature

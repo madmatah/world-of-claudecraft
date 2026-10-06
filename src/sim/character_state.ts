@@ -174,10 +174,10 @@ export interface CharacterState {
   vcupBetWins?: number;
   vcupBetLosses?: number;
   vcupBetNet?: number;
-  // The Realm Racers rated win count (JSONB; optional and written only once a
-  // win exists, so pre-Rally saves load cleanly and unchanged saves stay
+  // The Mortar Overdrive rated win count (JSONB; optional and written only once a
+  // win exists, so pre-mortar-overdrive saves load cleanly and unchanged saves stay
   // byte-equal).
-  rrWins?: number;
+  mortarOverdriveWins?: number;
   // Talents & Specializations (JSONB). All optional so characters saved before
   // talents existed load cleanly; contentRevision owns point-tree -> row migration.
   talents?: TalentAllocation;

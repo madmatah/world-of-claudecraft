@@ -6,7 +6,7 @@
 // the schematic cannot: what a pilot SEES at the pinch, and whether a corner
 // arrives with any warning at race pace.
 //
-// The chase numbers are not invented here. `REALM_RACERS_CAMERA_BOOM_PROFILE`
+// The chase numbers are not invented here. `MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE`
 // (`src/render/camera_boom_core.ts`) is what the game's own camera runs while
 // driving, so the eye height and the boom stretch come in as parameters and a
 // tuning pass on the game moves the preview with it. The page supplies them;
@@ -14,9 +14,9 @@
 //
 // Pure core: DOM-free, Three-free, deterministic, no clock. Yards throughout,
 // and every coordinate is CIRCUIT-LOCAL (the preview subtracts
-// `REALM_RACERS_ORIGIN` from the world coordinates the track builder authors).
+// `MORTAR_OVERDRIVE_ORIGIN` from the world coordinates the track builder authors).
 
-import { REALM_RACERS_CAMERA_BOOM_PROFILE } from '../../render/camera_boom_core';
+import { MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE } from '../../render/camera_boom_core';
 
 export interface PreviewPoint {
   x: number;
@@ -46,7 +46,7 @@ export interface PreviewOrbitState {
  * band, so an eye-level orbit shows a line and nothing else.
  *
  * The distance ceiling has to frame the WIDEST circuit the band can hold, in
- * the NARROWEST panel it can be read in. `REALM_RACERS_MAX_REGION_HALF_X` is
+ * the NARROWEST panel it can be read in. `MORTAR_OVERDRIVE_MAX_REGION_HALF_X` is
  * 300, so 600 yards across; a half-screen panel is about half as wide as it is
  * tall, which cuts the horizontal field in half again. Anything less and the
  * biggest legal circuit cannot be seen whole.
@@ -74,7 +74,7 @@ const PAN_YARDS_PER_PIXEL_PER_YARD = 0.0022;
 /**
  * How far the orbit target may be slid from the circuit's own origin, yards.
  *
- * Generous against `REALM_RACERS_MAX_REGION_HALF_X` (300), because a pan is for
+ * Generous against `MORTAR_OVERDRIVE_MAX_REGION_HALF_X` (300), because a pan is for
  * getting the eye onto a corner and the corner can be at the region's edge with
  * the camera further out still. What it prevents is the one failure a free pan
  * has: a target dragged off into empty band, with the circuit nowhere on screen
@@ -203,7 +203,7 @@ export function orbitPose(state: PreviewOrbitState): PreviewPose {
  * camera uses.
  *
  * `boomDistance` and `eyeHeight` come from
- * `REALM_RACERS_CAMERA_BOOM_PROFILE`; `pitch` is the gameplay chase pitch. The
+ * `MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE`; `pitch` is the gameplay chase pitch. The
  * lift is the boom's own rise (`distance * sin(pitch)`) plus the eye height, so
  * a tuning pass on either number moves the preview the same way it moves the
  * seat.
@@ -219,7 +219,7 @@ export interface PreviewChaseProfile {
 /**
  * A centerline sample in the preview's own frame.
  *
- * The spline authors WORLD coordinates, around `REALM_RACERS_ORIGIN` out at
+ * The spline authors WORLD coordinates, around `MORTAR_OVERDRIVE_ORIGIN` out at
  * x = 113 700; the preview stages the circuit on the world origin instead (see
  * `preview3d.ts`). Handing `flyThroughPose` a raw sample therefore parks the
  * camera a hundred thousand yards from the circuit it is meant to be riding,
@@ -334,12 +334,12 @@ export function flyLookPose(pose: PreviewPose, look: PreviewFlyLook): PreviewPos
 
 /**
  * The gameplay chase pitch, radians. It matches `GAMEPLAY_PITCH` in
- * `src/game/realm_racers_start_camera.ts`, which keeps it module-private; the
+ * `src/game/mortar_overdrive/start_camera.ts`, which keeps it module-private; the
  * preview is a dev tool and not worth widening that module's surface for.
  */
 const CHASE_PITCH = 0.32;
 
-/** The game's default camera distance (`Input.camDist`), before the rally boom
+/** The game's default camera distance (`Input.camDist`), before the Mortar Overdrive boom
  *  profile stretches it. */
 const CHASE_BASE_DISTANCE = 12;
 
@@ -354,13 +354,13 @@ const CHASE_LOOK_AHEAD = 26;
  * page did).
  */
 export const PREVIEW_CHASE_PROFILE: PreviewChaseProfile = {
-  boomDistance: CHASE_BASE_DISTANCE * REALM_RACERS_CAMERA_BOOM_PROFILE.distanceScale,
+  boomDistance: CHASE_BASE_DISTANCE * MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE.distanceScale,
   pitch: CHASE_PITCH,
-  eyeHeight: REALM_RACERS_CAMERA_BOOM_PROFILE.eyeHeight,
+  eyeHeight: MORTAR_OVERDRIVE_CAMERA_BOOM_PROFILE.eyeHeight,
   lookAhead: CHASE_LOOK_AHEAD,
 };
 
-/** The part of `RallyTrackModel` the fly-through reads. Structural, so the core
+/** The part of `MortarOverdriveTrackModel` the fly-through reads. Structural, so the core
  *  needs no sim import to ride a real track. */
 export interface PreviewTrackSampler {
   pointAt(s: number): { x: number; z: number; tx: number; tz: number };

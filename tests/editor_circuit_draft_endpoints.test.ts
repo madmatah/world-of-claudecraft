@@ -21,13 +21,13 @@ import {
   roundCircuit,
   validateCircuitPayload,
 } from '../src/editor/circuit/export_core';
-import { parseRealmRacersDraftCommand } from '../src/game/realm_racers_draft_dev';
+import { parseMortarOverdriveDraftCommand } from '../src/game/mortar_overdrive/draft_dev';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
 
-const record = (id = 'draft_one'): RealmRacersCircuit => ({ ...GARDEN, id });
+const record = (id = 'draft_one'): MortarOverdriveCircuit => ({ ...GARDEN, id });
 
 /**
  * A reader that REMEMBERS what it was asked for, so a test can assert that a
@@ -111,7 +111,7 @@ describe('the one-draft endpoint', () => {
     // validator quietly drop the one authorable placement a circuit had, so the
     // raced draft lost the island out in its lake while the editor's own
     // preview still drew it. The authored DRESSING is that field now.
-    const parsed = JSON.parse(response.body) as RealmRacersCircuit;
+    const parsed = JSON.parse(response.body) as MortarOverdriveCircuit;
     expect(parsed).toEqual(roundCircuit(record()));
     expect(parsed.props).toEqual(GARDEN.props);
   });
@@ -123,7 +123,7 @@ describe('the one-draft endpoint', () => {
       '/draft_one',
       reader({ 'draft_one.ts': draftFileContents(plain) }),
     );
-    const parsed = JSON.parse(response.body) as RealmRacersCircuit;
+    const parsed = JSON.parse(response.body) as MortarOverdriveCircuit;
     expect(parsed).toEqual(roundCircuit(plain));
     expect('props' in parsed).toBe(false);
   });
@@ -278,8 +278,9 @@ describe('the id shape', () => {
     // The payload validator's own copy, reached the only way it is exposed.
     expect(validateCircuitPayload({ ...record(), id }) !== null, `payload: ${id}`).toBe(legal);
     // And the client's command parser, which refuses before it ever fetches.
-    expect(parseRealmRacersDraftCommand(`/dev rallydraft ${id}`) !== null, `command: ${id}`).toBe(
-      legal,
-    );
+    expect(
+      parseMortarOverdriveDraftCommand(`/dev overdrivedraft ${id}`) !== null,
+      `command: ${id}`,
+    ).toBe(legal);
   });
 });

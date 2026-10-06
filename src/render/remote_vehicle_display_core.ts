@@ -47,13 +47,13 @@
 
 import { resolveMovement } from '../sim/colliders';
 import { vehicleProfile } from '../sim/content/vehicles';
-import { auraSpeedMult, GRAVITY } from '../sim/player_motion';
 import {
   GROUND_BLAST_MUZZLE_NOSE_YD,
   GROUND_BLAST_POP_VELOCITY,
   GROUND_BLAST_PUSH,
-} from '../sim/realm_racers_ground_blast';
-import { realmRacersLaneAt } from '../sim/realm_racers_layout';
+} from '../sim/mortar_overdrive/ground_blast';
+import { mortarOverdriveLaneAt } from '../sim/mortar_overdrive/layout';
+import { auraSpeedMult, GRAVITY } from '../sim/player_motion';
 import { type Aura, DT, type Entity, type VehicleDrive } from '../sim/types';
 import { MAX_BUMP_IMPULSE } from '../sim/vehicle_contact';
 import {
@@ -246,13 +246,13 @@ export type RemoteVehicleResolve = (
 ) => { x: number; z: number };
 
 /**
- * The rally lanes' static collision (the garden wall, the authored barriers and
+ * The Mortar Overdrive lanes' static collision (the garden wall, the authored barriers and
  * solid dressing), swept the way the sim moves a machine through an instanced
  * region. Outside a lane the move passes through: a racing machine only ever
  * drives in one, and the lane branch of the resolve reads no world seed.
  */
-export const rallyLaneResolve: RemoteVehicleResolve = (fromX, fromZ, toX, toZ, radius) =>
-  realmRacersLaneAt(toX, toZ) === null
+export const mortarOverdriveLaneResolve: RemoteVehicleResolve = (fromX, fromZ, toX, toZ, radius) =>
+  mortarOverdriveLaneAt(toX, toZ) === null
     ? { x: toX, z: toZ }
     : resolveMovement(0, fromX, fromZ, toX, toZ, radius);
 
@@ -494,7 +494,7 @@ export function stepRemoteRacerView<E extends RemoteRacerMirror>(
   dt: number,
   /** Arrival time of the local player's newest wire pose, ms. */
   selfArrivedAt?: number,
-  resolve: RemoteVehicleResolve | null = rallyLaneResolve,
+  resolve: RemoteVehicleResolve | null = mortarOverdriveLaneResolve,
 ): e is E & { drive: VehicleDrive; netUpdatedAt: number } {
   if (e.drive && e.netUpdatedAt !== undefined) {
     const horizon = remoteRacerHorizon(

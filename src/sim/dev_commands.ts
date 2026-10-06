@@ -205,11 +205,13 @@ export function handleDevChat(
   // Race a named circuit right now, against a full grid of house pilots. The
   // ordinary way onto a competition circuit is to queue and wait out the
   // backfill, which is minutes per attempt while a circuit is being tuned.
-  const rallyMatch = /^\/(?:dev\s+rally|devrally)\s+(\S+)(?:\s+(\S+))?\s*$/i.exec(raw);
-  if (rallyMatch) {
-    const circuitId = rallyMatch[1];
-    const tier = rallyMatch[2] ?? 'ace';
-    const started = ctx.realmRacersDevRace(circuitId, tier, pid);
+  const mortarOverdriveMatch = /^\/(?:dev\s+overdrive|devoverdrive)\s+(\S+)(?:\s+(\S+))?\s*$/i.exec(
+    raw,
+  );
+  if (mortarOverdriveMatch) {
+    const circuitId = mortarOverdriveMatch[1];
+    const tier = mortarOverdriveMatch[2] ?? 'ace';
+    const started = ctx.mortarOverdriveDevRace(circuitId, tier, pid);
     emitDevLog(
       ctx,
       pid,
@@ -220,19 +222,20 @@ export function handleDevChat(
     return null;
   }
 
-  // A full armoury for the seated pilot, so a rally weapon can be felt lap after
+  // A full armoury for the seated pilot, so a Mortar Overdrive weapon can be felt lap after
   // lap while it is being tuned: the weapon budget and EVERY pickup effect, all
   // at once, because a chat command between two crossings is not something
   // anyone can type at 45 yd/s. `0` hands the race its own rules back.
-  const rallyKitMatch = /^\/(?:dev\s+rallykit|devrallykit)(?:\s+(\d+))?\s*$/i.exec(raw);
-  if (rallyKitMatch) {
-    const charges = clampInteger(Number(rallyKitMatch[1] ?? 50), 0, 999);
-    const granted = ctx.realmRacersDevGrantKit(pid, charges);
+  const mortarOverdriveKitMatch =
+    /^\/(?:dev\s+overdrivekit|devoverdrivekit)(?:\s+(\d+))?\s*$/i.exec(raw);
+  if (mortarOverdriveKitMatch) {
+    const charges = clampInteger(Number(mortarOverdriveKitMatch[1] ?? 50), 0, 999);
+    const granted = ctx.mortarOverdriveDevGrantKit(pid, charges);
     emitDevLog(
       ctx,
       pid,
       granted
-        ? `[dev] Rally kit: ${charges} of the weapon and ${charges} of every pickup effect.`
+        ? `[dev] Mortar Overdrive kit: ${charges} of the weapon and ${charges} of every pickup effect.`
         : '[dev] Not in a race.',
     );
     return null;

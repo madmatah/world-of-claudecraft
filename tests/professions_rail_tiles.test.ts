@@ -216,9 +216,9 @@ describe('both tiles hydrate and stay under the rail height budget', () => {
       'mm-bag',
       'mm-crafting',
       'mm-perfecting',
-      // Realm Racers closes the column: in col-b it left that column three
+      // Mortar Overdrive closes the column: in col-b it left that column three
       // rows taller (tests/browser/mount_release_polish.browser.test.ts).
-      'mm-rally',
+      'mm-mortar-overdrive',
     ];
     for (const [name, html] of entries) {
       // The class ATTRIBUTE is a list on this branch (the rail tiles adopted the

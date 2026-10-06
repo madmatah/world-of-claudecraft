@@ -16,12 +16,12 @@ import {
   MIN_GROUND_POINTS,
 } from '../src/editor/circuit/ground_core';
 import { MIN_CONTROL_POINTS } from '../src/editor/circuit/handles_core';
-import { REALM_RACERS_MIN_GROUND_POINTS } from '../src/sim/realm_racers_ground';
-import type { RallyPoint } from '../src/sim/realm_racers_layout';
+import { MORTAR_OVERDRIVE_MIN_GROUND_POINTS } from '../src/sim/mortar_overdrive/ground';
+import type { MortarOverdrivePoint } from '../src/sim/mortar_overdrive/layout';
 
 /** A ten-handle ring, big enough to delete from and regular enough that every
  *  distance below can be checked by eye. */
-const RING: RallyPoint[] = Array.from({ length: 10 }, (_, i) => {
+const RING: MortarOverdrivePoint[] = Array.from({ length: 10 }, (_, i) => {
   const angle = (i / 10) * Math.PI * 2;
   return { x: Math.round(Math.cos(angle) * 100), z: Math.round(Math.sin(angle) * 100) };
 });
@@ -92,7 +92,7 @@ describe('removing one ground handle', () => {
     // ground shape is a triangle at worst. The resolver and the save endpoint
     // both accept three, so borrowing the road's floor here refused a shape the
     // record allows and made a nine-handle proposal deletable exactly once.
-    expect(MIN_GROUND_POINTS).toBe(REALM_RACERS_MIN_GROUND_POINTS);
+    expect(MIN_GROUND_POINTS).toBe(MORTAR_OVERDRIVE_MIN_GROUND_POINTS);
     expect(MIN_GROUND_POINTS).toBe(3);
     expect(MIN_CONTROL_POINTS).toBeGreaterThan(MIN_GROUND_POINTS);
     // A four-handle ring gives one up; a three-handle one is the floor.

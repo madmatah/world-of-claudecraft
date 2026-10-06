@@ -176,6 +176,7 @@ import {
 import { applyMobileHudLayout } from './game/mobile_hud_layout_applier';
 import { watchMobileMoreState } from './game/mobile_more_diagnostics';
 import { mobilePlatform, mobilePreflightCopy } from './game/mobile_preflight';
+import * as moWiring from './game/mortar_overdrive/client_wiring';
 import { mouselookReleaseFacing } from './game/mouselook_release';
 import { music } from './game/music';
 import { tryNearbyInteraction } from './game/nearby_interaction';
@@ -197,7 +198,6 @@ import { runPetCommand } from './game/pet_commands';
 import { kickCharacterPreloadStream, runPostEntryWarmups } from './game/post_entry_warmups_core';
 import { newPresentationGateInput, presentationGate } from './game/presentation_gate';
 import { startRealmBuilderRollLoad } from './game/realm_builder_boot';
-import * as realmRacers from './game/realm_racers_client_wiring';
 import { adaptiveSelfAlphaLead } from './game/self_alpha_lead';
 import { SelfMotionFrameBuffer } from './game/self_motion_frame_buffer';
 import {
@@ -1743,8 +1743,8 @@ async function startGame(
       // that channel without the player retyping "/world" etc.
       const raw = chatInput.value;
       // dev-only chat interceptors (day/night scrub, the placer rig, circuit drafts)
-      const draft = realmRacers.draftChatHook(online ? null : offlineSim, () => renderer);
-      if (tryDevChatHooks(raw, { hud, renderer, world, realmRacersDraft: draft })) {
+      const draft = moWiring.draftChatHook(online ? null : offlineSim, () => renderer);
+      if (tryDevChatHooks(raw, { hud, renderer, world, mortarOverdriveDraft: draft })) {
         chatInput.value = '';
         closeChat();
         return;
@@ -1981,7 +1981,7 @@ async function startGame(
     onEmotes: () => hud.toggleEmoteWheel(),
     onArena: () => hud.toggleArena(),
     onDungeonFinder: () => hud.toggleDungeonFinder(),
-    onRally: () => hud.toggleRealmRacers(),
+    onMortarOverdrive: () => hud.toggleMortarOverdrive(),
     onQuestLog: () => hud.toggleQuestLog(),
     onCharacter: () => {
       hud.toggleChar();
@@ -4420,7 +4420,7 @@ async function startGame(
         perf.finishTrace('camera.follow', traceStart, 'mode', 'offline', 'frameDtMs', frameDtMs);
       }
       introCameraTick(now);
-      rallyCameraTick(pp.facing);
+      mortarOverdriveCameraTick(pp.facing);
       renderer.camYaw = input.camYaw;
       renderer.camPitch = input.camPitch;
       renderer.camDist = input.camDist;
@@ -4521,7 +4521,7 @@ async function startGame(
     kbTurnArgs.snapshotIntervalMs = net.snapInterval;
     kbTurnArgs.movementWireVersion = net.movementWireVersion;
     kbTurnArgs.frameDt = frameDt;
-    realmRacers.applyDriveFacingLane(kbTurnArgs, driving);
+    moWiring.applyDriveFacingLane(kbTurnArgs, driving);
     const kbFacing = stepKeyboardTurnFacing(kbTurn, kbTurnArgs);
     const netFacing = foreignFacing ?? kbTurn.wireFacing;
     const localFacing = netFacing ?? kbFacing;
@@ -4644,7 +4644,7 @@ async function startGame(
                 frameDelveMotionState,
               ),
             );
-    const onlineCameraFacing = realmRacers.cameraFacing(pe, renderer, kbFacing, interpServerFacing);
+    const onlineCameraFacing = moWiring.cameraFacing(pe, renderer, kbFacing, interpServerFacing);
     traceStart = perf.startTrace();
     try {
       updateCamera(frameDt, onlineCameraFacing);
@@ -4663,7 +4663,7 @@ async function startGame(
       );
     }
     introCameraTick(now);
-    rallyCameraTick(onlineCameraFacing);
+    mortarOverdriveCameraTick(onlineCameraFacing);
     renderer.camYaw = input.camYaw;
     renderer.camPitch = input.camPitch;
     renderer.camDist = input.camDist;
@@ -4824,7 +4824,7 @@ async function startGame(
   const osReducedMotion =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const rallyCameraTick = realmRacers.createStartCameraTick(
+  const mortarOverdriveCameraTick = moWiring.createStartCameraTick(
     input,
     world,
     () => settings.get('reduceMotion') || osReducedMotion,

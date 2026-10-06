@@ -45,8 +45,8 @@ import { applyFarshoreShipwreckShore } from './farshore_shipwreck_shore';
 import { GALE_DECK_FREEBOARD } from './gale_harbor';
 import { applyGliderApproachPath } from './glider_approach_path';
 import { applyKeepSitePad, keepSitePadWeight } from './keep_site';
+import { isAtMortarOverdriveXZ } from './mortar_overdrive/layout';
 import { reachDeckClear, reachDeckSurface } from './reach_decks';
-import { isAtRealmRacersXZ } from './realm_racers_layout';
 import { fbm2, hash2, noise2 } from './rng';
 import { carveSeaChannels } from './sea_channels';
 import {
@@ -3829,7 +3829,7 @@ export function groundHeight(x: number, z: number, seed: number): number {
     const o = bgOriginAt(z);
     return bgFieldHeightLocal(x - o.x, z - o.z);
   }
-  if (isAtRealmRacersXZ(x, z)) return DUNGEON_FLOOR_Y;
+  if (isAtMortarOverdriveXZ(x, z)) return DUNGEON_FLOOR_Y;
   if (x > DUNGEON_X_THRESHOLD) {
     const dungeon = dungeonAt(x);
     if (dungeon?.interior === 'wildheart') {

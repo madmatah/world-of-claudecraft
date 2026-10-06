@@ -1,5 +1,5 @@
+import { mortarOverdriveSlickReconFor } from '../src/sim/mortar_overdrive/race';
 import type { SimContext } from '../src/sim/sim_context';
-import { realmRacersSlickReconFor } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
 import { DRIVE_RECON_WIRE_VERSION } from '../src/world_api';
 import { driveReconWire } from './drive_recon_wire';
@@ -43,7 +43,10 @@ export function reconciliationSelfWire(
     ...(entity.drive && session.driveReconWireVersion === DRIVE_RECON_WIRE_VERSION
       ? {
           drv: undefined,
-          rdv: driveReconWire(entity, sim ? realmRacersSlickReconFor(sim.ctx, entity.id) : null),
+          rdv: driveReconWire(
+            entity,
+            sim ? mortarOverdriveSlickReconFor(sim.ctx, entity.id) : null,
+          ),
         }
       : {}),
   };

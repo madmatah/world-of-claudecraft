@@ -11,13 +11,16 @@ import {
   perpendicularDistance,
   resampleClosed,
 } from '../src/editor/circuit/stroke_fit_core';
-import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/realm_racers_circuits';
-import { type RallyPoint, REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import type { MortarOverdriveCircuit } from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/mortar_overdrive/circuits';
+import {
+  MORTAR_OVERDRIVE_ORIGIN,
+  type MortarOverdrivePoint,
+} from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 /** A hand-drawn circle: 300 points, an uneven hand, no duplicate close. */
-function circleStroke(radius: number, points = 300): RallyPoint[] {
+function circleStroke(radius: number, points = 300): MortarOverdrivePoint[] {
   return Array.from({ length: points }, (_, i) => {
     const angle = (i / points) * Math.PI * 2;
     // A deterministic wobble standing in for a pointer's jitter.
@@ -27,14 +30,14 @@ function circleStroke(radius: number, points = 300): RallyPoint[] {
 }
 
 /** A square-ish stroke: four straights and four hard corners. */
-function squareStroke(half: number, perSide = 60): RallyPoint[] {
+function squareStroke(half: number, perSide = 60): MortarOverdrivePoint[] {
   const corners = [
     { x: -half, z: -half },
     { x: half, z: -half },
     { x: half, z: half },
     { x: -half, z: half },
   ];
-  const out: RallyPoint[] = [];
+  const out: MortarOverdrivePoint[] = [];
   corners.forEach((corner, i) => {
     const next = corners[(i + 1) % corners.length];
     for (let k = 0; k < perSide; k++) {
@@ -46,11 +49,14 @@ function squareStroke(half: number, perSide = 60): RallyPoint[] {
 }
 
 /** The fitted points as a circuit, so the REAL spline says where the curve goes. */
-function candidate(id: string, controlPoints: readonly RallyPoint[]): RealmRacersCircuit {
+function candidate(
+  id: string,
+  controlPoints: readonly MortarOverdrivePoint[],
+): MortarOverdriveCircuit {
   return { ...GARDEN, id, controlPoints };
 }
 
-describe('Realm Racers stroke fitting', () => {
+describe('Mortar Overdrive stroke fitting', () => {
   it('is deterministic: the same gesture always fits the same way', () => {
     const stroke = circleStroke(100);
     expect(fitStrokeToControlPoints(stroke)).toEqual(fitStrokeToControlPoints(stroke));
@@ -79,9 +85,9 @@ describe('Realm Racers stroke fitting', () => {
     // Measured against the real spline, not against the fitted polyline: the
     // curve is what the sim drives, and it bulges between control points.
     const fitted = fitStrokeToControlPoints(circleStroke(100));
-    const track = realmRacersTrack(candidate('stroke_fit_circle', fitted));
+    const track = mortarOverdriveTrack(candidate('stroke_fit_circle', fitted));
     const radii = track.samples.map((sample) =>
-      Math.hypot(sample.x - REALM_RACERS_ORIGIN.x, sample.z - REALM_RACERS_ORIGIN.z),
+      Math.hypot(sample.x - MORTAR_OVERDRIVE_ORIGIN.x, sample.z - MORTAR_OVERDRIVE_ORIGIN.z),
     );
     // The stroke itself wobbles by 0.6 yd, so a tolerance of 1.5 leaves the fit
     // under a yard of slack: enough that a regression in either pass shows.

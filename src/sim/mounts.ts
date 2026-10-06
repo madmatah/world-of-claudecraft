@@ -134,7 +134,7 @@ function trainingSummon(meta: PlayerMeta | undefined, key: string): boolean {
   return key === TRAINING_MOUNT_KEY && meta?.mountTraining?.state === 'IN_PROGRESS';
 }
 
-/** A Realm Racers pilot is seated on the match's machine, which the race hands
+/** A Mortar Overdrive pilot is seated on the match's machine, which the race hands
  *  out and takes back itself: no reins item exists for it and the pilot never
  *  owns one, so the transferable-reins rule has nothing to re-validate against.
  *  `drive` is set only by the race (and cleared by it, or by forceDismount), so
@@ -264,7 +264,7 @@ export function summonMountItem(ctx: SimContext, pid: number, key: string): bool
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
-  if (meta.realmRacersMatchId !== null) return false;
+  if (meta.mortarOverdriveMatchId !== null) return false;
   if (
     wispMazeActionsLocked(meta.worldQuestLog) ||
     shadowActionsLocked(meta.worldQuestLog) ||
@@ -339,7 +339,7 @@ export function toggleMount(ctx: SimContext, pid: number): boolean {
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
-  if (meta.realmRacersMatchId !== null) return false;
+  if (meta.mortarOverdriveMatchId !== null) return false;
   if (
     wispMazeActionsLocked(meta.worldQuestLog) ||
     shadowActionsLocked(meta.worldQuestLog) ||
@@ -429,7 +429,7 @@ export function updateMountTransition(ctx: SimContext, e: Entity, swimming: bool
   // so the ridden mount can leave the player's possession mid-ride (traded,
   // mailed, listed, deposited): the ride must follow the item, or one reins
   // could keep a chain of players mounted. The lent training steed and a
-  // seated rally pilot are the two sanctioned unowned rides. Draws no rng (a
+  // seated Mortar Overdrive pilot are the two sanctioned unowned rides. Draws no rng (a
   // pure bags+bank scan), and the id-staggered cadence keeps the per-tick cost
   // flat across mounted players.
   if (

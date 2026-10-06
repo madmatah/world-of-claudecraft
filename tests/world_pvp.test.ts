@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyHeal } from '../src/sim/combat/heal';
 import { BUILTIN_WORLD, PLAYER_START, ZONES } from '../src/sim/data';
+import { mortarOverdriveStartMatch } from '../src/sim/mortar_overdrive/race';
 import {
   WORLD_PVP_ASSIST_WINDOW,
   WORLD_PVP_DISARM_SECONDS,
@@ -34,7 +35,6 @@ import {
   worldPvpOnPlayerDeath,
 } from '../src/sim/pvp/world_pvp';
 import { Sim } from '../src/sim/sim';
-import { realmRacersStartMatch } from '../src/sim/social/realm_racers';
 import type { Entity, SimConfig, SimEvent, WorldContent } from '../src/sim/types';
 import { DT } from '../src/sim/types';
 import { groundHeight } from '../src/sim/world';
@@ -467,13 +467,13 @@ describe('hostility: the world arm of isHostileTo', () => {
     expect(sim.isHostileTo(ent(sim, a), ent(sim, b))).toBe(true);
   });
 
-  it('a Realm Racers heat keeps the world arm off, and its knockouts book no stake', () => {
+  it('a Mortar Overdrive heat keeps the world arm off, and its knockouts book no stake', () => {
     const sim = world();
     const racers = ['Aleph', 'Bet', 'Gimel', 'Dalet'].map((name, i) =>
       addFighter(sim, name, 20, 2001 + i),
     );
     for (const pid of racers) flag(sim, pid);
-    expect(realmRacersStartMatch(sim.ctx, racers)).toBe(true);
+    expect(mortarOverdriveStartMatch(sim.ctx, racers)).toBe(true);
     const [a, b] = racers;
     // The same flags on the same ground, off the grid, ARE a world fight: the
     // circuit is contested ground, so only the heat can switch the arm off.

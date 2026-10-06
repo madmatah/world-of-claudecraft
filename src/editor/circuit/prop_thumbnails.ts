@@ -4,7 +4,7 @@
 // place" and never "what does `statueHead` look like": the operator's own words
 // for the job were that dressing a circuit is a hunt. So each asset is rendered
 // ONCE through the game's own visual registry
-// (`src/render/realm_racers_prop_visuals.ts`), off screen, and cached.
+// (`src/render/mortar_overdrive/prop_visuals.ts`), off screen, and cached.
 //
 // Loaded on demand, like `preview3d.ts` and for the same reason: it drags in
 // Three and a GL context, and the 2D tool is the one that has to open instantly.
@@ -15,7 +15,7 @@
 // Two things it must not do, both about the SHARED caches it draws from:
 //  - a GLB-backed piece is a clone of the loader's parsed scene wearing what a
 //    circuit draws it with (the world's converted prop materials, through
-//    `realm_racers_dressing_material.ts`), so its geometry and materials belong
+//    `mortar_overdrive/dressing_material.ts`), so its geometry and materials belong
 //    to those caches and are never disposed here; freeing one would take every
 //    authored circuit's props, and the world's, down with it;
 //  - an `instanced` piece draws a cached geometry and material for the same
@@ -29,13 +29,13 @@
 import * as THREE from 'three';
 import { loadGltf } from '../../render/assets/loader';
 import { whenIgnivarEnvPropsSettled } from '../../render/ignivar_env_props';
-import { REALM_RACERS_BARRIER_VISUALS } from '../../render/realm_racers_barrier_visuals';
+import { MORTAR_OVERDRIVE_BARRIER_VISUALS } from '../../render/mortar_overdrive/barrier_visuals';
 import {
-  realmRacersDressingPart,
-  realmRacersWorldKitPart,
-} from '../../render/realm_racers_dressing_material';
-import { REALM_RACERS_PROP_VISUALS } from '../../render/realm_racers_prop_visuals';
-import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
+  mortarOverdriveDressingPart,
+  mortarOverdriveWorldKitPart,
+} from '../../render/mortar_overdrive/dressing_material';
+import { MORTAR_OVERDRIVE_PROP_VISUALS } from '../../render/mortar_overdrive/prop_visuals';
+import { disposeMortarOverdriveTrackGroup } from '../../render/mortar_overdrive/track_dispose_core';
 import {
   BARRIER_PREFIX,
   thumbnailBoundsUsable,
@@ -60,7 +60,7 @@ function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
   object.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const part = realmRacersDressingPart(url, mesh.geometry, mesh.material as THREE.Material);
+    const part = mortarOverdriveDressingPart(url, mesh.geometry, mesh.material as THREE.Material);
     if (!part) {
       mesh.visible = false;
       return;
@@ -79,7 +79,7 @@ function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
  */
 async function worldKitModel(url: string): Promise<THREE.Mesh | null> {
   await whenIgnivarEnvPropsSettled();
-  const template = realmRacersWorldKitPart(url);
+  const template = mortarOverdriveWorldKitPart(url);
   return template ? new THREE.Mesh(template.geometry, template.material) : null;
 }
 
@@ -145,7 +145,7 @@ export class PropThumbnailRig {
    * materials belong to that cache and are never disposed here.
    */
   private async barrierSubject(kit: string): Promise<THREE.Object3D | null> {
-    const visual = REALM_RACERS_BARRIER_VISUALS[kit];
+    const visual = MORTAR_OVERDRIVE_BARRIER_VISUALS[kit];
     if (!visual) return null;
     try {
       const module = visual.worldTemplate
@@ -178,7 +178,7 @@ export class PropThumbnailRig {
       const object = await this.barrierSubject(asset.slice(BARRIER_PREFIX.length));
       return object ? { object, owned: false } : null;
     }
-    const visual = REALM_RACERS_PROP_VISUALS[asset];
+    const visual = MORTAR_OVERDRIVE_PROP_VISUALS[asset];
     if (!visual) return null;
     if (visual.kind === 'group') {
       return { object: visual.build(0, 0, 0, 1), owned: thumbnailOwnsGeometry('group') };
@@ -242,8 +242,8 @@ export class PropThumbnailRig {
     } finally {
       this.stage.remove(subject.object);
       if (subject.owned) {
-        disposeRealmRacersTrackGroup(
-          subject.object as unknown as Parameters<typeof disposeRealmRacersTrackGroup>[0],
+        disposeMortarOverdriveTrackGroup(
+          subject.object as unknown as Parameters<typeof disposeMortarOverdriveTrackGroup>[0],
         );
       }
     }

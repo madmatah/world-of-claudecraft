@@ -23,14 +23,17 @@ import {
   removedPickupRow,
 } from '../src/editor/circuit/pickup_rows_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdrivePickupBoxes } from '../src/sim/mortar_overdrive/pickups';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../src/sim/mortar_overdrive/spline';
 
-const track = realmRacersTrack(GARDEN);
+const track = mortarOverdriveTrack(GARDEN);
 
 /** The distance between two lap fractions the short way round, which is how
  *  every gap in this tool is measured. */
@@ -43,8 +46,8 @@ function gapOnLap(a: number, b: number): number {
 function pointAt(fraction: number, lateral = 0): { x: number; z: number } {
   const p = track.pointAt(fraction * track.length);
   return {
-    x: p.x - REALM_RACERS_ORIGIN.x - p.tz * lateral,
-    z: p.z - REALM_RACERS_ORIGIN.z + p.tx * lateral,
+    x: p.x - MORTAR_OVERDRIVE_ORIGIN.x - p.tz * lateral,
+    z: p.z - MORTAR_OVERDRIVE_ORIGIN.z + p.tx * lateral,
   };
 }
 
@@ -59,7 +62,7 @@ describe('where a click on the plan lays a pickup row', () => {
     // Out past the garden edge, which is the outermost thing a click could
     // plausibly have meant.
     const s = 0.32 * track.length;
-    const outside = pointAt(0.32, rallyGardenEdgeOffsetAt(GARDEN, s) + 6);
+    const outside = pointAt(0.32, mortarOverdriveGardenEdgeOffsetAt(GARDEN, s) + 6);
     expect(pickupRowFractionAt(GARDEN, outside.x, outside.z)).toBeNull();
   });
 
@@ -71,7 +74,7 @@ describe('where a click on the plan lays a pickup row', () => {
     // edge" and the readout measured the road.
     const s = 0.32 * track.length;
     const halfWidth = track.halfWidthAt(s);
-    expect(rallyGardenEdgeOffsetAt(GARDEN, s)).toBeGreaterThan(halfWidth + 1);
+    expect(mortarOverdriveGardenEdgeOffsetAt(GARDEN, s)).toBeGreaterThan(halfWidth + 1);
     const inside = pointAt(0.32, halfWidth - 1);
     const verge = pointAt(0.32, halfWidth + 1);
     expect(pickupRowFractionAt(GARDEN, inside.x, inside.z)).toBeCloseTo(0.32, 3);
@@ -83,16 +86,16 @@ describe('where a click on the plan lays a pickup row', () => {
   });
 
   it('finds the row a click landed on, at any box of it', () => {
-    const boxes = realmRacersPickupBoxes(GARDEN);
+    const boxes = mortarOverdrivePickupBoxes(GARDEN);
     for (const box of [boxes[0], boxes[3], boxes[boxes.length - 1]]) {
-      const x = box.x - REALM_RACERS_ORIGIN.x;
-      const z = box.z - REALM_RACERS_ORIGIN.z;
+      const x = box.x - MORTAR_OVERDRIVE_ORIGIN.x;
+      const z = box.z - MORTAR_OVERDRIVE_ORIGIN.z;
       expect(pickupRowAtPoint(GARDEN, x, z, 2)).toBe(box.row);
     }
   });
 
   it('finds nothing where no row stands', () => {
-    const boxes = realmRacersPickupBoxes(GARDEN);
+    const boxes = mortarOverdrivePickupBoxes(GARDEN);
     const far = pointAt((boxes[0].s / track.length + 0.5) % 1);
     expect(pickupRowAtPoint(GARDEN, far.x, far.z, 2)).toBe(-1);
   });
@@ -262,7 +265,7 @@ describe('how far an arrow key moves a row', () => {
 });
 
 describe('the rows survive the round trip out of the tool', () => {
-  const drawn: RealmRacersCircuit = { ...GARDEN, id: 'pickup_round_trip' };
+  const drawn: MortarOverdriveCircuit = { ...GARDEN, id: 'pickup_round_trip' };
 
   it('exports and reads back every authored row', () => {
     const back = circuitFromTypeScript(circuitToTypeScript(drawn));

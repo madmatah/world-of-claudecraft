@@ -11,13 +11,13 @@ import {
   seenTouchClosing,
   shouldPlayLocalBump,
 } from '../src/render/own_bump_feedback_core';
-import { REALM_RACERS_GHOST_AURA } from '../src/sim/realm_racers_ghost';
+import { MORTAR_OVERDRIVE_GHOST_AURA } from '../src/sim/mortar_overdrive/ghost';
 import type { Aura, Entity } from '../src/sim/types';
 
 const ghostAura = {
-  id: REALM_RACERS_GHOST_AURA,
+  id: MORTAR_OVERDRIVE_GHOST_AURA,
   name: 'Ghosted',
-  kind: 'rally_ghost',
+  kind: 'mortar_overdrive_ghost',
 } as Aura;
 const machine = (id: number, ghost = false): Entity =>
   ({ id, auras: ghost ? [ghostAura] : [] }) as unknown as Entity;
@@ -132,10 +132,10 @@ describe('own bump feedback', () => {
   });
 
   it('is the gate the renderer bangs through, with the rival first and the self second', () => {
-    // The bang lives in the rally scene's rival step, which the renderer's
+    // The bang lives in the Mortar Overdrive scene's rival step, which the renderer's
     // entity loop runs for every view before it places the body.
     const scene = readFileSync(
-      new URL('../src/render/realm_racers_scene.ts', import.meta.url),
+      new URL('../src/render/mortar_overdrive/scene.ts', import.meta.url),
       'utf8',
     );
     expect(scene).toContain(
@@ -143,7 +143,7 @@ describe('own bump feedback', () => {
     );
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain(
-      'this.realmRacers.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
+      'this.mortarOverdrive.projectRival(isSelf, v, e, rp, selfMotion, now, dt, p, selfPos);',
     );
   });
 });

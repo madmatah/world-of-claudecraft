@@ -11,7 +11,7 @@
 > `masterwrought-art-completion-2026-09-02/accepted-art.json`.
 > Updated 2026-09-05: the hidden Forgebreaker celebration adds one pending crest,
 > bringing the ledger to 11. Its commission brief is at the end of this file.
-> The nine Realm Racers `pvp_rr_*` crests ride on top of that ledger, commissioned in
+> The nine Mortar Overdrive `pvp_mortar_overdrive_*` crests ride on top of that ledger, commissioned in
 > their own section below and not yet ingested.
 
 Ready to send. One line per new deed, same format as the v1 brief; icon files
@@ -114,7 +114,7 @@ Exploration (the walk-in castles):
 - [v1] `exp_the_last_keep`, The Quiet Halls: the Last Keep's gatehouse arch half in shadow, one banner stirring in a cold draught, dusk grey on ember red.
 - [v1] `exp_dawnhold_castle`, An Open Door in the Garden: Dawnhold's garden gate standing open, petals drifting across the threshold, warm morning gold on hedge green.
 
-## Realm Racers (13c), pending
+## Mortar Overdrive (13c), pending
 
 Ten ids, seven deed crests and three ability icons, all enumerated once in
 `src/ui/icons.ts`: the deeds as `DEED_ART_PENDING`, the abilities as
@@ -124,7 +124,7 @@ entry), so removing an id from its list is the single edit that lands with the
 ingested art.
 
 One of the seven carries a SECOND edit, and the tests will ask for it rather than
-relying on this note. `pvp_rr_wins_25` rewards the title Overdrive Ace, and the
+relying on this note. `pvp_mortar_overdrive_wins_25` rewards the title Overdrive Ace, and the
 Reliquary's Horizons title shelf takes every non-hidden title deed, but
 `tests/reliquary_cell_art.test.ts` refuses a shelf row that falls back to the
 category crest. So the row waits on the art. `tests/reliquary_content.test.ts`
@@ -135,21 +135,21 @@ three counts move with it (catalog completion, catalog slot total, and the
 written down so the red is expected rather than alarming.
 
 PvP (deed crests, `npm run assets:deeds <source-dir>`):
-- [v1] `pvp_rr_first_race`, Off the Line: a lowered starting flag over four tyre tracks cut into pale grit, dusk blue on warm sand.
-- [v1] `pvp_rr_first_win`, Chequered and Cheered: a chequered flag half-furled above a raised gauntlet, hot white on deep track grey.
-- [v1] `pvp_rr_wins_10`, Podium Regular: three stepped blocks seen head-on, the centre one worn smooth, brushed bronze on slate.
-- [v1] `pvp_rr_wins_25`, Overdrive Ace: a full circuit ribbon coiled into a laurel, gold on night blue.
-- [v1] `pvp_rr_fast_lap`, (fast lap): a single glowing lap line splitting a stopwatch face, violet on charcoal.
-- [v1] `pvp_rr_clean_race`, (clean race): an unscratched machine flank catching one clean highlight, cold steel on green.
-- [v1] `pvp_rr_comeback`, From the Back of the Pack: four staggered silhouettes with the rearmost breaking forward, ember trail behind it.
-- [v1] `pvp_rr_rampart_lap`, Scorching Lap: a lap line burning through a fortress rampart silhouette, molten orange on basalt black.
-- [v1] `pvp_rr_lagoon_lap`, Tidal Lap: a lap line riding a curling wave past a leaning palm, lagoon turquoise on coral sand.
+- [v1] `pvp_mortar_overdrive_first_race`, Off the Line: a lowered starting flag over four tyre tracks cut into pale grit, dusk blue on warm sand.
+- [v1] `pvp_mortar_overdrive_first_win`, Chequered and Cheered: a chequered flag half-furled above a raised gauntlet, hot white on deep track grey.
+- [v1] `pvp_mortar_overdrive_wins_10`, Podium Regular: three stepped blocks seen head-on, the centre one worn smooth, brushed bronze on slate.
+- [v1] `pvp_mortar_overdrive_wins_25`, Overdrive Ace: a full circuit ribbon coiled into a laurel, gold on night blue.
+- [v1] `pvp_mortar_overdrive_fast_lap`, (fast lap): a single glowing lap line splitting a stopwatch face, violet on charcoal.
+- [v1] `pvp_mortar_overdrive_clean_race`, (clean race): an unscratched machine flank catching one clean highlight, cold steel on green.
+- [v1] `pvp_mortar_overdrive_comeback`, From the Back of the Pack: four staggered silhouettes with the rearmost breaking forward, ember trail behind it.
+- [v1] `pvp_mortar_overdrive_rampart_lap`, Scorching Lap: a lap line burning through a fortress rampart silhouette, molten orange on basalt black.
+- [v1] `pvp_mortar_overdrive_lagoon_lap`, Tidal Lap: a lap line riding a curling wave past a leaning palm, lagoon turquoise on coral sand.
 
 Abilities (icon sheet):
-- [v1] `rally_nitro`: a pressurised canister venting a forward cone of flame, orange over gunmetal.
-- [v1] `rally_oil_slick`: a spreading black pool with an iridescent sheen at its rim, on wet asphalt.
+- [v1] `mortar_overdrive_nitro`: a pressurised canister venting a forward cone of flame, orange over gunmetal.
+- [v1] `mortar_overdrive_oil_slick`: a spreading black pool with an iridescent sheen at its rim, on wet asphalt.
 
-`rally_ground_blast` is listed as pending too, sharing the Ground Blast weapon
+`mortar_overdrive_ground_blast` is listed as pending too, sharing the Ground Blast weapon
 art brief above rather than a second commission.
 
 ## The bank socket crests (2026-08-20)

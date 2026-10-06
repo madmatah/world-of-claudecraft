@@ -1563,14 +1563,14 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     expect(SCENARIOS.filter((s) => s.name.startsWith('rift_clear_rewards')).length).toBe(4);
   });
 
-  it('realm_racers: seats a grid, drives, bumps, ghosts a recovery, takes a box, and classifies the forfeit cascade', () => {
-    const rec = run('realm_racers');
+  it('mortar_overdrive: seats a grid, drives, bumps, ghosts a recovery, takes a box, and classifies the forfeit cascade', () => {
+    const rec = run('mortar_overdrive');
     const ev = rec.allEvents as Ev[];
     // The grid really seated and went green: one personal GO per pilot.
-    expect(ev.filter((e) => e.type === 'realmRacersGo')).toHaveLength(4);
+    expect(ev.filter((e) => e.type === 'mortarOverdriveGo')).toHaveLength(4);
     // The rival contact beat really resolved an announced impact between the
     // third and fourth pilots, so a contact-rule change moves the digest.
-    const bumps = ev.filter((e) => e.type === 'realmRacersBump');
+    const bumps = ev.filter((e) => e.type === 'mortarOverdriveBump');
     expect(bumps).toHaveLength(2);
     expect(bumps[0].impact as number).toBeGreaterThan(3);
     // The recovery ghost beat: held past the lock with a rival parked on the
@@ -1581,11 +1581,11 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     const pair = [bumps[1].aId, bumps[1].bId].sort();
     expect(pair).not.toEqual([bumps[0].aId, bumps[0].bId].sort());
     // The box really changed hands, which is the tick the one weighted effect
-    // draw fires on; without it the digest never covers the rally's draw site.
-    expect(ev.some((e) => e.type === 'realmRacersPickup')).toBe(true);
+    // draw fires on; without it the digest never covers the Mortar Overdrive's draw site.
+    expect(ev.some((e) => e.type === 'mortarOverdrivePickup')).toBe(true);
     // The shell really caught one machine inside the full-force core and one
     // out in the falloff band, so a falloff change moves the digest.
-    const hits = ev.filter((e) => e.type === 'realmRacersGroundBlastHit');
+    const hits = ev.filter((e) => e.type === 'mortarOverdriveGroundBlastHit');
     expect(hits).toHaveLength(1);
     const core = rec.notes.blastCoreVictim as number;
     const band = rec.notes.blastBandVictim as number;
@@ -1599,9 +1599,9 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     // sqrt(17) yd off the crater: 1 - (4.123 - 1.5) / 4.5, in thousandths.
     expect(list[3]).toBe(0.417);
     // The forfeit cascade decided the race and the survivor got a tableau.
-    expect(ev.some((e) => e.type === 'realmRacersResult')).toBe(true);
+    expect(ev.some((e) => e.type === 'mortarOverdriveResult')).toBe(true);
     // Teardown really ran: the race slot is free again.
-    expect((rec.sim as any).realmRacers.match).toBeNull();
+    expect((rec.sim as any).mortarOverdrive.match).toBeNull();
   });
 
   it('supported_elevation_line_of_sight: heals across the stall jump and denies airborne cover sight', () => {

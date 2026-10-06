@@ -14,7 +14,7 @@
 // the composed library as the real part selection and merge compose it, and
 // the procedural shapes the rig adds (the baked far mesh and the face decals).
 // The other veil users add the form rigs they wear, the quest visions (mobs on
-// fixed player rigs) and the Pale Keeper's composed look, and the Realm Racers
+// fixed player rigs) and the Pale Keeper's composed look, and the Mortar Overdrive
 // machine, the one mount a veil covers (a racer's ward or recovery ghost).
 //
 // The composed library is modelled the way assets.ts modularVariant builds it:
@@ -79,7 +79,7 @@ import {
 } from '../src/render/characters/spirit_veil_family_core';
 import { mountVisualSpecFor } from '../src/render/mount_visuals';
 import { MOBS } from '../src/sim/data';
-import { REALM_RACERS_MOUNT_KEY } from '../src/sim/social/realm_racers';
+import { MORTAR_OVERDRIVE_MOUNT_KEY } from '../src/sim/mortar_overdrive/race';
 import type { Entity } from '../src/sim/types';
 
 interface GltfPrimitive {
@@ -297,7 +297,7 @@ function formRigUrls(): string[] {
 /** The racer's machine, both tiers' assets: the mount under every veiled racer
  *  (riderSkin is null while driving, so no mount skin stands in for it). */
 function racerKartUrls(): string[] {
-  const spec = mountVisualSpecFor(REALM_RACERS_MOUNT_KEY, null);
+  const spec = mountVisualSpecFor(MORTAR_OVERDRIVE_MOUNT_KEY, null);
   if (!spec) throw new Error('the racer machine has no mount visual');
   const def = VISUALS[spec.visualKey];
   const urls = new Set<string>();

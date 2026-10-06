@@ -2,8 +2,8 @@
 // chrome hung off it.
 //
 // Every decision lives in a core (`plan_core`, `stroke_fit_core`, `handles_core`,
-// `props_core`, `export_core`, `layout_core`) or in the sim (`realmRacersTrack`
-// for the geometry, `realmRacersCircuitMetrics` for the readout). Nothing here
+// `props_core`, `export_core`, `layout_core`) or in the sim (`mortarOverdriveTrack`
+// for the geometry, `mortarOverdriveCircuitMetrics` for the readout). Nothing here
 // computes anything about a circuit or about the shell: this file turns pointers
 // into calls and returned numbers into pixels.
 //
@@ -15,41 +15,47 @@
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
 import {
-  REALM_RACERS_PICKUP_COLOR_CSS,
-  REALM_RACERS_PICKUP_FILL_CSS,
-} from '../../render/realm_racers_pickups_core';
-import { realmRacersTheme } from '../../render/realm_racers_themes';
-import { REALM_RACERS_BARRIERS } from '../../sim/content/realm_racers_barriers';
+  MORTAR_OVERDRIVE_PICKUP_COLOR_CSS,
+  MORTAR_OVERDRIVE_PICKUP_FILL_CSS,
+} from '../../render/mortar_overdrive/pickups_core';
+import { mortarOverdriveTheme } from '../../render/mortar_overdrive/themes';
+import { MORTAR_OVERDRIVE_BARRIERS } from '../../sim/content/mortar_overdrive/barriers';
 import {
-  type RallyFence,
-  type RallyProp,
-  REALM_RACERS_CIRCUIT_LIST,
-  REALM_RACERS_PRACTICE_CIRCUIT,
-  type RealmRacersBasin,
-  type RealmRacersCircuit,
-} from '../../sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
+  MORTAR_OVERDRIVE_CIRCUIT_LIST,
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
+  type MortarOverdriveBasin,
+  type MortarOverdriveCircuit,
+  type MortarOverdriveFence,
+  type MortarOverdriveProp,
+} from '../../sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
 import {
-  type RealmRacersCircuitMetrics,
-  type RealmRacersCircuitProblem,
-  realmRacersCircuitMetrics,
-  realmRacersPickupRowFit,
-} from '../../sim/realm_racers_circuit_metrics';
-import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
-import { realmRacersGroundShape } from '../../sim/realm_racers_ground';
-import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
+  type MortarOverdriveCircuitMetrics,
+  type MortarOverdriveCircuitProblem,
+  mortarOverdriveCircuitMetrics,
+  mortarOverdrivePickupRowFit,
+} from '../../sim/mortar_overdrive/circuit_metrics';
+import { mortarOverdriveFencePlacements } from '../../sim/mortar_overdrive/fences';
+import { mortarOverdriveGroundShape } from '../../sim/mortar_overdrive/ground';
 import {
-  REALM_RACERS_PICKUP_BOX_HALF,
-  realmRacersPickupBoxes,
-} from '../../sim/realm_racers_pickups';
-import { type RallyPlacedProp, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
+  MORTAR_OVERDRIVE_ORIGIN,
+  type MortarOverdrivePoint,
+} from '../../sim/mortar_overdrive/layout';
 import {
-  type RallyTrackModel,
-  rallyGardenEdgeOffsetAt,
-  realmRacersGates,
-  realmRacersStarts,
-  realmRacersTrack,
-} from '../../sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PICKUP_BOX_HALF,
+  mortarOverdrivePickupBoxes,
+} from '../../sim/mortar_overdrive/pickups';
+import {
+  type MortarOverdrivePlacedProp,
+  mortarOverdrivePlacements,
+} from '../../sim/mortar_overdrive/props_resolve';
+import {
+  type MortarOverdriveTrackModel,
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveGates,
+  mortarOverdriveStarts,
+  mortarOverdriveTrack,
+} from '../../sim/mortar_overdrive/spline';
 import { type NudgeKey, rotateStep } from '../placement_transform_core';
 import { CircuitDock } from './dock';
 import { DraftDialog } from './draft_dialog';
@@ -249,11 +255,12 @@ const PAINT_RAMP_YARDS = 25;
 /** The placeholder record a blank canvas stands on. The rule (a blank canvas
  *  inherits the template's NUMBERS and none of what its author placed on it)
  *  lives in `plan_core.ts`, where a test can hold it. */
-const blankCircuit = (): RealmRacersCircuit => blankCircuitFrom(REALM_RACERS_CIRCUIT_LIST[0]);
+const blankCircuit = (): MortarOverdriveCircuit =>
+  blankCircuitFrom(MORTAR_OVERDRIVE_CIRCUIT_LIST[0]);
 
 // ---- state ----
 
-let record: RealmRacersCircuit = blankCircuit();
+let record: MortarOverdriveCircuit = blankCircuit();
 /**
  * Whether the record above is the operator's circuit or the placeholder a blank
  * canvas stands on.
@@ -266,8 +273,8 @@ let record: RealmRacersCircuit = blankCircuit();
  * check in twenty places.
  */
 let drawn = false;
-let track: RallyTrackModel = realmRacersTrack(record);
-let metrics: RealmRacersCircuitMetrics = realmRacersCircuitMetrics(record);
+let track: MortarOverdriveTrackModel = mortarOverdriveTrack(record);
+let metrics: MortarOverdriveCircuitMetrics = mortarOverdriveCircuitMetrics(record);
 /**
  * Which rail entry is armed. The GESTURE it routes is derived
  * (`toolFor(railMode, drawn)`): SHAPE draws a blank canvas and edits handles on
@@ -342,7 +349,7 @@ let groundDragging = false;
  * gesture: the record has no position to read the offset back out of.
  */
 let wallGrip: EnclosureGrab | null = null;
-let wallMove: { x: number; z: number; from: RealmRacersCircuit } | null = null;
+let wallMove: { x: number; z: number; from: MortarOverdriveCircuit } | null = null;
 /**
  * Whether the next drag on the plan shapes the LAND.
  *
@@ -355,11 +362,11 @@ let wallMove: { x: number; z: number; from: RealmRacersCircuit } | null = null;
 let groundArmed = false;
 /** The freehand loop being drawn for the ground, kept off the record until the
  *  release fits it, exactly as the centerline's own stroke is. */
-let groundStroke: RallyPoint[] = [];
+let groundStroke: MortarOverdrivePoint[] = [];
 let groundDrawing = false;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
-let stroke: RallyPoint[] = [];
+let stroke: MortarOverdrivePoint[] = [];
 let drawing = false;
 let dragging: Selection = null;
 let painting = false;
@@ -384,7 +391,7 @@ let propHandle: PropHandle | null = null;
  *  drag measures against THIS. An explicit collide literal keeps a constant
  *  reach while the scale grows, so a ratio read against the placement the
  *  previous move committed compounds to the clamp within a few moves. */
-let propGrab: RallyPlacedProp | null = null;
+let propGrab: MortarOverdrivePlacedProp | null = null;
 /** The projection index a track-space drag is anchored to: without it a drag
  *  across a pinch re-anchors the piece to the facing stretch. Refreshed from
  *  every move's own answer, because a hint parked at the press is outrun by
@@ -425,12 +432,12 @@ let ghostSnap: SnapResult | null = null;
 let altHeld = false;
 /** Where the pointer last was on the plan, which is where the armed piece's
  *  ghost stands. Null once the pointer leaves. */
-let hover: RallyPoint | null = null;
+let hover: MortarOverdrivePoint | null = null;
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
 /** The edit history. Snapshots of the whole record, because `commit` already
  *  produces one per edit; the model and its forward branch live in the core. */
 interface EditSnapshot {
-  record: RealmRacersCircuit;
+  record: MortarOverdriveCircuit;
   drawn: boolean;
 }
 const history = new SnapshotHistory<EditSnapshot>();
@@ -473,8 +480,8 @@ const PICK_FILL = withAlpha(planPalette.pick, 0.35);
  * numbers here is a set of tuning values that can drift from the ones the game
  * ships without anything saying so.
  */
-let rememberedBasin: RealmRacersBasin = record.basin ??
-  REALM_RACERS_PRACTICE_CIRCUIT.basin ?? {
+let rememberedBasin: MortarOverdriveBasin = record.basin ??
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.basin ?? {
     waterY: -0.55,
     bankSlope: 0.8,
     depthMax: 6,
@@ -587,12 +594,12 @@ function pushUndo(): void {
 
 /** Every edit lands here: it rounds to what the export carries, re-derives the
  *  geometry and the readout, and schedules a repaint. */
-function commit(next: RealmRacersCircuit, remember = true): void {
+function commit(next: MortarOverdriveCircuit, remember = true): void {
   if (remember) pushUndo();
   record = roundCircuit(next);
   if (record.basin) rememberedBasin = record.basin;
-  track = realmRacersTrack(record);
-  metrics = realmRacersCircuitMetrics(record);
+  track = mortarOverdriveTrack(record);
+  metrics = mortarOverdriveCircuitMetrics(record);
   dirty = true;
   saveDraftLocally();
   requestRedraw();
@@ -662,9 +669,9 @@ function redo(): void {
 
 // ---- view maths (screen only: nothing here is about the circuit) ----
 
-const local = (point: { x: number; z: number }): RallyPoint => ({
-  x: point.x - REALM_RACERS_ORIGIN.x,
-  z: point.z - REALM_RACERS_ORIGIN.z,
+const local = (point: { x: number; z: number }): MortarOverdrivePoint => ({
+  x: point.x - MORTAR_OVERDRIVE_ORIGIN.x,
+  z: point.z - MORTAR_OVERDRIVE_ORIGIN.z,
 });
 
 /**
@@ -685,7 +692,7 @@ function samplePlanSize(): void {
 const screenX = (x: number): number => (x - view.x) * view.scale + plan.width / 2;
 const screenY = (z: number): number => (z - view.z) * view.scale + plan.height / 2;
 
-function toLocal(ev: { clientX: number; clientY: number }): RallyPoint {
+function toLocal(ev: { clientX: number; clientY: number }): MortarOverdrivePoint {
   const rect = canvas.getBoundingClientRect();
   return {
     x: (ev.clientX - rect.left - rect.width / 2) / view.scale + view.x,
@@ -694,17 +701,18 @@ function toLocal(ev: { clientX: number; clientY: number }): RallyPoint {
 }
 
 /** Where a canvas point sits along the lap, through the REAL projection. */
-function fractionAt(point: RallyPoint): number {
+function fractionAt(point: MortarOverdrivePoint): number {
   const projection = track.project(
-    point.x + REALM_RACERS_ORIGIN.x,
-    point.z + REALM_RACERS_ORIGIN.z,
+    point.x + MORTAR_OVERDRIVE_ORIGIN.x,
+    point.z + MORTAR_OVERDRIVE_ORIGIN.z,
   );
   return projection.s / track.length;
 }
 
 /** What a gesture authors from a raw pointer position: the grid rounds it when
  *  the operator asked for a grid to round to. */
-const authored = (point: RallyPoint): RallyPoint => snapPoint(point, layout.snap);
+const authored = (point: MortarOverdrivePoint): MortarOverdrivePoint =>
+  snapPoint(point, layout.snap);
 
 function fitView(): void {
   const half = fitHalfExtent(drawn, metrics.roadHalfX, metrics.roadHalfZ);
@@ -738,7 +746,7 @@ function requestRedraw(): void {
   });
 }
 
-function tracePolygon(points: readonly RallyPoint[]): void {
+function tracePolygon(points: readonly MortarOverdrivePoint[]): void {
   ctx.beginPath();
   points.forEach((point, i) => {
     const x = screenX(point.x);
@@ -796,7 +804,7 @@ function drawGridLines(): void {
  *  exactly the way the sim and the renderer offset them. */
 function drawSurfaces(): void {
   const samples = track.samples;
-  const offsetRing = (offset: (index: number) => number, side: 1 | -1): RallyPoint[] =>
+  const offsetRing = (offset: (index: number) => number, side: 1 | -1): MortarOverdrivePoint[] =>
     samples.map((sample, i) => {
       const distance = offset(i) * side;
       const p = local(sample);
@@ -807,7 +815,7 @@ function drawSurfaces(): void {
   // its water and its holes in the lawn from, so a wobble the operator seeded
   // is the wobble they will drive past.
   ctx.fillStyle = '#1d3448';
-  for (const pond of realmRacersPlacements(record).ponds) {
+  for (const pond of mortarOverdrivePlacements(record).ponds) {
     tracePolygon(pond.outline);
     ctx.fill();
   }
@@ -835,7 +843,7 @@ function drawSurfaces(): void {
   ctx.strokeStyle = '#4a7a52';
   ctx.lineWidth = 1;
   for (const side of [1, -1] as const) {
-    tracePolygon(offsetRing((i) => rallyGardenEdgeOffsetAt(record, samples[i].s), side));
+    tracePolygon(offsetRing((i) => mortarOverdriveGardenEdgeOffsetAt(record, samples[i].s), side));
     ctx.stroke();
   }
   ctx.restore();
@@ -853,7 +861,7 @@ function drawGates(): void {
   // seeing while shaping the curve that decides it.
   ctx.strokeStyle = '#6b6250';
   ctx.lineWidth = 1;
-  for (const gate of realmRacersGates(record)) {
+  for (const gate of mortarOverdriveGates(record)) {
     const p = local(gate);
     const nx = -gate.dirZ * gate.halfWidth;
     const nz = gate.dirX * gate.halfWidth;
@@ -864,7 +872,7 @@ function drawGates(): void {
   }
 
   ctx.fillStyle = '#e0e4ee';
-  for (const slot of realmRacersStarts(record)) {
+  for (const slot of mortarOverdriveStarts(record)) {
     const p = local(slot);
     ctx.beginPath();
     ctx.arc(screenX(p.x), screenY(p.z), Math.max(2, 1.7 * view.scale), 0, Math.PI * 2);
@@ -876,17 +884,17 @@ function drawGates(): void {
  * The pickup rows: the four boxes each one resolves to, drawn where the sim
  * says they stand.
  *
- * Straight off `realmRacersPickupBoxes`, never from arithmetic here, for the
+ * Straight off `mortarOverdrivePickupBoxes`, never from arithmetic here, for the
  * same reason the dressing draws the resolver's own output: a square on this
  * canvas has to be a box a machine can drive into.
  */
 function drawPickupRows(): void {
-  for (const box of realmRacersPickupBoxes(record)) {
+  for (const box of mortarOverdrivePickupBoxes(record)) {
     const chosen = pickupSelection === box.row;
     drawPickupBox(
       box,
-      chosen ? PICK_FILL : REALM_RACERS_PICKUP_FILL_CSS,
-      chosen ? planPalette.pick : REALM_RACERS_PICKUP_COLOR_CSS,
+      chosen ? PICK_FILL : MORTAR_OVERDRIVE_PICKUP_FILL_CSS,
+      chosen ? planPalette.pick : MORTAR_OVERDRIVE_PICKUP_COLOR_CSS,
     );
   }
 }
@@ -899,7 +907,7 @@ function drawPickupBox(
   dashed = false,
 ): void {
   const p = local(box);
-  const size = Math.max(3, REALM_RACERS_PICKUP_BOX_HALF * 2 * view.scale);
+  const size = Math.max(3, MORTAR_OVERDRIVE_PICKUP_BOX_HALF * 2 * view.scale);
   const x = screenX(p.x) - size / 2;
   const y = screenY(p.z) - size / 2;
   ctx.fillStyle = fill;
@@ -931,9 +939,9 @@ function drawPickupGhost(): void {
   const fraction = pickupRowFractionAt(record, hover.x, hover.z);
   if (fraction === null) return;
   const pending = { ...record, pickupRows: [{ s: fraction }] };
-  const boxes = realmRacersPickupBoxes(pending);
+  const boxes = mortarOverdrivePickupBoxes(pending);
   const clear =
-    realmRacersPickupRowFit(pending, boxes).fitsRoad &&
+    mortarOverdrivePickupRowFit(pending, boxes).fitsRoad &&
     addPickupRow(record.pickupRows ?? [], fraction).outcome === 'added';
   for (const box of boxes) {
     drawPickupBox(box, 'transparent', clear ? planPalette.ok : planPalette.bad, true);
@@ -1133,7 +1141,7 @@ function drawProblemMarkers(): void {
  * the ONE resolver, so the outline under the cursor is the outline the collision
  * set will hold.
  */
-function cursorGhost(): RallyPlacedProp | null {
+function cursorGhost(): MortarOverdrivePlacedProp | null {
   const armed = library.armed;
   if (!drawn || armed === null || armed === POND_CHOICE || !hover) return null;
   // A tile drag draws its ghost over whatever tool is showing; a plan hover only
@@ -1157,7 +1165,7 @@ function cursorGhost(): RallyPlacedProp | null {
  * follows the pointer, which is what makes a drawing gesture readable at all.
  */
 function drawFences(): void {
-  const placements = realmRacersFencePlacements(record);
+  const placements = mortarOverdriveFencePlacements(record);
   for (const fence of placements.fences) {
     // Keyed off the placement's OWN record index, never its position in this
     // list: an unknown kit is skipped by the resolver, so the two lists stop
@@ -1189,7 +1197,7 @@ function drawFences(): void {
   // tool's own arithmetic would be free to draw a normal-coloured line over a
   // run the panel is about to refuse with `fence_blocks_racing_surface`, and the
   // operator would only meet the refusal after committing.
-  const draftHalf = (REALM_RACERS_BARRIERS[fenceDraft.kit]?.halfThickness ?? 0) * 1;
+  const draftHalf = (MORTAR_OVERDRIVE_BARRIERS[fenceDraft.kit]?.halfThickness ?? 0) * 1;
   const last = fenceDraft.points[fenceDraft.points.length - 1];
   const pendingBlocked =
     hover !== null && last !== undefined && !fenceRunClearOfSurface(record, last, hover, draftHalf);
@@ -1217,15 +1225,15 @@ function drawFences(): void {
 /**
  * The dressing, as the resolver placed it.
  *
- * Every footprint here is read off `realmRacersPlacements`, never worked out
+ * Every footprint here is read off `mortarOverdrivePlacements`, never worked out
  * from the record: the canvas is a VIEW of the one placement, and a tool that
  * drew a fountain where the game does not put one is the whole defect the
  * resolver exists to prevent.
  */
 function drawDressing(): void {
-  const placements = realmRacersPlacements(record);
-  const placed = placedPropIndices(record.props, REALM_RACERS_PROPS);
-  const traceFootprint = (prop: RallyPlacedProp): void => {
+  const placements = mortarOverdrivePlacements(record);
+  const placed = placedPropIndices(record.props, MORTAR_OVERDRIVE_PROPS);
+  const traceFootprint = (prop: MortarOverdrivePlacedProp): void => {
     ctx.beginPath();
     if (prop.footprint.kind === 'circle') {
       ctx.arc(
@@ -1404,7 +1412,7 @@ function drawGroundOutline(): void {
   if (authored?.length) {
     ctx.strokeStyle = '#4d7fa0';
     ctx.lineWidth = 2;
-    tracePolygon(realmRacersGroundShape(record).outline);
+    tracePolygon(mortarOverdriveGroundShape(record).outline);
     ctx.stroke();
     if (tool() === 'terrain') {
       authored.forEach((point, i) => {
@@ -1486,7 +1494,7 @@ function draw(): void {
  * palette places, and its two refusals (off the road, too near an existing row)
  * are still reported by name.
  */
-function startRaceFurnitureGesture(raw: RallyPoint): void {
+function startRaceFurnitureGesture(raw: MortarOverdrivePoint): void {
   if (!drawn) return;
   const hit = pickupRowAtPoint(record, raw.x, raw.z, dressingTolerance());
   if (hit >= 0) {
@@ -1600,7 +1608,7 @@ const fenceTolerance = (): number => FENCE_POINT_TOLERANCE_YD / view.scale;
  * hit-testing first would make the second point select the barrier instead of
  * extending it. While a draft is open every click goes to the draft.
  */
-function startTerrainGesture(raw: RallyPoint): void {
+function startTerrainGesture(raw: MortarOverdrivePoint): void {
   if (!drawn) return;
   // The GROUND is armed with one gesture and one only: a freehand loop. It is
   // tested before the barriers for the reason a drawing run is: a stroke that
@@ -1685,7 +1693,7 @@ function startTerrainGesture(raw: RallyPoint): void {
 
 /** Put a finished run on the record and select it. One commit, so the whole
  *  drawing gesture is one step back. */
-function commitFence(fence: RallyFence, how: string): void {
+function commitFence(fence: MortarOverdriveFence, how: string): void {
   const added = addFence(record.fences ?? [], fence);
   fenceDraft = null;
   announceArmed(terrainPalette.armed);
@@ -1812,7 +1820,7 @@ function centerCircuit(): void {
  * behaviour too: a closed centripetal Catmull-Rom does not pass through the
  * stroke, so the plan draws the raw loop faint under the derived one.
  */
-function startGroundStroke(raw: RallyPoint): void {
+function startGroundStroke(raw: MortarOverdrivePoint): void {
   groundStroke = [raw];
   groundDrawing = true;
   groundPoint = null;
@@ -1870,7 +1878,7 @@ function finishGroundStroke(): void {
  * it, a click on the line inserts one there, `del` removes one. Returns whether
  * the click was the ground's, so the caller can go on to deselect.
  */
-function groundHitOf(raw: RallyPoint): GroundHit | null {
+function groundHitOf(raw: MortarOverdrivePoint): GroundHit | null {
   const outline = record.groundOutline;
   if (!outline || outline.length === 0) return null;
   // Which of the two it was is `ground_core.ts`'s call, not the page's. It was
@@ -1926,7 +1934,7 @@ function insertGroundHandle(hit: Extract<GroundHit, { kind: 'insert' }>): void {
  * other drag in this tool, so one gesture is one step back rather than one per
  * pointermove.
  */
-function startWallGesture(raw: RallyPoint): boolean {
+function startWallGesture(raw: MortarOverdrivePoint): boolean {
   const hit = enclosureHitAt(
     record.perimeter.halfX,
     record.perimeter.halfZ,
@@ -2034,7 +2042,7 @@ function deleteGroundPoint(): void {
 function removeGroundShape(): void {
   if (!record.groundOutline) return;
   const next = { ...record };
-  delete (next as { groundOutline?: readonly RallyPoint[] }).groundOutline;
+  delete (next as { groundOutline?: readonly MortarOverdrivePoint[] }).groundOutline;
   commit(next);
   groundPoint = null;
   setStatus('ground shape removed: the land covers the whole region again', 'ok');
@@ -2077,8 +2085,8 @@ const dressingTolerance = (): number => HIT_TOLERANCE_PIXELS.dressing / view.sca
  * a big circuit; per move it is once per thing the operator actually did.
  */
 let roadRunPreview: {
-  props: RallyProp[];
-  placed: RallyPlacedProp[];
+  props: MortarOverdriveProp[];
+  placed: MortarOverdrivePlacedProp[];
   severity: (PlacementLegality['severity'] | undefined)[];
 } = {
   props: [],
@@ -2086,7 +2094,7 @@ let roadRunPreview: {
   severity: [],
 };
 
-function buildRoadRun(): RallyProp[] {
+function buildRoadRun(): MortarOverdriveProp[] {
   const armed = library.armed;
   if (!roadRun || !hover || !armed || armed === POND_CHOICE) return [];
   return alongRoadProps(record, roadRun.fromS, lapPositionAt(record, hover.x, hover.z), {
@@ -2109,7 +2117,7 @@ function refreshRoadRunPreview(): void {
 }
 
 /** The record with one dressing list replaced, committed. */
-function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): void {
+function commitDressing(next: Partial<MortarOverdriveCircuit>, remember = true): void {
   // A pond is the only thing on a circuit that needs the basin, and the record
   // requires the two to agree: authoring the first pond brings the water back
   // and deleting the last one takes it away, so neither is a second step the
@@ -2119,8 +2127,8 @@ function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): voi
   commit({ ...record, ...next, basin }, remember);
 }
 
-function startDressingGesture(raw: RallyPoint, rect: boolean): void {
-  const placements = realmRacersPlacements(record);
+function startDressingGesture(raw: MortarOverdrivePoint, rect: boolean): void {
+  const placements = mortarOverdrivePlacements(record);
   const tolerance = dressingTolerance();
 
   // A selected PROP's grips come first, for the reason the pond's do: the scale
@@ -2155,7 +2163,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   // finger whether or not the next placement will be rounded to the grid.
   const hitProp = hitTestPlaced(placements.props, raw.x, raw.z, tolerance);
   if (hitProp >= 0) {
-    const index = placedPropIndices(record.props, REALM_RACERS_PROPS)[hitProp];
+    const index = placedPropIndices(record.props, MORTAR_OVERDRIVE_PROPS)[hitProp];
     dressing = { kind: 'prop', index };
     pushUndo();
     dressingDrag = 'move';
@@ -2221,12 +2229,12 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
  * is that what it drew is what lands, so the snap and the yaw are resolved here
  * exactly as `cursorGhost` resolves them.
  */
-function placeOne(raw: RallyPoint): void {
+function placeOne(raw: MortarOverdrivePoint): void {
   const armed = library.armed;
   if (!armed || armed === POND_CHOICE) return;
   const snap = resolveSnap(record, raw.x, raw.z, { grid: layout.snap, free: altHeld });
   const authoredAt = authorPlacement(record, snap.x, snap.z);
-  const piece: RallyProp = { asset: armed, at: authoredAt.at };
+  const piece: MortarOverdriveProp = { asset: armed, at: authoredAt.at };
   if (pendingYaw !== null) piece.yaw = pendingYaw;
   if (!placement.solid) piece.collide = 'none';
   const props = [...(record.props ?? []), piece];
@@ -2256,7 +2264,7 @@ function placeOne(raw: RallyPoint): void {
  * what it means here is "do not step this rotation", which is a decision the
  * operator makes while watching the piece turn.
  */
-function moveDressingGesture(raw: RallyPoint, free = false): void {
+function moveDressingGesture(raw: MortarOverdrivePoint, free = false): void {
   const point = authored(raw);
   if (dressingDrag === 'prop' && propHandle && dressing?.kind === 'prop') {
     const prop = selectedProp();
@@ -2396,7 +2404,7 @@ function endDressingGesture(): void {
 }
 
 /** The selected prop, or null: every keyboard transform reads this. */
-function selectedProp(): RallyProp | null {
+function selectedProp(): MortarOverdriveProp | null {
   if (dressing?.kind !== 'prop') return null;
   return (record.props ?? [])[dressing.index] ?? null;
 }
@@ -2405,13 +2413,13 @@ function selectedProp(): RallyProp | null {
  *  faces and how big its footprint came out. Every grip and every focus reads
  *  this rather than the record, for the reason the whole tool does: the one
  *  resolver decides where a piece is. */
-function selectedPlacedProp(): RallyPlacedProp | null {
+function selectedPlacedProp(): MortarOverdrivePlacedProp | null {
   if (dressing?.kind !== 'prop') return null;
-  const placedIndex = placementIndexOf(record.props, REALM_RACERS_PROPS, dressing.index);
-  return realmRacersPlacements(record).props[placedIndex] ?? null;
+  const placedIndex = placementIndexOf(record.props, MORTAR_OVERDRIVE_PROPS, dressing.index);
+  return mortarOverdrivePlacements(record).props[placedIndex] ?? null;
 }
 
-function transformSelectedProp(next: (prop: RallyProp) => RallyProp): void {
+function transformSelectedProp(next: (prop: MortarOverdriveProp) => MortarOverdriveProp): void {
   const prop = selectedProp();
   if (!prop || dressing?.kind !== 'prop') return;
   commitDressing({ props: replacedAt(record.props, dressing.index, next(prop)) });
@@ -2494,7 +2502,7 @@ function duplicateDressing(): void {
  *  only when it is OPEN: pointing a camera nobody can see is work for nothing,
  *  and opening one uninvited is a half-megabyte rebuild the operator did not
  *  ask for. */
-function lookAtPoint(point: RallyPoint): void {
+function lookAtPoint(point: MortarOverdrivePoint): void {
   view.x = point.x;
   view.z = point.z;
   requestRedraw();
@@ -2819,7 +2827,7 @@ function paintedBands(): CircuitBand[] {
 }
 
 /** Extends the live stroke to this point and re-applies the whole of it. */
-function paintAt(point: RallyPoint): void {
+function paintAt(point: MortarOverdrivePoint): void {
   const field = TOOL_VALUE_FIELDS[tool()];
   const value = Number(shell.toolValueInput.value);
   if (!field || !paintOrigin || !Number.isFinite(value)) return;
@@ -2902,13 +2910,13 @@ canvas.addEventListener('pointerdown', (ev) => {
 /** The status bar's live cursor. In the two track tools it also carries where
  *  the pointer sits ALONG the lap, which is the coordinate those tools author
  *  in. */
-function reportCursor(point: RallyPoint): void {
+function reportCursor(point: MortarOverdrivePoint): void {
   const parts = [`x ${point.x.toFixed(1)}`, `z ${point.z.toFixed(1)}`];
   const active = tool();
   if (drawn && (active === 'width' || active === 'props' || active === 'race')) {
     const projection = track.project(
-      point.x + REALM_RACERS_ORIGIN.x,
-      point.z + REALM_RACERS_ORIGIN.z,
+      point.x + MORTAR_OVERDRIVE_ORIGIN.x,
+      point.z + MORTAR_OVERDRIVE_ORIGIN.z,
     );
     parts.push(`s ${projection.s.toFixed(0)} yd`, `off ${projection.lateral.toFixed(1)}`);
   }
@@ -3091,7 +3099,7 @@ function applyZoom(percent: number): void {
   requestRedraw();
 }
 
-function focusProblem(problem: RealmRacersCircuitProblem): void {
+function focusProblem(problem: MortarOverdriveCircuitProblem): void {
   if (!drawn || problem.s < 0) return;
   const p = local(track.pointAt(problem.s));
   view.x = p.x;
@@ -3118,7 +3126,7 @@ function newBlank(): void {
 }
 
 /** Starting from something: the starter oval, or any circuit the game ships. */
-function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
+function loadCircuit(circuit: MortarOverdriveCircuit, label: string): void {
   stroke = [];
   clearSelections();
   // A shipped record is loaded under a DRAFT id, so editing it can never hand
@@ -3143,7 +3151,7 @@ async function copyRecord(): Promise<void> {
   const text = circuitToTypeScript(record);
   try {
     await navigator.clipboard.writeText(text);
-    setStatus('record copied: paste it into realm_racers_circuits.ts', 'ok');
+    setStatus('record copied: paste it into mortar_overdrive/circuits.ts', 'ok');
   } catch {
     // Clipboard access needs a secure context; a download is the fallback that
     // always works over plain http on a dev host.
@@ -3516,8 +3524,8 @@ const panelDocument = {
   drawn: () => drawn,
   mode: () => railMode,
   selection: () => dressing,
-  commit: (next: RealmRacersCircuit) => commit(next),
-  commitDressing: (next: Partial<RealmRacersCircuit>) => commitDressing(next),
+  commit: (next: MortarOverdriveCircuit) => commit(next),
+  commitDressing: (next: Partial<MortarOverdriveCircuit>) => commitDressing(next),
   setStatus,
 };
 
@@ -3582,7 +3590,7 @@ const terrainPanelHost: TerrainPanelHost = {
   // theme's art lives. An unknown theme id falls back the same way every other
   // consumer does rather than leaving the palette empty: an operator drawing a
   // circuit against a theme being written in the same change still needs kits.
-  themeBarriers: () => realmRacersTheme(record).barriers,
+  themeBarriers: () => mortarOverdriveTheme(record).barriers,
 };
 
 const form = new RecordFormPanel(panelHost);
@@ -3598,13 +3606,13 @@ const metricsDrawer = new MetricsDrawerPanel(panelHost, shell.metricsBodyEl);
 
 // ---- the load dialog ----
 
-const LOAD_CHOICES: { label: string; detail: string; build: () => RealmRacersCircuit }[] = [
+const LOAD_CHOICES: { label: string; detail: string; build: () => MortarOverdriveCircuit }[] = [
   {
     label: 'starter oval',
     detail: 'a plain loop to deform',
     build: () => ({ ...blankCircuit(), id: 'draft_circuit' }),
   },
-  ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => ({
+  ...MORTAR_OVERDRIVE_CIRCUIT_LIST.map((circuit) => ({
     label: circuit.id,
     detail: `${circuit.roles.join(' and ')}, ${circuit.laps} laps`,
     build: () => ({ ...circuit, id: `draft_${circuit.id}` }),
@@ -3846,8 +3854,8 @@ function runSelectionAction(id: ActionId): void {
     case 'rotateProp': {
       if (dressing?.kind !== 'prop') return;
       const placed =
-        realmRacersPlacements(record).props[
-          placementIndexOf(record.props, REALM_RACERS_PROPS, dressing.index)
+        mortarOverdrivePlacements(record).props[
+          placementIndexOf(record.props, MORTAR_OVERDRIVE_PROPS, dressing.index)
         ];
       transformSelectedProp((prop) => rotatedProp(prop, placed?.yaw ?? 0, 1));
       return;

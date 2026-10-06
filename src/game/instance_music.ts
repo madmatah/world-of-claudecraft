@@ -1,6 +1,6 @@
-import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_CIRCUIT_LIST } from '../sim/content/mortar_overdrive/circuits';
 import { delveAt, dungeonAt, isBgPos, isDelvePos, type ZoneDef } from '../sim/data';
-import { realmRacersLaneAt } from '../sim/realm_racers_layout';
+import { mortarOverdriveLaneAt } from '../sim/mortar_overdrive/layout';
 import { type CrucibleFloor, crucibleFloorForDungeon } from './crucible_music';
 import {
   type MusicZone,
@@ -16,20 +16,20 @@ import { type AreaTrackId, isAreaTrackId } from './music_tracks';
  * treated as no track rather than as a missing file: silence beats a 404 loop,
  * and `tests/instance_music.test.ts` pins that no shipped circuit does it.
  */
-export function realmRacersAreaTrackAt(x: number, z: number): AreaTrackId | null {
-  const track = realmRacersLaneAt(x, z)?.circuit.musicTrack;
+export function mortarOverdriveAreaTrackAt(x: number, z: number): AreaTrackId | null {
+  const track = mortarOverdriveLaneAt(x, z)?.circuit.musicTrack;
   return track !== undefined && isAreaTrackId(track) ? track : null;
 }
 
-/** Whether an area track belongs to a rally circuit, which is what decides
+/** Whether an area track belongs to a Mortar Overdrive circuit, which is what decides
  *  whether a new race RESTARTS it. Derived from the circuit records, so a new
  *  circuit joins it by existing. */
-export function isRealmRacersAreaTrack(track: AreaTrackId | null): boolean {
-  return track !== null && REALM_RACERS_CIRCUIT_TRACKS.has(track);
+export function isMortarOverdriveAreaTrack(track: AreaTrackId | null): boolean {
+  return track !== null && MORTAR_OVERDRIVE_CIRCUIT_TRACKS.has(track);
 }
 
-const REALM_RACERS_CIRCUIT_TRACKS: ReadonlySet<string> = new Set(
-  REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.musicTrack),
+const MORTAR_OVERDRIVE_CIRCUIT_TRACKS: ReadonlySet<string> = new Set(
+  MORTAR_OVERDRIVE_CIRCUIT_LIST.map((circuit) => circuit.musicTrack),
 );
 
 export interface InstanceMusicEntity {
@@ -61,7 +61,7 @@ export interface InstanceMusicInput {
   zone: Pick<ZoneDef, 'id' | 'biome' | 'hub'>;
   inDungeon: boolean;
   entities: Iterable<InstanceMusicEntity>;
-  realmRacersMatchId: number | null;
+  mortarOverdriveMatchId: number | null;
   // The active procedural Rift floor (null outside a rift). A rift floor scores
   // by its RiftTheme, not the dungeon fallback, and each floor counts as its own
   // instance entry so the crawl cue re-phrases from the top even when two floors
@@ -120,13 +120,13 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
   const instanceId = isDelvePos(input.playerPos.x)
     ? (delveAt(input.playerPos.x)?.id ?? FALLBACK_DELVE_ID)
     : (dungeon?.id ?? null);
-  // A rally circuit sits on the flat instance plane, so inDungeon is true there
+  // A Mortar Overdrive circuit sits on the flat instance plane, so inDungeon is true there
   // and the zone cue would otherwise fall back to the dungeon crawl theme. The
   // circuit's own race track owns the mix instead, for the whole visit: players
   // only ever stand there for a race (grid, countdown, laps, results). The
   // track comes off the CIRCUIT standing on that lane, so a themed circuit
   // brings its zone's music with it.
-  const realmRacersTrack = realmRacersAreaTrackAt(input.playerPos.x, input.playerPos.z);
+  const mortarOverdriveTrack = mortarOverdriveAreaTrackAt(input.playerPos.x, input.playerPos.z);
   // The Forge-Lift shares the approach's score (one shaft, one theme).
   // Aliased here in the decision layer, zone selection only (the reset key
   // keeps the real id), because music.ts sits at its monolith ceiling.
@@ -157,34 +157,34 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
     bossEngaged: crucibleFloor === null && bossEngaged,
     crucibleFloor,
     instanceId: musicInstanceId,
-    areaTrack: realmRacersTrack,
+    areaTrack: mortarOverdriveTrack,
   };
 }
 
 export class InstanceMusicController {
   private lastInstanceId: string | null = null;
-  private lastRealmRacersMatchId: number | null = null;
+  private lastMortarOverdriveMatchId: number | null = null;
 
   constructor(private readonly music: InstanceMusicPort) {}
 
   update(input: InstanceMusicInput): InstanceMusicDecision {
     const decision = instanceMusicDecision(input);
-    const restartRealmRacers =
-      isRealmRacersAreaTrack(decision.areaTrack) &&
-      input.realmRacersMatchId !== null &&
-      input.realmRacersMatchId !== this.lastRealmRacersMatchId;
+    const restartMortarOverdrive =
+      isMortarOverdriveAreaTrack(decision.areaTrack) &&
+      input.mortarOverdriveMatchId !== null &&
+      input.mortarOverdriveMatchId !== this.lastMortarOverdriveMatchId;
     if (shouldResetMusicForDungeonEntry(this.lastInstanceId, decision.instanceId)) {
       this.music.resetForDungeonEntry(decision.instanceId, decision.zone);
     }
     this.lastInstanceId = decision.instanceId;
-    this.lastRealmRacersMatchId = input.realmRacersMatchId;
+    this.lastMortarOverdriveMatchId = input.mortarOverdriveMatchId;
     if (decision.crucibleFloor !== null) {
       this.music.update(decision.zone, decision.musicCombat, decision.crucibleFloor);
     } else {
       this.music.update(decision.zone, decision.musicCombat);
     }
     this.music.setBossCombat(decision.bossEngaged);
-    if (restartRealmRacers) this.music.setAreaTrack(decision.areaTrack, true);
+    if (restartMortarOverdrive) this.music.setAreaTrack(decision.areaTrack, true);
     else this.music.setAreaTrack(decision.areaTrack);
     return decision;
   }

@@ -121,9 +121,9 @@ export function bareClient(pid: number, overrides: BareClientOverrides = {}): Cl
   c.worldPvpInfo = null;
   c.hillInfo = null;
   c.cardMinigameInfo = { queued: false, available: true, match: null };
-  // Realm Racers mirrors: no queue, no heat, no trackside lane, no held kit
+  // Mortar Overdrive mirrors: no queue, no heat, no trackside lane, no held kit
   // until a snapshot carries one. Values mirror the class initializers exactly.
-  c.realmRacersInfo = {
+  c.mortarOverdriveInfo = {
     queued: false,
     queuePosition: 0,
     queueSize: 0,
@@ -131,8 +131,8 @@ export function bareClient(pid: number, overrides: BareClientOverrides = {}): Cl
     practiceAvailable: true,
     queueViable: true,
   };
-  c.realmRacersTrackside = null;
-  c.realmRacersKit = null;
+  c.mortarOverdriveTrackside = null;
+  c.mortarOverdriveKit = null;
   c.socialInfo = null;
   c.whoInfo = null;
   c.marketInfo = null;

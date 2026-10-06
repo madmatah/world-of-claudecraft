@@ -185,14 +185,14 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // dispatched beside bg_flag), at the second release/v0.44.0 base merge: 243/257/14.
 // The third release/v0.44.0 base merge adds the market buy orders (three
 // commands) and guild custom ranks (guild_set_ranks): 247/261/14.
-// The Realm Racers minigame adds five more on both sides, appended AFTER the
+// The Mortar Overdrive minigame adds five more on both sides, appended AFTER the
 // release's own tokens because a released index never moves: the queue pair
-// (realm_racers_join / realm_racers_leave), the forfeit, realm_racers_practice
+// (mortar_overdrive_join / mortar_overdrive_leave), the forfeit, mortar_overdrive_practice
 // (races a house pilot immediately, no queue and no wait) and the race-feel
-// pass's recovery command realm_racers_reset. RE-PINNED from a suite run at
-// the release/v0.44.0 merge into feature/realm-racers (ours 212/225/13, the
+// pass's recovery command mortar_overdrive_reset. RE-PINNED from a suite run at
+// the release/v0.44.0 merge into feature/mortar-overdrive (ours 212/225/13, the
 // release 247/261/14): 252/266/14.
-// The loading lobby's realm_racers_ready adds one on both sides: 253/267/14.
+// The loading lobby's mortar_overdrive_ready adds one on both sides: 253/267/14.
 const EXPECTED_SEND_COUNT = 253;
 const EXPECTED_DISPATCH_COUNT = 267;
 const EXPECTED_DISPATCH_ONLY_COUNT = 14;

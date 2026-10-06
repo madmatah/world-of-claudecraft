@@ -1,7 +1,7 @@
 // The circuit editor's 3D preview: the drawn circuit, rendered through the
 // GAME's own track builder.
 //
-// It is deliberately not a second drawing. `buildRealmRacersTrack` takes a
+// It is deliberately not a second drawing. `buildMortarOverdriveTrack` takes a
 // plain record, so the panel shows the shipped visual pipeline (ground splat,
 // kerbs, the basin, the perimeter, the dressing) and inherits whatever later
 // work adds to it. The 2D canvas answers "is this geometry legal"; this answers
@@ -10,7 +10,7 @@
 //
 // Two placement facts worth stating once:
 //
-//  - the builder authors WORLD coordinates around `REALM_RACERS_ORIGIN`
+//  - the builder authors WORLD coordinates around `MORTAR_OVERDRIVE_ORIGIN`
 //    (x = 113 700). The preview subtracts that on the parent group rather than
 //    flying the camera out to the band, so every camera number in
 //    `preview_camera_core.ts` is circuit-local and readable. The ground
@@ -34,18 +34,21 @@ import {
   warmDuskGrade,
 } from '../../render/day_night_core';
 import { initGfxTier, SUN_ANCHOR } from '../../render/gfx';
-import { realmRacersAuthoredPhase } from '../../render/realm_racers_daylight_core';
-import { rallySkyDayNightBiome, realmRacersTheme } from '../../render/realm_racers_themes';
-import { buildRealmRacersTrack } from '../../render/realm_racers_track';
-import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
+import { mortarOverdriveAuthoredPhase } from '../../render/mortar_overdrive/daylight_core';
 import {
-  createRealmRacersTrackPalette,
-  type RealmRacersTrackPalette,
-} from '../../render/realm_racers_track_palette';
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+  mortarOverdriveSkyDayNightBiome,
+  mortarOverdriveTheme,
+} from '../../render/mortar_overdrive/themes';
+import { buildMortarOverdriveTrack } from '../../render/mortar_overdrive/track';
+import { disposeMortarOverdriveTrackGroup } from '../../render/mortar_overdrive/track_dispose_core';
+import {
+  createMortarOverdriveTrackPalette,
+  type MortarOverdriveTrackPalette,
+} from '../../render/mortar_overdrive/track_palette';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
 import { VEHICLE_PROFILES } from '../../sim/content/vehicles';
-import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
-import { realmRacersTrack } from '../../sim/realm_racers_spline';
+import { MORTAR_OVERDRIVE_ORIGIN } from '../../sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../../sim/mortar_overdrive/spline';
 import {
   advanceFlyThrough,
   createFlyLook,
@@ -68,7 +71,7 @@ import {
 export type PreviewCameraMode = 'orbit' | 'fly';
 
 /** The loaner's top speed, which the two fly-through paces are fractions of. */
-const MACHINE_TOP_SPEED = VEHICLE_PROFILES.rally_loaner.maxSpeed;
+const MACHINE_TOP_SPEED = VEHICLE_PROFILES.mo_loaner.maxSpeed;
 
 /** Garden sky, matching the band's own daylight rather than a neutral grey: a
  *  circuit judged against grey reads differently from one judged in game. */
@@ -104,7 +107,7 @@ export class CircuitPreview {
    *  world origin (see the header). */
   private readonly stage = new THREE.Group();
   private trackGroup: THREE.Group | null = null;
-  private trackPalette: RealmRacersTrackPalette | null = null;
+  private trackPalette: MortarOverdriveTrackPalette | null = null;
 
   private readonly orbit = createPreviewOrbit();
   /** Where the fly-through is looking, relative to straight down the road. */
@@ -129,7 +132,7 @@ export class CircuitPreview {
   private visible = false;
   private lastFrameMs = 0;
   private rebuildTimer = 0;
-  private pending: RealmRacersCircuit | null = null;
+  private pending: MortarOverdriveCircuit | null = null;
   private assetsPromise: Promise<void> | null = null;
   private started = false;
   private disposed = false;
@@ -144,7 +147,7 @@ export class CircuitPreview {
     this.canvas = options.canvas;
     this.onStatus = options.onStatus;
     this.camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, FAR);
-    this.stage.position.set(-REALM_RACERS_ORIGIN.x, 0, -REALM_RACERS_ORIGIN.z);
+    this.stage.position.set(-MORTAR_OVERDRIVE_ORIGIN.x, 0, -MORTAR_OVERDRIVE_ORIGIN.z);
     this.scene.add(this.stage);
     this.scene.background = new THREE.Color(SKY_COLOUR);
     this.scene.fog = new THREE.Fog(SKY_COLOUR, 900, 2400);
@@ -182,11 +185,11 @@ export class CircuitPreview {
    * and two lights by design (see `buildLights`), so the preview reads the hour
    * rather than reproducing the frame.
    */
-  private applyDaylight(circuit: RealmRacersCircuit): void {
+  private applyDaylight(circuit: MortarOverdriveCircuit): void {
     const sun = this.sun;
     const hemi = this.hemi;
     if (!sun || !hemi) return;
-    const phase = realmRacersAuthoredPhase(circuit.timeOfDay);
+    const phase = mortarOverdriveAuthoredPhase(circuit.timeOfDay);
     if (phase === null) {
       // No hour authored: the circuit takes the world's clock in game, and the
       // panel keeps the standing daylight it has always drawn under.
@@ -199,7 +202,7 @@ export class CircuitPreview {
       this.setSkyColour(SKY_COLOUR, [1, 1, 1]);
       return;
     }
-    const biome = rallySkyDayNightBiome(realmRacersTheme(circuit).sky.biome);
+    const biome = mortarOverdriveSkyDayNightBiome(mortarOverdriveTheme(circuit).sky.biome);
     const dayness = globalDayness(phase);
     const direction = sunDirection(phase);
     const grade = warmDuskGrade(
@@ -269,7 +272,7 @@ export class CircuitPreview {
   }
 
   /** Every edit arrives here; only the last one in a burst is built. */
-  show(circuit: RealmRacersCircuit): void {
+  show(circuit: MortarOverdriveCircuit): void {
     this.pending = circuit;
     if (!this.started || this.assetsPromise === null) return;
     window.clearTimeout(this.rebuildTimer);
@@ -283,15 +286,15 @@ export class CircuitPreview {
     // A palette per rebuild, given back with the group: the rebuild reads the
     // tier arm (the splat set may have landed since) the way the game's first
     // build does, and one edit never leaks the last one's ground material.
-    this.trackPalette = createRealmRacersTrackPalette();
-    const view = buildRealmRacersTrack(circuit, undefined, this.trackPalette);
+    this.trackPalette = createMortarOverdriveTrackPalette();
+    const view = buildMortarOverdriveTrack(circuit, undefined, this.trackPalette);
     // The builder hides its group for the lane gate it will never be asked
     // about here (see the header); a preview has one circuit and shows it.
     view.group.visible = true;
     this.stage.add(view.group);
     this.trackGroup = view.group;
     this.applyDaylight(circuit);
-    const track = realmRacersTrack(circuit);
+    const track = mortarOverdriveTrack(circuit);
     this.lapLength = track.length;
     if (this.flyS > this.lapLength) this.flyS = 0;
   }
@@ -447,7 +450,11 @@ export class CircuitPreview {
     // Sampling, the world-to-stage conversion and the chase pose are ONE call:
     // the conversion was skippable when they were three, and skipping it put
     // the camera out at the instance band looking at empty sky.
-    const chase = flyThroughPoseAt(realmRacersTrack(circuit), this.flyS, REALM_RACERS_ORIGIN);
+    const chase = flyThroughPoseAt(
+      mortarOverdriveTrack(circuit),
+      this.flyS,
+      MORTAR_OVERDRIVE_ORIGIN,
+    );
     return flyLookPose(chase, this.flyLook);
   }
 
@@ -474,7 +481,7 @@ export class CircuitPreview {
   private releaseTrack(): void {
     if (this.trackGroup) {
       this.stage.remove(this.trackGroup);
-      disposeRealmRacersTrackGroup(this.trackGroup);
+      disposeMortarOverdriveTrackGroup(this.trackGroup);
       this.trackGroup = null;
     }
     this.trackPalette?.dispose();

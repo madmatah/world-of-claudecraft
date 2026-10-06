@@ -1,6 +1,6 @@
 // A private position in the procedural painters' random sequence
 // (textures.ts). Every painter there draws from one shared sequence, so a
-// painter run at a moment that varies (a Realm Racers circuit built when a
+// painter run at a moment that varies (a Mortar Overdrive circuit built when a
 // pilot commits to it, in whatever order races are drawn) would shift every
 // texture painted after it. A caller with its own stream paints from it
 // instead and leaves the shared sequence untouched. Its own module so the

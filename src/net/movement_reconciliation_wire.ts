@@ -1,4 +1,4 @@
-import type { RallySlickRecon } from '../sim/realm_racers_slick_contact';
+import type { MortarOverdriveSlickRecon } from '../sim/mortar_overdrive';
 import type { Entity, FerryDeckMirror, VehicleDrive } from '../sim/types';
 import { parseDriveRecon, restingDriveRecon } from './drive_recon_wire';
 import { QuestWorldWireState } from './quest_world_wire_state';
@@ -24,7 +24,7 @@ export class ReconWireState extends QuestWorldWireState {
   reconVy = 0;
   reconOnGround = true;
   /** The acknowledged standing with the oil, beside `reconDrive`. */
-  reconSlick: RallySlickRecon | null = null;
+  reconSlick: MortarOverdriveSlickRecon | null = null;
   /** The last well-formed `rdv` drive (or a resting one while no good row has
    *  landed yet), for PRESENTATION only: the mirror keeps drawing the machine
    *  across a malformed row. Never a replay input. */

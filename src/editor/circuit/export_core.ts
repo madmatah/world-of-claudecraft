@@ -2,7 +2,7 @@
 // literal, the reader that takes one back, and the validator the dev-server
 // save endpoint runs before it writes anything.
 //
-// The tool deliberately does NOT rewrite `src/sim/content/realm_racers_circuits.ts`
+// The tool deliberately does NOT rewrite `src/sim/content/mortar_overdrive/circuits.ts`
 // the way the music editor rewrites its generated module. That file is
 // hand-curated and its comments carry the reasoning behind every number (why a
 // chicane is 8.5, why a pool sits where it does); a generator would destroy it.
@@ -17,18 +17,18 @@
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
 import {
-  type RallyFence,
-  type RallyPickupRow,
-  type RallyPond,
-  type RallyProp,
-  type RallyPropCollide,
-  type RallyScatter,
-  REALM_RACERS_DEFAULT_THEME_ID,
-  type RealmRacersCircuit,
-  type RealmRacersCircuitRole,
-} from '../../sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_DEFAULT_THEME_ID,
+  type MortarOverdriveCircuit,
+  type MortarOverdriveCircuitRole,
+  type MortarOverdriveFence,
+  type MortarOverdrivePickupRow,
+  type MortarOverdrivePond,
+  type MortarOverdriveProp,
+  type MortarOverdrivePropCollide,
+  type MortarOverdriveScatter,
+} from '../../sim/content/mortar_overdrive/circuits';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
 import { isBarrierKit, MAX_FENCE_POINTS, MAX_FENCES } from './fences_core';
 import { MAX_PICKUP_ROWS } from './pickup_rows_core';
 
@@ -46,7 +46,7 @@ const PROP_PLACES = 2;
 const ID_RE = /^[a-z][a-z0-9_]{2,40}$/;
 /** A plain lower-case token: what a music track id and a theme id both are. */
 const TOKEN_RE = /^[a-z0-9_]{1,40}$/;
-const ROLES: readonly RealmRacersCircuitRole[] = ['practice', 'competition'];
+const ROLES: readonly MortarOverdriveCircuitRole[] = ['practice', 'competition'];
 
 function round(value: number, places: number): number {
   const scale = 10 ** places;
@@ -55,7 +55,7 @@ function round(value: number, places: number): number {
 
 /** The record as the export will carry it, so the live readout and the pasted
  *  literal are measurements of the same circuit. */
-export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
+export function roundCircuit(circuit: MortarOverdriveCircuit): MortarOverdriveCircuit {
   return {
     ...circuit,
     controlPoints: circuit.controlPoints.map((point) => ({
@@ -84,7 +84,7 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
   };
 }
 
-function roundCollide(collide: RallyPropCollide): RallyPropCollide {
+function roundCollide(collide: MortarOverdrivePropCollide): MortarOverdrivePropCollide {
   if (collide === 'default' || collide === 'none') return collide;
   // Footprints keep two places where a POSITION keeps one: a fence rail is a
   // quarter of a yard thick, and rounding its half-depth to a tenth would move
@@ -99,7 +99,7 @@ function roundCollide(collide: RallyPropCollide): RallyPropCollide {
       };
 }
 
-function roundProp(prop: RallyProp): RallyProp {
+function roundProp(prop: MortarOverdriveProp): MortarOverdriveProp {
   return {
     asset: prop.asset,
     at:
@@ -114,7 +114,7 @@ function roundProp(prop: RallyProp): RallyProp {
   };
 }
 
-function roundScatter(scatter: RallyScatter): RallyScatter {
+function roundScatter(scatter: MortarOverdriveScatter): MortarOverdriveScatter {
   return {
     asset: scatter.asset,
     zone: scatter.zone,
@@ -131,7 +131,7 @@ function roundScatter(scatter: RallyScatter): RallyScatter {
   };
 }
 
-function roundPond(pond: RallyPond): RallyPond {
+function roundPond(pond: MortarOverdrivePond): MortarOverdrivePond {
   return {
     x: round(pond.x, POINT_PLACES),
     z: round(pond.z, POINT_PLACES),
@@ -143,16 +143,16 @@ function roundPond(pond: RallyPond): RallyPond {
   };
 }
 
-const pointLiteral = (point: RallyPoint): string => `{ x: ${point.x}, z: ${point.z} }`;
+const pointLiteral = (point: MortarOverdrivePoint): string => `{ x: ${point.x}, z: ${point.z} }`;
 
-function collideLiteral(collide: RallyPropCollide): string {
+function collideLiteral(collide: MortarOverdrivePropCollide): string {
   if (collide === 'default' || collide === 'none') return `'${collide}'`;
   return collide.kind === 'circle'
     ? `{ kind: 'circle', r: ${collide.r} }`
     : `{ kind: 'obb', hw: ${collide.hw}, hd: ${collide.hd}, rot: ${collide.rot} }`;
 }
 
-function propLiteral(prop: RallyProp): string {
+function propLiteral(prop: MortarOverdriveProp): string {
   const at =
     's' in prop.at
       ? `{ s: ${prop.at.s}, offset: ${prop.at.offset} }`
@@ -166,14 +166,14 @@ function propLiteral(prop: RallyProp): string {
   return `{ ${parts.join(', ')} }`;
 }
 
-function scatterLiteral(scatter: RallyScatter): string {
+function scatterLiteral(scatter: MortarOverdriveScatter): string {
   const parts = [`asset: '${scatter.asset}'`, `zone: '${scatter.zone}'`];
   if (scatter.span) parts.push(`span: { s0: ${scatter.span.s0}, s1: ${scatter.span.s1} }`);
   parts.push(`spacing: ${scatter.spacing}`, `seed: ${scatter.seed}`);
   return `{ ${parts.join(', ')} }`;
 }
 
-function roundFence(fence: RallyFence): RallyFence {
+function roundFence(fence: MortarOverdriveFence): MortarOverdriveFence {
   return {
     ...fence,
     points: fence.points.map((point) => ({
@@ -184,7 +184,7 @@ function roundFence(fence: RallyFence): RallyFence {
   };
 }
 
-function fenceLiteral(fence: RallyFence): string {
+function fenceLiteral(fence: MortarOverdriveFence): string {
   const points = fence.points.map((point) => `{ x: ${point.x}, z: ${point.z} }`).join(', ');
   const parts = [`kit: '${fence.kit}'`, `points: [${points}]`];
   if (fence.closed) parts.push('closed: true');
@@ -192,7 +192,7 @@ function fenceLiteral(fence: RallyFence): string {
   return `{ ${parts.join(', ')} }`;
 }
 
-function pondLiteral(pond: RallyPond): string {
+function pondLiteral(pond: MortarOverdrivePond): string {
   const parts = [`x: ${pond.x}`, `z: ${pond.z}`, `rx: ${pond.rx}`, `rz: ${pond.rz}`];
   if (pond.rot !== undefined) parts.push(`rot: ${pond.rot}`);
   if (pond.wobble !== undefined) parts.push(`wobble: ${pond.wobble}`);
@@ -205,11 +205,11 @@ function pondLiteral(pond: RallyPond): string {
  * module. Stable field order and stable formatting, so two exports of the same
  * circuit are the same text and a diff shows only what actually moved.
  */
-export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
+export function circuitToTypeScript(circuit: MortarOverdriveCircuit): string {
   const c = roundCircuit(circuit);
   const constName = c.id.toUpperCase();
   const lines: string[] = [
-    `const ${constName}: RealmRacersCircuit = {`,
+    `const ${constName}: MortarOverdriveCircuit = {`,
     `  id: '${c.id}',`,
     '  controlPoints: [',
   ];
@@ -296,11 +296,11 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
  * normalize the one object-literal dialect it emits into JSON rather than
  * parsing TypeScript.
  */
-export function circuitFromTypeScript(source: string): RealmRacersCircuit | null {
+export function circuitFromTypeScript(source: string): MortarOverdriveCircuit | null {
   // Anchored on the annotated declaration rather than on the first brace, so a
   // whole draft FILE parses too: its preamble carries an `import type { ... }`
   // whose brace would otherwise be read as the start of the record.
-  const declaration = /:\s*RealmRacersCircuit\s*=\s*\{/.exec(source);
+  const declaration = /:\s*MortarOverdriveCircuit\s*=\s*\{/.exec(source);
   const start = declaration ? declaration.index + declaration[0].length - 1 : source.indexOf('{');
   const end = source.lastIndexOf('}');
   if (start < 0 || end <= start) return null;
@@ -325,9 +325,9 @@ const inRange = (value: unknown, min: number, max: number): value is number =>
 const isInteger = (value: unknown, min: number, max: number): value is number =>
   inRange(value, min, max) && Number.isInteger(value);
 
-function readPoints(raw: unknown): RallyPoint[] | null {
+function readPoints(raw: unknown): MortarOverdrivePoint[] | null {
   if (!Array.isArray(raw) || raw.length < 3 || raw.length > 256) return null;
-  const out: RallyPoint[] = [];
+  const out: MortarOverdrivePoint[] = [];
   for (const item of raw) {
     const point = item as { x?: unknown; z?: unknown };
     if (!inRange(point.x, -5000, 5000) || !inRange(point.z, -5000, 5000)) return null;
@@ -368,7 +368,7 @@ function readBands(raw: unknown, key: string, min: number, max: number): { s: nu
  * itself resolves footprints from, so the tool cannot bless a key the game
  * cannot place.
  */
-function readCollide(raw: unknown): RallyPropCollide | null {
+function readCollide(raw: unknown): MortarOverdrivePropCollide | null {
   if (raw === 'default' || raw === 'none') return raw;
   if (!raw || typeof raw !== 'object') return null;
   const c = raw as Record<string, unknown>;
@@ -383,16 +383,16 @@ function readCollide(raw: unknown): RallyPropCollide | null {
   return null;
 }
 
-function readProps(raw: unknown): RallyProp[] | null {
+function readProps(raw: unknown): MortarOverdriveProp[] | null {
   if (!Array.isArray(raw) || raw.length > 4096) return null;
-  const out: RallyProp[] = [];
+  const out: MortarOverdriveProp[] = [];
   for (const item of raw) {
     const prop = item as Record<string, unknown>;
-    if (typeof prop.asset !== 'string' || !Object.hasOwn(REALM_RACERS_PROPS, prop.asset))
+    if (typeof prop.asset !== 'string' || !Object.hasOwn(MORTAR_OVERDRIVE_PROPS, prop.asset))
       return null;
     const at = prop.at as Record<string, unknown> | undefined;
     if (!at || typeof at !== 'object') return null;
-    let placement: RallyProp['at'];
+    let placement: MortarOverdriveProp['at'];
     if (at.s !== undefined) {
       if (!inRange(at.s, 0, 1) || !inRange(at.offset, -5000, 5000)) return null;
       placement = { s: at.s, offset: at.offset };
@@ -416,12 +416,12 @@ function readProps(raw: unknown): RallyProp[] | null {
   return out;
 }
 
-function readScatters(raw: unknown): RallyScatter[] | null {
+function readScatters(raw: unknown): MortarOverdriveScatter[] | null {
   if (!Array.isArray(raw) || raw.length > 64) return null;
-  const out: RallyScatter[] = [];
+  const out: MortarOverdriveScatter[] = [];
   for (const item of raw) {
     const scatter = item as Record<string, unknown>;
-    if (typeof scatter.asset !== 'string' || !Object.hasOwn(REALM_RACERS_PROPS, scatter.asset))
+    if (typeof scatter.asset !== 'string' || !Object.hasOwn(MORTAR_OVERDRIVE_PROPS, scatter.asset))
       return null;
     if (scatter.zone !== 'infield' && scatter.zone !== 'outfield') return null;
     if (!inRange(scatter.spacing, 1, 200) || !isInteger(scatter.seed, -1e9, 1e9)) return null;
@@ -446,9 +446,9 @@ function readScatters(raw: unknown): RallyScatter[] | null {
  * dimensions for. A one-point entry is refused rather than dropped, because a
  * barrier with no run is a record entry every consumer then has to special-case.
  */
-function readFences(raw: unknown): RallyFence[] | null {
+function readFences(raw: unknown): MortarOverdriveFence[] | null {
   if (!Array.isArray(raw) || raw.length > MAX_FENCES) return null;
-  const out: RallyFence[] = [];
+  const out: MortarOverdriveFence[] = [];
   for (const item of raw) {
     const fence = item as Record<string, unknown>;
     if (typeof fence.kit !== 'string' || !isBarrierKit(fence.kit)) return null;
@@ -459,7 +459,7 @@ function readFences(raw: unknown): RallyFence[] | null {
     ) {
       return null;
     }
-    const points: RallyPoint[] = [];
+    const points: MortarOverdrivePoint[] = [];
     for (const rawPoint of fence.points) {
       const point = rawPoint as Record<string, unknown>;
       if (!inRange(point.x, -5000, 5000) || !inRange(point.z, -5000, 5000)) return null;
@@ -477,9 +477,9 @@ function readFences(raw: unknown): RallyFence[] | null {
   return out;
 }
 
-function readPonds(raw: unknown): RallyPond[] | null {
+function readPonds(raw: unknown): MortarOverdrivePond[] | null {
   if (!Array.isArray(raw) || raw.length > 256) return null;
-  const out: RallyPond[] = [];
+  const out: MortarOverdrivePond[] = [];
   for (const item of raw) {
     const pond = item as Record<string, unknown>;
     if (!inRange(pond.x, -5000, 5000) || !inRange(pond.z, -5000, 5000)) return null;
@@ -510,9 +510,9 @@ function readPonds(raw: unknown): RallyPond[] | null {
  * a hand-written payload can reach and exactly the shape this runs before a
  * write for.
  */
-function readPickupRows(raw: unknown): RallyPickupRow[] | null {
+function readPickupRows(raw: unknown): MortarOverdrivePickupRow[] | null {
   if (!Array.isArray(raw) || raw.length > MAX_PICKUP_ROWS) return null;
-  const out: RallyPickupRow[] = [];
+  const out: MortarOverdrivePickupRow[] = [];
   for (const item of raw) {
     const row = item as Record<string, unknown>;
     if (!inRange(row.s, 0, 1)) return null;
@@ -529,7 +529,7 @@ function readPickupRows(raw: unknown): RallyPickupRow[] | null {
  * and a draft written from a malformed payload would be a file the tree cannot
  * even parse.
  */
-export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null {
+export function validateCircuitPayload(raw: unknown): MortarOverdriveCircuit | null {
   if (!raw || typeof raw !== 'object') return null;
   const c = raw as Record<string, unknown>;
   if (typeof c.id !== 'string' || !ID_RE.test(c.id)) return null;
@@ -544,7 +544,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   // written before themes existed is a scratch file on the operator's disk, and
   // refusing the whole record for a field that has a default would read as
   // "this is not a circuit" with nothing naming the reason.
-  const theme = c.theme === undefined ? REALM_RACERS_DEFAULT_THEME_ID : c.theme;
+  const theme = c.theme === undefined ? MORTAR_OVERDRIVE_DEFAULT_THEME_ID : c.theme;
   if (typeof theme !== 'string' || !TOKEN_RE.test(theme)) return null;
   // The hour, on the same terms: a SHAPE check, membership left to the readout
   // (`unknown_time_of_day`). Absent is legal and stays absent, because here it
@@ -613,11 +613,11 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   }
 
   if (!Array.isArray(c.roles) || c.roles.length === 0 || c.roles.length > ROLES.length) return null;
-  const roles: RealmRacersCircuitRole[] = [];
+  const roles: MortarOverdriveCircuitRole[] = [];
   for (const role of c.roles) {
-    if (!ROLES.includes(role as RealmRacersCircuitRole)) return null;
-    if (roles.includes(role as RealmRacersCircuitRole)) return null;
-    roles.push(role as RealmRacersCircuitRole);
+    if (!ROLES.includes(role as MortarOverdriveCircuitRole)) return null;
+    if (roles.includes(role as MortarOverdriveCircuitRole)) return null;
+    roles.push(role as MortarOverdriveCircuitRole);
   }
 
   return {
@@ -662,15 +662,15 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
 
 /** The scratch draft the dev-server endpoint writes. Never the curated records
  *  module: this file is a note to self, not content. */
-export function draftFileContents(circuit: RealmRacersCircuit): string {
+export function draftFileContents(circuit: MortarOverdriveCircuit): string {
   return [
-    `// Realm Racers circuit draft '${circuit.id}', saved from circuit_editor.html.`,
+    `// Mortar Overdrive circuit draft '${circuit.id}', saved from circuit_editor.html.`,
     '// Scratch only: gitignored, never imported, and never the curated records',
     '// module (which carries the authored prose explaining every number). Paste',
-    '// the literal below into src/sim/content/realm_racers_circuits.ts and write',
+    '// the literal below into src/sim/content/mortar_overdrive/circuits.ts and write',
     '// that prose by hand.',
     '',
-    "import type { RealmRacersCircuit } from '../../src/sim/content/realm_racers_circuits';",
+    "import type { MortarOverdriveCircuit } from '../../src/sim/content/mortar_overdrive/circuits';",
     '',
     circuitToTypeScript(circuit),
   ].join('\n');

@@ -17,7 +17,11 @@ import {
   hasCharacterEffect,
 } from './character_effects_core';
 import type { SpiritVeilPalette } from './characters/spirit_veil_palette_core';
-import { type CharacterVeilboundState, rallyVeilLook, riderVeilLook } from './ghost_style_core';
+import {
+  type CharacterVeilboundState,
+  mortarOverdriveVeilLook,
+  riderVeilLook,
+} from './ghost_style_core';
 
 export function isAvengingWrathAura(aura: Pick<Aura, 'id' | 'kind'>): boolean {
   return aura.id === 'avenging_wrath' && aura.kind === 'buff_dmg_done';
@@ -180,7 +184,7 @@ export function syncCharacterVeils(
   rider.setGhost(look !== null, look ?? 'spirit');
   const mount = view.mountVisual;
   if (!mount || view.mountCompilePending) return;
-  const racer = rallyVeilLook(state);
+  const racer = mortarOverdriveVeilLook(state);
   mount.shareVeilUnit(rider);
   mount.setGhost(racer !== null, racer ?? 'spirit');
 }

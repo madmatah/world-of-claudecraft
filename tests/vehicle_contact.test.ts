@@ -19,10 +19,10 @@ import {
 } from '../src/sim/vehicle_motion';
 
 // Wheel-to-wheel contact, driven directly. Everything here is the pure leaf:
-// the rally module's use of it (the re-clamp through static collision, the
-// throttled event) is covered in tests/realm_racers_match.test.ts.
+// the Mortar Overdrive module's use of it (the re-clamp through static collision, the
+// throttled event) is covered in tests/mortar_overdrive_match.test.ts.
 
-const LOANER = vehicleProfile('rally_loaner');
+const LOANER = vehicleProfile('mo_loaner');
 
 interface BodyOptions {
   x: number;
@@ -35,7 +35,7 @@ interface BodyOptions {
 }
 
 function body(opts: BodyOptions): ContactBody {
-  const drive = createVehicleDrive('rally_loaner');
+  const drive = createVehicleDrive('mo_loaner');
   drive.speed = opts.speed ?? 0;
   drive.slip = opts.slip ?? 0;
   return {

@@ -18,8 +18,8 @@
 // the declared group, or lies inside it (the owner's own gate), is not affected.
 //
 // A caller may LIFT named owners for one call (`lifted`): a compile whose
-// trigger is that owner's own (the blocking arrival that lands in the rally
-// band, realm_racers_prepare_core.ts `rallyArrivalLifts`) links the group as
+// trigger is that owner's own (the blocking arrival that lands in the Mortar Overdrive
+// band, mortar_overdrive/prepare_core.ts `mortarOverdriveArrivalLifts`) links the group as
 // if it were never declared. The decision is the caller's, made explicit.
 //
 // The declared group itself is still visited, so it must be a plain group

@@ -635,13 +635,13 @@ const UI_PURE_CORES = [
   'src/ui/hud/hill/hill_bar_view.ts',
   'src/ui/hud/battleground/bg_end_banner_view.ts',
   'src/ui/hud/battleground/battleground_scoreboard_view.ts',
-  'src/ui/realm_racers_pickup_splash_view.ts',
-  'src/ui/realm_racers_view.ts',
-  'src/ui/realm_racers_standings_view.ts',
-  'src/ui/realm_racers_podium_view.ts',
-  'src/ui/realm_racers_ready_core.ts',
-  'src/ui/realm_racers_result_notice_view.ts',
-  'src/ui/hud/realm_racers/realm_racers_lobby_view.ts',
+  'src/ui/hud/mortar_overdrive/pickup_splash_view.ts',
+  'src/ui/hud/mortar_overdrive/race_view.ts',
+  'src/ui/hud/mortar_overdrive/standings_view.ts',
+  'src/ui/hud/mortar_overdrive/podium_view.ts',
+  'src/ui/hud/mortar_overdrive/ready_core.ts',
+  'src/ui/hud/mortar_overdrive/result_notice_view.ts',
+  'src/ui/hud/mortar_overdrive/lobby_view.ts',
   'src/ui/leaderboard_view.ts',
   'src/ui/guild_leaderboard_view.ts',
   // The signpost guild board's roster drill-in core (the board itself reuses
@@ -998,26 +998,26 @@ const RENDER_PURE_CORES = [
   'src/render/goblin_rocket_sled_fx_core.ts',
   'src/render/ground_aim_reticle_core.ts',
   'src/render/day_night_rig_core.ts',
-  'src/render/realm_racers_audio_core.ts',
-  'src/render/realm_racers_contact_kick_core.ts',
-  'src/render/realm_racers_daylight_core.ts',
-  'src/render/realm_racers_grass_core.ts',
-  'src/render/realm_racers_missed_pickup_core.ts',
-  'src/render/realm_racers_oil_spray_core.ts',
-  'src/render/realm_racers_pickups_core.ts',
-  'src/render/realm_racers_prepare_core.ts',
-  'src/render/realm_racers_slicks_core.ts',
+  'src/render/mortar_overdrive/audio_core.ts',
+  'src/render/mortar_overdrive/contact_kick_core.ts',
+  'src/render/mortar_overdrive/daylight_core.ts',
+  'src/render/mortar_overdrive/grass_core.ts',
+  'src/render/mortar_overdrive/missed_pickup_core.ts',
+  'src/render/mortar_overdrive/oil_spray_core.ts',
+  'src/render/mortar_overdrive/pickups_core.ts',
+  'src/render/mortar_overdrive/prepare_core.ts',
+  'src/render/mortar_overdrive/slicks_core.ts',
   // Data-as-code, but both are a purity DEPENDENCY of the cores above, so both
   // are swept: a three import in either would make those cores three-loading.
-  // `realm_racers_barrier_visuals.ts` is `realm_racers_track_core.ts`'s, through
-  // `rallyFencePieces`; the scan is per FILE and not transitive, so a dependency
+  // `mortar_overdrive/barrier_visuals.ts` is `mortar_overdrive/track_core.ts`'s, through
+  // `mortarOverdriveFencePieces`; the scan is per FILE and not transitive, so a dependency
   // that is not registered is a dependency nothing checks.
-  'src/render/realm_racers_barrier_visuals.ts',
-  'src/render/realm_racers_themes.ts',
-  'src/render/realm_racers_track_core.ts',
-  'src/render/realm_racers_upload_frame_core.ts',
-  'src/render/realm_racers_track_dispose_core.ts',
-  'src/render/realm_racers_visibility_core.ts',
+  'src/render/mortar_overdrive/barrier_visuals.ts',
+  'src/render/mortar_overdrive/themes.ts',
+  'src/render/mortar_overdrive/track_core.ts',
+  'src/render/mortar_overdrive/upload_frame_core.ts',
+  'src/render/mortar_overdrive/track_dispose_core.ts',
+  'src/render/mortar_overdrive/visibility_core.ts',
   'src/render/ignivar_encounter_core.ts',
   'src/render/varkhul_encounter_core.ts',
   'src/render/ignivar_judgment_fire_core.ts',
@@ -1191,8 +1191,8 @@ const BARE_NAMED = [
   'src/game/presentation_gate.ts',
   'src/game/glider_pitch_input.ts',
   'src/game/stale_chrome_focus.ts',
-  'src/render/realm_racers_barrier_visuals.ts',
-  'src/render/realm_racers_themes.ts',
+  'src/render/mortar_overdrive/barrier_visuals.ts',
+  'src/render/mortar_overdrive/themes.ts',
   'src/render/compile_gate.ts',
   'src/render/link_rate_budget.ts',
   'src/render/prewarm_compile_lifecycle.ts',
@@ -1364,13 +1364,13 @@ describe('src/sim architecture invariants', () => {
 
 const editorImportRoots = ['game', 'ui', 'render'].map((layer) => join(repoRoot, 'src', layer));
 
-// The one allowed edge: the /dev rallydraft client validates a drawn circuit
+// The one allowed edge: the /dev overdrivedraft client validates a drawn circuit
 // with the SAME core the editor's save endpoint validates with
 // (validateCircuitPayload), so a draft the editor accepts is a draft the
 // command seats. Dev-only: the whole path runs behind import.meta.env.DEV, and
 // the import is proven tree-shaken out of every production build.
 const ALLOWED_EDITOR_IMPORTS = new Set([
-  'src/game/realm_racers_draft_dev.ts -> ../editor/circuit/export_core',
+  'src/game/mortar_overdrive/draft_dev.ts -> ../../editor/circuit/export_core',
 ]);
 
 // A relative specifier that lands inside src/editor, RESOLVED against the
@@ -1403,9 +1403,9 @@ describe('src/game, src/ui, src/render never import from src/editor', () => {
 
   it('still finds the sanctioned import, so the allowlist cannot rot into a stale grant', () => {
     const source = stripComments(
-      readFileSync(join(repoRoot, 'src', 'game', 'realm_racers_draft_dev.ts'), 'utf8'),
+      readFileSync(join(repoRoot, 'src', 'game', 'mortar_overdrive/draft_dev.ts'), 'utf8'),
     );
-    expect(importSpecs(source)).toContain('../editor/circuit/export_core');
+    expect(importSpecs(source)).toContain('../../editor/circuit/export_core');
   });
 
   it('the matcher fires on every spelling an editor import could arrive by', () => {
@@ -2344,13 +2344,13 @@ const EXPECTED_BARE_NAMED = [
   'src/render/frame_present.ts',
   'src/render/interior_encounter_prewarm.ts',
   'src/render/link_rate_budget.ts',
+  'src/render/mortar_overdrive/barrier_visuals.ts',
+  'src/render/mortar_overdrive/themes.ts',
   'src/render/preview_prewarm_lane.ts',
   'src/render/prewarm_compile_lifecycle.ts',
   'src/render/prewarm_pass.ts',
   'src/render/prewarm_policy.ts',
   'src/render/prewarm_resume.ts',
-  'src/render/realm_racers_barrier_visuals.ts',
-  'src/render/realm_racers_themes.ts',
   'src/render/renderer_extensions.ts',
   'src/render/self_motion_rift_lift.ts',
   'src/ui/ability_tooltip_lines.ts',
@@ -2859,10 +2859,10 @@ const UI_DOM_MODULES = [
   // lives in localStorage; the note models stay in the pure tutorial_greeting_view.
   'src/ui/ferry_bell_home_note.ts',
   'src/ui/form_draft.ts',
-  'src/ui/realm_racers.ts',
-  'src/ui/realm_racers_pickup_splash_controller.ts',
-  // The rally HUD parts' deps, moved out of hud.ts: they resolve the #ui layer.
-  'src/ui/hud/realm_racers/realm_racers_hud_parts.ts',
+  'src/ui/hud/mortar_overdrive/composer.ts',
+  'src/ui/hud/mortar_overdrive/pickup_splash_controller.ts',
+  // The Mortar Overdrive HUD parts' deps, moved out of hud.ts: they resolve the #ui layer.
+  'src/ui/hud/mortar_overdrive/hud_parts.ts',
   'src/ui/gather_node_tooltip_controller.ts',
   'src/ui/gpu_notice_toast.ts',
   'src/ui/guild_bank_log_window.ts',

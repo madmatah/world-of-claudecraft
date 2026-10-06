@@ -1,13 +1,13 @@
 import { vehicleProfile } from '../src/sim/content/vehicles';
-import { GROUND_BLAST_PUSH } from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import { GROUND_BLAST_PUSH } from '../src/sim/mortar_overdrive/ground_blast';
+import { MORTAR_OVERDRIVE_GRID_SIZE } from '../src/sim/mortar_overdrive/layout';
 import {
-  REALM_RACERS_NITRO_KICK,
-  REALM_RACERS_NITRO_SPEED_MULT,
-} from '../src/sim/realm_racers_pickup_effects';
-import { REALM_RACERS_SLICK_SLIP_CAP } from '../src/sim/realm_racers_slicks';
+  MORTAR_OVERDRIVE_NITRO_KICK,
+  MORTAR_OVERDRIVE_NITRO_SPEED_MULT,
+} from '../src/sim/mortar_overdrive/pickup_effects';
+import { mortarOverdriveMovementLockedAt } from '../src/sim/mortar_overdrive/race';
+import { MORTAR_OVERDRIVE_SLICK_SLIP_CAP } from '../src/sim/mortar_overdrive/slicks';
 import type { PlayerMeta, Sim } from '../src/sim/sim';
-import { realmRacersMovementLockedAt } from '../src/sim/social/realm_racers';
 import { DT, type Entity, RUN_SPEED, type Vec3 } from '../src/sim/types';
 import { MAX_BUMP_IMPULSE } from '../src/sim/vehicle_contact';
 import { ferryMovementFrame } from './transport_head';
@@ -135,9 +135,9 @@ export function overrideActive(signature: MovementOverrideSignature): boolean {
 export function vehicleStepKinematicYd(profileKey: string): number {
   const profile = vehicleProfile(profileKey);
   return (
-    (profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT +
-      REALM_RACERS_NITRO_KICK +
-      profile.maxSlip * REALM_RACERS_SLICK_SLIP_CAP +
+    (profile.maxSpeed * MORTAR_OVERDRIVE_NITRO_SPEED_MULT +
+      MORTAR_OVERDRIVE_NITRO_KICK +
+      profile.maxSlip * MORTAR_OVERDRIVE_SLICK_SLIP_CAP +
       MAX_BUMP_IMPULSE +
       GROUND_BLAST_PUSH) *
     DT
@@ -149,7 +149,7 @@ export function vehicleStepKinematicYd(profileKey: string): number {
  *  hull left inside the next rival is moved again, so a pile-up of the whole
  *  grid moves it a radius per rival. */
 export function vehicleStepSettleMarginYd(profileKey: string): number {
-  return (REALM_RACERS_GRID_SIZE - 1) * vehicleProfile(profileKey).bodyRadius;
+  return (MORTAR_OVERDRIVE_GRID_SIZE - 1) * vehicleProfile(profileKey).bodyRadius;
 }
 
 export function vehicleStepCeilingYd(profileKey: string): number {
@@ -205,8 +205,8 @@ export function updateMovementOverrideEpochs(
     // (forfeit, manual reset) bump one tick late, like every command-driven
     // override.
     const raceLocked =
-      meta.realmRacersMatchId !== null &&
-      realmRacersMovementLockedAt(sim.ctx, session.pid, sim.ctx.tickCount + 1);
+      meta.mortarOverdriveMatchId !== null &&
+      mortarOverdriveMovementLockedAt(sim.ctx, session.pid, sim.ctx.tickCount + 1);
     const nextSignature = signature
       ? fillOverrideSignature(signature, entity, meta, moveSpeedMult, raceLocked)
       : computeOverrideSignature(entity, meta, moveSpeedMult, raceLocked);

@@ -1,6 +1,6 @@
 // The formal garden's stonework, shared by every place that needs it: the
 // tiered fountain and the weathered statue. Lifted out of garden_features.ts
-// unchanged when the Realm Racers's infield needed the same two pieces, so
+// unchanged when the Mortar Overdrive's infield needed the same two pieces, so
 // the Evergarden's Fountain Court and the circuit's landmark cannot drift into
 // two different fountains.
 import * as THREE from 'three';
@@ -33,7 +33,7 @@ function mergeGeos(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 /** Built once. Both callers hand it straight to an `InstancedMesh` and neither
  *  mutates it, so one merged geometry serves every statue in the world; minting
- *  a fresh one per call leaked one per rebuilt Realm Racers track. */
+ *  a fresh one per call leaked one per rebuilt Mortar Overdrive track. */
 let statueGeo: THREE.BufferGeometry | null = null;
 
 // A weathered garden statue: a plinth, a robed figure, a bowed head. Kept
@@ -60,7 +60,7 @@ export function gardenStatueGeo(): THREE.BufferGeometry {
 
 /** Built once, like the geometry above: the track disposer deliberately skips
  *  materials on the "one minted material per BUILD" contract, so a per-call
- *  mint here leaked one per rebuilt Realm Racers track. */
+ *  mint here leaked one per rebuilt Mortar Overdrive track. */
 let statueMat: THREE.Material | null = null;
 let fountainStoneMat: THREE.Material | null = null;
 let fountainWaterMat: THREE.MeshBasicMaterial | null = null;

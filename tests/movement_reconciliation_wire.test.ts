@@ -40,7 +40,7 @@ const V2_SESSION = {
 
 function pilot(): Entity {
   const e = createPlayer(7, 'warrior', { x: 113_700.125, y: 3.5, z: -41.75 }, 'Pilot');
-  e.drive = createVehicleDrive('rally_loaner');
+  e.drive = createVehicleDrive('mo_loaner');
   return e;
 }
 
@@ -116,7 +116,7 @@ describe('the drive recon (rdv)', () => {
     expect(state.reconSlick).toEqual(slick);
     // A remembered patch whose window has lapsed keeps only its id.
     const lapsed = driveReconWire(e, { gripLeft: 0, contactId: 4, contactLeft: 0 });
-    expect(lapsed).toEqual({ k: 'rally_loaner', sp: 0, sl: 0, yr: 0, oc: 4 });
+    expect(lapsed).toEqual({ k: 'mo_loaner', sp: 0, sl: 0, yr: 0, oc: 4 });
     const none = { gripLeft: 0, contactId: null, contactLeft: 0 };
     expect(driveReconWire(e, none)).toEqual(driveReconWire(e));
     applyReconSelfWire(state, overTheWire(e), 2);
@@ -129,9 +129,9 @@ describe('the drive recon (rdv)', () => {
   it('sends only the always-on fields for a machine at rest on a clean road', () => {
     const e = pilot();
     const wire = overTheWire(e);
-    expect(wire.rdv).toEqual({ k: 'rally_loaner', sp: 0, sl: 0, yr: 0 });
+    expect(wire.rdv).toEqual({ k: 'mo_loaner', sp: 0, sl: 0, yr: 0 });
     const { state } = decode(wire);
-    expect(state.reconDrive).toEqual(createVehicleDrive('rally_loaner'));
+    expect(state.reconDrive).toEqual(createVehicleDrive('mo_loaner'));
     expect(state.reconVy).toBe(0);
     expect(state.reconOnGround).toBe(true);
   });
@@ -159,20 +159,20 @@ describe('the drive recon (rdv)', () => {
   it.each([
     ['not an object', 7],
     ['an array', [1, 2, 3]],
-    ['a missing speed', { k: 'rally_loaner', sl: 0, yr: 0 }],
-    ['a null (non-finite) slip', { k: 'rally_loaner', sp: 0, sl: null, yr: 0 }],
-    ['a string yaw rate', { k: 'rally_loaner', sp: 0, sl: 0, yr: '0' }],
+    ['a missing speed', { k: 'mo_loaner', sl: 0, yr: 0 }],
+    ['a null (non-finite) slip', { k: 'mo_loaner', sp: 0, sl: null, yr: 0 }],
+    ['a string yaw rate', { k: 'mo_loaner', sp: 0, sl: 0, yr: '0' }],
     ['an unknown profile', { k: 'hovercraft', sp: 0, sl: 0, yr: 0 }],
     ['a numeric profile', { k: 3, sp: 0, sl: 0, yr: 0 }],
-    ['a non-finite grip', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, g: null }],
-    ['a boolean lock', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, lk: true }],
-    ['an airborne flag without vy', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, air: 1 }],
-    ['a vy on the ground', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, vy: -3 }],
-    ['a bad airborne flag', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, air: 2, vy: 1 }],
-    ['a negative grip window', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, og: -3 }],
-    ['a fractional grip window', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, og: 1.5 }],
-    ['a zero patch id', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, oc: 0 }],
-    ['a contact window with no patch', { k: 'rally_loaner', sp: 0, sl: 0, yr: 0, ou: 4 }],
+    ['a non-finite grip', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, g: null }],
+    ['a boolean lock', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, lk: true }],
+    ['an airborne flag without vy', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, air: 1 }],
+    ['a vy on the ground', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, vy: -3 }],
+    ['a bad airborne flag', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, air: 2, vy: 1 }],
+    ['a negative grip window', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, og: -3 }],
+    ['a fractional grip window', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, og: 1.5 }],
+    ['a zero patch id', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, oc: 0 }],
+    ['a contact window with no patch', { k: 'mo_loaner', sp: 0, sl: 0, yr: 0, ou: 4 }],
   ])('drops %s whole and stands the prediction down', (_name, rdv) => {
     const state = new ReconWireState();
     const mirror = pilot();
@@ -181,7 +181,7 @@ describe('the drive recon (rdv)', () => {
     expect(state.reconDrive).toBeNull();
     expect(state.reconOverrideActive).toBe(true);
     // Never replayed, only drawn: a resting machine of the default profile.
-    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
+    expect(mirror.drive).toEqual(createVehicleDrive('mo_loaner'));
   });
 
   it('keeps the last good machine on the mirror across consecutive malformed rows', () => {
@@ -193,7 +193,7 @@ describe('the drive recon (rdv)', () => {
     for (let i = 0; i < 2; i++) {
       // applyWire nulls the mirror first: the self record carries no `drv`.
       mirror.drive = null;
-      applyReconSelfWire(state, { ...overTheWire(e), rdv: { k: 'rally_loaner' } }, 2, mirror);
+      applyReconSelfWire(state, { ...overTheWire(e), rdv: { k: 'mo_loaner' } }, 2, mirror);
       expect(mirror.drive).toEqual(e.drive);
       expect(mirror.drive).not.toBe(state.reconDriveShown);
       expect(state.reconDrive).toBeNull();
@@ -207,14 +207,14 @@ describe('the drive recon (rdv)', () => {
     const state = new ReconWireState();
     const mirror = pilot();
     mirror.drive = null;
-    applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: { k: 'rally_loaner' } }, 2, mirror);
-    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
+    applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: { k: 'mo_loaner' } }, 2, mirror);
+    expect(mirror.drive).toEqual(createVehicleDrive('mo_loaner'));
     expect(state.reconDrive).toBeNull();
     expect(state.reconOverrideActive).toBe(true);
     // A second malformed row keeps it; the first good row replaces it.
     mirror.drive = null;
     applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: 3 }, 2, mirror);
-    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
+    expect(mirror.drive).toEqual(createVehicleDrive('mo_loaner'));
     const e = pilot();
     (e.drive as VehicleDrive).speed = 21.25;
     mirror.drive = null;
@@ -235,7 +235,7 @@ describe('the drive recon (rdv)', () => {
     mirror.drive = null;
     applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: 3 }, 2, mirror);
     // The held machine is gone, so the malformed row draws a resting one.
-    expect(mirror.drive).toEqual(createVehicleDrive('rally_loaner'));
+    expect(mirror.drive).toEqual(createVehicleDrive('mo_loaner'));
 
     applyReconSelfWire(state, overTheWire(pilot()), 2);
     state.resetReconWireState();

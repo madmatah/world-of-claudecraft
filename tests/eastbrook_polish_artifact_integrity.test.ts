@@ -1394,32 +1394,33 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted at the fourth release/v0.44.0 base merge into integration/world-quests-v0440
   // (the Eastbrook ferry, PR 4225; remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  // Re-minted at the release/v0.44.0 sync into feature/realm-racers
+  // Re-minted at the release/v0.44.0 sync into feature/mortar-overdrive
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
-  // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
-  // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
-  // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
-  // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
-  // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
-  // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
-  // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
-  // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
-  // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
-  // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
-  // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
-  // Re-minted for the Realm Racers golden ward veil (renderer leaf).
-  // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
-  // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+  // Re-minted for the Mortar Overdrive mount-skin presentation fix (renderer leaf).
+  // Re-minted for the Mortar Overdrive Ground Blast preparation seam (renderer leaf).
+  // Re-minted for the Mortar Overdrive lobby seam readout, narrowed (renderer leaf).
+  // Re-minted for the Mortar Overdrive circuit preparation lot (renderer leaf).
+  // Re-minted for the Mortar Overdrive shared remote racer step (renderer leaf).
+  // Re-minted for the Mortar Overdrive arrival compile lift for band landings (renderer leaf).
+  // Re-minted for the Mortar Overdrive self drive view on both wires (renderer leaf).
+  // Re-minted for the Mortar Overdrive drive view heading handoff and kart effects (renderer leaf).
+  // Re-minted for the Mortar Overdrive rivals drawn in the local kart frame (renderer leaf).
+  // Re-minted for the Mortar Overdrive aim pose and prediction lead through the core (renderer leaf).
+  // Re-minted for the Mortar Overdrive rival oil spray and missed-box cues (renderer leaf).
+  // Re-minted for the Mortar Overdrive rival blast pop drawn from the Hit event (renderer leaf).
+  // Re-minted for the Mortar Overdrive golden ward veil (renderer leaf).
+  // Re-minted for the Mortar Overdrive own shell launched on the input frame (renderer leaf).
+  // Re-minted for the Mortar Overdrive recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
-  // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
+  // Re-minted for the Mortar Overdrive ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
-  // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
-  // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
-  // Re-minted at the release/v0.45.0 merge into feature/realm-racers
+  // Re-minted for the Mortar Overdrive kart presentation moved out of the coordinator (renderer leaf).
+  // Re-minted for the Mortar Overdrive scene moved out of the coordinator (renderer leaf).
+  // Re-minted at the release/v0.45.0 merge into feature/mortar-overdrive
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted for the editor camera's shake decay (renderer leaf). No capture was retaken.
-  '33e2c509b127df6811cc9798c77ae7cb6dae7eb1ed471e5521af291e52fc8490';
+  // Re-minted for the Mortar Overdrive rename (renderer.ts imports and rewraps).
+  '2134b04bace2f8fd4bb70b5a03a440571dd2f0565279b921b4b7caa5b2531507';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the release/v0.44.0 base merges into PR 4193 (Buried Hoards), the second after PR 3847 landed. No capture was retaken.
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
@@ -1442,32 +1443,33 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted at the fourth release/v0.44.0 base merge into integration/world-quests-v0440
   // (the Eastbrook ferry, PR 4225; remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  // Re-minted at the release/v0.44.0 sync into feature/realm-racers
+  // Re-minted at the release/v0.44.0 sync into feature/mortar-overdrive
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
-  // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
-  // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
-  // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
-  // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
-  // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
-  // Re-minted for the Realm Racers arrival compile lift for band landings (renderer leaf).
-  // Re-minted for the Realm Racers self drive view on both wires (renderer leaf).
-  // Re-minted for the Realm Racers drive view heading handoff and kart effects (renderer leaf).
-  // Re-minted for the Realm Racers rivals drawn in the local kart frame (renderer leaf).
-  // Re-minted for the Realm Racers aim pose and prediction lead through the core (renderer leaf).
-  // Re-minted for the Realm Racers rival oil spray and missed-box cues (renderer leaf).
-  // Re-minted for the Realm Racers rival blast pop drawn from the Hit event (renderer leaf).
-  // Re-minted for the Realm Racers golden ward veil (renderer leaf).
-  // Re-minted for the Realm Racers own shell launched on the input frame (renderer leaf).
-  // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+  // Re-minted for the Mortar Overdrive mount-skin presentation fix (renderer leaf).
+  // Re-minted for the Mortar Overdrive Ground Blast preparation seam (renderer leaf).
+  // Re-minted for the Mortar Overdrive lobby seam readout, narrowed (renderer leaf).
+  // Re-minted for the Mortar Overdrive circuit preparation lot (renderer leaf).
+  // Re-minted for the Mortar Overdrive shared remote racer step (renderer leaf).
+  // Re-minted for the Mortar Overdrive arrival compile lift for band landings (renderer leaf).
+  // Re-minted for the Mortar Overdrive self drive view on both wires (renderer leaf).
+  // Re-minted for the Mortar Overdrive drive view heading handoff and kart effects (renderer leaf).
+  // Re-minted for the Mortar Overdrive rivals drawn in the local kart frame (renderer leaf).
+  // Re-minted for the Mortar Overdrive aim pose and prediction lead through the core (renderer leaf).
+  // Re-minted for the Mortar Overdrive rival oil spray and missed-box cues (renderer leaf).
+  // Re-minted for the Mortar Overdrive rival blast pop drawn from the Hit event (renderer leaf).
+  // Re-minted for the Mortar Overdrive golden ward veil (renderer leaf).
+  // Re-minted for the Mortar Overdrive own shell launched on the input frame (renderer leaf).
+  // Re-minted for the Mortar Overdrive recovery ghost bump gate (renderer leaf).
   // Re-minted for the carry of PR 4229, the shared spirit veil (renderer leaf).
-  // Re-minted for the Realm Racers ward and ghost veils on pilot and kart (renderer leaf).
+  // Re-minted for the Mortar Overdrive ward and ghost veils on pilot and kart (renderer leaf).
   // Re-minted for the racer veil review fixes: the veil core and the view slice (renderer leaf).
-  // Re-minted for the Realm Racers kart presentation moved out of the coordinator (renderer leaf).
-  // Re-minted for the Realm Racers rally scene moved out of the coordinator (renderer leaf).
-  // Re-minted at the release/v0.45.0 merge into feature/realm-racers
+  // Re-minted for the Mortar Overdrive kart presentation moved out of the coordinator (renderer leaf).
+  // Re-minted for the Mortar Overdrive scene moved out of the coordinator (renderer leaf).
+  // Re-minted at the release/v0.45.0 merge into feature/mortar-overdrive
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted for the editor camera's shake decay (renderer leaf). No capture was retaken.
-  '14f641bef0fc653444264b3f5b1a0e0aae0c203e3a1259ae95dca194c68845d4';
+  // Re-minted for the Mortar Overdrive rename (renderer.ts imports and rewraps).
+  '80e6e037a8c527246b9ed820e85d5daa9db878d63eaabb048a2ae85cddcff676';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2848,33 +2850,34 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // provenance. No capture or measured value changed.
       // Fourth release/v0.44.0 base merge (the Eastbrook ferry, PR 4225): recomputed
       // LAST again over the re-swept evidence. No capture was retaken.
-      // Release/v0.44.0 sync into feature/realm-racers: recomputed LAST over the
+      // Release/v0.44.0 sync into feature/mortar-overdrive: recomputed LAST over the
       // re-swept evidence. No capture was retaken.
-      // Re-minted for the Realm Racers mount-skin presentation fix.
-      // Re-minted for the Realm Racers Ground Blast preparation seam.
-      // Re-minted for the Realm Racers lobby seam readout, narrowed.
-      // Re-minted for the Realm Racers circuit preparation lot.
-      // Re-minted for the Realm Racers shared remote racer step.
-      // Re-minted for the Realm Racers arrival compile lift for band landings.
-      // Re-minted for the Realm Racers self drive view on both wires.
-      // Re-minted for the Realm Racers drive view heading handoff and kart effects.
-      // Re-minted for the Realm Racers rivals drawn in the local kart frame.
-      // Re-minted for the Realm Racers aim pose and prediction lead through the core.
-      // Re-minted for the Realm Racers rival blast pop drawn from the Hit event.
-      // Re-minted for the Realm Racers golden ward veil.
-      // Re-minted for the Realm Racers own shell launched on the input frame.
-      // Re-minted for the Realm Racers recovery ghost bump gate (renderer leaf).
+      // Re-minted for the Mortar Overdrive mount-skin presentation fix.
+      // Re-minted for the Mortar Overdrive Ground Blast preparation seam.
+      // Re-minted for the Mortar Overdrive lobby seam readout, narrowed.
+      // Re-minted for the Mortar Overdrive circuit preparation lot.
+      // Re-minted for the Mortar Overdrive shared remote racer step.
+      // Re-minted for the Mortar Overdrive arrival compile lift for band landings.
+      // Re-minted for the Mortar Overdrive self drive view on both wires.
+      // Re-minted for the Mortar Overdrive drive view heading handoff and kart effects.
+      // Re-minted for the Mortar Overdrive rivals drawn in the local kart frame.
+      // Re-minted for the Mortar Overdrive aim pose and prediction lead through the core.
+      // Re-minted for the Mortar Overdrive rival blast pop drawn from the Hit event.
+      // Re-minted for the Mortar Overdrive golden ward veil.
+      // Re-minted for the Mortar Overdrive own shell launched on the input frame.
+      // Re-minted for the Mortar Overdrive recovery ghost bump gate (renderer leaf).
       // Re-minted for the carry of PR 4229, the shared spirit veil.
-      // Re-minted for the Realm Racers ward and ghost veils on pilot and kart.
+      // Re-minted for the Mortar Overdrive ward and ghost veils on pilot and kart.
       // Re-minted for the racer veil review fixes.
-      // Re-minted for the Realm Racers kart presentation move.
-      // Re-minted for the Realm Racers rally scene move.
+      // Re-minted for the Mortar Overdrive kart presentation move.
+      // Re-minted for the Mortar Overdrive scene move.
       // release/v0.44.0 base merge into PR 4193: recomputed LAST again over the
       // re-swept evidence. No capture was retaken.
-      // Release/v0.45.0 merge into feature/realm-racers: recomputed LAST over the
+      // Release/v0.45.0 merge into feature/mortar-overdrive: recomputed LAST over the
       // re-swept evidence. No capture was retaken.
       // Re-minted for the editor camera's shake decay.
-    ).toBe('faa3fe253c76cb924bc363054369f785a5d3b043272afc79f381b99401887dcf');
+      // Re-minted for the Mortar Overdrive rename (renderer.ts imports and rewraps).
+    ).toBe('188ff4f11f613c81e48637773ff191c81d6bc64a98f13de5410786853756650f');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

@@ -7,17 +7,17 @@
 // the operator discover it in a readout afterwards.
 //
 // The recovery anchors used to live here too, as an authored list of lap
-// fractions. They are derived from the curve now (`realmRacersGates`), because
+// fractions. They are derived from the curve now (`mortarOverdriveGates`), because
 // nothing about where one sits is a design decision.
 //
 // Pure core: DOM-free, deterministic, no clock, no rng. Every function returns
 // a NEW list; nothing here mutates its input, so the page's undo stack is just
 // the previous value.
 
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
 
 /** A closed loop needs this many control points to have a shape at all; it is
- *  the same floor `tests/realm_racers_circuits.test.ts` holds every record to. */
+ *  the same floor `tests/mortar_overdrive_circuits.test.ts` holds every record to. */
 export const MIN_CONTROL_POINTS = 8;
 
 /** Lap fractions are snapped to this grid, which is what stops a drag from
@@ -41,7 +41,7 @@ export interface SegmentHit {
   /** Index of the control point OPENING the nearest segment. */
   index: number;
   distance: number;
-  point: RallyPoint;
+  point: MortarOverdrivePoint;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -51,7 +51,7 @@ function clamp(value: number, min: number, max: number): number {
 /** Which control point is under (x, z), or -1. Nearest wins, so overlapping
  *  handles resolve the way the operator sees them. */
 export function hitTestControlPoint(
-  points: readonly RallyPoint[],
+  points: readonly MortarOverdrivePoint[],
   x: number,
   z: number,
   radius: number,
@@ -70,7 +70,11 @@ export function hitTestControlPoint(
 
 /** The closed-loop segment nearest (x, z), and where on it the point lands.
  *  What an insert-a-handle click reads, so the new point starts on the line. */
-export function nearestSegment(points: readonly RallyPoint[], x: number, z: number): SegmentHit {
+export function nearestSegment(
+  points: readonly MortarOverdrivePoint[],
+  x: number,
+  z: number,
+): SegmentHit {
   let best: SegmentHit = { index: 0, distance: Number.POSITIVE_INFINITY, point: { x, z } };
   for (let i = 0; i < points.length; i++) {
     const a = points[i];
@@ -87,10 +91,10 @@ export function nearestSegment(points: readonly RallyPoint[], x: number, z: numb
 }
 
 export function moveControlPoint(
-  points: readonly RallyPoint[],
+  points: readonly MortarOverdrivePoint[],
   index: number,
-  to: RallyPoint,
-): RallyPoint[] {
+  to: MortarOverdrivePoint,
+): MortarOverdrivePoint[] {
   if (index < 0 || index >= points.length) return [...points];
   return points.map((point, i) => (i === index ? { x: to.x, z: to.z } : point));
 }
@@ -98,10 +102,10 @@ export function moveControlPoint(
 /** Inserts a point INTO the segment opening at `index`, which is where
  *  `nearestSegment` reports a click on the line. */
 export function insertControlPoint(
-  points: readonly RallyPoint[],
+  points: readonly MortarOverdrivePoint[],
   index: number,
-  at: RallyPoint,
-): RallyPoint[] {
+  at: MortarOverdrivePoint,
+): MortarOverdrivePoint[] {
   if (points.length === 0) return [{ x: at.x, z: at.z }];
   const opening = ((index % points.length) + points.length) % points.length;
   const out = [...points];
@@ -112,7 +116,10 @@ export function insertControlPoint(
 /** Refuses below the record's own floor: a loop with too few points is not a
  *  shape the spline can read, and finding that out in a readout afterwards is
  *  exactly what this tool exists to stop. */
-export function deleteControlPoint(points: readonly RallyPoint[], index: number): RallyPoint[] {
+export function deleteControlPoint(
+  points: readonly MortarOverdrivePoint[],
+  index: number,
+): MortarOverdrivePoint[] {
   if (points.length <= MIN_CONTROL_POINTS) return [...points];
   if (index < 0 || index >= points.length) return [...points];
   return points.filter((_, i) => i !== index);
@@ -141,7 +148,7 @@ function smoothstep(t: number): number {
 
 /** Reads a band table the way the spline reads it: piecewise linear, wrapping.
  *  A local re-read for editing, not a second home for the rule: the authority
- *  is `bandValueAtFraction` in `realm_racers_spline.ts`, which is what the game
+ *  is `bandValueAtFraction` in `mortar_overdrive/spline.ts`, which is what the game
  *  runs. */
 function valueAt(bands: readonly CircuitBand[], fraction: number): number {
   if (bands.length === 0) return 0;

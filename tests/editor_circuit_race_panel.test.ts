@@ -22,12 +22,12 @@ import {
   type RacePanelHost,
 } from '../src/editor/circuit/panel_race';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { REALM_RACERS_MIN_HALF_WIDTH } from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { MORTAR_OVERDRIVE_MIN_HALF_WIDTH } from '../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 
 function mount(overrides: Partial<RacePanelHost> = {}): {
   palette: RacePalettePanel;
@@ -37,8 +37,8 @@ function mount(overrides: Partial<RacePanelHost> = {}): {
   document.body.innerHTML = '';
   const host: RacePanelHost = {
     record: () => GARDEN,
-    metrics: () => realmRacersCircuitMetrics(GARDEN),
-    track: () => realmRacersTrack(GARDEN),
+    metrics: () => mortarOverdriveCircuitMetrics(GARDEN),
+    track: () => mortarOverdriveTrack(GARDEN),
     drawn: () => true,
     mode: () => 'race',
     selection: () => null,
@@ -136,7 +136,7 @@ describe('the race palette', () => {
 });
 
 describe('the race inspector', () => {
-  const withRow: RealmRacersCircuit = { ...GARDEN, pickupRows: [{ s: 0.25 }, { s: 0.75 }] };
+  const withRow: MortarOverdriveCircuit = { ...GARDEN, pickupRows: [{ s: 0.25 }, { s: 0.75 }] };
 
   it('says what to do when nothing is selected, and which thing to do it with', () => {
     const { inspector } = mount({ record: () => withRow });
@@ -157,8 +157,8 @@ describe('the race inspector', () => {
     expect(text).toContain('0.7500');
     // The road's own width there, which is what decides whether the row fits and
     // how far apart its boxes are.
-    const halfWidth = realmRacersTrack(withRow).halfWidthAt(
-      0.75 * realmRacersTrack(withRow).length,
+    const halfWidth = mortarOverdriveTrack(withRow).halfWidthAt(
+      0.75 * mortarOverdriveTrack(withRow).length,
     );
     expect(text).toContain(halfWidth.toFixed(1));
   });
@@ -170,7 +170,7 @@ describe('the race inspector', () => {
     const { inspector, host } = mount({ record: () => withRow, pickupSelection: () => 0 });
     inspector.paint();
     const input = inspector.el.querySelector('input') as HTMLInputElement;
-    const lap = realmRacersTrack(withRow).length;
+    const lap = mortarOverdriveTrack(withRow).length;
     expect(Number(input.value)).toBeCloseTo(0.25 * lap, 1);
     input.value = '300';
     input.dispatchEvent(new Event('change'));
@@ -187,18 +187,18 @@ describe('the race inspector', () => {
     // corner projects to a different lap position from the row's centre. That is
     // the case the predicate measures four corners for, so it is the one worth
     // seating here.
-    const stepped: RealmRacersCircuit = {
+    const stepped: MortarOverdriveCircuit = {
       ...withRow,
       widthBands: [
         { s: 0, halfWidth: 12 },
         { s: 0.2495, halfWidth: 12 },
-        { s: 0.2505, halfWidth: REALM_RACERS_MIN_HALF_WIDTH },
+        { s: 0.2505, halfWidth: MORTAR_OVERDRIVE_MIN_HALF_WIDTH },
         { s: 0.9, halfWidth: 12 },
       ],
       pickupRows: [{ s: 0.2495 }],
     };
-    const offRoad = (circuit: RealmRacersCircuit): boolean =>
-      realmRacersCircuitMetrics(circuit).problems.some(
+    const offRoad = (circuit: MortarOverdriveCircuit): boolean =>
+      mortarOverdriveCircuitMetrics(circuit).problems.some(
         (problem) => problem.code === 'pickup_row_off_road',
       );
     // Both arms, and both are real: the readout genuinely refuses the stepped

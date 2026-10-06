@@ -9,15 +9,15 @@
 // may not do. Pure and DOM-free: the caller hands in a reader and turns what
 // comes back into pixels.
 
-import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import type { RallyPoint } from '../../sim/realm_racers_layout';
+import type { MortarOverdriveCircuit } from '../../sim/content/mortar_overdrive';
+import type { MortarOverdrivePoint } from '../../sim/mortar_overdrive';
 import {
-  REALM_RACERS_LAWN_OVERSHOOT,
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_RUNOFF_WIDTH,
-  REALM_RACERS_VERGE_MARGIN,
-} from '../../sim/realm_racers_layout';
+  MORTAR_OVERDRIVE_LAWN_OVERSHOOT,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+  MORTAR_OVERDRIVE_RUNOFF_WIDTH,
+  MORTAR_OVERDRIVE_VERGE_MARGIN,
+} from '../../sim/mortar_overdrive/layout';
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { clampScale } from './layout_core';
 
@@ -31,7 +31,7 @@ export const STARTER_OVAL = { points: 12, halfX: 95, halfZ: 55 } as const;
 
 /** An oval a new circuit opens on, so the tool never starts on geometry the
  *  spline cannot read. Local yards, counter-clockwise. */
-export function starterControlPoints(): RallyPoint[] {
+export function starterControlPoints(): MortarOverdrivePoint[] {
   return Array.from({ length: STARTER_OVAL.points }, (_, i) => {
     const angle = (i / STARTER_OVAL.points) * Math.PI * 2;
     return {
@@ -63,7 +63,7 @@ export function starterControlPoints(): RallyPoint[] {
  * It lives here rather than in the page for that reason: a rule with a history
  * of being forgotten needs somewhere a test can reach it.
  */
-export function blankCircuit(template: RealmRacersCircuit): RealmRacersCircuit {
+export function blankCircuit(template: MortarOverdriveCircuit): MortarOverdriveCircuit {
   return {
     ...template,
     id: 'draft_circuit',
@@ -102,7 +102,8 @@ export const FIT_MARGIN_BLANK = 1.12;
 export function fitHalfExtent(drawn: boolean, roadHalfX: number, roadHalfZ: number): number {
   if (!drawn) {
     return (
-      Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * FIT_MARGIN_BLANK
+      Math.max(MORTAR_OVERDRIVE_MAX_REGION_HALF_X, MORTAR_OVERDRIVE_MAX_REGION_HALF_Z) *
+      FIT_MARGIN_BLANK
     );
   }
   return Math.max(roadHalfX, roadHalfZ, 20) * FIT_MARGIN_DRAWN;
@@ -132,7 +133,7 @@ export interface CenterlineLimit {
 
 export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit {
   const road = halfWidths.length > 0 ? Math.max(...halfWidths) : 0;
-  const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+  const gardenEdge = road + MORTAR_OVERDRIVE_VERGE_MARGIN + MORTAR_OVERDRIVE_RUNOFF_WIDTH;
   // Off the WALL's ceiling, not the volume's, and the yard between them is the
   // whole of it: the road has to fit inside the widest legal wall, and the
   // widest legal wall is a yard under the volume so it stays strictly inside.
@@ -211,14 +212,14 @@ const size = (halfX: number, halfZ: number): string =>
  * drawn here.
  */
 export function planBearings(
-  circuit: RealmRacersCircuit,
+  circuit: MortarOverdriveCircuit,
   drawn: boolean,
   aiming = false,
 ): PlanBearing[] {
   const volumeHalf = { halfX: circuit.regionHalfX, halfZ: circuit.regionHalfZ };
   const ceiling =
-    circuit.regionHalfX === REALM_RACERS_MAX_REGION_HALF_X &&
-    circuit.regionHalfZ === REALM_RACERS_MAX_REGION_HALF_Z;
+    circuit.regionHalfX === MORTAR_OVERDRIVE_MAX_REGION_HALF_X &&
+    circuit.regionHalfZ === MORTAR_OVERDRIVE_MAX_REGION_HALF_Z;
   const volume: PlanBearing = {
     id: 'volume',
     half: volumeHalf,
@@ -232,7 +233,7 @@ export function planBearings(
     // number beside a word that would then be a lie.
     value: ceiling
       ? `${size(volumeHalf.halfX, volumeHalf.halfZ)}, the flat floor`
-      : `${size(volumeHalf.halfX, volumeHalf.halfZ)}, under the ${size(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z)} ceiling`,
+      : `${size(volumeHalf.halfX, volumeHalf.halfZ)}, under the ${size(MORTAR_OVERDRIVE_MAX_REGION_HALF_X, MORTAR_OVERDRIVE_MAX_REGION_HALF_Z)} ceiling`,
     dash: PLAN_BEARING_DASH.volume,
   };
   // The aim box is up while a STROKE is about to be made, and not for the whole
@@ -281,8 +282,8 @@ export function planBearings(
       value: authoredGround
         ? 'the shape you drew'
         : `${size(
-            circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
-            circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+            circuit.regionHalfX + MORTAR_OVERDRIVE_LAWN_OVERSHOOT,
+            circuit.regionHalfZ + MORTAR_OVERDRIVE_LAWN_OVERSHOOT,
           )}, the lawn past the edge`,
       dash: PLAN_BEARING_DASH.ground,
     },

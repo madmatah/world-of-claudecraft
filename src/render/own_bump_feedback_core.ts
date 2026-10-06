@@ -1,5 +1,5 @@
 // The local bump bang: the tiny decisions behind instant collision feedback
-// online. The server's realmRacersBump event carries the sparks, the sound and
+// online. The server's mortarOverdriveBump event carries the sparks, the sound and
 // the shake, one downlink after the touch; with the displayed hulls now
 // accurate, the player SEES the touch a beat before hearing it. The renderer
 // therefore plays the bang the moment the DISPLAYED hulls meet with a real
@@ -11,12 +11,12 @@
 // Pure and clock-agnostic like own_shot_feedback_core: the caller passes its
 // wall clock in.
 
-import { realmRacersGhosted } from '../sim/realm_racers_ghost';
+import { mortarOverdriveGhosted } from '../sim/mortar_overdrive/ghost';
 import type { Entity } from '../sim/types';
 
 /**
  * Displayed closing speed under which no local bang plays, yd/s. Mirrors
- * REALM_RACERS_BUMP_EVENT_MIN_IMPACT (src/sim/social/realm_racers.ts), which
+ * MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT (src/sim/mortar_overdrive/race.ts), which
  * cannot be imported here: that module is a sim system behind SimContext, and
  * the render tree may only import pure sim leaves. Display-only, so drift
  * would cost a spurious or missed EARLY bang, never a wrong outcome.
@@ -116,8 +116,8 @@ export function localBumpArmed(
     race?.phase === 'racing' &&
     stillRacing(race, rival.id) &&
     stillRacing(race, self.id) &&
-    !realmRacersGhosted(rival) &&
-    !realmRacersGhosted(self)
+    !mortarOverdriveGhosted(rival) &&
+    !mortarOverdriveGhosted(self)
   );
 }
 

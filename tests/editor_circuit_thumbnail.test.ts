@@ -16,7 +16,7 @@ import {
   thumbnailOwnsGeometry,
   thumbnailPose,
 } from '../src/editor/circuit/thumbnail_core';
-import { REALM_RACERS_PROP_VISUALS } from '../src/render/realm_racers_prop_visuals';
+import { MORTAR_OVERDRIVE_PROP_VISUALS } from '../src/render/mortar_overdrive/prop_visuals';
 
 const FOV = (32 * Math.PI) / 180;
 
@@ -213,7 +213,9 @@ describe('what the rig owns of what it draws', () => {
   it('covers every kind the visual registry actually has', () => {
     // Both ways, so a fourth kind added render-side cannot silently default to
     // "we own it" and start disposing a cache.
-    const kinds = new Set(Object.values(REALM_RACERS_PROP_VISUALS).map((visual) => visual.kind));
+    const kinds = new Set(
+      Object.values(MORTAR_OVERDRIVE_PROP_VISUALS).map((visual) => visual.kind),
+    );
     expect([...kinds].sort()).toEqual(['gltf', 'group', 'instanced', 'streetlamp', 'worldKit']);
   });
 });

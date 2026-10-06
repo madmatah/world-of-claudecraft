@@ -66,9 +66,9 @@ export const zh_CN: EnTranslations = {
       "difficulty": "难度",
       "name": "名称",
       "spec": "专精",
-      "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier",
-      "rallyKitCharges": "Weapon charges",
+      "mortarOverdriveCircuit": "Circuit",
+      "mortarOverdriveTier": "Rival tier",
+      "mortarOverdriveKitCharges": "Weapon charges",
       "bed": "田畦ID（可选）"
     },
     "difficulty": {
@@ -176,12 +176,12 @@ export const zh_CN: EnTranslations = {
         "label": "进入团队副本",
         "description": "直接进入尼思拉克西斯竞技场。"
       },
-      "rally": {
+      "mortarOverdrive": {
         "label": "Race a circuit",
-        "description": "Start a Realm Racers race on the chosen circuit right now."
+        "description": "Start a Mortar Overdrive race on the chosen circuit right now."
       },
-      "rallykit": {
-        "label": "Fill the rally kit",
+      "mortarOverdriveKit": {
+        "label": "Fill the Mortar Overdrive kit",
         "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
@@ -1925,7 +1925,7 @@ export const zh_CN: EnTranslations = {
       "targetFriendlyNext": "切换友方目标",
       "targetPrev": "反向切换目标",
       "discord": "Discord",
-      "rally": "王国竞速赛",
+      "mortarOverdrive": "迫击狂飙",
       "bgFlag": "战场夺旗动作",
       "friendlyNameplates": "切换友方姓名板",
       "sheathe": "收起/拔出武器",
@@ -2130,10 +2130,10 @@ export const zh_CN: EnTranslations = {
         "graveyard": "墓地"
       }
     },
-    "rally": {
+    "mortarOverdrive": {
       "kicker": "常青园赛车协会",
-      "title": "王国竞速赛",
-      "close": "关闭王国竞速赛窗口",
+      "title": "迫击狂飙",
+      "close": "关闭迫击狂飙窗口",
       "pitch": "钢铁穿林而过。找到理想路线，相信甩尾，让每个对手都吞你的尾尘。",
       "promiseCircuit": "花园赛道",
       "promiseSlide": "手刹甩尾",
@@ -2217,8 +2217,8 @@ export const zh_CN: EnTranslations = {
       "drawReturn": "平局。{seconds} 秒后返回",
       "raceVoid": "RACE VOID",
       "voidReturn": "比赛作废。{seconds} 秒后返回",
-      "logQueued": "王国竞速赛队列位置：{position}。",
-      "logUnqueued": "你已离开王国竞速赛队列。",
+      "logQueued": "迫击狂飙队列位置：{position}。",
+      "logUnqueued": "你已离开迫击狂飙队列。",
       "bannerLap": "第 {lap}/{total} 圈",
       "bannerWin": "你赢得了比赛！",
       "bannerLoss": "{name} 赢得了比赛。",
@@ -4088,10 +4088,10 @@ export const zh_CN: EnTranslations = {
       "temporalEcho": "施法者的奥术伤害会治疗你，单体伤害转化 {singlePct}%，范围伤害转化 {areaPct}%。以太涌动和以太飞镖在单独的时光回响上按4倍加成计算。群体回响会产生等量的治疗储备，按照缺失生命值在生命低于60%的被标记盟友之间分配",
       "arcaneCharge": "{stacks} 层奥术充能：以太涌动伤害提高 {damagePct}%，施法加快 {castPct}%，法力消耗变为 {costMult} 倍",
       "physicalReduction": "受到的物理伤害降低 {pct}%",
-      "rallyGroundBlast": "移动速度降低 {pct}%。命中后 {gripSeconds} 秒内，你的机车抓地力降低 {gripPct}%。",
-      "rallyOffTrack": "移动速度降低 {pct}%。你的机车抓地力降低 {gripPct}%，阻力是在路面上的 {drag} 倍。回到路面后消失。",
-      "rallyWard": "吸收下一次命中你的震地爆破或油渍，随后破碎。持续 {seconds} 秒。无法阻挡其他机车的碰撞。",
-      "rallyGhost": "比赛把你送回赛道后，对手的机车会从你身上穿过。至少持续 {minSeconds} 秒，并持续到你能再次驾驶为止；之后一旦与所有对手分开便立即结束，最多再延续 {marginSeconds} 秒。震地爆破和油渍仍会命中你。",
+      "mortarOverdriveGroundBlast": "移动速度降低 {pct}%。命中后 {gripSeconds} 秒内，你的机车抓地力降低 {gripPct}%。",
+      "mortarOverdriveOffTrack": "移动速度降低 {pct}%。你的机车抓地力降低 {gripPct}%，阻力是在路面上的 {drag} 倍。回到路面后消失。",
+      "mortarOverdriveWard": "吸收下一次命中你的震地爆破或油渍，随后破碎。持续 {seconds} 秒。无法阻挡其他机车的碰撞。",
+      "mortarOverdriveGhost": "比赛把你送回赛道后，对手的机车会从你身上穿过。至少持续 {minSeconds} 秒，并持续到你能再次驾驶为止；之后一旦与所有对手分开便立即结束，最多再延续 {marginSeconds} 秒。震地爆破和油渍仍会命中你。",
       "temporalHourglass": "免疫伤害且无法行动；恢复生命并加速冷却。右键点击可取消。",
       "tongues": "施法时间延长 {pct}%",
       "combustionCrit": "你的火焰法术必定造成致命一击",
@@ -7101,7 +7101,7 @@ export const zh_CN: EnTranslations = {
       "combat": "战斗",
       "talents": "天赋",
       "arena": "竞技场与 PvP",
-      "realmRacers": "王国竞速赛",
+      "mortarOverdrive": "迫击狂飙",
       "thornhollow": "荆谷原野",
       "worldPvp": "世界 PvP",
       "deeds": "功绩之书",
@@ -8465,13 +8465,13 @@ export const zh_CN: EnTranslations = {
       "rewardsHeading": "一场比赛给什么",
       "rewardsBody": "每一场打完的比赛都会给荣誉：获胜给得更多，落败或平局也有一份安慰；此外你每拿下一个击杀、每协助一次，都会额外得到少量荣誉，所以在远离旗帜的地方厮杀同样值得。每天的首胜还会额外给一份奖励，只要这份奖励还等着你，面板就会告诉你。这个“每天”属于荣誉自己，它按自己的时钟翻篇，而不跟着王国的副本重置走。反复遇上同一支队伍，从第二次起比赛本身给的荣誉会减少，但很快就会稳定在一个下限，而不会一路跌到零；被判弃权的比赛则一点都不给。赚到的荣誉可以在任意一位战争军需官处消费。"
     },
-    "realmRacersPage": {
-      "heading": "王国竞速赛",
+    "mortarOverdrivePage": {
+      "heading": "迫击狂飙",
       "intro": "常青园赛车协会开辟了一条花园赛道，向任何有胆量驾驶的人开放：四名车手同场竞速，一件招牌武器，还有一条两侧夹道、既奖励大胆超车也奖励干净路线的赛道。",
       "loreHeading": "常青园赛车协会",
       "loreBody": "常青园的总园丁们从未打算让树篱之间的巡视小径跑得比独轮车更快，但一位闲得发慌、又借来坐骑的场地管理员却另有想法。由那第一次胆大妄为发展而来的协会，如今划出了一条正式赛道，凑满整场比赛，只要四名车手准备就绪，便会落下发车旗。",
       "howHeading": "怎么玩",
-      "howQueueBody": "在世界任何地方，都可以从王国竞速赛窗口排队参赛。凑满四人的整场比赛后，所有人会一同就位在发车线上，倒计时随即开始。",
+      "howQueueBody": "在世界任何地方，都可以从迫击狂飙窗口排队参赛。凑满四人的整场比赛后，所有人会一同就位在发车线上，倒计时随即开始。",
       "howRaceBody": "用你惯用的移动键转向、加速和刹车，按住跳跃键可拉手刹，滑过狭窄的弯道。每位车手都携带震地爆破，这是一记向前发射的冲击，会让被击中者失去平衡，因此挡在你前面的对手绝不安全。冲过最后一圈终点线的第一人获胜，全场车手则按比赛决出胜负时各自所处的位置排定名次。",
       "howLimitsBody": "赛道两侧的花园是开放且可以驾驶的，所以跑宽、被撞出去、或者从花圃里滑过都是比赛的一部分：代价只是速度。但它不能让你占到便宜。一旦离开赛道并走出比赛道本身更短的路线，赛会就会把你送回你离开的位置；停在花园里不动的车手，几秒后也会被送回赛道。",
       "howPracticeBody": "还没准备好和陌生人较量？练习赛会让你在同一台机器、同样的操控手感下，于专属的赛道副本中挑战自选的对手，好让你先摸清路线，再去排队参加正式比赛。",
@@ -8483,7 +8483,7 @@ export const zh_CN: EnTranslations = {
       "circuitsCompetitionTitle": "正赛赛道",
       "circuitsCompetitionBody": "排队比赛从不会跑训练赛道，而是从另一个赛道池中抽取更长的正赛赛道，每一条都披上其所借用场地所在游戏区域的主题，因此即便车辆不变，场地也会随之改变。",
       "rewardsHeading": "你为何而战",
-      "rewardsBody": "王国竞速赛不发放经验值，也没有战利品：这纯粹是一项运动，为了比赛本身，也为了它带来的名次而战。不过，在正式比赛中取得的名次，仍会计入功绩之书：冲过终点线、胜利，以及一批更难达成的驾驶壮举，都等着愿意去追逐它们的车手。只有至少还有一名其他玩家和你一同发车并真正参赛（冲过终点，或至少跑完一圈）时，胜利才会被计入：只赢过协会的陪练车手，或从未离开发车格的对手，只算练习，不算战绩。这些功绩不提供名望，但只要赢下足够多的比赛，就能获得一个可佩戴的装饰性头衔。"
+      "rewardsBody": "迫击狂飙不发放经验值，也没有战利品：这纯粹是一项运动，为了比赛本身，也为了它带来的名次而战。不过，在正式比赛中取得的名次，仍会计入功绩之书：冲过终点线、胜利，以及一批更难达成的驾驶壮举，都等着愿意去追逐它们的车手。只有至少还有一名其他玩家和你一同发车并真正参赛（冲过终点，或至少跑完一圈）时，胜利才会被计入：只赢过协会的陪练车手，或从未离开发车格的对手，只算练习，不算战绩。这些功绩不提供名望，但只要赢下足够多的比赛，就能获得一个可佩戴的装饰性头衔。"
     },
     "factionsPage": {
       "heading": "阵营与声望",
@@ -13235,15 +13235,15 @@ export const zh_CN: EnTranslations = {
         "name": "发条震荡炸弹",
         "description": "向目标位置投掷一枚发条震荡炸弹，对5码内的敌人造成120到160点自然伤害。"
       },
-      "rally_ground_blast": {
+      "mortar_overdrive_ground_blast": {
         "name": "震地爆破",
         "description": "向前方至少 {minRange} 码、偏离车头不超过 {coneDegrees} 度的地面位置发射一枚炮弹。炮弹在 {minFlight} 至 {maxFlight} 秒后落地。落点 {radius} 码内的每个对手都会被掀起并抛开，{coreRadius} 码内为全力，越靠近边缘越弱。他们还会在 {gripSeconds} 秒内失去 {gripPct}% 的抓地力，并在 {slowSeconds} 秒内被减速 {slowPct}%。赛道护盾可吸收这次命中。"
       },
-      "rally_nitro": {
+      "mortar_overdrive_nitro": {
         "name": "氮气加速",
         "description": "点燃氮气，瞬间向前提速 {kick} 码/秒。{seconds} 秒内，你的最高速度比机车的正常上限高出 {speedPct}%。"
       },
-      "rally_oil_slick": {
+      "mortar_overdrive_oil_slick": {
         "name": "油渍",
         "description": "在车下洒出一滩机油，它会在赛道上留存 {seconds} 秒。驶入其中的对手会被横向推开，速度越快推得越猛，并在 {gripSeconds} 秒内失去 {gripPct}% 的抓地力。在你驶离之前，你自己的机油不会影响你。赛道护盾可吸收它。"
       },

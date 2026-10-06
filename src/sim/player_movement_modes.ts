@@ -1,17 +1,17 @@
 // Ordered exclusive locomotion modes before ordinary charge/follow/fear/walking.
 // True means this mode owns the step. Keep the order: vehicle freeze precedes
-// rift lift stripping, the rally lock follows the AFK clear and precedes Valkyr,
+// rift lift stripping, the Mortar Overdrive lock follows the AFK clear and precedes Valkyr,
 // and the race lock precedes leap/climb but follows Valkyr.
 
 import { advanceClimb, tryStartClimb } from './climb';
 import { advanceHeroicLeap } from './combat/heroic_leap';
 import { advanceValkyrsCalling } from './combat/paladin_valkyrs_calling';
+import { mortarOverdriveMovementLocked } from './mortar_overdrive/race';
 import type { PlayerMotionDeps } from './player_motion';
 import { riftPlayerLift } from './rift/runs';
 import type { PlayerMeta } from './sim';
 import type { SimContext } from './sim_context';
 import { clearAfkOnMove } from './social/away';
-import { realmRacersMovementLocked } from './social/realm_racers';
 import { stepPassenger } from './transport_ferry';
 import type { Entity } from './types';
 import { advanceGliderMovement } from './world_quest_glider';
@@ -44,10 +44,10 @@ export function advanceExclusiveMovement(
     // Deliberate locomotion clears AFK, but not Do Not Disturb.
     clearAfkOnMove(ctx, meta, p);
   }
-  // A rally start or recovery lock is authoritative, not client animation, and
+  // A Mortar Overdrive start or recovery lock is authoritative, not client animation, and
   // it outranks every forced locomotion mode below: while the race holds a
   // machine, nothing else may move it.
-  if (meta.realmRacersMatchId !== null && realmRacersMovementLocked(ctx, meta.entityId)) {
+  if (meta.mortarOverdriveMatchId !== null && mortarOverdriveMovementLocked(ctx, meta.entityId)) {
     return true;
   }
   if (advanceValkyrsCalling(ctx, p)) return true;

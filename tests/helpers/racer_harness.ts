@@ -1,34 +1,34 @@
-// A seated Realm Racers pilot on the REAL online path: one ClientWorld and one
+// A seated Mortar Overdrive pilot on the REAL online path: one ClientWorld and one
 // GameServer over the simulated link (tests/helpers/online_harness.ts), racing
 // a Practice grid of house pilots on the practice circuit.
 //
 // What the rig adds on top of the online harness, each for a stated reason:
 //   - The stripped world the online racer suite races in
-//     (tests/realm_racers_online.test.ts): no camps, npcs or ground objects,
+//     (tests/mortar_overdrive_online.test.ts): no camps, npcs or ground objects,
 //     so nothing but the race draws from the shared stream, and the scripted
-//     stream (tests/helpers/realm_racers_rng.ts) can pin every pickup roll.
+//     stream (tests/helpers/mortar_overdrive_rng.ts) can pin every pickup roll.
 //   - The house pilots are parked off the racing line after every server
 //     tick, well clear of the local machine: a rival contact is a real server
 //     outcome, and a proof about the local pilot's own motion must not depend
 //     on where a bot happened to steer.
 //   - The loading lobby is closed the way a live client closes it: the
 //     ClientWorld sends its ready command over the link.
-//   - GO is pulled in (the shipped countdown is REALM_RACERS_COUNTDOWN_TICKS),
+//   - GO is pulled in (the shipped countdown is MORTAR_OVERDRIVE_COUNTDOWN_TICKS),
 //     through the match's own `goTick`, the one field the countdown reads.
 //   - A server-side shove, applied after a tick the way a contact applies its
 //     impulse, for the later proofs about outcomes the client cannot predict.
 //
 // `createRacerDuelHarness` seats TWO human clients in one public heat instead,
 // each over its own link, so what one pilot's screen shows of the other can be
-// measured against the server (tests/realm_racers_rival_frames.test.ts):
+// measured against the server (tests/mortar_overdrive_rival_frames.test.ts):
 //   - Both queue through their clients; the backfill that seats a short queue
 //     is brought forward (the wait clock is rewound, the way GO is pulled in),
 //     so the heat is the shipped one: the drawn competition circuit, its
 //     public lane, two house pilots in the seats nobody claimed.
 //   - The house pilots are parked (or left to drive), the boxes stripped
-//     (realmRacersStripPickups) so no draw moves a scenario.
+//     (mortarOverdriveStripPickups) so no draw moves a scenario.
 //   - Each pilot is held on scripted keys, or driven closed loop by the house
-//     pilot brain (src/sim/realm_racers_driver.ts) reading only what that
+//     pilot brain (src/sim/mortar_overdrive/driver.ts) reading only what that
 //     client knows: its own mirrored pose and drive, on every new snapshot.
 //   - Each pilot's screen can be recorded frame by frame: its drawn self and
 //     the rival drawn through the renderer's own remote racing step
@@ -36,9 +36,14 @@
 //
 // A suite using this helper must mock Postgres itself, hoisted above its own
 // import of this module (copy the factory at the top of
-// tests/realm_racers_v2_prediction.test.ts).
+// tests/mortar_overdrive_v2_prediction.test.ts).
 
 import type { ClientWorld } from '../../src/net/online';
+import {
+  contactKickRivalShift,
+  foldContactKickHandoff,
+  startContactKickAt,
+} from '../../src/render/mortar_overdrive/contact_kick_core';
 import {
   createOwnBumpFeedback,
   LOCAL_BUMP_MIN_CLOSING,
@@ -48,30 +53,31 @@ import {
   shouldPlayLocalBump,
 } from '../../src/render/own_bump_feedback_core';
 import {
-  contactKickRivalShift,
-  foldContactKickHandoff,
-  startContactKickAt,
-} from '../../src/render/realm_racers_contact_kick_core';
-import {
   createRemoteVehicleDisplay,
   remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
   stepRemoteRacerView,
 } from '../../src/render/remote_vehicle_display_core';
 import type { ReconciledSelfPrediction } from '../../src/render/self_render_position_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../../src/sim/content/realm_racers_circuits';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../../src/sim/content/mortar_overdrive/circuits';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../../src/sim/data';
-import { auraSpeedMult } from '../../src/sim/player_motion';
-import { driveRealmRacers, type RallyDriverTier } from '../../src/sim/realm_racers_driver';
-import { realmRacersStripPickups } from '../../src/sim/realm_racers_pickups';
-import { type RallyTrackModel, realmRacersTrack } from '../../src/sim/realm_racers_spline';
+import { MORTAR_OVERDRIVE_BACKFILL_TICKS } from '../../src/sim/mortar_overdrive/bots';
 import {
-  type RealmRacersMatch,
-  realmRacersCircuitOf,
-  realmRacersToCanonical,
-} from '../../src/sim/social/realm_racers';
-import { REALM_RACERS_BACKFILL_TICKS } from '../../src/sim/social/realm_racers_bots';
+  driveMortarOverdrive,
+  type MortarOverdriveDriverTier,
+} from '../../src/sim/mortar_overdrive/driver';
+import { mortarOverdriveStripPickups } from '../../src/sim/mortar_overdrive/pickups';
+import {
+  type MortarOverdriveMatch,
+  mortarOverdriveCircuitOf,
+  mortarOverdriveToCanonical,
+} from '../../src/sim/mortar_overdrive/race';
+import {
+  type MortarOverdriveTrackModel,
+  mortarOverdriveTrack,
+} from '../../src/sim/mortar_overdrive/spline';
+import { auraSpeedMult } from '../../src/sim/player_motion';
 import { DT, type Entity, type SimEvent, type VehicleDrive } from '../../src/sim/types';
 import {
   addVehicleSlip,
@@ -83,6 +89,7 @@ import {
   vehicleVelocityZ,
 } from '../../src/sim/vehicle_motion';
 import type { LatencyLinkConfig } from './latency_link';
+import { installScriptedRng, type ScriptedRng } from './mortar_overdrive_rng';
 import {
   type ClientFrameInfo,
   createOnlineHarness,
@@ -90,7 +97,6 @@ import {
   type OnlineHarness,
   SERVER_TICK_MS,
 } from './online_harness';
-import { installScriptedRng, type ScriptedRng } from './realm_racers_rng';
 
 /** Where along the lap (a share of its length) each house pilot is parked:
  *  the tail of the lap is taken, far from a grid the local pilot leaves. */
@@ -118,7 +124,10 @@ export interface RacerHarnessOptions {
 
 /** The share of a lap each on-line parking spot sits at, or the infield
  *  points (canonical frame) farthest from the road. */
-function infieldParking(track: RallyTrackModel, count: number): { x: number; z: number }[] {
+function infieldParking(
+  track: MortarOverdriveTrackModel,
+  count: number,
+): { x: number; z: number }[] {
   const samples = Array.from({ length: 256 }, (_, i) => track.pointAt((track.length * i) / 256));
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -168,7 +177,7 @@ export interface RacerHarness {
   harness: OnlineHarness;
   rng: ScriptedRng;
   /** The local pilot's practice match (throws before the seat). */
-  match(): RealmRacersMatch;
+  match(): MortarOverdriveMatch;
   /** Where each house pilot is parked, in world coordinates. */
   parkedPilots(): { pid: number; x: number; z: number }[];
   /** Ask for a Practice race through the client and advance until the mirror
@@ -206,16 +215,16 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
   }
   const { server, client, pid, clock } = harness;
   const rng = installScriptedRng(server.sim);
-  const track = realmRacersTrack(REALM_RACERS_PRACTICE_CIRCUIT);
+  const track = mortarOverdriveTrack(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT);
   const goAfterTicks = opts.goAfterTicks ?? 20;
-  let goPulledFor: RealmRacersMatch | null = null;
-  let seatSeen: { match: RealmRacersMatch; tick: number } | null = null;
+  let goPulledFor: MortarOverdriveMatch | null = null;
+  let seatSeen: { match: MortarOverdriveMatch; tick: number } | null = null;
 
-  function currentMatch(): RealmRacersMatch | null {
-    return server.sim.realmRacers.practices.find((m) => m.pids.includes(pid)) ?? null;
+  function currentMatch(): MortarOverdriveMatch | null {
+    return server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(pid)) ?? null;
   }
 
-  function match(): RealmRacersMatch {
+  function match(): MortarOverdriveMatch {
     const found = currentMatch();
     if (!found) throw new Error('the local pilot is not seated in a practice race');
     return found;
@@ -294,7 +303,7 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
     match,
     parkedPilots,
     seat(): void {
-      client.startRealmRacersPractice('rookie');
+      client.startMortarOverdrivePractice('rookie');
       advanceUntil(
         () => currentMatch() !== null && mirrorDrive() != null,
         5000,
@@ -302,7 +311,7 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
       );
     },
     advanceToGo(): void {
-      if (match().phase === 'loading') client.readyRealmRacers();
+      if (match().phase === 'loading') client.readyMortarOverdrive();
       advanceUntil(
         () => match().phase === 'racing' && mirrorDrive()?.controlsLocked === false,
         (goAfterTicks + 40) * SERVER_TICK_MS,
@@ -357,7 +366,7 @@ export interface PilotKeys {
 /** The closed-loop pilot: the house-pilot brain on the client's own mirror. */
 export interface PilotAutopilot {
   /** The brain's tier (default 'ace', the tidiest line at the highest pace). */
-  tier?: RallyDriverTier;
+  tier?: MortarOverdriveDriverTier;
   /** Yards left of the brain's own line the machine is held (negative: right).
    *  The brain is handed its pose shifted the other way, so it corrects onto
    *  a line offset by this much. */
@@ -441,7 +450,7 @@ function observeMachine(self: HarnessClient, options: PilotAutopilot): ObservedM
  *  client's held intent (so they ride its own wire). */
 function createAutopilotDriver(
   self: HarnessClient,
-  currentMatch: () => RealmRacersMatch | null,
+  currentMatch: () => MortarOverdriveMatch | null,
 ): AutopilotDriver {
   let autopilot: PilotAutopilot | null = null;
   let decidedOn = '';
@@ -458,8 +467,8 @@ function createAutopilotDriver(
       decidedOn = seen.key;
       const machine = seen.drive;
       if (machine.controlsLocked) return;
-      const lap = realmRacersTrack(realmRacersCircuitOf(heat));
-      const here = realmRacersToCanonical(heat, seen.x, seen.z);
+      const lap = mortarOverdriveTrack(mortarOverdriveCircuitOf(heat));
+      const here = mortarOverdriveToCanonical(heat, seen.x, seen.z);
       const onLine = lap.project(here.x, here.z, hintIndex);
       hintIndex = onLine.index;
       const offset = autopilot.lineOffsetYd ?? 0;
@@ -469,7 +478,7 @@ function createAutopilotDriver(
       const x = here.x + onLine.tangentZ * offset;
       const z = here.z - onLine.tangentX * offset;
       const projection = offset === 0 ? onLine : lap.project(x, z, hintIndex);
-      const out = driveRealmRacers({
+      const out = driveMortarOverdrive({
         pid: seen.id,
         x,
         z,
@@ -566,7 +575,7 @@ export interface ServerTickRow {
   tMs: number;
   tick: number;
   poses: Record<number, ServerRacerPose>;
-  /** The tick's Realm Racers events. */
+  /** The tick's Mortar Overdrive events. */
   events: SimEvent[];
 }
 
@@ -591,7 +600,7 @@ export interface RacerDuelOptions {
   /** Predict both seated pilots on wire v2 (the pipeline flag). */
   predictDrivers?: boolean;
   /** Draw the bump at the seen touch on both screens, exactly as the race
-   *  scene does (realm_racers_scene.ts; realm_racers_contact_kick_core.ts):
+   *  scene does (mortar_overdrive/scene.ts; mortar_overdrive/contact_kick_core.ts):
    *  on by default, false records the screens without it. */
   contactKick?: boolean;
 }
@@ -602,9 +611,9 @@ export interface RacerDuelHarness {
   a: DuelPilot;
   b: DuelPilot;
   /** The heat both pilots are seated in (throws before the seat). */
-  match(): RealmRacersMatch;
+  match(): MortarOverdriveMatch;
   /** The heat's circuit model (canonical frame; see toCanonical). */
-  track(): RallyTrackModel;
+  track(): MortarOverdriveTrackModel;
   toCanonical(x: number, z: number): { x: number; z: number };
   /** Both queue through their clients; advance until both mirrors are seated. */
   seat(): void;
@@ -625,7 +634,7 @@ export interface RacerDuelHarness {
   dispose(): void;
 }
 
-const RACER_EVENT_PREFIX = 'realmRacers';
+const RACER_EVENT_PREFIX = 'mortarOverdrive';
 
 function racerEvents(events: readonly SimEvent[]): SimEvent[] {
   return events.filter((ev) => ev.type.startsWith(RACER_EVENT_PREFIX));
@@ -678,40 +687,43 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
   const goAfterTicks = opts.goAfterTicks ?? 20;
   const humans = [primary.pid, peer.pid];
   let seatRequested = false;
-  let seatSeen: { match: RealmRacersMatch; tick: number } | null = null;
-  let goPulledFor: RealmRacersMatch | null = null;
+  let seatSeen: { match: MortarOverdriveMatch; tick: number } | null = null;
+  let goPulledFor: MortarOverdriveMatch | null = null;
   let recording: DuelRecording | null = null;
   // The wall instant of the server tick that dropped the flag.
   let goWallMs: number | null = null;
 
-  function currentMatch(): RealmRacersMatch | null {
-    const heat = server.sim.realmRacers.match;
+  function currentMatch(): MortarOverdriveMatch | null {
+    const heat = server.sim.mortarOverdrive.match;
     return heat && humans.every((pid) => heat.pids.includes(pid)) ? heat : null;
   }
 
-  function match(): RealmRacersMatch {
+  function match(): MortarOverdriveMatch {
     const found = currentMatch();
     if (!found) throw new Error('the two pilots are not seated in one heat');
     return found;
   }
 
   harness.onServerTick((events) => {
-    const rally = server.sim.realmRacers;
+    const mortarOverdrive = server.sim.mortarOverdrive;
     const heat = currentMatch();
-    if (!heat && seatRequested && rally.match === null) {
+    if (!heat && seatRequested && mortarOverdrive.match === null) {
       // Bring the backfill forward: once both are queued, their wait clock is
       // rewound so the next tick's backfill seats them, through the same path
-      // a short queue takes after REALM_RACERS_BACKFILL_TICKS.
-      if (humans.every((pid) => rally.queue.includes(pid))) {
+      // a short queue takes after MORTAR_OVERDRIVE_BACKFILL_TICKS.
+      if (humans.every((pid) => mortarOverdrive.queue.includes(pid))) {
         for (const pid of humans) {
-          rally.queuedAtTick.set(pid, server.sim.tickCount - REALM_RACERS_BACKFILL_TICKS);
+          mortarOverdrive.queuedAtTick.set(
+            pid,
+            server.sim.tickCount - MORTAR_OVERDRIVE_BACKFILL_TICKS,
+          );
         }
       }
     }
     if (heat) {
       if (seatSeen?.match !== heat) {
         seatSeen = { match: heat, tick: server.sim.tickCount };
-        realmRacersStripPickups(heat.pickups);
+        mortarOverdriveStripPickups(heat.pickups);
       }
       if (goPulledFor !== heat && heat.phase === 'countdown') {
         goPulledFor = heat;
@@ -722,7 +734,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       }
       if (goWallMs === null && heat.phase === 'racing') goWallMs = clock.now();
       if ((opts.housePilots ?? 'parked') === 'parked') {
-        const lap = realmRacersTrack(realmRacersCircuitOf(heat));
+        const lap = mortarOverdriveTrack(mortarOverdriveCircuitOf(heat));
         let parkedIndex = 0;
         for (const other of heat.pids) {
           if (humans.includes(other)) continue;
@@ -832,7 +844,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
       const p = c.entities.get(c.playerId);
       const rivalDrive = e.drive;
       if (!p?.drive || !rivalDrive) return;
-      if (!localBumpArmed(frame.selfRender.drive.source, c.realmRacersInfo.match, e, p)) return;
+      if (!localBumpArmed(frame.selfRender.drive.source, c.mortarOverdriveInfo.match, e, p)) return;
       const reach =
         vehicleProfile(rivalDrive.profileKey).bodyRadius +
         vehicleProfile(p.drive.profileKey).bodyRadius;
@@ -916,19 +928,19 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     a,
     b,
     match,
-    track: () => realmRacersTrack(realmRacersCircuitOf(match())),
-    toCanonical: (x: number, z: number) => realmRacersToCanonical(match(), x, z),
+    track: () => mortarOverdriveTrack(mortarOverdriveCircuitOf(match())),
+    toCanonical: (x: number, z: number) => mortarOverdriveToCanonical(match(), x, z),
     seat(): void {
       seatRequested = true;
       // A queues first and B once A is in, so A takes grid slot 0 at every
       // pair of links rather than whichever command landed first.
-      a.client.joinRealmRacersQueue();
+      a.client.joinMortarOverdriveQueue();
       advanceUntil(
-        () => server.sim.realmRacers.queue.includes(a.pid),
+        () => server.sim.mortarOverdrive.queue.includes(a.pid),
         5000,
         'pilot A to reach the queue',
       );
-      b.client.joinRealmRacersQueue();
+      b.client.joinMortarOverdriveQueue();
       advanceUntil(
         () => currentMatch() !== null && seatedOnMirror(a) && seatedOnMirror(b),
         5000,
@@ -937,8 +949,8 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     },
     advanceToGo(): void {
       if (match().phase === 'loading') {
-        a.client.readyRealmRacers();
-        b.client.readyRealmRacers();
+        a.client.readyMortarOverdrive();
+        b.client.readyMortarOverdrive();
       }
       advanceUntil(
         () => match().phase === 'racing' && racingOnMirror(a) && racingOnMirror(b),

@@ -153,7 +153,7 @@ reduce the time frames wait in the server timeline. That delay is observable as
 the harness's inputToAuthorityMs metric; a phase lock is a deferred refinement
 to be justified by that number, not assumed.
 
-### Seated drivers (Realm Racers)
+### Seated drivers (Mortar Overdrive)
 
 A pilot behind a wheel is predicted by the same pipeline, with the drive state
 as part of the replayed state:
@@ -169,18 +169,18 @@ as part of the replayed state:
   inputs stay the per-tick flags; pickups, contacts, blasts and nitro are
   server outcomes that arrive through the replay, never predicted. A rival
   contact is DRAWN from the seen touch (a display-only shift of the drawn
-  pose, `src/render/realm_racers_contact_kick_core.ts`, retired on the
+  pose, `src/render/mortar_overdrive/contact_kick_core.ts`, retired on the
   acknowledgement that can carry the server's contact): an exception to the
   "the drawn pose reflects only input on the wire" rule, named for the
-  maintainer (`docs/prd/realm-racers-contact-lag-compensation.md`).
+  maintainer (`docs/prd/mortar-overdrive-contact-lag-compensation.md`).
 - Oil: the one outcome predicted locally, because it is a pure function of
   state the client already mirrors (the patches and their expiry on the match
   readout, the race clock, the pilot's standing with the oil on `rdv` as
   `og`/`oc`/`ou`). `src/render/self_slick_prediction_core.ts` runs the race's
-  own crossing and bite code (`src/sim/realm_racers_slick_contact.ts`) after the
+  own crossing and bite code (`src/sim/mortar_overdrive/slick_contact.ts`) after the
   kernel on each predicted tick, and the match compares the standing in ticks
   left. A patch the client hears of after crossing it costs the one replay that
-  brings the grip window with it (`tests/realm_racers_prediction_proof.test.ts`).
+  brings the grip window with it (`tests/mortar_overdrive_prediction_proof.test.ts`).
 - Epoch: while a pilot drives, the override epoch sizes a legal step by the
   machine (`vehicleStepCeilingYd`) instead of run speed, ignores move-speed
   changes (surface bands are auras), and carries an active `raceLocked` bit for
@@ -190,13 +190,13 @@ as part of the replayed state:
 - Rivals: remote racers are projected into the local kart's own time frame
   (`remoteRacerHorizon` in `src/render/remote_vehicle_display_core.ts`), so the
   server's contact rule needs no forward window
-  (`docs/prd/realm-racers-contact-lag-compensation.md`).
+  (`docs/prd/mortar-overdrive-contact-lag-compensation.md`).
 
-Verified by `tests/realm_racers_prediction_proof.test.ts` (the two-host proof:
+Verified by `tests/mortar_overdrive_prediction_proof.test.ts` (the two-host proof:
 exact match rates, replays per server transition, fairness at 30 vs 144 fps),
-`tests/realm_racers_v2_prediction.test.ts`,
-`tests/realm_racers_drive_recon_online.test.ts` and
-`tests/realm_racers_rival_frames.test.ts`.
+`tests/mortar_overdrive_v2_prediction.test.ts`,
+`tests/mortar_overdrive_drive_recon_online.test.ts` and
+`tests/mortar_overdrive_rival_frames.test.ts`.
 
 ## Rollout inside the rework PR
 

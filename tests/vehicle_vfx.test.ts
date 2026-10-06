@@ -34,7 +34,7 @@ function probe(): {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('Realm Racers vehicle VFX', () => {
+describe('Mortar Overdrive vehicle VFX', () => {
   it('keeps tyre smoke pale and gated on a sustained slide', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.2);
     const { vfx, spawn } = probe();
@@ -73,7 +73,7 @@ describe('Realm Racers vehicle VFX', () => {
     // The road effects are the kart presentation's, run from the renderer's
     // entity loop for every view with the renderer as the host.
     const source = readFileSync(
-      new URL('../src/render/realm_racers_kart_presentation.ts', import.meta.url),
+      new URL('../src/render/mortar_overdrive/kart_presentation.ts', import.meta.url),
       'utf8',
     );
     expect(source).toContain('h.vfx.vehicleDriftSmoke(');
@@ -85,7 +85,7 @@ describe('Realm Racers vehicle VFX', () => {
     expect(source).toContain('h.vfx.vehicleScrapeSparks(');
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain(
-      'realmRacersKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
+      'moKart.syncRoadFx(this, v, e, isSelf, settled, facing, ax, ay, az, dt);',
     );
   });
 });

@@ -23,13 +23,14 @@ import type { InventoryGrantOptions } from './inventory_grant';
 import type { PendingLootRoll } from './loot/loot_roll';
 import type { MarketListing } from './market';
 import type { MobScanCounters } from './mob/scan_counters';
+import type { MortarOverdriveHeldEffect } from './mortar_overdrive/pickup_effects';
+import type { MortarOverdriveState } from './mortar_overdrive/race';
 import type { CommissionOrder } from './professions/commission_order';
 import type { FeastState } from './professions/feast';
 import type { PendingProjectile } from './projectile_travel';
 import type { HillState } from './pvp/hill';
 import type { HillSpotProbe } from './pvp/hill_rules';
 import type { WorldPvpBooks } from './pvp/world_pvp';
-import type { RallyHeldEffect } from './realm_racers_pickup_effects';
 import type { NaturalRiftPortal } from './rift/portals';
 import type { RiftEvent, RiftInstance } from './rift/types';
 import type { Rng } from './rng';
@@ -53,7 +54,6 @@ import type { BgOutcomeRecord } from './social/battleground_outcomes';
 import type { BgProposal } from './social/battleground_proposal';
 import type { CardDuelMatch } from './social/card_duel';
 import type { FinderFormationUnit } from './social/party';
-import type { RealmRacersState } from './social/realm_racers';
 import type { SpatialGrid } from './spatial';
 import type {
   AbilityDef,
@@ -382,9 +382,9 @@ export interface SimContextPrimitives {
   // reassigned, so a live read-only view like bankerIds. Always empty offline
   // (guilds are a server social system).
   readonly guildBanks: Map<number, GuildBankState>;
-  // The Realm Racers queue and single live two-racer match. The holder is
-  // mutated in place by social/realm_racers.ts.
-  readonly realmRacers: RealmRacersState;
+  // The Mortar Overdrive queue and single live two-racer match. The holder is
+  // mutated in place by mortar_overdrive/race.ts.
+  readonly mortarOverdrive: MortarOverdriveState;
   // Book of Deeds: players whose deed-relevant state changed this tick,
   // evaluated and cleared at the tick tail (deeds.ts updateDeeds). Sim-owned
   // Set mutated in place, so a read-only live view.
@@ -1216,17 +1216,17 @@ export interface SimContextCallbacks {
     escortId: string,
     escortee: Entity,
   ): void;
-  // The Realm Racers rally arms (owned by social/realm_racers.ts).
-  realmRacersFireGroundBlast(caster: Entity): void;
+  // The Mortar Overdrive arms (owned by mortar_overdrive/race.ts).
+  mortarOverdriveFireGroundBlast(caster: Entity): void;
   /** Spend the held pickup effect the racer just cast (22b): the nitro burst, or
    *  the oil dumped under the machine. Draws no rng. */
-  realmRacersSpendPickupEffect(caster: Entity, effect: RallyHeldEffect): void;
+  mortarOverdriveSpendPickupEffect(caster: Entity, effect: MortarOverdriveHeldEffect): void;
   /** Dev only, gated by `devCommands` at the call site: seat `pid` on a named
    *  circuit against a full grid of house pilots, with no queue and no wait. */
-  realmRacersDevRace(circuitId: string, tier: string, pid: number): boolean;
+  mortarOverdriveDevRace(circuitId: string, tier: string, pid: number): boolean;
   /** Dev only, same gate: top the seated pilot's weapon budget AND every pickup
    *  effect up to `charges` each. Zero restores the race's own rules. */
-  realmRacersDevGrantKit(pid: number, charges: number): boolean;
+  mortarOverdriveDevGrantKit(pid: number, charges: number): boolean;
 }
 
 // The seam consumed by extracted modules.
@@ -1572,8 +1572,8 @@ export function createSimContext(host: SimContextHost): SimContext {
     get guildBanks() {
       return host.guildBanks;
     },
-    get realmRacers() {
-      return host.realmRacers;
+    get mortarOverdrive() {
+      return host.mortarOverdrive;
     },
     get deedDirtyPids() {
       return host.deedDirtyPids;
@@ -1865,11 +1865,11 @@ export function createSimContext(host: SimContextHost): SimContext {
     currentWorldQuestRotation: host.currentWorldQuestRotation,
     hasActiveWorldQuest: host.hasActiveWorldQuest,
     completeWorldQuestEscort: host.completeWorldQuestEscort,
-    // The Realm Racers rally arms (points at social/realm_racers.ts via Sim).
-    realmRacersFireGroundBlast: host.realmRacersFireGroundBlast,
-    realmRacersSpendPickupEffect: host.realmRacersSpendPickupEffect,
-    realmRacersDevRace: host.realmRacersDevRace,
-    realmRacersDevGrantKit: host.realmRacersDevGrantKit,
+    // The Mortar Overdrive arms (points at mortar_overdrive/race.ts via Sim).
+    mortarOverdriveFireGroundBlast: host.mortarOverdriveFireGroundBlast,
+    mortarOverdriveSpendPickupEffect: host.mortarOverdriveSpendPickupEffect,
+    mortarOverdriveDevRace: host.mortarOverdriveDevRace,
+    mortarOverdriveDevGrantKit: host.mortarOverdriveDevGrantKit,
   };
 }
 

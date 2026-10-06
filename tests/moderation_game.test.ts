@@ -44,14 +44,14 @@ import { saveCharacterState } from '../server/db';
 import { type ClientSession, GameServer } from '../server/game';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { isInJailCage, JAIL_GATE, JAIL_VISITOR_POS, jailGateTeleport } from '../src/sim/jail';
-import { REALM_RACERS_LOITER_TICKS } from '../src/sim/realm_racers_track_limits';
-import { ARENA_MIN_LEVEL } from '../src/sim/social/arena';
 import {
-  REALM_RACERS_MOUNT_KEY,
-  REALM_RACERS_RETURN_TICKS,
-  REALM_RACERS_STUCK_TICKS,
-  type RealmRacersMatch,
-} from '../src/sim/social/realm_racers';
+  MORTAR_OVERDRIVE_MOUNT_KEY,
+  MORTAR_OVERDRIVE_RETURN_TICKS,
+  MORTAR_OVERDRIVE_STUCK_TICKS,
+  type MortarOverdriveMatch,
+} from '../src/sim/mortar_overdrive/race';
+import { MORTAR_OVERDRIVE_LOITER_TICKS } from '../src/sim/mortar_overdrive/track_limits';
+import { ARENA_MIN_LEVEL } from '../src/sim/social/arena';
 
 // Moderation acts on player sessions and the fixed jail cage; ambient camps,
 // world npcs and quest objects never take part, and every test here boots one
@@ -1013,18 +1013,18 @@ describe('server-side teleports end a live profession session', () => {
   });
 });
 
-// A seated racer is the Society's until it returns them: the rally re-forces its
+// A seated racer is the Society's until it returns them: the Mortar Overdrive re-forces its
 // mount and drive every tick and recovers a machine left off the road. Jailing
 // one without forfeiting first handed the body to two owners, and the release
 // then put the prisoner back on a circuit with no race.
-describe('jailing a Realm Racers pilot', () => {
+describe('jailing a Mortar Overdrive pilot', () => {
   function practiceRig(): {
     server: GameServer;
     moderator: ClientSession;
     pilot: ClientSession;
     pilotWs: FakeWs;
     original: { x: number; z: number };
-    match(): RealmRacersMatch | null;
+    match(): MortarOverdriveMatch | null;
     tickMs(ticks: number): { outOfCage: number; resets: number };
   } {
     const server = new GameServer();
@@ -1039,7 +1039,7 @@ describe('jailing a Realm Racers pilot', () => {
     const at = entity(server, pilot.pid).pos;
     const original = { x: at.x, z: at.z };
     const match = () =>
-      server.sim.realmRacers.practices.find((m) => m.pids.includes(pilot.pid)) ?? null;
+      server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(pilot.pid)) ?? null;
     return {
       server,
       moderator,
@@ -1054,7 +1054,7 @@ describe('jailing a Realm Racers pilot', () => {
           const events = server.sim.tick();
           internals(server).enforceJailStates();
           resets += events.filter(
-            (ev) => ev.type === 'realmRacersReset' && 'pid' in ev && ev.pid === pilot.pid,
+            (ev) => ev.type === 'mortarOverdriveReset' && 'pid' in ev && ev.pid === pilot.pid,
           ).length;
           if (!isInJailCage(entity(server, pilot.pid).pos)) outOfCage++;
         }
@@ -1067,15 +1067,15 @@ describe('jailing a Realm Racers pilot', () => {
     server.handleMessage(session, JSON.stringify({ t: 'cmd', ...payload }));
   }
 
-  function seat(rig: ReturnType<typeof practiceRig>): RealmRacersMatch {
-    cmd(rig.server, rig.pilot, { cmd: 'realm_racers_practice', tier: 'rookie' });
+  function seat(rig: ReturnType<typeof practiceRig>): MortarOverdriveMatch {
+    cmd(rig.server, rig.pilot, { cmd: 'mortar_overdrive_practice', tier: 'rookie' });
     const match = rig.match();
     if (!match) throw new Error('practice did not seat');
     return match;
   }
 
-  function toRacing(rig: ReturnType<typeof practiceRig>, match: RealmRacersMatch): void {
-    cmd(rig.server, rig.pilot, { cmd: 'realm_racers_ready' });
+  function toRacing(rig: ReturnType<typeof practiceRig>, match: MortarOverdriveMatch): void {
+    cmd(rig.server, rig.pilot, { cmd: 'mortar_overdrive_ready' });
     for (let i = 0; i < 40 && match.phase === 'loading'; i++) rig.server.sim.tick();
     expect(match.phase).toBe('countdown');
     match.goTick = rig.server.sim.tickCount + 1;
@@ -1099,8 +1099,8 @@ describe('jailing a Realm Racers pilot', () => {
     // The forfeit's own return runs before returnPos is read.
     expect(pilot.jailed?.returnPos).toEqual(original);
     expect(racer.drive).toBeNull();
-    expect(racer.mountKey).not.toBe(REALM_RACERS_MOUNT_KEY);
-    expect(server.sim.meta(pilot.pid)?.realmRacersMatchId).toBeNull();
+    expect(racer.mountKey).not.toBe(MORTAR_OVERDRIVE_MOUNT_KEY);
+    expect(server.sim.meta(pilot.pid)?.mortarOverdriveMatchId).toBeNull();
     expect(match.progress.get(pilot.pid)).toMatchObject({ returned: true });
     expect(match.progress.get(pilot.pid)?.retiredTick).not.toBeNull();
     // The house pilots alone decide nothing, so the race closes, and it counts:
@@ -1112,7 +1112,11 @@ describe('jailing a Realm Racers pilot', () => {
     // Past the stuck arm, the loiter arm and the tableau's return: no recovery,
     // no seat and no return ever moves the prisoner out of the cage.
     const held = rig.tickMs(
-      Math.max(REALM_RACERS_STUCK_TICKS, REALM_RACERS_LOITER_TICKS, REALM_RACERS_RETURN_TICKS) + 40,
+      Math.max(
+        MORTAR_OVERDRIVE_STUCK_TICKS,
+        MORTAR_OVERDRIVE_LOITER_TICKS,
+        MORTAR_OVERDRIVE_RETURN_TICKS,
+      ) + 40,
     );
     expect(held).toEqual({ outOfCage: 0, resets: 0 });
     expect(rig.match()).toBeNull();
@@ -1132,7 +1136,9 @@ describe('jailing a Realm Racers pilot', () => {
     // the grid seat marks its own relocation; only what follows the jail counts
     const seated = server.sim.drainEvents();
     expect(
-      seated.filter((ev) => ev.type === 'realmRacersReset' && 'pid' in ev && ev.pid === pilot.pid),
+      seated.filter(
+        (ev) => ev.type === 'mortarOverdriveReset' && 'pid' in ev && ev.pid === pilot.pid,
+      ),
     ).toHaveLength(1);
     command(server, moderator, '/jail "Speedster" 60');
     await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
@@ -1140,45 +1146,45 @@ describe('jailing a Realm Racers pilot', () => {
     expect(match.voided).toBe(true);
     expect(entity(server, pilot.pid).drive).toBeNull();
     expect(pilot.jailed?.returnPos).toEqual(original);
-    expect(rig.tickMs(REALM_RACERS_RETURN_TICKS + 40)).toEqual({ outOfCage: 0, resets: 0 });
+    expect(rig.tickMs(MORTAR_OVERDRIVE_RETURN_TICKS + 40)).toEqual({ outOfCage: 0, resets: 0 });
   });
 
   it('drops a queued pilot from the queue and refuses queue and Practice while jailed', async () => {
     const rig = practiceRig();
     const { server, moderator, pilot, pilotWs } = rig;
-    cmd(server, pilot, { cmd: 'realm_racers_join' });
-    expect(server.sim.realmRacers.queue).toContain(pilot.pid);
+    cmd(server, pilot, { cmd: 'mortar_overdrive_join' });
+    expect(server.sim.mortarOverdrive.queue).toContain(pilot.pid);
     command(server, moderator, '/jail "Speedster" 60');
     await vi.waitFor(() => expect(pilot.jailed).not.toBeNull());
-    expect(server.sim.realmRacers.queue).not.toContain(pilot.pid);
+    expect(server.sim.mortarOverdrive.queue).not.toContain(pilot.pid);
 
-    cmd(server, pilot, { cmd: 'realm_racers_join' });
-    cmd(server, pilot, { cmd: 'realm_racers_practice', tier: 'rookie' });
+    cmd(server, pilot, { cmd: 'mortar_overdrive_join' });
+    cmd(server, pilot, { cmd: 'mortar_overdrive_practice', tier: 'rookie' });
     expect(eventTexts(pilotWs)).toContain('You cannot do that while jailed.');
     // The sim refuses on its own too, whichever host asks.
-    server.sim.realmRacersQueueJoin(pilot.pid);
-    server.sim.realmRacersPracticeStart('rookie', pilot.pid);
-    expect(server.sim.realmRacers.queue).not.toContain(pilot.pid);
+    server.sim.mortarOverdriveQueueJoin(pilot.pid);
+    server.sim.mortarOverdrivePracticeStart('rookie', pilot.pid);
+    expect(server.sim.mortarOverdrive.queue).not.toContain(pilot.pid);
     expect(rig.match()).toBeNull();
     expect(rig.tickMs(40).outOfCage).toBe(0);
 
     command(server, moderator, '/unjail "Speedster"');
     await vi.waitFor(() => expect(pilot.jailed).toBeNull());
-    server.sim.realmRacersQueueJoin(pilot.pid);
-    expect(server.sim.realmRacers.queue).toContain(pilot.pid);
+    server.sim.mortarOverdriveQueueJoin(pilot.pid);
+    expect(server.sim.mortarOverdrive.queue).toContain(pilot.pid);
   });
 
   it('forfeits a moderator who visits the jail from a race', () => {
     const rig = practiceRig();
     const { server, moderator } = rig;
-    cmd(server, moderator, { cmd: 'realm_racers_practice', tier: 'rookie' });
-    const match = server.sim.realmRacers.practices.find((m) => m.pids.includes(moderator.pid));
+    cmd(server, moderator, { cmd: 'mortar_overdrive_practice', tier: 'rookie' });
+    const match = server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(moderator.pid));
     expect(match).toBeDefined();
     command(server, moderator, '/jail');
     expect(moderator.jailVisit).not.toBeNull();
     expect(entity(server, moderator.pid).drive).toBeNull();
-    expect(server.sim.meta(moderator.pid)?.realmRacersMatchId).toBeNull();
-    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 40; i++) {
+    expect(server.sim.meta(moderator.pid)?.mortarOverdriveMatchId).toBeNull();
+    for (let i = 0; i < MORTAR_OVERDRIVE_RETURN_TICKS + 40; i++) {
       server.sim.tick();
       internals(server).enforceJailStates();
     }
@@ -1192,15 +1198,15 @@ describe('jailing a Realm Racers pilot', () => {
     const { server, moderator, pilot } = rig;
     const at = entity(server, moderator.pid).pos;
     const original = { x: at.x, z: at.z };
-    cmd(server, moderator, { cmd: 'realm_racers_practice', tier: 'rookie' });
-    const match = server.sim.realmRacers.practices.find((m) => m.pids.includes(moderator.pid));
+    cmd(server, moderator, { cmd: 'mortar_overdrive_practice', tier: 'rookie' });
+    const match = server.sim.mortarOverdrive.practices.find((m) => m.pids.includes(moderator.pid));
     expect(match).toBeDefined();
     internals(server).enterSpectate(moderator, pilot);
-    expect(server.sim.meta(moderator.pid)?.realmRacersMatchId).toBeNull();
+    expect(server.sim.meta(moderator.pid)?.mortarOverdriveMatchId).toBeNull();
     expect(entity(server, moderator.pid).drive).toBeNull();
     expect(moderator.spectating?.savedPos).toMatchObject(original);
     const limbo = { ...entity(server, moderator.pid).pos };
-    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 40; i++) server.sim.tick();
+    for (let i = 0; i < MORTAR_OVERDRIVE_RETURN_TICKS + 40; i++) server.sim.tick();
     expect(entity(server, moderator.pid).pos).toMatchObject({ x: limbo.x, z: limbo.z });
     internals(server).exitSpectate(moderator);
     expect(entity(server, moderator.pid).pos.x).toBeCloseTo(original.x);
@@ -1210,9 +1216,9 @@ describe('jailing a Realm Racers pilot', () => {
   it('drops a queued moderator from the queue on spectate entry', () => {
     const rig = practiceRig();
     const { server, moderator, pilot } = rig;
-    cmd(server, moderator, { cmd: 'realm_racers_join' });
-    expect(server.sim.realmRacers.queue).toContain(moderator.pid);
+    cmd(server, moderator, { cmd: 'mortar_overdrive_join' });
+    expect(server.sim.mortarOverdrive.queue).toContain(moderator.pid);
     internals(server).enterSpectate(moderator, pilot);
-    expect(server.sim.realmRacers.queue).not.toContain(moderator.pid);
+    expect(server.sim.mortarOverdrive.queue).not.toContain(moderator.pid);
   });
 });

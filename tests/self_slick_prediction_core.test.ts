@@ -9,49 +9,55 @@ import {
   unoiledGrip,
 } from '../src/render/self_slick_prediction_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
-import { GROUND_BLAST_SHOCK_GRIP } from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_LANES, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
-import { applyRallySlickSurface } from '../src/sim/realm_racers_slick_contact';
+import { GROUND_BLAST_SHOCK_GRIP } from '../src/sim/mortar_overdrive/ground_blast';
 import {
-  REALM_RACERS_SLICK_GRIP,
-  REALM_RACERS_SLICK_GRIP_TICKS,
-  REALM_RACERS_SLICK_SLIP_CAP,
-  realmRacersSlickThrow,
-} from '../src/sim/realm_racers_slicks';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOffset,
+} from '../src/sim/mortar_overdrive/layout';
 import {
-  REALM_RACERS_GARDEN_BAND,
-  REALM_RACERS_VEHICLE_KEY,
-  REALM_RACERS_VERGE_BAND,
-  REALM_RACERS_WARD_AURA,
-} from '../src/sim/social/realm_racers';
+  MORTAR_OVERDRIVE_GARDEN_BAND,
+  MORTAR_OVERDRIVE_VEHICLE_KEY,
+  MORTAR_OVERDRIVE_VERGE_BAND,
+  MORTAR_OVERDRIVE_WARD_AURA,
+} from '../src/sim/mortar_overdrive/race';
+import { applyMortarOverdriveSlickSurface } from '../src/sim/mortar_overdrive/slick_contact';
+import {
+  MORTAR_OVERDRIVE_SLICK_GRIP,
+  MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
+  MORTAR_OVERDRIVE_SLICK_SLIP_CAP,
+  mortarOverdriveSlickThrow,
+} from '../src/sim/mortar_overdrive/slicks';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 import type { Aura } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
-import type { RealmRacersRacerInfo, RealmRacersSlickInfo } from '../src/world_api/realm_racers';
+import type {
+  MortarOverdriveRacerInfo,
+  MortarOverdriveSlickInfo,
+} from '../src/world_api/mortar_overdrive';
 
 // A lane other than 0, so the circuit-frame offset is really exercised.
-const LANE = REALM_RACERS_LANES[1];
-const ORIGIN = realmRacersLaneOffset(LANE.index);
-const HERE = realmRacersTrack(LANE.circuit).pointAt(40);
+const LANE = MORTAR_OVERDRIVE_LANES[1];
+const ORIGIN = mortarOverdriveLaneOffset(LANE.index);
+const HERE = mortarOverdriveTrack(LANE.circuit).pointAt(40);
 const PID = 7;
 const START_TICK = 100;
 
 /** A patch 1.5 yd up the z axis from HERE, in the circuit's frame. */
-function patch(over: Partial<RealmRacersSlickInfo> = {}): RealmRacersSlickInfo {
+function patch(over: Partial<MortarOverdriveSlickInfo> = {}): MortarOverdriveSlickInfo {
   return { id: 3, x: HERE.x, z: HERE.z + 1.5, endsAt: START_TICK + 200, ...over };
 }
 
 function match(
-  slicks: RealmRacersSlickInfo[],
+  slicks: MortarOverdriveSlickInfo[],
   over: Partial<SlickPredictionMatch> = {},
-  me: Partial<RealmRacersRacerInfo> = {},
+  me: Partial<MortarOverdriveRacerInfo> = {},
 ): SlickPredictionMatch {
   return {
     phase: 'racing',
     elapsedTicks: START_TICK,
     slicks,
     resetLocked: false,
-    me: { pid: PID, finished: false, retired: false, ...me } as RealmRacersRacerInfo,
+    me: { pid: PID, finished: false, retired: false, ...me } as MortarOverdriveRacerInfo,
     ...over,
   };
 }
@@ -71,7 +77,7 @@ function slickState(over: Partial<SlickPredictionState> = {}): SlickPredictionSt
 /** A machine at 30 yd/s, facing +z, that drives HERE to HERE + 3 yd: through
  *  the patch's centre. */
 function body(auras: Aura[] = []): SlickPredictionBody {
-  const drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
+  const drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
   drive.speed = 30;
   return {
     id: PID,
@@ -98,16 +104,16 @@ describe('SelfSlickPredictor', () => {
     expect(b.slick).toEqual(
       slickState({
         raceTick: tick,
-        slickGripUntilTick: tick + REALM_RACERS_SLICK_GRIP_TICKS,
+        slickGripUntilTick: tick + MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
         slickContactId: 3,
-        slickContactUntilTick: tick + REALM_RACERS_SLICK_GRIP_TICKS,
+        slickContactUntilTick: tick + MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
       }),
     );
     // The surface pass ran before the crossing, so this tick's grip is clean.
     expect(b.drive?.gripMult).toBe(1);
-    expect(b.drive?.slipCap).toBe(REALM_RACERS_SLICK_SLIP_CAP);
-    const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
-    const thrown = realmRacersSlickThrow({
+    expect(b.drive?.slipCap).toBe(MORTAR_OVERDRIVE_SLICK_SLIP_CAP);
+    const profile = vehicleProfile(MORTAR_OVERDRIVE_VEHICLE_KEY);
+    const thrown = mortarOverdriveSlickThrow({
       slip: 0,
       forwardSpeed: 30,
       topSpeed: profile.maxSpeed,
@@ -129,13 +135,13 @@ describe('SelfSlickPredictor', () => {
     const m = match([patch()]);
     predictor.step(b, m);
     const grips: number[] = [];
-    for (let i = 0; i < REALM_RACERS_SLICK_GRIP_TICKS; i++) {
+    for (let i = 0; i < MORTAR_OVERDRIVE_SLICK_GRIP_TICKS; i++) {
       parkAway(b);
       predictor.step(b, m);
       grips.push(b.drive?.gripMult ?? Number.NaN);
     }
-    const oiled = REALM_RACERS_SLICK_GRIP_TICKS - 1;
-    expect(grips.slice(0, oiled)).toEqual(Array(oiled).fill(REALM_RACERS_SLICK_GRIP));
+    const oiled = MORTAR_OVERDRIVE_SLICK_GRIP_TICKS - 1;
+    expect(grips.slice(0, oiled)).toEqual(Array(oiled).fill(MORTAR_OVERDRIVE_SLICK_GRIP));
     expect(grips.at(-1)).toBe(1);
     expect(b.drive?.slipCap).toBe(1);
   });
@@ -158,7 +164,7 @@ describe('SelfSlickPredictor', () => {
   });
 
   it('a ward eats the crossing: no grip loss and no throw, but the crossing is spent', () => {
-    const ward = { id: REALM_RACERS_WARD_AURA, kind: 'rally_ward' } as Aura;
+    const ward = { id: MORTAR_OVERDRIVE_WARD_AURA, kind: 'mortar_overdrive_ward' } as Aura;
     const b = body([ward]);
     new SelfSlickPredictor().step(b, match([patch()]));
     expect(b.drive?.slip).toBe(0);
@@ -168,7 +174,7 @@ describe('SelfSlickPredictor', () => {
   });
 
   it('spends the ward once: the next patch inside the window bites though the mirror still shows it', () => {
-    const ward = { id: REALM_RACERS_WARD_AURA, kind: 'rally_ward' } as Aura;
+    const ward = { id: MORTAR_OVERDRIVE_WARD_AURA, kind: 'mortar_overdrive_ward' } as Aura;
     const b = body([ward]);
     const predictor = new SelfSlickPredictor();
     const second = patch({ id: 4, z: HERE.z + 41.5 });
@@ -178,7 +184,7 @@ describe('SelfSlickPredictor', () => {
     b.pos = { x: ORIGIN.x + HERE.x, y: 0, z: ORIGIN.z + HERE.z + 43 };
     predictor.step(b, match([patch(), second]));
     expect(b.slick?.slickContactId).toBe(4);
-    expect(b.drive?.slipCap).toBe(REALM_RACERS_SLICK_SLIP_CAP);
+    expect(b.drive?.slipCap).toBe(MORTAR_OVERDRIVE_SLICK_SLIP_CAP);
     // Once the server's spend shows on the mirror, a later ward counts again.
     b.auras = [];
     parkAway(b);
@@ -199,7 +205,7 @@ describe('SelfSlickPredictor', () => {
     b.pos = { x: ORIGIN.x + HERE.x, y: 0, z: ORIGIN.z + HERE.z + 3.5 };
     predictor.step(b, match([first, overlap]));
     expect(b.slick?.slickContactId).toBe(3);
-    expect(b.slick?.slickContactUntilTick).toBe(START_TICK + 2 + REALM_RACERS_SLICK_GRIP_TICKS);
+    expect(b.slick?.slickContactUntilTick).toBe(START_TICK + 2 + MORTAR_OVERDRIVE_SLICK_GRIP_TICKS);
     expect(b.drive?.slip).toBe(slip);
   });
 
@@ -213,7 +219,7 @@ describe('SelfSlickPredictor', () => {
     parkAway(b);
     predictor.step(b, m);
     expect(b.drive?.gripMult).toBe(0.6);
-    expect(b.drive?.slipCap).toBe(REALM_RACERS_SLICK_SLIP_CAP);
+    expect(b.drive?.slipCap).toBe(MORTAR_OVERDRIVE_SLICK_SLIP_CAP);
   });
 
   it.each([
@@ -252,9 +258,9 @@ describe('SelfSlickPredictor', () => {
 
 describe('against a server older than the oil prediction', () => {
   /** What an older server's readout carries: patches with no `endsAt`. */
-  const oldPatch = (): RealmRacersSlickInfo => {
+  const oldPatch = (): MortarOverdriveSlickInfo => {
     const { endsAt: _endsAt, ...rest } = patch();
-    return rest as RealmRacersSlickInfo;
+    return rest as MortarOverdriveSlickInfo;
   };
 
   it('predicts no oil at all: no standing from the acknowledgement, no step', () => {
@@ -270,11 +276,15 @@ describe('against a server older than the oil prediction', () => {
 
 describe('the acknowledged standing', () => {
   it('takes the oil back off every shipped surface exactly', () => {
-    const drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
-    for (const band of [1, REALM_RACERS_VERGE_BAND.gripMult, REALM_RACERS_GARDEN_BAND.gripMult]) {
+    const drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
+    for (const band of [
+      1,
+      MORTAR_OVERDRIVE_VERGE_BAND.gripMult,
+      MORTAR_OVERDRIVE_GARDEN_BAND.gripMult,
+    ]) {
       for (const shock of [1, GROUND_BLAST_SHOCK_GRIP]) {
         const base = band * shock;
-        applyRallySlickSurface(drive, base, true);
+        applyMortarOverdriveSlickSurface(drive, base, true);
         expect(unoiledGrip(drive.gripMult)).toBe(base);
       }
     }
@@ -288,7 +298,7 @@ describe('the acknowledged standing', () => {
       acknowledgedSlickState({ gripLeft: 12, contactId: null, contactLeft: 0 }, match([]), 1)
         ?.baseGrip,
     ).toBeNull();
-    expect(unoiledGrip(REALM_RACERS_SLICK_GRIP)).toBe(1);
+    expect(unoiledGrip(MORTAR_OVERDRIVE_SLICK_GRIP)).toBe(1);
   });
 
   it('is null outside a running race or without a standing', () => {
@@ -302,7 +312,7 @@ describe('the acknowledged standing', () => {
     const state = acknowledgedSlickState(
       { gripLeft: 12, contactId: 5, contactLeft: 14 },
       match([]),
-      0.7 * REALM_RACERS_SLICK_GRIP,
+      0.7 * MORTAR_OVERDRIVE_SLICK_GRIP,
     );
     expect(state).toEqual({
       raceTick: START_TICK,
@@ -316,12 +326,12 @@ describe('the acknowledged standing', () => {
 
   it('on a bite tick, trusts the predicted entry about the grip only when they agree on it', () => {
     const recon = {
-      gripLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      gripLeft: MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
       contactId: 5,
-      contactLeft: REALM_RACERS_SLICK_GRIP_TICKS,
+      contactLeft: MORTAR_OVERDRIVE_SLICK_GRIP_TICKS,
     };
-    const drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
-    drive.gripMult = 0.5 * REALM_RACERS_SLICK_GRIP;
+    const drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
+    drive.gripMult = 0.5 * MORTAR_OVERDRIVE_SLICK_GRIP;
     const predicted = { drive, slick: slickState({ baseGrip: 0.5 }) };
     // Still in an earlier crossing's window when this one bit.
     expect(acknowledgedSlickState(recon, match([]), drive.gripMult, predicted)?.baseGrip).toBe(0.5);

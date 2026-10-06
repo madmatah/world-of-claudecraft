@@ -190,8 +190,8 @@ describe('title relics resolve the deed crest', () => {
     // member (the docs/design/deeds.md "art can trail the deed" contract), never
     // an unreviewed fallback; those route to their category crest until the
     // commissioned painting lands. The Arcane Calligraphy gold title (world
-    // quests, still art-pending), the Crucible flawless title, and the Realm
-    // Racers circuit title today.
+    // quests, still art-pending), the Crucible flawless title, and the Mortar
+    // Overdrive circuit title today.
     const pending = RELIQUARY_HORIZON_TITLES.filter((id) => deedImageUrl(`deed_${id}`) === null);
     // The three faction Champion titles (world quests, art-pending on the
     // progression crest) follow them on the shelf, then the Clue Scroll
@@ -203,7 +203,7 @@ describe('title relics resolve the deed crest', () => {
       'prog_church_order_champion',
       'prog_automatons_champion',
       'exp_clue_ten_caskets',
-      'pvp_rr_wins_25',
+      'pvp_mortar_overdrive_wins_25',
     ]);
     for (const id of pending) expect(DEED_ART_PENDING.has(id), id).toBe(true);
     for (const id of RELIQUARY_HORIZON_TITLES) {

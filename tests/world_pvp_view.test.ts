@@ -371,7 +371,7 @@ describe('isPvpHostilePlayer (the shared client verdict)', () => {
     expect(isPvpHostilePlayer(inArena, teammate)).toBe(false);
   });
 
-  it('a Realm Racers heat keeps the world arm off, from the seat and from the fence', () => {
+  it('a Mortar Overdrive heat keeps the world arm off, from the seat and from the fence', () => {
     const drive = {} as Entity['drive'];
     const me = player(1, { pvpFlag: true });
     const rival = player(2, { pvpFlag: true, drive });

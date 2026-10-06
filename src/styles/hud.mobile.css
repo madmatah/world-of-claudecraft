@@ -2980,8 +2980,8 @@
     z-index: 24;
   }
   /* The touch chat frame carries its own stacking (the composer moves inside
-     it), so its lift over the Realm Racers lobby curtain is restated here. */
-  body.mobile-touch #realm-racers-lobby.shown ~ #chatlog-wrap {
+     it), so its lift over the Mortar Overdrive lobby curtain is restated here. */
+  body.mobile-touch #mortar-overdrive-lobby.shown ~ #chatlog-wrap {
     z-index: 151;
   }
   /* The touch chat control is the Quick Actions anchor and its Chat item, in
@@ -2990,12 +2990,12 @@
      and hidden, and only those two controls are shown again: a hidden control
      takes no tap, and a swipe onto a hidden item picks nothing
      (menu_control_controller.ts asks the lobby key hold). */
-  body.mobile-touch.game-active.rally-lobby-shown #mobile-controls {
+  body.mobile-touch.game-active.mortar-overdrive-lobby-shown #mobile-controls {
     z-index: 96;
     visibility: hidden;
   }
-  body.mobile-touch.rally-lobby-shown #mobile-menu-anchor,
-  body.mobile-touch.rally-lobby-shown #mobile-menu-chat {
+  body.mobile-touch.mortar-overdrive-lobby-shown #mobile-menu-anchor,
+  body.mobile-touch.mortar-overdrive-lobby-shown #mobile-menu-chat {
     visibility: visible;
   }
   /* New model: tapping the Chat icon opens a centered READ panel; the composer is a
@@ -10274,7 +10274,7 @@
      fine pointer keeps the desktop strip at 74px, which the band clears as well.
      With the touch strip, the band stays at least 34px tall below any inset,
      and the touch banner size fits it. */
-  body.mobile-touch.rally-race-on
+  body.mobile-touch.mortar-overdrive-race-on
   #banner:not(
     .banner-with-art,
     .has-subtext,
@@ -10286,7 +10286,7 @@
     top: max(8px, env(safe-area-inset-top));
   }
   @media (pointer: coarse) {
-    body.mobile-touch #realm-racers-window {
+    body.mobile-touch #mortar-overdrive-window {
       inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
         max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
       /* Both edges pinned: the base .window translateX(-50%) would drag the
@@ -10296,52 +10296,52 @@
       max-width: none;
       max-height: none;
     }
-    body.mobile-touch #realm-racers-window .btn,
-    body.mobile-touch #realm-racers-window > .panel-title > .x-btn {
+    body.mobile-touch #mortar-overdrive-window .btn,
+    body.mobile-touch #mortar-overdrive-window > .panel-title > .x-btn {
       min-width: 40px;
       min-height: 40px;
     }
     /* Three rival cards across a phone width squeeze their hint copy to one
        word per line, so they stack instead; the control rows keep their keycaps
        beside the copy, which fits because touch drops the key column. */
-    body.mobile-touch #realm-racers-window .rally-tiers {
+    body.mobile-touch #mortar-overdrive-window .mortar-overdrive-tiers {
       grid-template-columns: 1fr;
     }
-    body.mobile-touch #realm-racers-window .rally-setup-actions {
+    body.mobile-touch #mortar-overdrive-window .mortar-overdrive-setup-actions {
       flex-direction: column-reverse;
     }
-    body.mobile-touch #realm-racers-window .rally-hero {
+    body.mobile-touch #mortar-overdrive-window .mortar-overdrive-hero {
       grid-template-columns: 1fr;
       justify-items: start;
       gap: 12px;
       padding: 14px 12px;
     }
-    body.mobile-touch #realm-racers-window .rally-pitch {
+    body.mobile-touch #mortar-overdrive-window .mortar-overdrive-pitch {
       font-size: 15px;
     }
     /* Wider than desktop: the stats row now carries the forfeit button too, and
        the strip must not clip it on a phone. */
-    body.mobile-touch #realm-racers-hud {
+    body.mobile-touch #mortar-overdrive-hud {
       top: max(48px, calc(env(safe-area-inset-top) + 34px));
       width: min(470px, calc(var(--app-vw, 100vw) - 108px));
     }
-    body.mobile-touch .rallyhud-stats > span {
+    body.mobile-touch .mortarOverdriveHud-stats > span {
       min-width: 66px;
       padding-inline: 6px;
     }
     /* The lobby panel spans the phone width inside the safe area; nothing on it
        is tappable, so only the fit matters. */
-    body.mobile-touch #realm-racers-lobby {
+    body.mobile-touch #mortar-overdrive-lobby {
       padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
         max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
     }
-    body.mobile-touch .rally-lobby-panel {
+    body.mobile-touch .mortar-overdrive-lobby-panel {
       max-height: 100%;
       overflow-y: auto;
       padding: 14px 14px 12px;
       gap: 8px;
     }
-    body.mobile-touch .rally-lobby-circuit {
+    body.mobile-touch .mortar-overdrive-lobby-circuit {
       font-size: 18px;
     }
     /* All four standings rows survive on a phone: the placing, the name and the
@@ -10355,7 +10355,7 @@
        only into the room left of them, minus a margin for longer locales: up to
        a full house-pilot name beside the Bot tag on a wide phone, and the old
        168px on the narrowest. */
-    body.mobile-touch #realm-racers-standings {
+    body.mobile-touch #mortar-overdrive-standings {
       top: calc(
         max(8px, env(safe-area-inset-top)) +
         120px *
@@ -10371,7 +10371,7 @@
       );
     }
     @media (orientation: landscape) {
-      body.mobile-touch #realm-racers-standings {
+      body.mobile-touch #mortar-overdrive-standings {
         top: calc(
           max(6px, env(safe-area-inset-top)) +
           120px *
@@ -10381,45 +10381,45 @@
         );
       }
     }
-    body.mobile-touch .rally-standing {
+    body.mobile-touch .mortar-overdrive-standing {
       grid-template-columns: 13px minmax(0, 1fr) auto;
       gap: 6px;
       padding-inline: 8px;
     }
-    body.mobile-touch .rally-standing-id {
+    body.mobile-touch .mortar-overdrive-standing-id {
       gap: 4px;
     }
-    body.mobile-touch .rally-standing-name {
+    body.mobile-touch .mortar-overdrive-standing-name {
       font-size: 12px;
     }
-    body.mobile-touch .rally-standing-lap {
+    body.mobile-touch .mortar-overdrive-standing-lap {
       font-size: 10px;
     }
-    body.mobile-touch .rallyhud-phase {
+    body.mobile-touch .mortarOverdriveHud-phase {
       font-size: 17px;
     }
     /* The strip sits top-center and the mobile action bar owns the bottom edge,
        so the forfeit control only has to clear the tap-target floor here. */
-    body.mobile-touch .rallyhud-reset,
-    body.mobile-touch .rallyhud-forfeit {
+    body.mobile-touch .mortarOverdriveHud-reset,
+    body.mobile-touch .mortarOverdriveHud-forfeit {
       min-height: 40px;
     }
-    body.mobile-touch .rallyhud-wrong-way {
+    body.mobile-touch .mortarOverdriveHud-wrong-way {
       font-size: 20px;
     }
     /* The pickup splash pops in the band between the strip's ward chip and the
        player frame: at the desktop size it reached down over the frame on a
        390px-tall landscape phone. */
-    body.mobile-touch #realm-racers-splash {
+    body.mobile-touch #mortar-overdrive-splash {
       top: 194px;
       gap: 4px;
     }
-    body.mobile-touch .rally-splash-icon {
+    body.mobile-touch .mortar-overdrive-splash-icon {
       width: 68px;
       height: 68px;
       border-radius: 12px;
     }
-    body.mobile-touch .rally-splash-label {
+    body.mobile-touch .mortar-overdrive-splash-label {
       padding: 3px 12px;
       font-size: 16px;
     }
@@ -10428,32 +10428,32 @@
        it), on a solid ground so the strip does not glow through it (the steps
        carry the winner's name), and tightens until it ends above the player
        frame and the handbrake. */
-    body.mobile-touch #realm-racers-podium {
+    body.mobile-touch #mortar-overdrive-podium {
       top: 44%;
       gap: 6px;
       padding: 12px 20px 10px;
-      background: var(--rally-podium-bg);
+      background: var(--mortar-overdrive-podium-bg);
       transform: translate(-50%, calc(-50% + 10px));
     }
-    body.mobile-touch #realm-racers-podium.shown {
+    body.mobile-touch #mortar-overdrive-podium.shown {
       transform: translate(-50%, -50%);
     }
-    body.mobile-touch .rally-podium-crest {
+    body.mobile-touch .mortar-overdrive-podium-crest {
       width: 36px;
       height: 36px;
     }
-    body.mobile-touch .rally-podium-step.p1 .rally-podium-block {
+    body.mobile-touch .mortar-overdrive-podium-step.p1 .mortar-overdrive-podium-block {
       height: 54px;
     }
-    body.mobile-touch .rally-podium-step.p2 .rally-podium-block {
+    body.mobile-touch .mortar-overdrive-podium-step.p2 .mortar-overdrive-podium-block {
       height: 40px;
     }
-    body.mobile-touch .rally-podium-step.p3 .rally-podium-block {
+    body.mobile-touch .mortar-overdrive-podium-step.p3 .mortar-overdrive-podium-block {
       height: 30px;
     }
     @media (prefers-reduced-motion: reduce) {
-      body.mobile-touch #realm-racers-podium,
-      body.mobile-touch #realm-racers-podium.shown {
+      body.mobile-touch #mortar-overdrive-podium,
+      body.mobile-touch #mortar-overdrive-podium.shown {
         transform: translate(-50%, -50%);
       }
     }

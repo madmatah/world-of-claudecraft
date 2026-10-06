@@ -2,7 +2,7 @@
 // and guild rosters plus /who (presenceOf), the Discord `!word` relay embed,
 // and the admin live location.
 //
-// The Realm Racers band sits on the instance plane far east of the map, so the
+// The Mortar Overdrive band sits on the instance plane far east of the map, so the
 // overworld lookup (`zoneAt`) answers a circuit lane with whichever zone band
 // its z happens to share: a racer on the Palmreach Lagoon Run read The
 // Drakelands on all three surfaces. Each surface must name the circuit's own
@@ -44,23 +44,23 @@ import {
   zoneAt,
 } from '../../src/sim/data';
 import {
-  REALM_RACERS_BAND_X_MAX,
-  REALM_RACERS_BAND_X_MIN,
-  REALM_RACERS_LANES,
-  realmRacersLaneOrigin,
-} from '../../src/sim/realm_racers_layout';
-import { realmRacersThemeZone } from '../../src/sim/realm_racers_zone';
+  MORTAR_OVERDRIVE_BAND_X_MAX,
+  MORTAR_OVERDRIVE_BAND_X_MIN,
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOrigin,
+} from '../../src/sim/mortar_overdrive/layout';
+import { mortarOverdriveThemeZone } from '../../src/sim/mortar_overdrive/zone';
 import type { Entity, ZoneDef } from '../../src/sim/types';
 
 // The lane the defect was found on: its z lies past the northmost zone band,
 // which clamps onto The Drakelands, while the circuit is Palmreach's.
 const LAGOON = (() => {
-  const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+  const lane = MORTAR_OVERDRIVE_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
   if (!lane) throw new Error('the Palmreach Lagoon Run ships a lane');
   return lane;
 })();
-const LANE_POS = realmRacersLaneOrigin(LAGOON.index);
-const CIRCUIT_ZONE: ZoneDef = realmRacersThemeZone(LAGOON.circuit.theme);
+const LANE_POS = mortarOverdriveLaneOrigin(LAGOON.index);
+const CIRCUIT_ZONE: ZoneDef = mortarOverdriveThemeZone(LAGOON.circuit.theme);
 const OVERWORLD_ZONE: ZoneDef = zoneAt(LANE_POS.x, LANE_POS.z);
 
 // The GameServer members the three surfaces read through.
@@ -170,10 +170,10 @@ describe('presenceZoneAt: the one zone rule', () => {
   });
 });
 
-describe('instanceZoneName on the rally band', () => {
+describe('instanceZoneName on the Mortar Overdrive band', () => {
   it('answers null across the band: past the dungeon threshold but in no instance band', () => {
     const z = LANE_POS.z;
-    for (const x of [REALM_RACERS_BAND_X_MIN, LANE_POS.x, REALM_RACERS_BAND_X_MAX]) {
+    for (const x of [MORTAR_OVERDRIVE_BAND_X_MIN, LANE_POS.x, MORTAR_OVERDRIVE_BAND_X_MAX]) {
       expect(x).toBeGreaterThan(DUNGEON_X_THRESHOLD);
       expect(isDelvePos(x), `delve at ${x}`).toBe(false);
       expect(dungeonAt(x), `dungeon at ${x}`).toBeNull();

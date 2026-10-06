@@ -10,12 +10,12 @@ export class SelfPositionDiscontinuityLatch {
   private pending = false;
   private ready = false;
 
-  /** Arms the latch on the viewer's own completed unstuck or rally reset. */
+  /** Arms the latch on the viewer's own completed unstuck or Mortar Overdrive reset. */
   noteEvent(ev: SimEvent, playerId: number): void {
     if (
       ((ev.type === 'unstuck' &&
         (ev as Extract<SimEvent, { type: 'unstuck' }>).phase === 'completed') ||
-        ev.type === 'realmRacersReset') &&
+        ev.type === 'mortarOverdriveReset') &&
       ((ev as { pid?: number }).pid === undefined || (ev as { pid?: number }).pid === playerId)
     ) {
       this.pending = true;

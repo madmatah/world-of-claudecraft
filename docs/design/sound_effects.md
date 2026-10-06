@@ -270,7 +270,7 @@ that is not buffered yet falls back to the base key rather than to silence.
 | `proj_nature` | 0.5 | a glob of nature energy flying, organic whoosh |
 | `proj_groundshaker` | 2.7 | a real tank cannon firing for the Dreadspark Groundshaker, three ordered takes |
 
-### Spell and Realm Racers impacts (spatial one-shots)
+### Spell and Mortar Overdrive impacts (spatial one-shots)
 | key | dur | prompt summary |
 |---|---|---|
 | `impact_fire` | 0.8 | a fireball exploding, fiery burst and crackling flames |

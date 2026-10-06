@@ -788,9 +788,9 @@ describe('no effect state reaches a lit transparent twin', () => {
         'stealth-other',
         'moonkin',
         'soul-rend',
-        'rally-ward',
-        'rally-ward-ending',
-        'rally-ghost',
+        'mortar-overdrive-ward',
+        'mortar-overdrive-ward-ending',
+        'mortar-overdrive-ghost',
       ] as const
     ).map((palette) => ({
       name: `ghost:${palette}`,

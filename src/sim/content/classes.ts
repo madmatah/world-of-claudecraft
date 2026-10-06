@@ -33,9 +33,9 @@ import {
   setBonusFlag,
   WILDFANG_2PC_REDHARVEST_ENERGY_MULT,
 } from './ignivar_set_bonuses';
+import { MORTAR_OVERDRIVE_ABILITIES } from './mortar_overdrive/kit';
 import { PALADIN_CORE_ABILITIES } from './paladin_core_abilities';
 import { PRIEST_ABILITIES } from './priest';
-import { REALM_RACERS_ABILITIES } from './realm_racers';
 import { MENDING_WATERS_MANA_COST, TIDECALL_MANA_COST } from './shaman_tuning';
 import { TALENT_ABILITIES_V2 } from './talent_abilities_v2';
 import type { TalentModifiers } from './talents';
@@ -8708,11 +8708,11 @@ export const ABILITIES: Record<string, AbilityDef> = {
   ...TALENT_ABILITIES_V2,
   ...PRIEST_ABILITIES,
 
-  // The Realm Racers kit (class-agnostic; src/sim/content/realm_racers.ts). Merged here
+  // The Mortar Overdrive kit (class-agnostic; src/sim/content/mortar_overdrive/kit.ts). Merged here
   // so every ABILITIES consumer (casting, icons, hotbar validation, tooltips)
   // resolves race ids; no class lists them, so abilitiesKnownAt never grants
   // them outside a race.
-  ...REALM_RACERS_ABILITIES,
+  ...MORTAR_OVERDRIVE_ABILITIES,
 
   // The Buried Hoards Clockwork Shock Bomb: an item use that aims like a ground
   // spell, resolved for the reticle by resolveGroundAimAbility.

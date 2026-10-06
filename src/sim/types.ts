@@ -12,13 +12,16 @@ import type { TreasureMapRarity } from './content/treasure_maps';
 import type { LockSession, LootTier, PickAction, StepResult, VisibleCell } from './lockpick';
 import type { GliderFlightResult, GliderFlightState } from './minigames/glider_flight';
 import type { WispMazeState } from './minigames/wisp_maze';
+import type {
+  MortarOverdriveHeldEffect,
+  MortarOverdrivePickupEffect,
+} from './mortar_overdrive/pickup_effects';
 import type { FishingCatchBand } from './professions/fishing_bands';
 import type { HarvestYield } from './professions/harvest_yields';
 import type {
   PerfectingSwapDenyReason,
   PerfectingSwapRequest,
 } from './professions/perfecting_swap';
-import type { RallyHeldEffect, RallyPickupEffect } from './realm_racers_pickup_effects';
 import type { RespawnWindow } from './respawn_policy';
 import type { HoardControlCast } from './rift/hoard_control_casts';
 import type {
@@ -432,19 +435,19 @@ export type AuraKind =
   | 'moontide'
   | 'old_blood'
   | 'verdance'
-  // The Realm Racers ward (social/realm_racers.ts): a pure BUFF marker granted by
+  // The Mortar Overdrive ward (mortar_overdrive/race.ts): a pure BUFF marker granted by
   // a pickup box, carrying no stat effect at all. While it rides, the next
-  // hostile rally effect (a Ground Blast impact or a patch of oil) is absorbed
+  // hostile Mortar Overdrive effect (a Ground Blast impact or a patch of oil) is absorbed
   // and the aura is consumed. Its own kind rather than a borrowed one because
   // every alternative carries mechanics a race must not inherit (an `absorb`
   // would be eaten by the first point of damage, a `buff_dr` would change how
   // much a hit hurts), and because the buff bar keys an aura's icon off its kind.
-  | 'rally_ward'
-  // The Realm Racers recovery ghost (realm_racers_ghost.ts): a pure marker put on
+  | 'mortar_overdrive_ward'
+  // The Mortar Overdrive recovery ghost (mortar_overdrive/ghost.ts): a pure marker put on
   // a machine the race has just put back on the racing line. While it rides,
   // rival machines pass through it rather than hitting it where it stands locked.
   // Its own kind for the ward's reasons: nothing else may inherit its meaning.
-  | 'rally_ghost'
+  | 'mortar_overdrive_ghost'
   // Cauterize lockout (fire mage, combat/fire_mage.ts): a pure debuff marking that
   // the lethal save already fired. While worn, Cauterize cannot save again. It
   // SURVIVES death (resurrection.ts aurasSurvivingDeath) and pauses while dead, so
@@ -3539,17 +3542,17 @@ export type AbilityEffect =
       dazeMult: number;
       dazeDuration: number;
     }
-  // The Realm Racers's single mounted action. The social system owns the
+  // The Mortar Overdrive's single mounted action. The social system owns the
   // straight-line shell and silently ignores casts outside an active race.
-  // The Realm Racers weapon slot's shot. Ground-targeted: it lands where the
+  // The Mortar Overdrive weapon slot's shot. Ground-targeted: it lands where the
   // pilot aimed, and `radius` is the blast, carried on the effect so the aiming
   // reticle draws the exact circle the sim will resolve.
-  | { type: 'realmRacersGroundBlast'; radius: number }
+  | { type: 'mortarOverdriveGroundBlast'; radius: number }
   // Spending a HELD pickup effect (22b): the nitro burst, or dumping the oil
   // under the machine. The effect id is on the record rather than read off the
   // racer, so the ability a pilot pressed is the ability that fires and a stale
   // held slot can never cast the other one.
-  | { type: 'realmRacersPickupEffect'; effect: RallyHeldEffect }
+  | { type: 'mortarOverdrivePickupEffect'; effect: MortarOverdriveHeldEffect }
   | {
       type: 'consumeAura';
       auraIds?: string[];
@@ -5211,7 +5214,7 @@ export interface ClientMirroredEntityFields {
 }
 
 /**
- * Live driving state of an entity piloting a VEHICLE (the Realm Racers
+ * Live driving state of an entity piloting a VEHICLE (the Mortar Overdrive
  * racers). Present only while the owning activity seats a pilot; null everywhere
  * else, which is what selects the character path in the movement kernel.
  *
@@ -5222,8 +5225,8 @@ export interface ClientMirroredEntityFields {
  *
  * The three surface multipliers are the seam between the generic vehicle model
  * and whatever activity owns the vehicle: the kernel never knows what a circuit
- * is, and the rally writes these each tick from the racer's projection onto the
- * track (src/sim/social/realm_racers.ts).
+ * is, and the Mortar Overdrive writes these each tick from the racer's projection onto the
+ * track (src/sim/mortar_overdrive/race.ts).
  */
 export interface VehicleDrive {
   /** Which VEHICLE_PROFILES record supplies every handling number. */
@@ -5283,7 +5286,7 @@ export interface VehicleDrive {
   collisionImpact: number;
   /**
    * The owning activity has taken the controls away: the machine is held where
-   * it stands and its weapons are inert. The Realm Racers sets it on the grid
+   * it stands and its weapons are inert. The Mortar Overdrive sets it on the grid
    * before the flag and again once the race is over.
    *
    * It gates the CAST, not just the shot's effect, which is the whole reason it
@@ -5366,7 +5369,7 @@ export interface Entity extends ClientMirroredEntityFields {
       // legacy sequential state, converted on the first recharge tick.
       recharges?: number[];
       // A FIXED BUDGET rather than the recharge model above: N uses granted by
-      // an activity for its duration, never refilled (the Realm Racers's
+      // an activity for its duration, never refilled (the Mortar Overdrive's
       // weapon slot). The recharge tick skips it entirely, and a spent-out fixed
       // pool refuses the cast as EMPTY rather than as cooling down, which the
       // action bar draws differently. It is a flag and not merely
@@ -7544,42 +7547,42 @@ export type SimEvent = { pid?: number } & (
       glow: number;
       duration: number;
     }
-  // The Realm Racers. Queue/match lifecycle is personal; shell effects carry
+  // The Mortar Overdrive. Queue/match lifecycle is personal; shell effects carry
   // world coordinates plus entity ids so nearby clients can render them.
-  | { type: 'realmRacersQueued'; position: number }
-  | { type: 'realmRacersUnqueued' }
+  | { type: 'mortarOverdriveQueued'; position: number }
+  | { type: 'mortarOverdriveUnqueued' }
   | {
-      type: 'realmRacersFound';
+      type: 'mortarOverdriveFound';
       matchId: number;
       /** Everyone else on the grid, in slot order, excluding the recipient. */
       rivalNames: string[];
     }
-  | { type: 'realmRacersGo' }
+  | { type: 'mortarOverdriveGo' }
   // Personal, silent recovery discontinuity. It is distinct from `respawn`:
   // no one died, but the online renderer must snap even for a short rewind.
-  | { type: 'realmRacersReset' }
-  | { type: 'realmRacersLap'; lap: number; totalLaps: number }
+  | { type: 'mortarOverdriveReset' }
+  | { type: 'mortarOverdriveLap'; lap: number; totalLaps: number }
   // A pickup box changed hands, and this is what it gave. Personal and
   // TEXT-FREE: the sim decides the effect, the client owns the words for it
-  // (`src/ui/realm_racers_pickup_i18n.ts`), exactly like the Card Duel pair
+  // (`src/ui/hud/mortar_overdrive/pickup_i18n.ts`), exactly like the Card Duel pair
   // below and the gather/craft results above.
-  | { type: 'realmRacersPickup'; effect: RallyPickupEffect }
+  | { type: 'mortarOverdrivePickup'; effect: MortarOverdrivePickupEffect }
   // The same take, world-visible and effect-free: WHO took a box and where it
   // stood (world coordinates, hundredths of a yard). The effect stays the
   // taker's own business; this is what lets a rival who was closing on the box
   // see that they missed it.
-  | { type: 'realmRacersPickupTaken'; takerId: number; x: number; z: number }
+  | { type: 'mortarOverdrivePickupTaken'; takerId: number; x: number; z: number }
   // A pilot laid a patch of oil. World-visible, one per drop: the patch itself
   // rides the match readout (which names no owner), so this is what lets a
   // client draw the spray off the machine that laid it. World coordinates of
   // the machine at the drop, hundredths of a yard.
-  | { type: 'realmRacersSlickDropped'; sourceId: number; x: number; z: number }
-  // A ward ate a hostile rally effect (a Ground Blast impact or an oil slick)
+  | { type: 'mortarOverdriveSlickDropped'; sourceId: number; x: number; z: number }
+  // A ward ate a hostile Mortar Overdrive effect (a Ground Blast impact or an oil slick)
   // and broke. Personal, text-free: without it a shell that lands on a warded
   // machine and does nothing is a bug as far as the pilot can tell.
-  | { type: 'realmRacersWardBroken' }
+  | { type: 'mortarOverdriveWardBroken' }
   | {
-      type: 'realmRacersResult';
+      type: 'mortarOverdriveResult';
       won: boolean;
       forfeited: boolean;
       winnerName: string;
@@ -7596,7 +7599,7 @@ export type SimEvent = { pid?: number } & (
   // flash, the whole arc, and the ground marker that makes the shot dodgeable,
   // with no per-tick traffic behind it.
   | {
-      type: 'realmRacersGroundBlastFired';
+      type: 'mortarOverdriveGroundBlastFired';
       sourceId: number;
       /** Muzzle. */
       x: number;
@@ -7609,7 +7612,7 @@ export type SimEvent = { pid?: number } & (
   // shot still craters: `targetId` is the racer nearest the centre, or null on
   // empty track, and `impact` is that racer's 0..1 blast falloff.
   | {
-      type: 'realmRacersGroundBlastHit';
+      type: 'mortarOverdriveGroundBlastHit';
       sourceId: number;
       targetId: number | null;
       x: number;
@@ -7625,7 +7628,7 @@ export type SimEvent = { pid?: number } & (
   // above, and throttled at the emit site: a sustained side-by-side lean is one
   // impact to a player, not one event every tick it lasts.
   | {
-      type: 'realmRacersBump';
+      type: 'mortarOverdriveBump';
       aId: number;
       bId: number;
       x: number;
@@ -7637,7 +7640,7 @@ export type SimEvent = { pid?: number } & (
   // text-free like the pair above, and for the same reason: a rival spinning
   // beside you is something you hear and see happen, not a line in your log.
   | {
-      type: 'realmRacersSlicked';
+      type: 'mortarOverdriveSlicked';
       targetId: number;
       x: number;
       z: number;
@@ -9299,12 +9302,12 @@ export interface SimConfig {
   // before a craft or enchant consumes from the Materials Vault. Offline and
   // headless hosts omit it and receive an inert successful reservation.
   vaultConsumptionAdmission?: VaultConsumptionAdmission;
-  // When true, a player left ALONE in the Realm Racers queue past the
+  // When true, a player left ALONE in the Mortar Overdrive queue past the
   // backfill wait is paired with a house pilot instead of waiting for a rival
   // who may never come. The server enables it; tests/goldens leave it off so no
   // bot ever spawns inside a deterministic scenario. The Practice button is NOT
   // gated by this: it is an explicit player action, always available.
-  realmRacersBackfill?: boolean;
+  mortarOverdriveBackfill?: boolean;
   // The material-gatherer identity for the player this constructor MINTS (the
   // primary offline/headless character), allocated by the HOST outside the sim
   // and passed in whole (src/sim/material_gatherer.ts). A VALUE, never a
@@ -9614,7 +9617,7 @@ export type DeedMeterId =
   | 'bgCaptures'
   | 'vcupWins'
   | 'vcupGuildWins'
-  | 'rrWins'
+  | 'mortarOverdriveWins'
   | 'bankPurchasedSlots'
   // Gold-bought bank bag sockets unlocked (BankState.unlockedSockets, phase 06;
   // monotonic: an unlock never reverts).

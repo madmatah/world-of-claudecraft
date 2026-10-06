@@ -243,9 +243,9 @@ const DEFAULT_FLOWER_KINDS: FlowerKind[] = [
  * It used to mint a fresh 128px DataTexture on every call, which was invisible
  * while every caller ran at boot and became a leak the moment one of them
  * started rebuilding: the circuit editor's 3D preview rebuilds its whole track
- * on every edit, and the dev draft arm rebuilds one per `/dev rallydraft`. It
+ * on every edit, and the dev draft arm rebuilds one per `/dev overdrivedraft`. It
  * is also what makes the track group's shared-vs-owned split TRUE rather than
- * merely intended (see `realm_racers_track_dispose_core.ts`).
+ * merely intended (see `mortar_overdrive/track_dispose_core.ts`).
  */
 const flowerTuftCache = new Map<string, THREE.Texture>();
 
@@ -879,21 +879,23 @@ export function sparkleTexture(): THREE.CanvasTexture {
 
 // Kerb stripes: one coloured block plus one pale block per repeat, so the arc
 // length UV lays a classic alternating kerb down the outside of a corner. The
-// two colours come from the circuit's THEME (`realm_racers_themes.ts`); the
+// two colours come from the circuit's THEME (`mortar_overdrive/themes.ts`); the
 // pattern, the shading and the size are the same on every circuit, because a
 // kerb is the one thing on the road a pilot reads at speed.
 /** One entry per colour pair, because this is drawn ONCE per pair and used
  *  forever after. Freshly minted per call it took a new material with it every
  *  time (`surfaceMat` keys on the map), so a rebuilt track leaked both. */
-const rallyKerbCache = new Map<string, THREE.CanvasTexture>();
+const mortarOverdriveKerbCache = new Map<string, THREE.CanvasTexture>();
 
 /** The Evergarden's pair, and the shipped look before a theme could ask for
  *  another: default callers get exactly the texture they always got. */
-const RALLY_KERB_DEFAULT = { base: 0xe8e2d4, stripe: 0xb8402f };
+const MORTAR_OVERDRIVE_KERB_DEFAULT = { base: 0xe8e2d4, stripe: 0xb8402f };
 
-export function rallyKerbTexture(colours = RALLY_KERB_DEFAULT): THREE.CanvasTexture {
+export function mortarOverdriveKerbTexture(
+  colours = MORTAR_OVERDRIVE_KERB_DEFAULT,
+): THREE.CanvasTexture {
   const key = `${colours.base}:${colours.stripe}`;
-  const cached = rallyKerbCache.get(key);
+  const cached = mortarOverdriveKerbCache.get(key);
   if (cached) return cached;
   const kerb = makeCanvas(64, (ctx, s) => {
     ctx.fillStyle = cssHex(colours.base);
@@ -904,7 +906,7 @@ export function rallyKerbTexture(colours = RALLY_KERB_DEFAULT): THREE.CanvasText
     ctx.fillRect(0, 0, s, 3);
     ctx.fillRect(0, s - 3, s, 3);
   });
-  rallyKerbCache.set(key, kerb);
+  mortarOverdriveKerbCache.set(key, kerb);
   return kerb;
 }
 
@@ -925,10 +927,10 @@ function cssHex(colour: number): string {
 /** Drawn ONCE and shared, same reason as the kerb and grid caches above: every
  *  marker is the same 256px canvas, and minting one per call handed each
  *  rebuilt track a fresh texture to leak. */
-let rallyGroundBlastMarkerCache: THREE.CanvasTexture | null = null;
+let mortarOverdriveGroundBlastMarkerCache: THREE.CanvasTexture | null = null;
 
-export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
-  if (rallyGroundBlastMarkerCache) return rallyGroundBlastMarkerCache;
+export function mortarOverdriveGroundBlastMarkerTexture(): THREE.CanvasTexture {
+  if (mortarOverdriveGroundBlastMarkerCache) return mortarOverdriveGroundBlastMarkerCache;
   const tex = makeCanvas(256, (ctx, s) => {
     const mid = s / 2;
     ctx.clearRect(0, 0, s, s);
@@ -969,20 +971,22 @@ export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
   // One circle over the whole quad: repeating it would tile the hazard band.
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  rallyGroundBlastMarkerCache = tex;
+  mortarOverdriveGroundBlastMarkerCache = tex;
   return tex;
 }
 
 // The start/finish chequer, four blocks across the road per repeat. Themed the
 // same way as the kerb: the two squares are the circuit's, the chequer is not.
 /** One entry per colour pair, same reason as the kerb above. */
-const rallyStartGridCache = new Map<string, THREE.CanvasTexture>();
+const mortarOverdriveStartGridCache = new Map<string, THREE.CanvasTexture>();
 
-const RALLY_START_GRID_DEFAULT = { light: 0xf2efe6, dark: 0x22201d };
+const MORTAR_OVERDRIVE_START_GRID_DEFAULT = { light: 0xf2efe6, dark: 0x22201d };
 
-export function rallyStartGridTexture(colours = RALLY_START_GRID_DEFAULT): THREE.CanvasTexture {
+export function mortarOverdriveStartGridTexture(
+  colours = MORTAR_OVERDRIVE_START_GRID_DEFAULT,
+): THREE.CanvasTexture {
   const key = `${colours.light}:${colours.dark}`;
-  const cached = rallyStartGridCache.get(key);
+  const cached = mortarOverdriveStartGridCache.get(key);
   if (cached) return cached;
   const light = cssHex(colours.light);
   const dark = cssHex(colours.dark);
@@ -995,6 +999,6 @@ export function rallyStartGridTexture(colours = RALLY_START_GRID_DEFAULT): THREE
       }
     }
   });
-  rallyStartGridCache.set(key, grid);
+  mortarOverdriveStartGridCache.set(key, grid);
   return grid;
 }

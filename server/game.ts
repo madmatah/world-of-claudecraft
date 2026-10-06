@@ -422,14 +422,12 @@ import {
 } from './entity_wire_cache';
 import { observeEventRecords } from './event_record_observers';
 import { parseGuildPledgeSettingsCommand } from './guild_pledge_settings_cmd';
+import * as moServer from './mortar_overdrive';
+import { leaveMortarOverdriveForModeration as moLeaveForModeration } from './mortar_overdrive';
 import { recordLevelUp } from './progress_events';
 import * as questWire from './quest_command_wire';
 import * as questSnap from './quest_snapshot_wire';
 import { REALM, REALM_PUBLIC_ORIGIN, REALM_RESET_TIME_ZONE } from './realm';
-import { dispatchRealmRacersCommand, leaveRealmRacersForModeration } from './realm_racers_commands';
-import { driveWire } from './realm_racers_drive_wire';
-import { realmRacersInterestParticipantIds } from './realm_racers_interest';
-import { emitRealmRacersKitKey, emitRealmRacersSelfKeys } from './realm_racers_self_wire';
 import { createRealmReadoutMemo, realmReadoutJson, realmReadoutObject } from './realm_readout_memo';
 import { RiftAssetCoordinator, riftAssetConfigFromEnv } from './rift_assets';
 import { dispatchRiftCommand } from './rift_forge_dispatch';
@@ -615,7 +613,7 @@ export const SIM_LAP_PHASES = [
   'delves',
   'valecup',
   'battleground',
-  'realmRacers',
+  'mortarOverdrive',
   'worldPvp',
   'hill',
   'dfinder',
@@ -650,7 +648,7 @@ export { SIM_MOB_ZONE_PHASES };
 export const SELF_WIRE_PHASES = [
   'base', // wireEntity + the always-on scalar block + its stringify
   'timers', // lockouts, corpse, auras, cooldowns, node cooldowns, charges, stats, weapon
-  'social', // party, marks, trade, duel, cardDuel, rr, rrc, rrt, honor, wpvp, hill, arena
+  'social', // party, marks, trade, duel, cardDuel, mo, moc, mot, honor, wpvp, hill, arena
   'bg',
   'df',
   'market',
@@ -868,8 +866,8 @@ const LANE_DROP_CAUSE = {
 const JAILED_BLOCKED_COMMANDS = new Set<string>([
   'arena_queue',
   'bg_queue',
-  'realm_racers_join',
-  'realm_racers_practice',
+  'mortar_overdrive_join',
+  'mortar_overdrive_practice',
   'enter_dungeon',
   'enter_crypt',
   'enter_delve',
@@ -1390,7 +1388,7 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
   // root), so it is actionable and always rides when non-zero.
   if (e.mountCastRemaining) out.mcr = round2(e.mountCastRemaining);
   if (e.mountCastKey) out.mck = e.mountCastKey;
-  if (e.drive) out.drv = driveWire(e.drive);
+  if (e.drive) out.drv = moServer.driveWire(e.drive);
   if (e.sitting || e.eating || e.drinking) out.sit = 1;
   if (e.riftSliding) out.sld = 1; // ice-slide: render a frozen gliding pose
   // Ledge climb: quantized progress (1..99), not the arc. The client never
@@ -2002,7 +2000,7 @@ export class GameServer {
       moderator.spectating.characterId = target.characterId;
       moderator.spectating.name = target.name;
     } else {
-      const savedPos = leaveRealmRacersForModeration(this.sim, moderator.pid, moderatorEntity);
+      const savedPos = moLeaveForModeration(this.sim, moderator.pid, moderatorEntity);
       const priorGm = !!moderatorEntity.gm;
       const stowedPet = this.sim.stowPetForSpectate(moderator.pid);
       const limbo = this.sim.groundPos(SPECTATE_LIMBO_X, SPECTATE_LIMBO_Z);
@@ -2115,9 +2113,9 @@ export class GameServer {
     const sentencedAtMs = Date.now();
     const targetEntity = this.sim.entities.get(target.pid);
     if (!targetEntity) return;
-    // Out of the rally first, so returnPos is where the race found them; every
+    // Out of the Mortar Overdrive first, so returnPos is where the race found them; every
     // other queue and match follows (JAILED_BLOCKED_COMMANDS refuses a new one).
-    this.sim.realmRacersForfeit(target.pid, true);
+    this.sim.mortarOverdriveForfeit(target.pid, true);
     target.jailed = {
       returnPos: { x: targetEntity.pos.x, z: targetEntity.pos.z },
       returnFacing: targetEntity.facing,
@@ -2201,7 +2199,7 @@ export class GameServer {
     const entity = this.sim.entities.get(moderator.pid);
     if (!entity) return;
     if (!moderator.jailVisit) {
-      this.sim.realmRacersForfeit(moderator.pid, true);
+      this.sim.mortarOverdriveForfeit(moderator.pid, true);
       moderator.jailVisit = {
         savedPos: { ...entity.pos },
         savedFacing: entity.facing,
@@ -7261,13 +7259,13 @@ export class GameServer {
         sim.forfeitCardDuel(pid);
         break;
 
-      case 'realm_racers_join':
-      case 'realm_racers_leave':
-      case 'realm_racers_forfeit':
-      case 'realm_racers_reset':
-      case 'realm_racers_practice':
-      case 'realm_racers_ready':
-        dispatchRealmRacersCommand(sim, command, msg, pid);
+      case 'mortar_overdrive_join':
+      case 'mortar_overdrive_leave':
+      case 'mortar_overdrive_forfeit':
+      case 'mortar_overdrive_reset':
+      case 'mortar_overdrive_practice':
+      case 'mortar_overdrive_ready':
+        moServer.dispatchMortarOverdriveCommand(sim, command, msg, pid);
         break;
 
       // Dungeon Finder (docs/prd/dungeon-finder.md). Deliberately NOT in
@@ -7939,7 +7937,7 @@ export class GameServer {
         const ents: string[] = [];
         const keep: number[] = [];
         const present = new Set<number>();
-        const pinnedIds = realmRacersInterestParticipantIds(
+        const pinnedIds = moServer.mortarOverdriveInterestParticipantIds(
           this.sim.ctx,
           anchorSession.pid,
           anchorEntity.id,
@@ -8451,7 +8449,7 @@ export class GameServer {
     maybe('trade', tradeWire(this.sim, anchorSession.pid));
     maybe('duel', duelWire(this.sim, anchorSession.pid));
     maybe('cardDuel', this.sim.cardMinigameInfoFor(anchorSession.pid));
-    emitRealmRacersSelfKeys(maybe, maybeRaw, this.sim, anchorSession.pid);
+    moServer.emitMortarOverdriveSelfKeys(maybe, maybeRaw, this.sim, anchorSession.pid);
     // Small PvP-ledger scalars, delta-guarded like delve marks (a fresh session gets both).
     maybe('honor', meta.honor);
     maybe('lhonor', meta.lifetimeHonor);
@@ -8726,7 +8724,7 @@ export class GameServer {
       // bound to that frozen text, so lastSent-diffing sends it exactly once and
       // a later client save never round-trips back to clobber an in-flight edit.
       maybeSerialized('hbl', session.initialHotbarLayoutJson);
-      emitRealmRacersKitKey(maybe, meta);
+      moServer.emitMortarOverdriveKitKey(maybe, meta);
     }
     selfLap?.('self.heavy');
     const assembled = extra === '' ? json : `${json.slice(0, -1)}${extra}}`;

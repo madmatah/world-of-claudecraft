@@ -2093,7 +2093,7 @@ export const hudChromeStrings = {
     targetPrev: 'Cycle Target Backward',
     // Discord is a brand name; it stays identical across locales.
     discord: 'Discord',
-    rally: 'Realm Racers',
+    mortarOverdrive: 'Mortar Overdrive',
     bgFlag: 'Battleground Flag Action',
     // The friendly half of the `hud` catalog's existing `nameplates` row: that
     // key (V) hides every mob nameplate, this one (Ctrl+V) hides only the
@@ -2427,10 +2427,10 @@ export const hudChromeStrings = {
       graveyard: 'Graveyard',
     },
   },
-  rally: {
+  mortarOverdrive: {
     kicker: 'Evergarden Racing Society',
-    title: 'Realm Racers',
-    close: 'Close the Realm Racers window',
+    title: 'Mortar Overdrive',
+    close: 'Close the Mortar Overdrive window',
     pitch:
       'Steel through the hedges. Find the line, trust the slide, and leave every rival eating dust.',
     // Timeless promise chips under the pitch: no pilot counts, no lap counts.
@@ -2518,7 +2518,7 @@ export const hudChromeStrings = {
     // no longer driving stopped.
     standingsYou: 'YOU',
     // The house-pilot marker: the game's ONE AI badge, which used to live on the
-    // retired Vale Cup team sheet and now belongs to the rally's own namespace.
+    // retired Vale Cup team sheet and now belongs to the Mortar Overdrive's own namespace.
     standingsBot: 'Bot',
     standingsFinished: 'Finished',
     standingsRetired: 'Out',
@@ -2532,7 +2532,7 @@ export const hudChromeStrings = {
     lobbyPreparing: 'Preparing the circuit',
     lobbyPrepared: 'Circuit prepared',
     lobbyStartsBy: 'The race starts when every pilot is ready, in {time} at the latest.',
-    // One key per circuit in `src/sim/content/realm_racers_circuits.ts`, keyed
+    // One key per circuit in `src/sim/content/mortar_overdrive/circuits.ts`, keyed
     // by its record id. Competition DRAWS its circuit when the grid fills, so
     // the name is the first thing a pilot has to be told: it names the circuit
     // on the race strip through the countdown, heads the podium, and says which
@@ -2559,8 +2559,8 @@ export const hudChromeStrings = {
     cutReturned: 'Shortcut. Returned to where you left the track.',
     reset: 'Reset to track',
     // What a pickup box just gave, floated over the machine that took it. One
-    // line per effect the sim can draw (`realm_racers_pickup_effects.ts`),
-    // resolved through `realm_racers_pickup_i18n.ts`. Short: it is read at
+    // line per effect the sim can draw (`mortar_overdrive/pickup_effects.ts`),
+    // resolved through `mortar_overdrive/pickup_i18n.ts`. Short: it is read at
     // racing speed, out of the corner of an eye, by somebody steering. Two of
     // the four are HELD (they arrive on the action bar and the pilot spends
     // them), so their lines say READY rather than announcing an effect that has
@@ -2589,8 +2589,8 @@ export const hudChromeStrings = {
     // nothing.
     raceVoid: 'RACE VOID',
     voidReturn: 'RACE VOID. Returning in {seconds}',
-    logQueued: 'Realm Racers queue position: {position}.',
-    logUnqueued: 'You left the Realm Racers queue.',
+    logQueued: 'Mortar Overdrive queue position: {position}.',
+    logUnqueued: 'You left the Mortar Overdrive queue.',
     bannerLap: 'Lap {lap} of {total}',
     bannerWin: 'You win the race!',
     bannerLoss: '{name} wins the race.',
@@ -5395,16 +5395,16 @@ export const hudChromeStrings = {
     arcaneCharge:
       '{stacks} Arcane Charges: Aether Surge deals {damagePct}% more damage, casts {castPct}% faster, and costs {costMult}x mana',
     physicalReduction: 'Reduces Physical damage taken by {pct}%',
-    // The Realm Racers auras (realm_racers.ts, realm_racers_ghost.ts). The
+    // The Mortar Overdrive auras (mortar_overdrive/race.ts, mortar_overdrive/ghost.ts). The
     // off-track line serves both bands (Soft Verge, Garden Lawn); the aura's
     // name above it says which one the racer is on.
-    rallyGroundBlast:
+    mortarOverdriveGroundBlast:
       'Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.',
-    rallyOffTrack:
+    mortarOverdriveOffTrack:
       'Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.',
-    rallyWard:
+    mortarOverdriveWard:
       'Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.',
-    rallyGhost:
+    mortarOverdriveGhost:
       'Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.',
     temporalHourglass:
       'Immune and unable to act; restores health and accelerates cooldown recovery. Right-click to cancel.',

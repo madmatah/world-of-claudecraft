@@ -28,7 +28,7 @@ import {
   type ZoneDef,
   zoneAt,
 } from '../sim/data';
-import { realmRacersZoneAt } from '../sim/realm_racers_zone';
+import { mortarOverdriveZoneAt } from '../sim/mortar_overdrive/zone';
 import type { IWorld } from '../world_api';
 
 /** An axis-aligned rectangle in canvas-pixel space. */
@@ -136,7 +136,7 @@ export function buildContinentMapModel(input: ContinentMapInput): ContinentMapMo
   });
 
   const p = world.player;
-  const currentZoneId = (realmRacersZoneAt(p.pos.x, p.pos.z) ?? zoneAt(p.pos.x, p.pos.z)).id;
+  const currentZoneId = (mortarOverdriveZoneAt(p.pos.x, p.pos.z) ?? zoneAt(p.pos.x, p.pos.z)).id;
 
   const regions: ContinentZoneRegion[] = ZONES.map((zone) => {
     const [xMin, xMax] = zoneXBounds(zone);

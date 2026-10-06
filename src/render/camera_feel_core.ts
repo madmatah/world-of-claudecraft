@@ -94,8 +94,8 @@ export const DEFAULT_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
   shakeFrequency: 60,
 };
 
-/** Wider, slower-settling chase grammar for the 60 yd/s rally machine. */
-export const REALM_RACERS_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
+/** Wider, slower-settling chase grammar for the 60 yd/s Mortar Overdrive machine. */
+export const MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
   leadTime: 0.22,
   leadMax: 3.5,
   leadOmega: 3,
@@ -111,7 +111,7 @@ export const REALM_RACERS_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
 };
 
 export function cameraFeelProfileForDriving(driving: boolean): CameraFeelProfile {
-  return driving ? REALM_RACERS_CAMERA_FEEL_PROFILE : DEFAULT_CAMERA_FEEL_PROFILE;
+  return driving ? MORTAR_OVERDRIVE_CAMERA_FEEL_PROFILE : DEFAULT_CAMERA_FEEL_PROFILE;
 }
 
 export function createCameraFeel(): CameraFeelState {

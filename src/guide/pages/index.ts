@@ -23,11 +23,11 @@ import { home } from './home';
 import { howToPlay } from './how_to_play';
 import { interfacePage } from './interface';
 import { models } from './models';
+import { mortarOverdrive } from './mortar_overdrive';
 import { mounts } from './mounts';
 import { professions } from './professions';
 import { progression } from './progression';
 import { quests } from './quests';
-import { realmRacers } from './realm_racers';
 import { reliquary } from './reliquary';
 import { rifts } from './rifts';
 import { settings } from './settings';
@@ -63,7 +63,7 @@ const PAGES: Record<string, GuidePage> = {
   arena,
   'thornhollow-fields': thornhollowFields,
   'world-pvp': worldPvp,
-  'realm-racers': realmRacers,
+  'mortar-overdrive': mortarOverdrive,
   deeds,
   reliquary,
   combat,

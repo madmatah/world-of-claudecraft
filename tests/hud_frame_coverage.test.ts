@@ -194,8 +194,8 @@ const UI_ROOT_TOUCHERS: Record<string, string> = {
     'world-anchored "target the dummy" coachmark bubble, transient (the bootcamp.ts pattern)',
   'src/ui/hud/quest/wisp_maze_hud_controller.ts':
     'the wisp maze trial HUD, shown only while the player is inside the maze (transient, activity-scoped)',
-  'src/ui/hud/realm_racers/realm_racers_hud_parts.ts':
-    'the rally race UI and pickup splash layers, moved out of hud.ts (transient, activity-scoped)',
+  'src/ui/hud/mortar_overdrive/hud_parts.ts':
+    'the Mortar Overdrive race UI and pickup splash layers, moved out of hud.ts (transient, activity-scoped)',
   'src/ui/hud/vehicle/forge_action_bar_controller.ts':
     'the forge minigame action bar, shown only while a forging attempt runs (transient, activity-scoped)',
   'src/ui/hud/vehicle/shadow_action_bar_controller.ts':

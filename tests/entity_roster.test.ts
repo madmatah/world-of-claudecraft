@@ -19,6 +19,7 @@ import {
   tickGroundAoEs,
 } from '../src/sim/entity_roster';
 import { createMobScanCounters } from '../src/sim/mob/scan_counters';
+import { createMortarOverdriveState } from '../src/sim/mortar_overdrive/race';
 import type { PendingProjectile } from '../src/sim/projectile_travel';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
@@ -27,7 +28,6 @@ import {
   inertVaultConsumptionAdmission,
   type SimContextHost,
 } from '../src/sim/sim_context';
-import { createRealmRacersState } from '../src/sim/social/realm_racers';
 import { SpatialGrid } from '../src/sim/spatial';
 import { DEFAULT_STORAGE_PRICES } from '../src/sim/storage_prices';
 import type { Entity } from '../src/sim/types';
@@ -304,7 +304,7 @@ function makeCtx() {
     nextCommissionOrderId: 1,
     bankerIds: [],
     guildBanks: new Map(),
-    realmRacers: createRealmRacersState(),
+    mortarOverdrive: createMortarOverdriveState(),
     deedDirtyPids: new Set<number>(),
     deedDirtyKeys: new Map<number, Set<string>>(),
     worldBossEntityIds: [],
@@ -459,11 +459,11 @@ function makeCtx() {
     bgOnPlayerDamaged: vi.fn(),
     bgOnPlayerHealed: vi.fn(),
     bgCancelFlagAura: vi.fn(() => false),
-    // Realm Racers hooks.
-    realmRacersFireGroundBlast: vi.fn(),
-    realmRacersSpendPickupEffect: vi.fn(),
-    realmRacersDevRace: vi.fn(),
-    realmRacersDevGrantKit: vi.fn(),
+    // Mortar Overdrive hooks.
+    mortarOverdriveFireGroundBlast: vi.fn(),
+    mortarOverdriveSpendPickupEffect: vi.fn(),
+    mortarOverdriveDevRace: vi.fn(),
+    mortarOverdriveDevGrantKit: vi.fn(),
   };
   const ctx = createSimContext(host);
   return {

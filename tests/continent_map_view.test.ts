@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_X, WORLD_MIN_Z, ZONES, zoneAt } from '../src/sim/data';
-import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
+import {
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOrigin,
+} from '../src/sim/mortar_overdrive/layout';
 import {
   buildContinentMapModel,
   CONTINENT_FALLBACK_ASPECT,
@@ -236,11 +239,11 @@ describe('buildContinentMapModel: current zone + player marker', () => {
     expect(current[0].zoneId).toBe('drakelands');
   });
 
-  it('flags the circuit zone on a Realm Racers lane, not the band its z shares', () => {
+  it('flags the circuit zone on a Mortar Overdrive lane, not the band its z shares', () => {
     // Out on the instance plane zoneAt clamps the Lagoon Run onto The Drakelands.
-    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    const lane = MORTAR_OVERDRIVE_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
     if (!lane) throw new Error('expected the Lagoon Run lane');
-    const origin = realmRacersLaneOrigin(lane.index);
+    const origin = mortarOverdriveLaneOrigin(lane.index);
     expect(zoneAt(origin.x, origin.z).id).toBe('drakelands');
     for (const shape of ['sim', 'client'] as const) {
       const m = buildContinentMapModel(input(worldAt(shape, origin.x, origin.z), 1));

@@ -14,8 +14,8 @@
 // Structure and wiring: what a chip means, what a search matches and what a mode
 // lays are `library_core.ts` and `placement_core.ts`.
 
-import { realmRacersTheme } from '../../render/realm_racers_themes';
-import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
+import { mortarOverdriveTheme } from '../../render/mortar_overdrive/themes';
+import { MORTAR_OVERDRIVE_PROPS } from '../../sim/content/mortar_overdrive/props';
 import { parseThumbnailCache, THUMBNAIL_STORAGE_KEY } from './draft_store_core';
 import {
   filterLibrary,
@@ -188,7 +188,7 @@ export class LibraryPanel {
   // ---- the tiles ----
 
   private entries(): PropPaletteEntry[] {
-    return propPalette(REALM_RACERS_PROPS, realmRacersTheme(this.host.record()).props);
+    return propPalette(MORTAR_OVERDRIVE_PROPS, mortarOverdriveTheme(this.host.record()).props);
   }
 
   paint(): void {

@@ -41,7 +41,7 @@ import { EMPTY_TEST_WORLD } from './sim_shared';
 const SEED = 42;
 const FRAME_DT = 1 / 60;
 const HANDOFF_RATE = 15;
-const PROFILE = 'rally_loaner';
+const PROFILE = 'mo_loaner';
 
 const kartDrive = (over: Partial<VehicleDrive> = {}): VehicleDrive => ({
   ...createVehicleDrive(PROFILE),

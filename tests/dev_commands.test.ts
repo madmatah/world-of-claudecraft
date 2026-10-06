@@ -1,23 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { FARM_CROP_IDS } from '../src/sim/content/farm_crops';
 import { FARM_BED_IDS, farmBedById } from '../src/sim/content/farm_patches';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_ABILITY_ID,
-  REALM_RACERS_NITRO_ABILITY_ID,
-  REALM_RACERS_SLICK_ABILITY_ID,
-  REALM_RACERS_WEAPON_CHARGES,
-} from '../src/sim/content/realm_racers';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_ABILITY_ID,
+  MORTAR_OVERDRIVE_NITRO_ABILITY_ID,
+  MORTAR_OVERDRIVE_SLICK_ABILITY_ID,
+  MORTAR_OVERDRIVE_WEAPON_CHARGES,
+} from '../src/sim/content/mortar_overdrive/kit';
 import { WORLD_QUEST_MIN_LEVEL } from '../src/sim/content/world_quests';
 import { parseBisGearFor } from '../src/sim/dev/parse_bis_loadouts';
+import { startMortarOverdrivePractice } from '../src/sim/mortar_overdrive/bots';
+import { mortarOverdrivePickupBoxes } from '../src/sim/mortar_overdrive/pickups';
+import {
+  mortarOverdriveForfeit,
+  mortarOverdriveSpendPickupEffect,
+} from '../src/sim/mortar_overdrive/race';
+import { mortarOverdriveTrack } from '../src/sim/mortar_overdrive/spline';
 import { normalizeFarmPlots, serializeFarmPlots } from '../src/sim/professions/farm_persist';
-import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
-import { realmRacersForfeit, realmRacersSpendPickupEffect } from '../src/sim/social/realm_racers';
-import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { MAX_LEVEL } from '../src/sim/types';
-import { installScriptedRng } from './helpers/realm_racers_rng';
+import { installScriptedRng } from './helpers/mortar_overdrive_rng';
 import { EMPTY_TEST_WORLD } from './sim_shared';
 
 function devSim(seed = 42): Sim {
@@ -287,17 +290,17 @@ describe('dev commands', () => {
     expect(sim.activeMobileStationCrafts).toEqual(['engineering']);
   });
 
-  it('fills the whole rally kit at once, weapon and every pickup effect', () => {
+  it('fills the whole Mortar Overdrive kit at once, weapon and every pickup effect', () => {
     const sim = devSim();
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    const race = sim.realmRacers.practices[0];
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    const race = sim.mortarOverdrive.practices[0];
     race.phase = 'racing';
     const progress = race.progress.get(pid);
     const meta = (sim as any).players.get(pid);
     if (!progress) throw new Error('missing progress');
 
-    sim.chat('/dev rallykit');
+    sim.chat('/dev overdrivekit');
 
     expect(progress.heldWeapon?.charges).toBe(50);
     expect(progress.devHeldCharges).toEqual({ nitro: 50, slick: 50 });
@@ -309,24 +312,24 @@ describe('dev commands', () => {
         .sort(),
     ).toEqual(
       [
-        [REALM_RACERS_ABILITY_ID, 50],
-        [REALM_RACERS_NITRO_ABILITY_ID, 50],
-        [REALM_RACERS_SLICK_ABILITY_ID, 50],
+        [MORTAR_OVERDRIVE_ABILITY_ID, 50],
+        [MORTAR_OVERDRIVE_NITRO_ABILITY_ID, 50],
+        [MORTAR_OVERDRIVE_SLICK_ABILITY_ID, 50],
       ].sort(),
     );
 
     // Spending draws the stack down one at a time, and only the effect spent.
-    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, pid);
-    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, pid);
+    sim.castAbility(MORTAR_OVERDRIVE_SLICK_ABILITY_ID, pid);
+    sim.castAbility(MORTAR_OVERDRIVE_SLICK_ABILITY_ID, pid);
     expect(race.slicks).toHaveLength(2);
     expect(progress.devHeldCharges).toEqual({ nitro: 50, slick: 48 });
 
     // And zero hands the race its own rules back, or a tuning session could
     // never return to the one-charge pickup it is meant to be judging.
-    sim.chat('/dev rallykit 0');
+    sim.chat('/dev overdrivekit 0');
     expect(progress.devHeldCharges).toBeNull();
     expect(meta.known.map((known: { def: { id: string } }) => known.def.id)).toEqual([
-      REALM_RACERS_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
     ]);
   });
 
@@ -336,17 +339,17 @@ describe('dev commands', () => {
     // to judge the ordinary budget.
     const sim = devSim();
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    const race = sim.realmRacers.practices[0];
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    const race = sim.mortarOverdrive.practices[0];
     race.phase = 'racing';
     const progress = race.progress.get(pid);
     if (!progress) throw new Error('missing progress');
 
-    sim.chat('/dev rallykit');
+    sim.chat('/dev overdrivekit');
     expect(progress.heldWeapon?.charges).toBe(50);
-    sim.chat('/dev rallykit 0');
+    sim.chat('/dev overdrivekit 0');
     expect(progress.devHeldCharges).toBeNull();
-    expect(progress.heldWeapon?.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
+    expect(progress.heldWeapon?.charges).toBe(MORTAR_OVERDRIVE_WEAPON_CHARGES);
   });
 
   it('stands the drained stack aside for an ordinary pickup', () => {
@@ -356,20 +359,20 @@ describe('dev commands', () => {
     // re-acquire it (a full slot turns every later box into a refill).
     const sim = devSim();
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    const race = sim.realmRacers.practices[0];
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    const race = sim.mortarOverdrive.practices[0];
     race.phase = 'racing';
     const progress = race.progress.get(pid);
     const meta = (sim as any).players.get(pid);
     if (!progress) throw new Error('missing progress');
 
-    sim.chat('/dev rallykit 1');
-    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, pid);
-    sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, pid);
+    sim.chat('/dev overdrivekit 1');
+    sim.castAbility(MORTAR_OVERDRIVE_SLICK_ABILITY_ID, pid);
+    sim.castAbility(MORTAR_OVERDRIVE_NITRO_ABILITY_ID, pid);
     expect(progress.devHeldCharges).toEqual({ nitro: 0, slick: 0 });
     // Drained: the bar is back to the weapon alone, not stuck on empty buttons.
     expect(meta.known.map((known: { def: { id: string } }) => known.def.id)).toEqual([
-      REALM_RACERS_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
     ]);
 
     // And an ordinary pickup now reaches the bar exactly as it would have with
@@ -379,11 +382,14 @@ describe('dev commands', () => {
     // condition under test (it did, in the first draft of this case).
     const racer = sim.entities.get(pid);
     if (!racer) throw new Error('missing racer');
-    const box = realmRacersPickupBoxes(REALM_RACERS_PRACTICE_CIRCUIT)[0];
+    const box = mortarOverdrivePickupBoxes(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT)[0];
     racer.pos.x = race.origin.x + box.x;
     racer.pos.z = race.origin.z + box.z;
     racer.prevPos = { ...racer.pos };
-    const projection = realmRacersTrack(REALM_RACERS_PRACTICE_CIRCUIT).project(box.x, box.z);
+    const projection = mortarOverdriveTrack(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT).project(
+      box.x,
+      box.z,
+    );
     progress.lastS = projection.s;
     progress.trackIndex = projection.index;
     // The oil is LAST in all three position tables, so a roll inside the top
@@ -395,8 +401,8 @@ describe('dev commands', () => {
 
     expect(progress.heldEffect).toBe('slick');
     expect(meta.known.map((known: { def: { id: string } }) => known.def.id)).toEqual([
-      REALM_RACERS_ABILITY_ID,
-      REALM_RACERS_SLICK_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
+      MORTAR_OVERDRIVE_SLICK_ABILITY_ID,
     ]);
   });
 
@@ -406,49 +412,49 @@ describe('dev commands', () => {
     // post-race tableau, which is what the code there forbids in as many words.
     const sim = devSim();
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    const race = sim.realmRacers.practices[0];
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    const race = sim.mortarOverdrive.practices[0];
     race.phase = 'racing';
     const meta = (sim as any).players.get(pid);
 
-    sim.chat('/dev rallykit');
+    sim.chat('/dev overdrivekit');
     expect(meta.known).toHaveLength(3);
 
-    realmRacersForfeit(sim.ctx, pid);
+    mortarOverdriveForfeit(sim.ctx, pid);
     expect(race.progress.get(pid)?.devHeldCharges).toBeNull();
     expect(meta.known.map((known: { def: { id: string } }) => known.def.id)).toEqual([
-      REALM_RACERS_ABILITY_ID,
+      MORTAR_OVERDRIVE_ABILITY_ID,
     ]);
   });
 
   it('does not let the race command swallow the kit command', () => {
-    // `/dev rally <circuit>` is matched first and `rallykit` starts with it: only
-    // the whitespace after `rally` keeps them apart, which is exactly the kind of
+    // `/dev overdrive <circuit>` is matched first and `mortarOverdriveKit` starts with it: only
+    // the whitespace after `mortarOverdrive` keeps them apart, which is exactly the kind of
     // thing a later edit to either pattern breaks silently.
     const sim = devSim();
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    sim.realmRacers.practices[0].phase = 'racing';
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    sim.mortarOverdrive.practices[0].phase = 'racing';
 
-    sim.chat('/devrallykit 7');
+    sim.chat('/devoverdrivekit 7');
 
-    const progress = sim.realmRacers.practices[0].progress.get(pid);
+    const progress = sim.mortarOverdrive.practices[0].progress.get(pid);
     expect(progress?.heldWeapon?.charges).toBe(7);
     expect(progress?.devHeldCharges).toEqual({ nitro: 7, slick: 7 });
   });
 
-  it('leaves the rally kit alone outside dev builds', () => {
+  it('leaves the Mortar Overdrive kit alone outside dev builds', () => {
     // The latch is read behind `ctx.devCommands` at the spend site as well as at
     // the grant, so a slot cannot refill itself on a real realm.
     const sim = new Sim({ seed: 42, playerClass: 'warrior', autoEquip: true, devCommands: false });
     const pid = sim.playerId;
-    expect(startRealmRacersPractice(sim, 'rookie', pid)).toBe(true);
-    const race = sim.realmRacers.practices[0];
+    expect(startMortarOverdrivePractice(sim, 'rookie', pid)).toBe(true);
+    const race = sim.mortarOverdrive.practices[0];
     race.phase = 'racing';
     const progress = race.progress.get(pid);
     if (!progress) throw new Error('missing progress');
 
-    sim.chat('/dev rallykit');
+    sim.chat('/dev overdrivekit');
     expect(progress.heldEffect).toBeNull();
     expect(progress.devHeldCharges).toBeNull();
 
@@ -461,12 +467,12 @@ describe('dev commands', () => {
     if (!racer) throw new Error('missing racer');
     progress.devHeldCharges = { nitro: 50, slick: 50 };
     progress.heldEffect = 'slick';
-    realmRacersSpendPickupEffect(sim.ctx, racer, 'slick');
+    mortarOverdriveSpendPickupEffect(sim.ctx, racer, 'slick');
     expect(race.slicks).toHaveLength(1);
     expect(progress.heldEffect).toBeNull();
     expect(progress.devHeldCharges).toEqual({ nitro: 50, slick: 50 });
     // The second cast finds an empty slot and a stack it may not read: nothing.
-    realmRacersSpendPickupEffect(sim.ctx, racer, 'slick');
+    mortarOverdriveSpendPickupEffect(sim.ctx, racer, 'slick');
     expect(race.slicks).toHaveLength(1);
   });
 

@@ -20,11 +20,11 @@ import {
   THUMBNAIL_STORAGE_KEY,
 } from '../src/editor/circuit/draft_store_core';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  type RealmRacersCircuit,
-} from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  type MortarOverdriveCircuit,
+} from '../src/sim/content/mortar_overdrive/circuits';
 
-const record: RealmRacersCircuit = { ...GARDEN, id: 'draft_saved' };
+const record: MortarOverdriveCircuit = { ...GARDEN, id: 'draft_saved' };
 const NOW = 1_700_000_000_000;
 
 describe('the autosaved draft', () => {

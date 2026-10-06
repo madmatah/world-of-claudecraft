@@ -326,7 +326,7 @@ describe('createWsAuth: authenticateWebSocket reject paths', () => {
     expectNoAdmissionWork(fixture);
   });
 
-  it('2c-45. rejects a release/v0.44.0 auth-world-45 client (no Realm Racers race surface) before all admission work', async () => {
+  it('2c-45. rejects a release/v0.44.0 auth-world-45 client (no Mortar Overdrive race surface) before all admission work', async () => {
     const fixture = setup();
     const { ws, deps, req } = fixture;
 

@@ -16,30 +16,30 @@ import {
   SELF_PREDICTION_RING_CAPACITY,
 } from '../src/render/self_prediction_core';
 import type { SlickPredictionState } from '../src/render/self_slick_prediction_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
-import { stepPlayerMotion } from '../src/sim/player_motion';
+import { MORTAR_OVERDRIVE_PRACTICE_CIRCUIT } from '../src/sim/content/mortar_overdrive/circuits';
 import {
   GROUND_BLAST_CONTROL_SECONDS,
   GROUND_BLAST_CONTROL_SPEED_MULT,
   GROUND_BLAST_POP_VELOCITY,
   GROUND_BLAST_SHOCK_GRIP,
   GROUND_BLAST_SHOCK_TICKS,
-} from '../src/sim/realm_racers_ground_blast';
+} from '../src/sim/mortar_overdrive/ground_blast';
 import {
-  REALM_RACERS_NITRO_KICK,
-  REALM_RACERS_NITRO_SPEED_MULT,
-} from '../src/sim/realm_racers_pickup_effects';
+  MORTAR_OVERDRIVE_NITRO_KICK,
+  MORTAR_OVERDRIVE_NITRO_SPEED_MULT,
+} from '../src/sim/mortar_overdrive/pickup_effects';
 import {
-  REALM_RACERS_SLICK_GRIP,
-  REALM_RACERS_SLICK_SLIP_CAP,
-} from '../src/sim/realm_racers_slicks';
-import { realmRacersStarts } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_GROUND_BLAST_AURA,
+  MORTAR_OVERDRIVE_OFF_TRACK_AURA,
+  MORTAR_OVERDRIVE_VEHICLE_KEY,
+  MORTAR_OVERDRIVE_VERGE_BAND,
+} from '../src/sim/mortar_overdrive/race';
 import {
-  REALM_RACERS_GROUND_BLAST_AURA,
-  REALM_RACERS_OFF_TRACK_AURA,
-  REALM_RACERS_VEHICLE_KEY,
-  REALM_RACERS_VERGE_BAND,
-} from '../src/sim/social/realm_racers';
+  MORTAR_OVERDRIVE_SLICK_GRIP,
+  MORTAR_OVERDRIVE_SLICK_SLIP_CAP,
+} from '../src/sim/mortar_overdrive/slicks';
+import { mortarOverdriveStarts } from '../src/sim/mortar_overdrive/spline';
+import { stepPlayerMotion } from '../src/sim/player_motion';
 import {
   type Aura,
   CAST_COMPLETE_EPS,
@@ -198,12 +198,12 @@ describe('self prediction core', () => {
 // The drive-aware reconcile against the REAL movement kernel on the practice
 // circuit. The "server" steps a body with stepPlayerMotion (the call the Sim's
 // movement pass makes; tests/player_motion.test.ts pins the client dep shape
-// to the live Sim for a driver) and applies its race outcomes with the rally's
+// to the live Sim for a driver) and applies its race outcomes with the Mortar Overdrive's
 // own numbers; the client predicts ahead through the production deck-aware
 // step and reconciles each acknowledgement.
 
 const SEED = WORLD_SEED;
-const RACE_START = realmRacersStarts(REALM_RACERS_PRACTICE_CIRCUIT)[0];
+const RACE_START = mortarOverdriveStarts(MORTAR_OVERDRIVE_PRACTICE_CIRCUIT)[0];
 
 function driveMi(over: Partial<MoveInput> = {}): MoveInput {
   return { ...emptyMoveInput(), ...over };
@@ -219,7 +219,7 @@ function seatedPilot(facing = RACE_START.facing): MotionState {
     facing,
     fallStartY: y,
     mountKey: 'terrorspark_groundshaker',
-    drive: createVehicleDrive(REALM_RACERS_VEHICLE_KEY),
+    drive: createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY),
   };
 }
 
@@ -246,7 +246,7 @@ function acknowledgement(body: MotionState): PredictionPose {
 }
 
 // updateAuras (src/sim/combat/auras.ts) runs after the movement pass and
-// before the rally pass: one DT off each timer, gone once within the epsilon.
+// before the Mortar Overdrive pass: one DT off each timer, gone once within the epsilon.
 function tickAuras(body: MotionState): void {
   for (const aura of body.auras.slice()) {
     aura.remaining -= DT;
@@ -254,7 +254,7 @@ function tickAuras(body: MotionState): void {
   }
 }
 
-/** The tick whose updateAuras removes an aura the rally pass of `appliedCt`
+/** The tick whose updateAuras removes an aura the Mortar Overdrive pass of `appliedCt`
  *  left at `seconds`. */
 function auraExpiryTick(appliedCt: number, seconds: number): number {
   let remaining = seconds;
@@ -266,13 +266,13 @@ function auraExpiryTick(appliedCt: number, seconds: number): number {
 
 const OFF_TRACK_AURA_SECONDS = 0.2;
 
-// The rally's off-track half of the surface pass (tickTrackLimits): the band
+// The Mortar Overdrive's off-track half of the surface pass (tickTrackLimits): the band
 // writes its multipliers and refreshes its slow aura, the road clears both.
 function offTrackPass(server: MotionState, inBand: boolean): void {
   const drive = server.drive as VehicleDrive;
-  const existing = server.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
-  drive.gripMult = inBand ? REALM_RACERS_VERGE_BAND.gripMult : 1;
-  drive.dragMult = inBand ? REALM_RACERS_VERGE_BAND.dragMult : 1;
+  const existing = server.auras.find((aura) => aura.id === MORTAR_OVERDRIVE_OFF_TRACK_AURA);
+  drive.gripMult = inBand ? MORTAR_OVERDRIVE_VERGE_BAND.gripMult : 1;
+  drive.dragMult = inBand ? MORTAR_OVERDRIVE_VERGE_BAND.dragMult : 1;
   if (!inBand) {
     if (existing) server.auras = server.auras.filter((aura) => aura !== existing);
     return;
@@ -284,12 +284,12 @@ function offTrackPass(server: MotionState, inBand: boolean): void {
   server.auras = [
     ...server.auras,
     {
-      id: REALM_RACERS_OFF_TRACK_AURA,
-      name: REALM_RACERS_VERGE_BAND.name,
+      id: MORTAR_OVERDRIVE_OFF_TRACK_AURA,
+      name: MORTAR_OVERDRIVE_VERGE_BAND.name,
       kind: 'slow',
       remaining: OFF_TRACK_AURA_SECONDS,
       duration: OFF_TRACK_AURA_SECONDS,
-      value: REALM_RACERS_VERGE_BAND.speedMult,
+      value: MORTAR_OVERDRIVE_VERGE_BAND.speedMult,
       sourceId: server.id,
       school: 'physical',
     },
@@ -318,7 +318,7 @@ interface DriveRun {
 interface DriveScenario {
   ticks: number;
   lag?: number;
-  /** A server outcome written in the rally pass of tick `ct` (after the
+  /** A server outcome written in the Mortar Overdrive pass of tick `ct` (after the
    *  movement pass and updateAuras). */
   outcome?: (ct: number, server: MotionState) => void;
   facing?: number;
@@ -448,7 +448,7 @@ describe('self prediction core: a seated driver', () => {
           x: server.pos.x + Math.sin(server.facing) * 1.5 + Math.cos(server.facing) * 0.6,
           z: server.pos.z + Math.cos(server.facing) * 1.5 - Math.sin(server.facing) * 0.6,
           facing: server.facing + 1,
-          drive: createVehicleDrive(REALM_RACERS_VEHICLE_KEY),
+          drive: createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY),
           radius: 1.4,
           mass: 1,
         };
@@ -461,11 +461,11 @@ describe('self prediction core: a seated driver', () => {
       'a surface band change',
       (server: MotionState) => {
         const drive = server.drive as VehicleDrive;
-        drive.gripMult = REALM_RACERS_VERGE_BAND.gripMult;
-        drive.dragMult = REALM_RACERS_VERGE_BAND.dragMult;
+        drive.gripMult = MORTAR_OVERDRIVE_VERGE_BAND.gripMult;
+        drive.dragMult = MORTAR_OVERDRIVE_VERGE_BAND.dragMult;
         server.auras = [
           ...server.auras,
-          slowAura(REALM_RACERS_OFF_TRACK_AURA, REALM_RACERS_VERGE_BAND.speedMult),
+          slowAura(MORTAR_OVERDRIVE_OFF_TRACK_AURA, MORTAR_OVERDRIVE_VERGE_BAND.speedMult),
         ];
       },
     ],
@@ -496,7 +496,7 @@ describe('self prediction core: a seated driver', () => {
           server.auras = [
             ...server.auras,
             {
-              ...slowAura(REALM_RACERS_GROUND_BLAST_AURA, GROUND_BLAST_CONTROL_SPEED_MULT),
+              ...slowAura(MORTAR_OVERDRIVE_GROUND_BLAST_AURA, GROUND_BLAST_CONTROL_SPEED_MULT),
               remaining: GROUND_BLAST_CONTROL_SECONDS,
               duration: GROUND_BLAST_CONTROL_SECONDS,
             },
@@ -509,7 +509,7 @@ describe('self prediction core: a seated driver', () => {
     // ends the shock, so one acknowledgement carries both and one replay adopts both
     expect(auraExpiryTick(POP, GROUND_BLAST_CONTROL_SECONDS)).toBe(SHOCK_END);
     expect(run.server[SHOCK_END - 1].auras.map((a) => a.id)).toEqual([
-      REALM_RACERS_GROUND_BLAST_AURA,
+      MORTAR_OVERDRIVE_GROUND_BLAST_AURA,
     ]);
     expect(run.server[SHOCK_END].auras).toEqual([]);
     expectAllReconciled(run, 110);
@@ -527,7 +527,7 @@ describe('self prediction core: a seated driver', () => {
       ticks: 90,
       outcome: (ct, server) => offTrackPass(server, ct >= ENTER && ct < EXIT),
     });
-    expect(run.server[EXIT - 1].auras.map((a) => a.id)).toEqual([REALM_RACERS_OFF_TRACK_AURA]);
+    expect(run.server[EXIT - 1].auras.map((a) => a.id)).toEqual([MORTAR_OVERDRIVE_OFF_TRACK_AURA]);
     expect(run.server[EXIT].auras).toEqual([]);
     expectAllReconciled(run, 90);
     expect(replayedTicks(run)).toEqual([ENTER, EXIT]);
@@ -552,7 +552,9 @@ describe('self prediction core: a seated driver', () => {
     // ran without the slow, one tick after the updateAuras that removed it
     const expiry = auraExpiryTick(EXIT - 1, OFF_TRACK_AURA_SECONDS);
     expect(expiry).toBe(EXIT + 3);
-    expect(run.server[expiry - 1].auras.map((a) => a.id)).toEqual([REALM_RACERS_OFF_TRACK_AURA]);
+    expect(run.server[expiry - 1].auras.map((a) => a.id)).toEqual([
+      MORTAR_OVERDRIVE_OFF_TRACK_AURA,
+    ]);
     expect(run.server[expiry].auras).toEqual([]);
     expectAllReconciled(run, 90);
     expect(replayedTicks(run)).toEqual([ENTER, EXIT, expiry + 1]);
@@ -562,8 +564,8 @@ describe('self prediction core: a seated driver', () => {
     [
       'nitro',
       (drive: VehicleDrive) => {
-        drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
-        drive.speed += REALM_RACERS_NITRO_KICK;
+        drive.speedCap = MORTAR_OVERDRIVE_NITRO_SPEED_MULT;
+        drive.speed += MORTAR_OVERDRIVE_NITRO_KICK;
       },
       (drive: VehicleDrive) => {
         drive.speedCap = 1;
@@ -572,8 +574,8 @@ describe('self prediction core: a seated driver', () => {
     [
       'oil',
       (drive: VehicleDrive) => {
-        drive.gripMult = REALM_RACERS_SLICK_GRIP;
-        drive.slipCap = REALM_RACERS_SLICK_SLIP_CAP;
+        drive.gripMult = MORTAR_OVERDRIVE_SLICK_GRIP;
+        drive.slipCap = MORTAR_OVERDRIVE_SLICK_SLIP_CAP;
       },
       (drive: VehicleDrive) => {
         drive.gripMult = 1;
@@ -614,7 +616,7 @@ describe('self prediction core: a seated driver', () => {
     ring.dropThrough(EVENT - 1);
     server.vy += GROUND_BLAST_POP_VELOCITY;
     server.onGround = false;
-    server.auras = [slowAura(REALM_RACERS_GROUND_BLAST_AURA, GROUND_BLAST_CONTROL_SPEED_MULT)];
+    server.auras = [slowAura(MORTAR_OVERDRIVE_GROUND_BLAST_AURA, GROUND_BLAST_CONTROL_SPEED_MULT)];
     const ack = acknowledgement(server);
 
     expect(reconcile(ring, EVENT, ack, 0, 0, step).mode).toBe('replayed');
@@ -627,7 +629,7 @@ describe('self prediction core: a seated driver', () => {
     expect(next?.vy).toBe(expected.vy);
     expect(next?.onGround).toBe(false);
     expect(next?.drive).toEqual(expected.drive);
-    expect(next?.auras.map((a) => a.id)).toEqual([REALM_RACERS_GROUND_BLAST_AURA]);
+    expect(next?.auras.map((a) => a.id)).toEqual([MORTAR_OVERDRIVE_GROUND_BLAST_AURA]);
     expect(next?.prevFacing).toBe(server.facing);
     expect(ack.drive).not.toBe(next?.drive);
   });
@@ -823,7 +825,7 @@ describe('self prediction core: a seated driver', () => {
   });
 
   it('compares every drive field but the two presentation readings, so a new field forces a decision', () => {
-    const fields = Object.keys(createVehicleDrive(REALM_RACERS_VEHICLE_KEY)).sort();
+    const fields = Object.keys(createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY)).sort();
     expect(fields).toEqual([
       'collisionImpact',
       'controlsLocked',
@@ -903,7 +905,7 @@ describe('self prediction core: a seated driver', () => {
       y: 2,
       z: 3,
       facing: 0,
-      drive: createVehicleDrive(REALM_RACERS_VEHICLE_KEY),
+      drive: createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY),
       vy: 0,
       onGround: true,
     };

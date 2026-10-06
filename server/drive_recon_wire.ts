@@ -6,18 +6,18 @@
 // `vy` and `air` ride only while airborne. `ci` (the scrape reading) follows
 // the `drv` rule, above 0.01 only: the kernel never reads it, the self scrape
 // sparks do. `og`, `oc` and `ou` are the pilot's standing with the oil
-// (RallySlickRecon: grip ticks left, the patch a crossing remembers, its ticks
+// (MortarOverdriveSlickRecon: grip ticks left, the patch a crossing remembers, its ticks
 // left), each omitted at 0 or none, so the client predicts a slide the server
 // is about to hand out instead of correcting it a round trip late.
 
-import type { RallySlickRecon } from '../src/sim/realm_racers_slick_contact';
+import type { MortarOverdriveSlickRecon } from '../src/sim/mortar_overdrive';
 import type { Entity } from '../src/sim/types';
 
 export type DriveReconWire = Record<string, number | string>;
 
 export function driveReconWire(
   e: Entity,
-  slick: RallySlickRecon | null = null,
+  slick: MortarOverdriveSlickRecon | null = null,
 ): DriveReconWire | undefined {
   const d = e.drive;
   if (!d) return undefined;

@@ -19,12 +19,12 @@
 // the list and how far an arrow steps are `pickup_rows_core.ts`; where the boxes
 // stand is the sim's own resolver. Dev tool, so English lives here (no `t()`).
 
-import { realmRacersPickupRowFit } from '../../sim/realm_racers_circuit_metrics';
+import { mortarOverdrivePickupRowFit } from '../../sim/mortar_overdrive/circuit_metrics';
 import {
-  REALM_RACERS_PICKUP_REACH,
-  realmRacersPickupBoxes,
-  realmRacersPickupLaneGap,
-} from '../../sim/realm_racers_pickups';
+  MORTAR_OVERDRIVE_PICKUP_REACH,
+  mortarOverdrivePickupBoxes,
+  mortarOverdrivePickupLaneGap,
+} from '../../sim/mortar_overdrive/pickups';
 import { type EditorIconId, editorIcon } from './editor_icons';
 import { raceArmStateText } from './panel_core';
 import {
@@ -179,10 +179,10 @@ export class RaceInspectorPanel {
     const track = this.host.track();
     const yards = row.s * track.length;
     const halfWidth = track.halfWidthAt(yards);
-    const gap = realmRacersPickupLaneGap(halfWidth);
-    const fit = realmRacersPickupRowFit(
+    const gap = mortarOverdrivePickupLaneGap(halfWidth);
+    const fit = mortarOverdrivePickupRowFit(
       this.host.record(),
-      realmRacersPickupBoxes(this.host.record()).filter((box) => box.row === index),
+      mortarOverdrivePickupBoxes(this.host.record()).filter((box) => box.row === index),
     );
 
     this.el.append(heading(`pickup row ${index + 1} of ${rows.length}`));
@@ -202,7 +202,7 @@ export class RaceInspectorPanel {
     // the drawer: it is a fact about THIS row, and the operator is looking at it.
     this.el.append(
       detailLine(
-        gap / 2 < REALM_RACERS_PICKUP_REACH
+        gap / 2 < MORTAR_OVERDRIVE_PICKUP_REACH
           ? `boxes ${gap.toFixed(1)} yd apart: closer than two catch radii, so the middle is inside both`
           : `boxes ${gap.toFixed(1)} yd apart`,
       ),

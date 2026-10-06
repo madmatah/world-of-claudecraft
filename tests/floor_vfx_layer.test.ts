@@ -94,7 +94,7 @@ const FLOOR_VFX_LAYERED_MODULES: readonly FloorVfxModule[] = [
   { file: 'src/render/ember_pools.ts', layer: 'ground', strict: true },
   { file: 'src/render/camp_braziers.ts', layer: 'ground', strict: true },
   { file: 'src/render/streetlamps.ts', layer: 'ground', strict: true },
-  { file: 'src/render/realm_racers_lamps.ts', layer: 'ground', strict: true },
+  { file: 'src/render/mortar_overdrive/lamps.ts', layer: 'ground', strict: true },
   { file: 'src/render/decor_torch_fx.ts', layer: 'ground', strict: true },
   { file: 'src/render/impact_site.ts', layer: 'ground', strict: true },
   { file: 'src/render/hill_ring.ts', layer: 'ground', strict: true },
@@ -175,7 +175,7 @@ const FLOOR_VFX_LAYERED_MODULES: readonly FloorVfxModule[] = [
   // The Ground Blast's landing marker is the dodge read a rival acts on; its
   // impact shockwave is aftermath a pilot emitted, so it rides the player band.
   {
-    file: 'src/render/realm_racers_ground_blast.ts',
+    file: 'src/render/mortar_overdrive/ground_blast.ts',
     layer: 'encounter',
     alsoNames: ['player'],
     strict: true,

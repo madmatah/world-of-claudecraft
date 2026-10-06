@@ -133,7 +133,7 @@ export function mountPresentationKey(
 /** The worn skin a rider presents: what every presentation site hands
  *  mountPresentationKey and mountVisualSpecFor (src/render/mount_visuals.ts)
  *  instead of the raw Entity.mountSkinId. None while they drive a race machine
- *  (`Entity.drive`, Realm Racers): the loaner is not their mount, so it
+ *  (`Entity.drive`, Mortar Overdrive): the loaner is not their mount, so it
  *  presents as itself. The stored choice is untouched and shows again at home. */
 export function riderSkin(rider: {
   readonly mountSkinId?: string | null;

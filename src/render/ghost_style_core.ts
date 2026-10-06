@@ -7,7 +7,7 @@
 // and the Veilbound March their own. Stealth wears one of two palettes by its
 // source: the rogue's Duskveil and Smokefade, or any other (the druid cat's
 // Stalk, the mage's Greater Invisibility). A dead stealther is a spirit
-// first, and a stealthed Ghost Wolf stays a wolf. The Realm Racers ward and
+// first, and a stealthed Ghost Wolf stays a wolf. The Mortar Overdrive ward and
 // recovery ghost wear their own palettes, on the pilot and on the machine
 // (character_effects.ts syncCharacterVeils dresses both). Three-free so a
 // Vitest pins the table.
@@ -48,10 +48,10 @@ export function characterGhostLook(
 }
 
 /**
- * The veil family: the paladin's Veilbound March and Mark, and the Realm
- * Racers ward and recovery ghost, which wear the spirit veil in palettes of
+ * The veil family: the paladin's Veilbound March and Mark, and the Mortar
+ * Overdrive ward and recovery ghost, which wear the spirit veil in palettes of
  * their own (a denser March gold, a cold pale) on the pilot and on the whole
- * machine. A ward in its last `RALLY_WARD_ENDING_SECONDS` is `ward-ending`: the
+ * machine. A ward in its last `MORTAR_OVERDRIVE_WARD_ENDING_SECONDS` is `ward-ending`: the
  * same gold, pulsing, so its holder and every rival see it is about to go.
  *
  * Both racer veils are ACTIONABLE (a shell fired at a warded rival is wasted, a
@@ -63,20 +63,20 @@ export type CharacterVeilboundState = 'none' | 'march' | 'mark' | 'ward' | 'ward
 
 /** When a ward starts to read as ending, seconds of its aura clock left (the
  *  mirrored `remaining`, which both worlds count down). */
-export const RALLY_WARD_ENDING_SECONDS = 2;
+export const MORTAR_OVERDRIVE_WARD_ENDING_SECONDS = 2;
 // The offline clock is a sum of float ticks and the mirror's a rounded
 // deadline: the tolerance lets both flip on the same tick.
-const RALLY_WARD_ENDING_EPS = 1e-6;
+const MORTAR_OVERDRIVE_WARD_ENDING_EPS = 1e-6;
 
 export function characterVeilboundState(e: Entity): CharacterVeilboundState {
   // The racer reads first: a class veil must never mask one. The ghost wins
   // over the ward because it is the short one (it ends the moment the machine
   // is clear) and the one a rival arriving at speed acts on; the gold is back
   // the tick it ends, and the ward stays in the aura row meanwhile.
-  if (e.auras.some((a) => a.kind === 'rally_ghost')) return 'ghost';
-  const ward = e.auras.find((a) => a.kind === 'rally_ward');
+  if (e.auras.some((a) => a.kind === 'mortar_overdrive_ghost')) return 'ghost';
+  const ward = e.auras.find((a) => a.kind === 'mortar_overdrive_ward');
   if (ward) {
-    return ward.remaining <= RALLY_WARD_ENDING_SECONDS + RALLY_WARD_ENDING_EPS
+    return ward.remaining <= MORTAR_OVERDRIVE_WARD_ENDING_SECONDS + MORTAR_OVERDRIVE_WARD_ENDING_EPS
       ? 'ward-ending'
       : 'ward';
   }
@@ -104,10 +104,10 @@ export function classVeilActive(state: CharacterVeilboundState): boolean {
  * unless a released spirit, stealth or Ghost Wolf claims the rig first (none of
  * which a seated racer can hold), and on the machine always.
  */
-export function rallyVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
-  if (state === 'ward') return 'rally-ward';
-  if (state === 'ward-ending') return 'rally-ward-ending';
-  return state === 'ghost' ? 'rally-ghost' : null;
+export function mortarOverdriveVeilLook(state: CharacterVeilboundState): SpiritVeilPalette | null {
+  if (state === 'ward') return 'mortar-overdrive-ward';
+  if (state === 'ward-ending') return 'mortar-overdrive-ward-ending';
+  return state === 'ghost' ? 'mortar-overdrive-ghost' : null;
 }
 
 /**
@@ -122,6 +122,7 @@ export function riderVeilLook(
   state: CharacterVeilboundState,
 ): CharacterGhostLook | null {
   return (
-    characterGhostLook(viewerId, e, ghostWolf, classVeilboundState(state)) ?? rallyVeilLook(state)
+    characterGhostLook(viewerId, e, ghostWolf, classVeilboundState(state)) ??
+    mortarOverdriveVeilLook(state)
   );
 }

@@ -2,7 +2,7 @@
 //
 // The material itself lives in `terrain.ts`, where the world's own chunks build
 // it and where the release keeps evolving it. This module is the THIN ADAPTER
-// that lets a surface which is not a terrain chunk wear the same one: the rally
+// that lets a surface which is not a terrain chunk wear the same one: the Mortar Overdrive
 // circuit's lawn, and any activity band that follows it, sits far past
 // `DUNGEON_X_THRESHOLD` where no chunk is ever built. Before it existed such a
 // band hand-rolled a lookalike out of one canvas texture: same maps, none of the

@@ -65,7 +65,7 @@ export function selfMotionPredictionEnabled(args: SelfMotionGateArgs): boolean {
     // kernel only predicts grounded input, so it must stand down while the
     // authoritative flight is active.
     args.leaping !== true &&
-    // The Realm Racers authority owns the grid, recovery and retirement locks:
+    // The Mortar Overdrive authority owns the grid, recovery and retirement locks:
     // the prediction stands down (dropping its ring) instead of driving a kart
     // the server holds, and re-seeds from the snapshot that releases it.
     args.driveControlsLocked !== true

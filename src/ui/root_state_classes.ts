@@ -27,11 +27,11 @@ export const DESKTOP_LOGIN_EXIT_SHOWN_CLASS = 'desktop-login-exit-shown';
 /** On body while the composer is focused (the touch reply layout); predates the
  *  set above and lives here beside its focus-mirrored sibling. */
 export const MOBILE_CHAT_REPLY_CLASS = 'mobile-chat-reply';
-/** On body while the Realm Racers lobby curtain is shown: the touch chat
+/** On body while the Mortar Overdrive lobby curtain is shown: the touch chat
  *  control is lifted over it (hud.mobile.css). */
-export const RALLY_LOBBY_SHOWN_CLASS = 'rally-lobby-shown';
+export const MORTAR_OVERDRIVE_LOBBY_SHOWN_CLASS = 'mortar-overdrive-lobby-shown';
 /** On body while the viewer's own race is on, from the lobby to the result
- *  (RealmRacersUi, with the race strip): the race owns the top of the screen,
+ *  (MortarOverdriveUi, with the race strip): the race owns the top of the screen,
  *  so the plain banners ride above the strip and the new-adventurer card and
  *  its arrow stand down until it ends. */
-export const RALLY_RACE_ON_CLASS = 'rally-race-on';
+export const MORTAR_OVERDRIVE_RACE_ON_CLASS = 'mortar-overdrive-race-on';

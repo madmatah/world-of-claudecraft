@@ -8,8 +8,8 @@ import {
   AREA_TRACK_URLS,
   type AreaTrackId,
   COMBAT_STREAM_URLS,
+  MORTAR_OVERDRIVE_AREA_TRACKS,
   pickCombatTrackIndex,
-  REALM_RACERS_AREA_TRACKS,
   ZONE_STREAM_URLS,
 } from '../src/game/music_tracks';
 
@@ -47,10 +47,10 @@ describe('remastered soundtrack catalog', () => {
 
   it('ships every area file track at the top level of public/audio', () => {
     const ids: AreaTrackId[] = [
-      'realm_racers_evergarden',
-      'realm_racers_nightbloom',
-      'realm_racers_drakelands',
-      'realm_racers_palmreach',
+      'mortar_overdrive_evergarden',
+      'mortar_overdrive_nightbloom',
+      'mortar_overdrive_drakelands',
+      'mortar_overdrive_palmreach',
     ];
     expect(Object.keys(AREA_TRACK_URLS).sort()).toEqual([...ids].sort());
     for (const [id, url] of Object.entries(AREA_TRACK_URLS)) {
@@ -59,38 +59,40 @@ describe('remastered soundtrack catalog', () => {
     }
   });
 
-  it('routes each Realm Racers circuit track to its supplied master', () => {
+  it('routes each Mortar Overdrive circuit track to its supplied master', () => {
     // One track per zone that has a circuit, each its own file and its own
     // group, so activating one never downloads the other.
     const supplied = {
-      realm_racers_evergarden: [
-        '/audio/realm-racers-evergarden.mp3',
+      mortar_overdrive_evergarden: [
+        '/audio/mortar-overdrive-evergarden.mp3',
         '068a25617a603686c973c7c39574597924478752b5466b3105c270412a5eef07',
       ],
-      realm_racers_nightbloom: [
-        '/audio/realm-racers-nightbloom.mp3',
+      mortar_overdrive_nightbloom: [
+        '/audio/mortar-overdrive-nightbloom.mp3',
         '7b4a78114dd129db9a7744c4f897229365fbab8c49aa2f0a88867d5ee2e24423',
       ],
-      realm_racers_drakelands: [
-        '/audio/realm-racers-drakelands.mp3',
+      mortar_overdrive_drakelands: [
+        '/audio/mortar-overdrive-drakelands.mp3',
         '4c336156b8a8f5f2dc839e6ec26486a8d6b68a9939d6506ccbefa68769785132',
       ],
-      realm_racers_palmreach: [
-        '/audio/realm-racers-palmreach.mp3',
+      mortar_overdrive_palmreach: [
+        '/audio/mortar-overdrive-palmreach.mp3',
         '0803e090f0d349641f79309327fa4afc4bf1d279bba55567fdd6ae64ed23d8aa',
       ],
     } as const;
     for (const [id, [url, expected]] of Object.entries(supplied)) {
       const track = id as AreaTrackId;
       expect(AREA_TRACK_URLS[track]).toBe(url);
-      expect(REALM_RACERS_AREA_TRACKS.has(track), `${id} is a rally track`).toBe(true);
+      expect(MORTAR_OVERDRIVE_AREA_TRACKS.has(track), `${id} is a Mortar Overdrive track`).toBe(
+        true,
+      );
       expect(AREA_TRACK_GROUP[track], `${id} owns its group`).toBe(id);
       const hash = createHash('sha256')
         .update(readFileSync(assetPath(url)))
         .digest('hex');
       expect(hash, `${id} track bytes`).toBe(expected);
     }
-    expect(REALM_RACERS_AREA_TRACKS.size).toBe(Object.keys(supplied).length);
+    expect(MORTAR_OVERDRIVE_AREA_TRACKS.size).toBe(Object.keys(supplied).length);
   });
 
   it('routes each supplied new-zone remaster to its matching music cue', () => {

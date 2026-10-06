@@ -66,9 +66,9 @@ export const it_IT: EnTranslations = {
       "difficulty": "Difficoltà",
       "name": "Nome",
       "spec": "Specializzazione",
-      "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier",
-      "rallyKitCharges": "Weapon charges",
+      "mortarOverdriveCircuit": "Circuit",
+      "mortarOverdriveTier": "Rival tier",
+      "mortarOverdriveKitCharges": "Weapon charges",
       "bed": "Id aiuola (facoltativo)"
     },
     "difficulty": {
@@ -176,12 +176,12 @@ export const it_IT: EnTranslations = {
         "label": "Entra nell’incursione",
         "description": "Entra direttamente nell’arena di Nythraxis."
       },
-      "rally": {
+      "mortarOverdrive": {
         "label": "Race a circuit",
-        "description": "Start a Realm Racers race on the chosen circuit right now."
+        "description": "Start a Mortar Overdrive race on the chosen circuit right now."
       },
-      "rallykit": {
-        "label": "Fill the rally kit",
+      "mortarOverdriveKit": {
+        "label": "Fill the Mortar Overdrive kit",
         "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
@@ -1925,7 +1925,7 @@ export const it_IT: EnTranslations = {
       "targetFriendlyNext": "Scorri i bersagli amici",
       "targetPrev": "Scorri i bersagli indietro",
       "discord": "Discord",
-      "rally": "Realm Racers",
+      "mortarOverdrive": "Mortar Overdrive",
       "bgFlag": "Azione Bandiera del Campo di Battaglia",
       "friendlyNameplates": "Mostra nomi amichevoli",
       "sheathe": "Fodera/Sfodera Arma",
@@ -2130,10 +2130,10 @@ export const it_IT: EnTranslations = {
         "graveyard": "Cimitero"
       }
     },
-    "rally": {
+    "mortarOverdrive": {
       "kicker": "Evergarden Racing Society",
-      "title": "Realm Racers",
-      "close": "Close the Realm Racers window",
+      "title": "Mortar Overdrive",
+      "close": "Close the Mortar Overdrive window",
       "pitch": "Steel through the hedges. Find the line, trust the slide, and leave every rival eating dust.",
       "promiseCircuit": "Garden circuit",
       "promiseSlide": "Handbrake slides",
@@ -2217,8 +2217,8 @@ export const it_IT: EnTranslations = {
       "drawReturn": "DRAW. Returning in {seconds}",
       "raceVoid": "RACE VOID",
       "voidReturn": "RACE VOID. Returning in {seconds}",
-      "logQueued": "Realm Racers queue position: {position}.",
-      "logUnqueued": "You left the Realm Racers queue.",
+      "logQueued": "Mortar Overdrive queue position: {position}.",
+      "logUnqueued": "You left the Mortar Overdrive queue.",
       "bannerLap": "Lap {lap} of {total}",
       "bannerWin": "You win the race!",
       "bannerLoss": "{name} wins the race.",
@@ -4088,10 +4088,10 @@ export const it_IT: EnTranslations = {
       "temporalEcho": "I danni Arcani del lanciatore ti curano per il {singlePct}% dei danni a bersaglio singolo o il {areaPct}% dei danni ad area. Potere d'Etere e Dardi d’Etere ottengono un bonus di 4 volte con un Eco Temporale individuale. Gli Echi di gruppo creano una riserva di cure equivalente, condivisa tra gli alleati segnati sotto il 60% di salute in base alla salute mancante",
       "arcaneCharge": "{stacks} Cariche Arcane: Potere d'Etere infligge il {damagePct}% di danni in più, si lancia il {castPct}% più veloce e costa {costMult}x mana",
       "physicalReduction": "Riduce i danni Fisici subiti del {pct}%",
-      "rallyGroundBlast": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.",
-      "rallyOffTrack": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.",
-      "rallyWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
-      "rallyGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
+      "mortarOverdriveGroundBlast": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip for {gripSeconds} sec after the hit.",
+      "mortarOverdriveOffTrack": "Reduces movement speed by {pct}%. Your machine has {gripPct}% less grip and {drag} times the drag it has on the road. Lasts until you are back on the road.",
+      "mortarOverdriveWard": "Absorbs the next Ground Blast or oil slick that catches you, then breaks. Lasts {seconds} sec. Does not stop bumps from other machines.",
+      "mortarOverdriveGhost": "Rival machines pass through you after the race puts you back on the track. Lasts at least {minSeconds} sec and until you can drive again, then ends as soon as you are clear of every rival, {marginSeconds} sec later at most. Ground Blasts and oil slicks still hit you.",
       "temporalHourglass": "Immune e impossibilitato ad agire; ripristina la salute e accelera il recupero dei tempi di recupero. Clic destro per annullare.",
       "tongues": "Aumenta il tempo di lancio del {pct}%",
       "combustionCrit": "I tuoi incantesimi del Fuoco colpiscono sempre criticamente",
@@ -7101,7 +7101,7 @@ export const it_IT: EnTranslations = {
       "combat": "Combattimento",
       "talents": "Talenti",
       "arena": "Arena e PvP",
-      "realmRacers": "Realm Racers",
+      "mortarOverdrive": "Mortar Overdrive",
       "thornhollow": "Campi di Thornhollow",
       "worldPvp": "PvP Mondiale",
       "deeds": "Libro delle Imprese",
@@ -8465,13 +8465,13 @@ export const it_IT: EnTranslations = {
       "rewardsHeading": "Cosa paga una partita",
       "rewardsBody": "Ogni partita conclusa paga Onore: di più per una vittoria, una consolazione per una sconfitta o un pareggio, più una piccola quantità per ogni colpo di grazia che infliggi e ogni assistenza che fornisci, così combattere lontano dalle bandiere vale comunque la pena. La tua prima vittoria di ogni giorno paga un bonus in più, e il pannello ti avvisa finché quel bonus ti sta ancora aspettando. Quel giorno è tutto dell'Onore, e si rinnova secondo il proprio orologio anziché con il reset delle istanze del reame. Affrontare la stessa squadra più e più volte paga sempre meno per la partita in sé dopo la prima, assestandosi rapidamente su un minimo anziché scendere fino a zero, e una partita abbandonata non paga assolutamente nulla. Spendi ciò che guadagni presso uno dei due quartiermastri della Guerra."
     },
-    "realmRacersPage": {
-      "heading": "Realm Racers",
+    "mortarOverdrivePage": {
+      "heading": "Mortar Overdrive",
       "intro": "The Evergarden Racing Society runs a garden circuit for anyone with the nerve to drive it: four pilots to a grid, one signature weapon, and a hedge-lined track that rewards a clean line as much as a bold one.",
       "loreHeading": "The Evergarden Racing Society",
       "loreBody": "The Evergarden's head gardeners never meant the service paths between the hedgerows for anything faster than a wheelbarrow, but a groundskeeper with too much time and a loaned mount found otherwise. The Society that grew out of that first dare now marks out a proper circuit, seats a full grid, and drops the flag whenever four pilots are ready to go.",
       "howHeading": "How to play",
-      "howQueueBody": "Queue for a race from the Realm Racers window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.",
+      "howQueueBody": "Queue for a race from the Mortar Overdrive window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.",
       "howRaceBody": "Steer, throttle, and brake with your usual movement keys, and hold the jump control to pull the handbrake and slide through a tight corner. Every pilot carries Ground Blast, a forward shot that unsteadies whoever it catches, so a rival in your way is never quite safe. First across the line after the final lap takes the win, and the whole field is ranked by where each pilot stands when the race is decided.",
       "howLimitsBody": "The garden either side of the road is open and drivable, so running wide, being shoved off, or sliding through a flowerbed is part of racing: it only costs you speed. What it may not do is gain you ground. Leave the road and take a line shorter than the road itself and the stewards put you back where you left it, and a pilot who stops out in the garden is returned to the track after a few seconds.",
       "howPracticeBody": "Not ready to race strangers yet? Practice runs the same machine and the same handling on a private copy of the circuit, against rivals you choose yourself, so you can learn the line before you queue for the real thing.",
@@ -8483,7 +8483,7 @@ export const it_IT: EnTranslations = {
       "circuitsCompetitionTitle": "Competition circuits",
       "circuitsCompetitionBody": "A queued race never runs the practice loop. Instead it draws from a separate pool of longer competition circuits, each one dressed in the theme of the game zone it borrows its ground from, so the venue changes even when the machine does not.",
       "rewardsHeading": "What you race for",
-      "rewardsBody": "Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: crossing the finish line, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. A win only counts when at least one other player started the heat with you and raced it, finishing or at least completing a lap: beating the house pilots, or a rival who never left the grid, is practice, not a record. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear."
+      "rewardsBody": "Mortar Overdrive pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: crossing the finish line, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them. A win only counts when at least one other player started the heat with you and raced it, finishing or at least completing a lap: beating the house pilots, or a rival who never left the grid, is practice, not a record. These deeds pay no Renown, but a long enough run of wins earns a cosmetic title to wear."
     },
     "factionsPage": {
       "heading": "Fazioni e Reputazione",
@@ -13235,15 +13235,15 @@ export const it_IT: EnTranslations = {
         "name": "Bomba a shock meccanica",
         "description": "Lancia una Bomba a shock meccanica nel punto bersaglio, infliggendo da 120 a 160 danni da Natura ai nemici entro 5 metri."
       },
-      "rally_ground_blast": {
+      "mortar_overdrive_ground_blast": {
         "name": "Ground Blast",
         "description": "Fire a shell at a spot on the ground at least {minRange} yards ahead and within {coneDegrees} degrees of your nose. It lands {minFlight} to {maxFlight} sec later. Every rival within {radius} yards of the landing is thrown up and away, at full force within {coreRadius} yards and weaker toward the edge. They also lose {gripPct}% of their grip for {gripSeconds} sec and are slowed by {slowPct}% for {slowSeconds} sec. A Racing Ward absorbs the hit."
       },
-      "rally_nitro": {
+      "mortar_overdrive_nitro": {
         "name": "Nitro",
         "description": "Burn your nitro for an instant {kick} yards per second push forward. For {seconds} sec, your top speed is raised {speedPct}% above your machine's normal cap."
       },
-      "rally_oil_slick": {
+      "mortar_overdrive_oil_slick": {
         "name": "Oil Slick",
         "description": "Drop a patch of oil under your machine. It stays on the track for {seconds} sec. A rival who drives into it is pushed sideways, harder the faster they are going, and loses {gripPct}% of their grip for {gripSeconds} sec. Your own oil cannot catch you until you have driven out of it. A Racing Ward absorbs it."
       },

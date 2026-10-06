@@ -148,9 +148,9 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // (exp_harbor_to_harbor at renown 5) at the fourth release/v0.44.0 base merge.
     // 319 / 3545 with the release's Buried Hoards Coinsack catch
     // (cmb_coinsack_caught at renown 10).
-    // 326 / 3640 with the seven Realm Racers placing deeds (95 Renown),
+    // 326 / 3640 with the seven Mortar Overdrive placing deeds (95 Renown),
     // appended after exp_harbor_to_harbor at the release/v0.44.0 merge into
-    // feature/realm-racers. Then 326 / 3545 once those seven drop to zero
+    // feature/mortar-overdrive. Then 326 / 3545 once those seven drop to zero
     // Renown (casual unranked heats never score the board).
     // 327 / 3545 with the Drakelands Rampart Run's flying lap, at zero Renown
     // like the seven. 328 / 3545 with the Palmreach Lagoon Run's, likewise.
@@ -189,7 +189,7 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // release side added independently. UNION MERGE: base plus both deltas.
       collection: 41,
       // Release's Thornhollow battlegrounds plus the WARFARE honor ladder, plus
-      // the seven Realm Racers placing deeds and the Rampart and Lagoon Run
+      // the seven Mortar Overdrive placing deeds and the Rampart and Lagoon Run
       // flying laps.
       pvp: 44,
       // +2 bank socket ladder deeds (soc_strongbox_outfitter,
@@ -419,19 +419,19 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // The release's Eastbrook ferry round trip, appended last at the fourth
       // release/v0.44.0 base merge.
       'exp_harbor_to_harbor',
-      // Realm Racers: placing-based, mirroring the Vale Cup precedent,
+      // Mortar Overdrive: placing-based, mirroring the Vale Cup precedent,
       // appended after the release's ferry round trip.
-      'pvp_rr_first_race',
-      'pvp_rr_first_win',
-      'pvp_rr_wins_10',
-      'pvp_rr_wins_25',
-      'pvp_rr_fast_lap',
-      'pvp_rr_clean_race',
-      'pvp_rr_comeback',
+      'pvp_mortar_overdrive_first_race',
+      'pvp_mortar_overdrive_first_win',
+      'pvp_mortar_overdrive_wins_10',
+      'pvp_mortar_overdrive_wins_25',
+      'pvp_mortar_overdrive_fast_lap',
+      'pvp_mortar_overdrive_clean_race',
+      'pvp_mortar_overdrive_comeback',
       // The Drakelands Rampart Run's flying lap, appended after the seven.
-      'pvp_rr_rampart_lap',
+      'pvp_mortar_overdrive_rampart_lap',
       // The Palmreach Lagoon Run's flying lap, appended after it.
-      'pvp_rr_lagoon_lap',
+      'pvp_mortar_overdrive_lagoon_lap',
     ]);
     expect(DEEDS.dgn_wildheart_basin.renown).toBe(10);
     expect(DEEDS.dgn_wildheart_basin_heroic.renown).toBe(10);
@@ -509,30 +509,45 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       kind: 'quest',
       questId: 'q_dk_matriarch_of_the_maw',
     });
-    // Realm Racers (13c, docs/design/deeds.md): placing-based rather than a
+    // Mortar Overdrive (13c, docs/design/deeds.md): placing-based rather than a
     // win/lose pair, mirroring the Vale Cup precedent (pvp_vcup_*). Zero
     // Renown: casual unranked heats never score the board.
-    expect(DEEDS.pvp_rr_first_race.renown).toBe(0);
-    expect(DEEDS.pvp_rr_first_race.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_first_win.renown).toBe(0);
-    expect(DEEDS.pvp_rr_first_win.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 1 });
-    expect(DEEDS.pvp_rr_wins_10.renown).toBe(0);
-    expect(DEEDS.pvp_rr_wins_10.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 10 });
-    expect(DEEDS.pvp_rr_wins_25.renown).toBe(0);
-    expect(DEEDS.pvp_rr_wins_25.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 25 });
-    expect(DEEDS.pvp_rr_wins_25.reward).toEqual({ kind: 'title', text: 'Overdrive Ace' });
-    expect(DEEDS.pvp_rr_fast_lap.renown).toBe(0);
-    expect(DEEDS.pvp_rr_fast_lap.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_clean_race.renown).toBe(0);
-    expect(DEEDS.pvp_rr_clean_race.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_comeback.renown).toBe(0);
-    expect(DEEDS.pvp_rr_comeback.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_rampart_lap.renown).toBe(0);
-    expect(DEEDS.pvp_rr_rampart_lap.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_rampart_lap.category).toBe('pvp');
-    expect(DEEDS.pvp_rr_lagoon_lap.renown).toBe(0);
-    expect(DEEDS.pvp_rr_lagoon_lap.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_lagoon_lap.category).toBe('pvp');
+    expect(DEEDS.pvp_mortar_overdrive_first_race.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_first_race.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_first_win.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_first_win.trigger).toEqual({
+      kind: 'meter',
+      meter: 'mortarOverdriveWins',
+      amount: 1,
+    });
+    expect(DEEDS.pvp_mortar_overdrive_wins_10.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_wins_10.trigger).toEqual({
+      kind: 'meter',
+      meter: 'mortarOverdriveWins',
+      amount: 10,
+    });
+    expect(DEEDS.pvp_mortar_overdrive_wins_25.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_wins_25.trigger).toEqual({
+      kind: 'meter',
+      meter: 'mortarOverdriveWins',
+      amount: 25,
+    });
+    expect(DEEDS.pvp_mortar_overdrive_wins_25.reward).toEqual({
+      kind: 'title',
+      text: 'Overdrive Ace',
+    });
+    expect(DEEDS.pvp_mortar_overdrive_fast_lap.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_fast_lap.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_clean_race.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_clean_race.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_comeback.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_comeback.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_rampart_lap.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_rampart_lap.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_rampart_lap.category).toBe('pvp');
+    expect(DEEDS.pvp_mortar_overdrive_lagoon_lap.renown).toBe(0);
+    expect(DEEDS.pvp_mortar_overdrive_lagoon_lap.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_mortar_overdrive_lagoon_lap.category).toBe('pvp');
   });
 
   it('pins the Rift coverage: renown and trigger literals', () => {
@@ -852,7 +867,7 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // the 2026-08-30 release/v0.41.0 sync merge) one more, and the three
     // faction standing Champion titles (Riftwarden, Dawnkeeper, Forgemaster)
     // three more, and the Clue Scroll tenth-casket title (Treasure Hunter)
-    // one more, and the Realm Racers pvp_rr_wins_25 title (Overdrive Ace) one more.
+    // one more, and the Mortar Overdrive pvp_mortar_overdrive_wins_25 title (Overdrive Ace) one more.
     expect(titles.length).toBe(52);
     expect(borders.length).toBe(4);
     // Titles and border slugs are unique (one deed per cosmetic).
@@ -1087,32 +1102,36 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // shipped trigger or renown value was touched.
   // Re-baselined at the 2026-09-28 release merge into feature/buried-hoards: one NEW
   // deed (cmb_coinsack_caught) joins; no existing trigger or renown changed.
-  // Re-baselined for the seven appended Realm Racers placing deeds
-  // (pvp_rr_first_race, pvp_rr_first_win, pvp_rr_wins_10, pvp_rr_wins_25,
-  // pvp_rr_fast_lap, pvp_rr_clean_race, pvp_rr_comeback) at the release/v0.44.0
-  // merge into feature/realm-racers, re-minted THE AUDITABLE WAY: the
+  // Re-baselined for the seven appended Mortar Overdrive placing deeds
+  // (pvp_mortar_overdrive_first_race, pvp_mortar_overdrive_first_win, pvp_mortar_overdrive_wins_10, pvp_mortar_overdrive_wins_25,
+  // pvp_mortar_overdrive_fast_lap, pvp_mortar_overdrive_clean_race, pvp_mortar_overdrive_comeback) at the release/v0.44.0
+  // merge into feature/mortar-overdrive, re-minted THE AUDITABLE WAY: the
   // 8749b988... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
   // proof below reproduces it exactly. No shipped trigger or renown value was
   // touched. Re-minted again when those seven (branch-only, never shipped)
   // dropped to zero Renown.
   // Re-baselined for the appended Drakelands Rampart Run flying lap
-  // (pvp_rr_rampart_lap) on feature/realm-racers, re-minted THE AUDITABLE WAY:
+  // (pvp_mortar_overdrive_rampart_lap) on feature/mortar-overdrive, re-minted THE AUDITABLE WAY:
   // the 634e426c... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
   // proof below reproduces it exactly. No shipped trigger or renown value was
   // touched.
   // Re-baselined for the appended Palmreach Lagoon Run flying lap
-  // (pvp_rr_lagoon_lap) on feature/realm-racers, re-minted THE AUDITABLE WAY:
+  // (pvp_mortar_overdrive_lagoon_lap) on feature/mortar-overdrive, re-minted THE AUDITABLE WAY:
   // the 5379b414... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
   // proof below reproduces it exactly. No shipped trigger or renown value was
   // touched.
-  // Re-baselined at the release/v0.45.0 merge into feature/realm-racers: the
+  // Re-baselined at the release/v0.45.0 merge into feature/mortar-overdrive: the
   // release's catalog (with cmb_coinsack_caught seated before
-  // exp_harbor_to_harbor) comes first and the nine branch-only pvp_rr_* deeds
+  // exp_harbor_to_harbor) comes first and the nine branch-only pvp_mortar_overdrive_* deeds
   // append after it, re-minted THE AUDITABLE WAY: the release's 765c2ea1...
   // literal rotated down into PRE_APPEND_CATALOG_SHA256 and the proof below
   // reproduces it exactly by stripping the nine. No shipped trigger or renown
   // value was touched.
-  const FROZEN_CATALOG_SHA256 = 'f28c4dc01dfbc8dfa9dd39ff8f94adafd3c46ce5e746ae5f80a7fddf105204aa';
+  // Re-baselined for the Mortar Overdrive rename: the nine branch-only deeds were
+  // renamed pvp_rr_* -> pvp_mortar_overdrive_* (never shipped, so no id is frozen);
+  // their triggers, renown and order are unchanged, and the release prefix the
+  // proof below strips to is untouched.
+  const FROZEN_CATALOG_SHA256 = '40210a6885e5f332dead3250a3668ef2bce6cf61f5d839d14eacb8d1676f3bb3';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(
@@ -1180,36 +1199,36 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // previous mint is the clue pair's 0d91bc68... literal (rotated down here),
   // and stripping the one id must reproduce it exactly.
   //
-  // The seven Realm Racers placing deeds append after exp_harbor_to_harbor at
-  // the release/v0.44.0 merge into feature/realm-racers; the previous mint is
+  // The seven Mortar Overdrive placing deeds append after exp_harbor_to_harbor at
+  // the release/v0.44.0 merge into feature/mortar-overdrive; the previous mint is
   // the ferry round trip's 8749b988... literal, and stripping the seven
   // reproduced it exactly.
   //
-  // The Drakelands Rampart Run's flying lap appends pvp_rr_rampart_lap after
+  // The Drakelands Rampart Run's flying lap appends pvp_mortar_overdrive_rampart_lap after
   // the seven; the previous mint is their 634e426c... literal, and stripping
   // the one id reproduced it exactly.
   //
-  // The Palmreach Lagoon Run's flying lap appends pvp_rr_lagoon_lap after the
+  // The Palmreach Lagoon Run's flying lap appends pvp_mortar_overdrive_lagoon_lap after the
   // Rampart Run's; the previous mint is its 5379b414... literal, and stripping
   // the one id reproduced it exactly.
   //
   // At the release/v0.45.0 merge the release's own mint (its 765c2ea1...
   // literal: the clue pair's catalog plus cmb_coinsack_caught and
   // exp_harbor_to_harbor) is the previous mint, rotated down here, and
-  // stripping the nine pvp_rr_* ids from the merged catalog must reproduce it
+  // stripping the nine pvp_mortar_overdrive_* ids from the merged catalog must reproduce it
   // exactly.
   const PRE_APPEND_CATALOG_SHA256 =
     '765c2ea13a8a87d5b43a3f725ab56e1c58464f850dc2ec0e10048adc12f67829';
   const APPENDED_SINCE: readonly string[] = [
-    'pvp_rr_first_race',
-    'pvp_rr_first_win',
-    'pvp_rr_wins_10',
-    'pvp_rr_wins_25',
-    'pvp_rr_fast_lap',
-    'pvp_rr_clean_race',
-    'pvp_rr_comeback',
-    'pvp_rr_rampart_lap',
-    'pvp_rr_lagoon_lap',
+    'pvp_mortar_overdrive_first_race',
+    'pvp_mortar_overdrive_first_win',
+    'pvp_mortar_overdrive_wins_10',
+    'pvp_mortar_overdrive_wins_25',
+    'pvp_mortar_overdrive_fast_lap',
+    'pvp_mortar_overdrive_clean_race',
+    'pvp_mortar_overdrive_comeback',
+    'pvp_mortar_overdrive_rampart_lap',
+    'pvp_mortar_overdrive_lagoon_lap',
   ];
 
   it('the catalog minus the ids appended since the previous mint reproduces the previous digest', () => {
@@ -1217,7 +1236,7 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
     for (const id of APPENDED_SINCE) {
       expect(DEED_ORDER.includes(id), `${id} is in the live catalog`).toBe(true);
     }
-    // The nine Realm Racers deeds sit at the true tail after the release's
+    // The nine Mortar Overdrive deeds sit at the true tail after the release's
     // Coinsack catch and ferry round trip. Pin those two predecessors too: this
     // is an append into a known seat, never a scattered insert or a retro-edit
     // (the digest below proves it).
@@ -1443,9 +1462,9 @@ describe('table shape', () => {
     // The one-time Forgebreaker quest's hidden celebration appends after it,
     // then the world-quest block, then the faction standing ladder, then the
     // Clue Scroll casket pair, then the release's ferry round trip, then the
-    // Realm Racers placing block, then the Rampart Run's flying lap, then the
+    // Mortar Overdrive placing block, then the Rampart Run's flying lap, then the
     // Lagoon Run's as the final entry.
-    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_rr_lagoon_lap');
+    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_mortar_overdrive_lagoon_lap');
   });
 
   it('every entry key matches its id and its prefix matches its category', () => {

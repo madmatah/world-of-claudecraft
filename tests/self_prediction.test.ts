@@ -13,8 +13,8 @@ import {
 import { DELVE_X_MIN } from '../src/sim/data';
 import { DELVE_DOOR_AISLE_HALF_DEPTH, type DelveDoorClampSolid } from '../src/sim/delves/geometry';
 import { createPlayer } from '../src/sim/entity';
+import { MORTAR_OVERDRIVE_VEHICLE_KEY } from '../src/sim/mortar_overdrive/race';
 import { stepPlayerMotion } from '../src/sim/player_motion';
-import { REALM_RACERS_VEHICLE_KEY } from '../src/sim/social/realm_racers';
 import {
   type Aura,
   type Entity,
@@ -288,7 +288,7 @@ describe('MovementPredictionPipeline for a seated driver', () => {
   function driverFixture() {
     const wire = new FakeSelfPredictionWire();
     const self = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Tester');
-    self.drive = createVehicleDrive('rally_loaner');
+    self.drive = createVehicleDrive('mo_loaner');
     const pipeline = new MovementPredictionPipeline(SEED);
     pipeline.connect(wire, 0);
     pipeline.prepare(wire, self, true);
@@ -400,7 +400,7 @@ describe('MovementPredictionPipeline for a seated driver', () => {
   it('keeps a driver standing down on a drive recon while driver prediction is off', () => {
     const { pipeline, wire } = driverFixture();
     pipeline.predictDrivers = false;
-    wire.reconDrive = createVehicleDrive('rally_loaner');
+    wire.reconDrive = createVehicleDrive('mo_loaner');
     for (let epoch = 1; epoch <= 3; epoch++) {
       wire.reconOverrideEpoch = epoch;
       wire.reconAckClientTick = 10 + epoch;
@@ -416,11 +416,11 @@ describe('MovementPredictionPipeline for a seated driver', () => {
     self.drive = null;
     drivePredictionFrame(pipeline, 5);
     expect(pipeline.display()).not.toBeNull();
-    self.drive = createVehicleDrive('rally_loaner');
+    self.drive = createVehicleDrive('mo_loaner');
     wire.reconOverrideEpoch = 3;
     expect(pipeline.display()).toBeNull();
 
-    wire.reconDrive = createVehicleDrive('rally_loaner');
+    wire.reconDrive = createVehicleDrive('mo_loaner');
     drivePredictionFrame(pipeline, 11);
     expect(pipeline.display()).not.toBeNull();
     expect(wire.reconcileOutcomes).toEqual([]);
@@ -429,7 +429,7 @@ describe('MovementPredictionPipeline for a seated driver', () => {
   it('predicts a driver by default once the wire carries a drive recon', () => {
     const { pipeline, wire } = driverFixture();
     expect(pipeline.predictDrivers).toBe(true);
-    wire.reconDrive = createVehicleDrive('rally_loaner');
+    wire.reconDrive = createVehicleDrive('mo_loaner');
     drivePredictionFrame(pipeline, 10);
     expect(ringHead(pipeline)).not.toBeNull();
     expect(pipeline.display()).not.toBeNull();
@@ -451,8 +451,8 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
   function seatedDriver(drive: Partial<VehicleDrive> = {}) {
     const wire = new FakeSelfPredictionWire();
     const self = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Tester');
-    self.drive = createVehicleDrive(REALM_RACERS_VEHICLE_KEY);
-    wire.reconDrive = { ...createVehicleDrive(REALM_RACERS_VEHICLE_KEY), ...drive };
+    self.drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
+    wire.reconDrive = { ...createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY), ...drive };
     wire.reconVy = 0;
     wire.reconOnGround = true;
     const pipeline = new MovementPredictionPipeline(SEED);
@@ -516,7 +516,7 @@ describe('MovementPredictionPipeline predicting a seated driver', () => {
     const seeded = wire.reconDrive;
     for (let ct = 0; ct < 6; ct++) drivePredictionFrame(pipeline, ct, THROTTLE);
     const head = internals(pipeline).predicted as MotionState;
-    expect(head.drive?.profileKey).toBe(REALM_RACERS_VEHICLE_KEY);
+    expect(head.drive?.profileKey).toBe(MORTAR_OVERDRIVE_VEHICLE_KEY);
     expect(head.drive?.speed).toBeGreaterThan(12);
     // the recon is copied, never stepped in place
     expect(wire.reconDrive).toBe(seeded);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ZONES } from '../src/sim/data';
-import { REALM_RACERS_LANES, realmRacersLaneOrigin } from '../src/sim/realm_racers_layout';
+import {
+  MORTAR_OVERDRIVE_LANES,
+  mortarOverdriveLaneOrigin,
+} from '../src/sim/mortar_overdrive/layout';
 import type { ZoneDef } from '../src/sim/types';
 import { resolveMapZone } from '../src/ui/hud/map/map_zone_focus_core';
 import { MAP_ZONE_LOOKUP } from '../src/ui/hud/map/map_zone_focus_lookup';
@@ -16,7 +19,7 @@ const lookup = (
   zones,
   zoneAt: (x: number, _z: number) => (x < 0 ? zones[0] : zones[1]),
   dungeonAt: () => (dungeonDoor ? { doorPos: dungeonDoor } : null),
-  realmRacersZoneAt: (x: number, _z: number) =>
+  mortarOverdriveZoneAt: (x: number, _z: number) =>
     circuitZone !== null && x >= CIRCUIT_X ? { id: circuitZone } : null,
 });
 
@@ -36,7 +39,7 @@ describe('resolveMapZone', () => {
     expect(at.id).toBe('eastbrook_vale');
   });
 
-  it('on a Realm Racers circuit frames the zone the circuit belongs to, not the frozen one', () => {
+  it('on a Mortar Overdrive circuit frames the zone the circuit belongs to, not the frozen one', () => {
     // The zone tracker freezes past the instance threshold, so the committed id
     // is wherever the pilot queued from; the circuit names its own zone, and
     // the zone comes out of the bag's own table.
@@ -56,12 +59,14 @@ describe('resolveMapZone', () => {
   });
 
   it('binds the live lookups: a real lane frames its circuit zone out of ZONES', () => {
-    const lane = REALM_RACERS_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
+    const lane = MORTAR_OVERDRIVE_LANES.find((l) => l.circuit.id === 'palmreach_lagoon_run');
     if (!lane) throw new Error('expected the Lagoon Run lane');
-    const origin = realmRacersLaneOrigin(lane.index);
+    const origin = mortarOverdriveLaneOrigin(lane.index);
     const lagoon = resolveMapZone(null, 'frostveil', origin, MAP_ZONE_LOOKUP);
     expect(lagoon).toBe(ZONES.find((z) => z.id === 'palmreach'));
-    const practice = realmRacersLaneOrigin(REALM_RACERS_LANES.find((l) => l.practice)?.index ?? 0);
+    const practice = mortarOverdriveLaneOrigin(
+      MORTAR_OVERDRIVE_LANES.find((l) => l.practice)?.index ?? 0,
+    );
     expect(resolveMapZone(null, 'frostveil', practice, MAP_ZONE_LOOKUP).id).toBe('evergarden');
     // Off the band the live binding keeps the committed zone.
     expect(resolveMapZone(null, 'frostveil', { x: 0, z: 0 }, MAP_ZONE_LOOKUP).id).toBe('frostveil');

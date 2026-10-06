@@ -1,0 +1,3385 @@
+// The Mortar Overdrive: a deterministic four-pilot vehicle race. This module owns
+// the FIFO queue, the single instanced match, arc-length lap progress, finish
+// arbitration (public and practice races may run different lap counts),
+// straight-line Ground Blast projectiles, and the complete gameplay parenthesis
+// (temporary kit/mount in, exact return state out).
+//
+// It is also what puts a racer BEHIND THE WHEEL: seating a pilot hands them a
+// `drive` state (src/sim/types.ts) and the movement kernel switches to the
+// vehicle model for as long as they carry it. The surface a racer is on
+// (`gripMult`/`dragMult` on that state) is written from their projection onto
+// the circuit here, at the END of the tick, while movement runs EARLIER in the
+// same tick: the surface written on tick N is therefore driven on tick N+1, one
+// tick of lag. That is deliberate and deterministic. The alternative, moving
+// this phase before the per-player loop, would reorder the tick phases, and
+// phase order is rng-draw-order load bearing (src/sim/CLAUDE.md); 50 ms of lag
+// on how slippery the grass is buys nothing worth that risk.
+
+import type {
+  MortarOverdriveInfo,
+  MortarOverdriveLaneView,
+  MortarOverdriveLoadingInfo,
+  MortarOverdriveMatchInfo,
+  MortarOverdrivePhase,
+  MortarOverdriveRacerInfo,
+  MortarOverdriveSlickInfo,
+} from '../../world_api/mortar_overdrive';
+import type { CharacterState } from '../character_state';
+import {
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
+  type MortarOverdriveCircuit,
+  mortarOverdriveCircuitById,
+  mortarOverdriveCompetitionCircuits,
+} from '../content/mortar_overdrive/circuits';
+import {
+  MORTAR_OVERDRIVE_EFFECT_ABILITIES,
+  type MortarOverdriveHeldSlot,
+  mortarOverdriveWeaponCharges,
+  resolveMortarOverdriveKit,
+} from '../content/mortar_overdrive/kit';
+import { vehicleProfile } from '../content/vehicles';
+import { serializeCooldowns } from '../cooldown_persist';
+import { abilitiesKnownAt, CLASSES, DUNGEON_X_THRESHOLD } from '../data';
+import * as deedsMod from '../deeds';
+import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
+import { RESURRECTION_SICKNESS_ID, UNSTUCK_SICKNESS_ID } from '../resurrection';
+import { persistedResource } from '../serialize_resource';
+import type { ArenaReturnPools, PlayerMeta } from '../sim';
+import type { SimContext } from '../sim_context';
+import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from '../social/arena';
+import { settleTeleportArrival } from '../teleport_arrival';
+import { CAST_COMPLETE_EPS, type Entity, TICK_RATE, type VehicleDrive } from '../types';
+import { restoreCooldownsPreservingUnstuck } from '../unstuck_cooldown';
+import {
+  type ContactBody,
+  resolveVehicleContactSwept,
+  type SweptContactBody,
+} from '../vehicle_contact';
+import { createVehicleDrive, resetVehicleDrive } from '../vehicle_motion';
+import {
+  type MortarOverdriveStrippedAuras,
+  restoreMortarOverdriveParkedPools,
+  restoreMortarOverdriveStrippedAuras,
+  settleMortarOverdriveStrippedAuras,
+  snapshotMortarOverdriveStrippedAuras,
+} from './auras';
+import { mortarOverdriveHeldElsewhere } from './busy';
+import { mortarOverdriveHadHumanRival } from './credit';
+import type { MortarOverdriveDriverTier } from './driver';
+import {
+  MORTAR_OVERDRIVE_GHOST_AURA,
+  MORTAR_OVERDRIVE_GHOST_AURA_NAME,
+  mortarOverdriveContactCounts,
+  mortarOverdriveGhosted,
+  mortarOverdriveGhostMayClear,
+  mortarOverdriveGhostWindow,
+  mortarOverdriveHullsMeetInTick,
+  mortarOverdriveKeepParting,
+  mortarOverdrivePartingEndTick,
+} from './ghost';
+import {
+  GROUND_BLAST_CONTROL_SECONDS,
+  GROUND_BLAST_CONTROL_SPEED_MULT,
+  GROUND_BLAST_MUZZLE_NOSE_YD,
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+  groundBlastFalloff,
+  groundBlastHitFalloffWire,
+  resolveGroundBlastAim,
+  resolveGroundBlastImpact,
+} from './ground_blast';
+import {
+  MORTAR_OVERDRIVE_GATE_RESYNC_WINDOW,
+  MORTAR_OVERDRIVE_GRID_SIZE,
+  MORTAR_OVERDRIVE_ORIGIN,
+  MORTAR_OVERDRIVE_RUNOFF_WIDTH,
+  MORTAR_OVERDRIVE_VERGE_MARGIN,
+  type MortarOverdriveGate,
+  type MortarOverdrivePoint,
+  mortarOverdriveGateCrossingFraction,
+  mortarOverdriveLaneAt,
+  mortarOverdriveLaneOffset,
+  mortarOverdrivePracticeLanes,
+  mortarOverdrivePublicLane,
+} from './layout';
+import {
+  beginMortarOverdriveCountdown,
+  clearMortarOverdriveReady,
+  MORTAR_OVERDRIVE_LOADING_MAX_TICKS,
+  markMortarOverdriveReady,
+  mortarOverdriveLoadingDone,
+  mortarOverdriveLoadingInfo,
+} from './loading';
+import {
+  drawMortarOverdrivePickupEffect,
+  isMortarOverdriveHeldEffect,
+  MORTAR_OVERDRIVE_NITRO_KICK,
+  MORTAR_OVERDRIVE_NITRO_SPEED_MULT,
+  MORTAR_OVERDRIVE_NITRO_TICKS,
+  type MortarOverdriveHeldEffect,
+  type MortarOverdrivePickupEffect,
+  mortarOverdrivePickupBand,
+} from './pickup_effects';
+import {
+  createMortarOverdrivePickupState,
+  MORTAR_OVERDRIVE_PICKUP_CHARGE_GRANT,
+  MORTAR_OVERDRIVE_PICKUP_COOLDOWN_TICKS,
+  type MortarOverdrivePickupRacer,
+  type MortarOverdrivePickupState,
+  mortarOverdrivePickupBoxes,
+  mortarOverdrivePickupTakenIndices,
+  stepMortarOverdrivePickups,
+} from './pickups';
+import { forwardArcDelta, stepMortarOverdriveProgress, travelledFromArc } from './progress';
+import {
+  applyMortarOverdriveSlickSurface,
+  biteMortarOverdriveSlick,
+  type MortarOverdriveSlickRecon,
+  mortarOverdriveSlickCrossing,
+  mortarOverdriveSlickRecon,
+} from './slick_contact';
+import {
+  MORTAR_OVERDRIVE_SLICK_CAP,
+  MORTAR_OVERDRIVE_SLICK_LIFETIME_TICKS,
+  type MortarOverdriveSlick,
+  type MortarOverdriveSlickRacer,
+  stepMortarOverdriveSlicks,
+} from './slicks';
+import {
+  type MortarOverdriveProjection,
+  mortarOverdriveForwardDot,
+  mortarOverdriveGates,
+  mortarOverdriveStarts,
+  mortarOverdriveTrack,
+} from './spline';
+import {
+  type MortarOverdriveStandingEntry,
+  mortarOverdriveClassification,
+  mortarOverdriveLeadIsDeadHeat,
+} from './standings';
+import {
+  MORTAR_OVERDRIVE_CUT_LOCK_TICKS,
+  MORTAR_OVERDRIVE_CUT_NOTICE_TICKS,
+  type MortarOverdriveExcursion,
+  mortarOverdriveLoiterCountdownTicks,
+  noMortarOverdriveExcursion,
+  stepMortarOverdriveTrackLimits,
+} from './track_limits';
+
+/** The machine every pilot is loaned, as a VEHICLE_PROFILES key. A roster of
+ *  machines is a later workstream. */
+export const MORTAR_OVERDRIVE_VEHICLE_KEY = 'mo_loaner';
+
+/** The mount visual that machine wears, mirrored onto Entity.mountKey. It is
+ *  read off the profile rather than written here because the two are separate
+ *  namespaces: Entity.mountKey is a bare string, so a stale literal would not
+ *  fail to compile, it would just render a pilot with no machine under them. */
+export const MORTAR_OVERDRIVE_MOUNT_KEY: string = vehicleProfile(MORTAR_OVERDRIVE_VEHICLE_KEY).key;
+export const MORTAR_OVERDRIVE_COUNTDOWN_TICKS = 9 * TICK_RATE;
+/**
+ * How long the rest of the field has to get home once the WINNER is home.
+ *
+ * Without it the race runs to the 180 s limit whenever one pilot stops driving,
+ * and three players who finished in forty seconds watch a result screen that
+ * will not arrive for another two minutes. Thirty seconds is about a lap of
+ * struggling off the racing line, so a real straggler still crosses the line
+ * and takes their placing; only a machine nobody is driving runs the clock out.
+ */
+export const MORTAR_OVERDRIVE_CHASE_TICKS = 30 * TICK_RATE;
+export const MORTAR_OVERDRIVE_RETURN_TICKS = 6 * TICK_RATE;
+export const MORTAR_OVERDRIVE_RESET_LOCK_TICKS = 2 * TICK_RATE;
+/**
+ * The lock an AUTOMATIC recovery carries (the wedged-machine arm and the
+ * referee's loiter verdict), ticks.
+ *
+ * One tick, not two seconds: automatic recovery has already charged its stop and
+ * hands control straight back, so this is not a settle window. It exists because
+ * every "was this driven into or teleported onto" guard in the Mortar Overdrive is written
+ * as `tickCount >= resetLockedUntilTick`, and a zero-tick lock leaves that field
+ * at 0, which is the guard reading TRUE. A machine dropped on a pickup box or in
+ * a patch of oil by a recovery would otherwise take it (or suffer it) on the next
+ * tick, which is the reward-for-going-off-road shape the manual arm already
+ * refuses.
+ */
+export const MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS = 1;
+export const MORTAR_OVERDRIVE_STUCK_TICKS = 3 * TICK_RATE;
+export const MORTAR_OVERDRIVE_WRONG_WAY_TICKS = Math.ceil(TICK_RATE / 2);
+export const MORTAR_OVERDRIVE_STUCK_SPEED = 0.75;
+/** The debuff an Ground Blast hit leaves in the victim's HUD aura row. */
+export const MORTAR_OVERDRIVE_GROUND_BLAST_AURA = 'mortar_overdrive_ground_blast_control';
+export interface MortarOverdriveSlowBand {
+  /** Player-visible aura name, localized at the client boundary. */
+  name: string;
+  /**
+   * The aura's `value`, which `moveSpeedMult` uses as a MULTIPLIER (it returns
+   * `slow * speed`), not as the fraction lost. 0.75 keeps three quarters of the
+   * racer's speed. Reading it the other way round is how the verge first
+   * shipped harsher than the garden it is supposed to be gentler than.
+   */
+  speedMult: number;
+  /**
+   * What the surface does to a VEHICLE beyond costing it speed: less grip means
+   * the machine slides where the road would have held it, more drag means it
+   * bleeds off rather than coasting across. The aura above still owns the top
+   * speed (it is what the anti-cut arithmetic is written in), so these two never
+   * double-count it.
+   */
+  gripMult: number;
+  dragMult: number;
+}
+
+/** One aura id for every band, so deepening the penalty re-tunes the aura in
+ *  place instead of stacking a second slow on top of the first. */
+export const MORTAR_OVERDRIVE_OFF_TRACK_AURA = 'mortar_overdrive_soft_verge';
+
+/**
+ * The WARD a pickup box can grant, as a real aura on the racer.
+ *
+ * It is an aura and not a flag on the race's own bookkeeping (operator call,
+ * 2026-08-04) for consistency with everything else the Mortar Overdrive does to a machine:
+ * the off-track bands and the Ground Blast control are auras, so a pilot reads
+ * every state the race put on them in the same row of the same frame, a rival who
+ * TARGETS them sees it there too, and it rides the ordinary entity aura wire with
+ * no new field. `AuraKind` gains its own `mortar_overdrive_ward` marker rather than borrowing
+ * one, because every existing kind carries mechanics a race must not inherit.
+ *
+ * The aura is the SOURCE OF TRUTH: the readout's `warded` flag is derived from
+ * it, so the two can never disagree.
+ */
+export const MORTAR_OVERDRIVE_WARD_AURA = 'mortar_overdrive_ward';
+const MORTAR_OVERDRIVE_WARD_AURA_NAME = 'Racing Ward';
+/**
+ * How long the ward lasts, seconds, on the aura clock: the per-tick pass takes
+ * DT off `remaining` and drops the aura at zero with the same fade the spend
+ * path emits, so every client clears it alike. Inside that window it absorbs
+ * the next Ground Blast hit or oil crossing and is spent by it. Granted in the
+ * Mortar Overdrive phase, which runs after the aura pass, it covers every hit the Mortar Overdrive
+ * phase resolves over the next 10 s of ticks and is gone before the one 10 s
+ * on.
+ */
+export const MORTAR_OVERDRIVE_WARD_AURA_SECONDS = 10;
+
+/** The duration the race writes on an aura it ends itself (the recovery
+ *  ghost): the permanent-until-removed arm the aura system already supports
+ *  (the Drowned Litany's cantor shield is the precedent), a clock no race can
+ *  outlive. */
+const MORTAR_OVERDRIVE_UNTIMED_AURA_SECONDS = 9999;
+
+/** Is this machine carrying a ward right now? The one question every ward site
+ *  asks, so nothing re-implements the lookup. */
+export function mortarOverdriveWarded(racer: Entity | undefined | null): boolean {
+  return !!racer?.auras.some((aura) => aura.id === MORTAR_OVERDRIVE_WARD_AURA);
+}
+
+/** Whole seconds the machine's ward has left, rounded up so a ward about to
+ *  go still reads 1, or 0 without one. The epsilon is the aura pass's own
+ *  expiry tolerance, so the accumulated tick drift never shows a stale second. */
+export function mortarOverdriveWardSecondsLeft(racer: Entity | undefined | null): number {
+  const ward = racer?.auras.find((aura) => aura.id === MORTAR_OVERDRIVE_WARD_AURA);
+  return ward ? Math.max(0, Math.ceil(ward.remaining - CAST_COMPLETE_EPS)) : 0;
+}
+
+/** Grant the ward. Refreshing an existing one is a no-op by construction: the
+ *  draw that would have granted a second falls back to the refill instead, so
+ *  a second box never restarts the clock either. */
+function applyMortarOverdriveWard(ctx: SimContext, racer: Entity): void {
+  ctx.applyAura(racer, {
+    id: MORTAR_OVERDRIVE_WARD_AURA,
+    name: MORTAR_OVERDRIVE_WARD_AURA_NAME,
+    kind: 'mortar_overdrive_ward',
+    remaining: MORTAR_OVERDRIVE_WARD_AURA_SECONDS,
+    duration: MORTAR_OVERDRIVE_WARD_AURA_SECONDS,
+    // No stat effect at all: the value is unread, and the kind is a marker.
+    value: 0,
+    sourceId: racer.id,
+    // Physical, so no dispel in the game can strip it (`isDispellableAura`
+    // refuses a physical aura outright) and nothing treats it as magic.
+    school: 'physical',
+  });
+}
+
+/**
+ * Spend the ward, if there is one. Returns whether it was there, which is the
+ * whole of "did this absorb happen": the caller emits the announcement.
+ */
+function consumeMortarOverdriveWard(ctx: SimContext, racer: Entity): boolean {
+  const index = racer.auras.findIndex((aura) => aura.id === MORTAR_OVERDRIVE_WARD_AURA);
+  if (index < 0) return false;
+  const name = racer.auras[index].name;
+  racer.auras.splice(index, 1);
+  // The fade event the buff bar and the aura log listen for, exactly as every
+  // other removed aura emits it.
+  ctx.emit({ type: 'aura', targetId: racer.id, name, gained: false });
+  return true;
+}
+
+/**
+ * Make a just-recovered machine a GHOST (mortar_overdrive/ghost.ts): rival machines
+ * pass through it until it is unlocked and clear, or the cap runs out. A second
+ * recovery inside the window only restarts the cap.
+ *
+ * Contacts are the ONLY thing it changes. A Ground Blast and a patch of oil keep
+ * their own rules (oil already refuses a locked machine, a blast never did), so
+ * the pilot who drives again after the lock is as exposed as any other: the
+ * ghost is a way out of a parked collision, never a way out of the fight.
+ *
+ * SILENT both ways, like the recovery itself (`mortarOverdriveReset` is a dedicated
+ * silent event): the aura rides the entity aura list every client mirrors, so
+ * the buff row and the veil read it with no gain or fade event, and a recovery
+ * adds no event frame to anyone's downlink. The aura carries no stat effect and
+ * no crowd-control kind, so nothing the aura pipeline guards applies to it.
+ */
+function applyMortarOverdriveGhost(
+  ctx: SimContext,
+  racer: Entity,
+  progress: MortarOverdriveProgress,
+): void {
+  // Written AFTER the lock (the caller's order): the window is a function of
+  // this recovery alone, so a second one replaces it rather than stacking.
+  const ghostWindow = mortarOverdriveGhostWindow(ctx.tickCount, progress.resetLockedUntilTick);
+  progress.ghostClearTick = ghostWindow.earliestClearTick;
+  progress.ghostCapTick = ghostWindow.capTick;
+  progress.ghostPartingPids.length = 0;
+  progress.ghostPartingEndTick = 0;
+  if (mortarOverdriveGhosted(racer)) return;
+  racer.auras.push({
+    id: MORTAR_OVERDRIVE_GHOST_AURA,
+    name: MORTAR_OVERDRIVE_GHOST_AURA_NAME,
+    kind: 'mortar_overdrive_ghost',
+    // Removed by the race, never by the clock: the cap above is what bounds it.
+    remaining: MORTAR_OVERDRIVE_UNTIMED_AURA_SECONDS,
+    duration: MORTAR_OVERDRIVE_UNTIMED_AURA_SECONDS,
+    value: 0,
+    sourceId: racer.id,
+    school: 'physical',
+  });
+}
+
+/** End a ghost, if there is one, as silently as it began (in place, the way
+ *  the ward is spent), and any parting a previous one left. The window and the
+ *  parting are the race's books and go even when the body is already gone. */
+function clearMortarOverdriveGhost(
+  racer: Entity | undefined,
+  progress: MortarOverdriveProgress | undefined,
+): void {
+  if (progress) {
+    progress.ghostClearTick = 0;
+    progress.ghostCapTick = 0;
+    progress.ghostPartingPids.length = 0;
+    progress.ghostPartingEndTick = 0;
+  }
+  if (!racer) return;
+  const index = racer.auras.findIndex((aura) => aura.id === MORTAR_OVERDRIVE_GHOST_AURA);
+  if (index >= 0) racer.auras.splice(index, 1);
+}
+
+/**
+ * The off-track bands. Leaving the circuit costs time, in proportion to how far
+ * out you are: the mown verge is a nudge and the garden beyond it is a real
+ * price. Two knobs, and pure FEEL: they were the only thing making a cut across
+ * the infield slower than the road, back when a third (the basin's wading
+ * margin) stood behind them, and the referee in `mortar_overdrive/track_limits.ts`
+ * does that job now. What they still have to hold is the ORDER, since further
+ * out being slower is what makes running wide legible.
+ */
+export const MORTAR_OVERDRIVE_VERGE_BAND: MortarOverdriveSlowBand = {
+  name: 'Soft Verge',
+  speedMult: 0.75,
+  gripMult: 0.7,
+  dragMult: 3,
+};
+export const MORTAR_OVERDRIVE_GARDEN_BAND: MortarOverdriveSlowBand = {
+  name: 'Garden Lawn',
+  speedMult: 0.6,
+  gripMult: 0.5,
+  dragMult: 6,
+};
+/** Two racers within this many yards of each other are a dead heat. */
+export const MORTAR_OVERDRIVE_DEAD_HEAT_YARDS = 0.5;
+
+/**
+ * Closing speed under which a contact is a rub rather than an impact: the
+ * bodies are still separated, but nothing is announced. Without it a pair
+ * leaning on each other through a long corner would emit at 20 Hz and every
+ * client would machine-gun the spark, the sound and the shake.
+ */
+export const MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT = 3;
+/** And even above that threshold, one event per pair per half second. */
+export const MORTAR_OVERDRIVE_BUMP_EVENT_TICKS = TICK_RATE / 2;
+
+/** The weapon a racer is holding, and what is left of it. A SLOT rather than a
+ *  hardcoded kit: pickups write a different value into it, and a roster of
+ *  machines writes the id off the vehicle profile. */
+export interface MortarOverdriveWeaponSlot {
+  abilityId: string;
+  /** Uses left this race, never refilled. Null is unlimited fire. */
+  charges: number | null;
+}
+
+export interface MortarOverdriveProgress {
+  lap: number;
+  finishedTick: number | null;
+  /**
+   * Where inside the crossing tick's segment this racer cut the line, 0 to 1.
+   * Only read against another racer finishing on the SAME tick; 1 until then.
+   */
+  finishFraction: number;
+  /**
+   * Tick this racer quit under its own steam, a forfeit or a disconnect, or
+   * null while they are still in the race. A quitter no longer hands anyone a
+   * win: they are classified LAST and the race goes on without them.
+   */
+  retiredTick: number | null;
+  /**
+   * True once the gameplay parenthesis has been closed for this racer and they
+   * stand back where the seat found them. They stay on `match.pids`, because
+   * the grid a race started with is the grid it is classified on, but nothing
+   * per-racer resolves to this race for them any more.
+   */
+  returned: boolean;
+  /** Last projected centerline sample: the search hint for the next tick. */
+  trackIndex: number;
+  lastS: number;
+  distanceSinceWrap: number;
+  /** Yards down the circuit, monotonic across laps; the live ranking key. */
+  travelled: number;
+  /** Ordered recovery-anchor state. It never replaces spline lap validation. */
+  nextResetGate: number;
+  resetS: number;
+  resetLap: number;
+  resetDistanceSinceWrap: number;
+  /** Automatic recovery counter and manual post-teleport control lock. */
+  stuckTicks: number;
+  resetLockedUntilTick: number;
+  /**
+   * The live TRACK-LIMITS excursion (see `mortar_overdrive/track_limits.ts`): where
+   * this racer left the racing surface, how long ago, and how much ground they
+   * have driven since. `exitS` null for the whole race until they leave it.
+   */
+  excursion: MortarOverdriveExcursion;
+  /** The lap bookkeeping AT that exit, restored verbatim when the referee sends
+   *  a cutter back: a return must undo the gain, not bank it. */
+  excursionLap: number;
+  excursionDistanceSinceWrap: number;
+  /** Tick the "you rejoin where you left" banner stands until; 0 when there is
+   *  nothing to say. */
+  cutReturnUntilTick: number;
+  /** Sustained direction state exposed to the HUD. */
+  wrongWayTicks: number;
+  wrongWay: boolean;
+  heldWeapon: MortarOverdriveWeaponSlot | null;
+  /**
+   * Tick this racer may take another pickup box on; 0 before the first one.
+   *
+   * The whole of the "one box per pass" rule: a row is crossed in well under a
+   * second, so a machine that just took one cannot reach a second box of the
+   * same row (`mortar_overdrive/pickups.ts`).
+   */
+  pickupCooldownUntilTick: number;
+  /**
+   * Tick this racer's nitro burst expires on; 0 when they are not boosting.
+   *
+   * It rides the vehicle kernel's OWN speed ceiling (`VehicleDrive.speedCap`,
+   * rewritten every tick by `applyVehicleSurface` like every other surface
+   * fact), so a burst is simply a run of ticks where the ceiling stands above
+   * the profile's maximum instead of on it.
+   */
+  nitroUntilTick: number;
+  /**
+   * The pickup effect this racer is HOLDING, or null with an empty slot.
+   *
+   * It is an ability on their action bar for as long as it sits here (the kit is
+   * republished whenever this moves), and casting it is what spends it. While it
+   * is full a box that draws another held effect falls back to the refill: no
+   * overwrite, no double stock.
+   */
+  heldEffect: MortarOverdriveHeldEffect | null;
+  /**
+   * The two halves of driving through oil, both ticks, both 0 before the first
+   * patch. `slickContactUntilTick` is how long this racer's CONTACT is already
+   * resolved for (a machine takes two or three ticks to cross a patch and that
+   * is one event, one ward, one grip loss); `slickGripUntilTick` is how long the
+   * grip is actually gone for, which a ward can leave at 0 by absorbing the
+   * contact.
+   */
+  slickContactUntilTick: number;
+  /** WHICH patch that contact deadline belongs to, or null before the first
+   *  one. Keyed per patch rather than per racer so lingering in one slick can
+   *  never buy immunity to a DIFFERENT one further down the road. */
+  slickContactId: number | null;
+  slickGripUntilTick: number;
+  /**
+   * DEV ONLY, and inert without `ctx.devCommands`: a stack of each held effect,
+   * standing in for the one-charge slot above while it lasts.
+   *
+   * A pickup grants one charge, which is right for a race and useless for tuning
+   * one: feeling a weapon means spending it lap after lap, and re-typing a chat
+   * command between two crossings is not a thing anyone can do at 45 yd/s. Both
+   * effects at once, because the bar reserves a key for each anyway, so a tuning
+   * session never has to choose which half of the kit it is judging.
+   *
+   * Read at the ONE spend site behind the same gate that let it be set, so a
+   * saved race can never carry it into a real one.
+   */
+  devHeldCharges: Record<MortarOverdriveHeldEffect, number> | null;
+  /** Tick the shell shock's grip loss expires on; 0 when the machine has not
+   *  been hit. */
+  groundBlastShockUntilTick: number;
+  /** The recovery ghost's window (mortar_overdrive/ghost.ts): the first tick it may
+   *  end on if clear, and the tick it ends on regardless. Both 0 while this
+   *  machine is not a ghost. The ghost AURA is the source of truth for whether
+   *  it is one; these only time it. */
+  ghostClearTick: number;
+  ghostCapTick: number;
+  /** The machines this one's ghost ended INSIDE (its cap ran out on an
+   *  overlap), each dropped the first tick the pair is apart. Their contacts
+   *  with this machine until then never count as rival contact
+   *  (`mortarOverdriveContactCounts`). Empty otherwise. */
+  ghostPartingPids: number[];
+  /** The tick those partings end on whatever the overlap
+   *  (`mortarOverdrivePartingEndTick`); 0 while there are none. */
+  ghostPartingEndTick: number;
+  /** Tick the current lap began (reset to GO, and to every later lap wrap).
+   *  Feeds the fast-lap deed; nothing else reads it. */
+  lapStartTick: number;
+  /** Deed-tracking state only, evaluated once at race end (docs/design/deeds.md):
+   *  whether this racer ever left the racing surface (verge excepted) or
+   *  traded a real bump with a rival, was ever hit by a Ground Blast, and was
+   *  ever classified dead last while still driving. Draws no rng. */
+  hadOffTrackContact: boolean;
+  hadRivalContact: boolean;
+  hitByShell: boolean;
+  wasLastPlace: boolean;
+}
+
+/**
+ * A shell in flight. It is not a moving point: the impact is decided at fire
+ * time and the sim only has to know where and when. That is cheaper, it is what
+ * lets one event carry the whole ground marker, and it removes the tunnelling
+ * a straight-line stepper has against a machine covering three yards a tick.
+ */
+export interface MortarOverdriveGroundBlast {
+  ownerPid: number;
+  /** Impact point, world coordinates on this race's copy of the circuit. */
+  x: number;
+  z: number;
+  impactTick: number;
+}
+
+interface MortarOverdriveReturn {
+  x: number;
+  z: number;
+  facing: number;
+  mountKey: string;
+}
+
+export interface MortarOverdriveMatch {
+  id: number;
+  /**
+   * Every pilot in frozen GRID order. Never mutated after seating: a pilot who
+   * quits is marked retired in `progress` instead, so a disconnect cannot
+   * renumber the grid and retroactively change what "Position 3/4" meant.
+   */
+  pids: number[];
+  /** `pids.length` at seat time, frozen for the same reason. */
+  gridSize: number;
+  phase: MortarOverdrivePhase;
+  /** Provisional while `loading`: both are rewritten when the countdown starts. */
+  goTick: number;
+  deadlineTick: number;
+  /** The loading cap: the countdown starts at this tick whoever is not ready. */
+  loadingUntilTick: number;
+  /** Pilots ready in the loading lobby: house pilots from the seat. */
+  ready: Set<number>;
+  /** Decided before GO (the field emptied in the lobby or the countdown): no
+   *  winner, no mortarOverdriveWins, no deed credit. */
+  voided: boolean;
+  finishTick: number | null;
+  winnerPid: number | null;
+  /**
+   * When the chase window shuts, or null until the winner is home. Armed once,
+   * by the first racer to cross the line, so the rest of the field is racing a
+   * clock that starts the moment there is something left to race for.
+   */
+  chaseUntilTick: number | null;
+  /** Final classification, first to last. Empty until the race is decided. */
+  finishOrder: number[];
+  /** Every pilot still driving on the tick the phase turned to racing, in grid
+   *  order; empty until then. Who started the race, for the win credit
+   *  (mortar_overdrive/credit.ts). */
+  seatedAtGo: number[];
+  returns: Map<number, MortarOverdriveReturn>;
+  preMatchPools: Map<number, ArenaReturnPools>;
+  /** What the seat's clean slate took off each pilot, handed back (aged) on
+   *  the return (mortar_overdrive/auras.ts). */
+  strippedAuras: Map<number, MortarOverdriveStrippedAuras>;
+  progress: Map<number, MortarOverdriveProgress>;
+  groundBlasts: MortarOverdriveGroundBlast[];
+  /**
+   * The pickup boxes on THIS copy of the circuit: which of them have been taken
+   * and which lap the leader was on when they were last put back.
+   *
+   * Per match rather than per circuit, which is what makes a practice lane's
+   * boxes its own: two races on two copies of the same circuit share the
+   * geometry (it is memoized content) and share nothing else.
+   */
+  pickups: MortarOverdrivePickupState;
+  /**
+   * The oil slicks standing on THIS copy of the circuit, in the order they were
+   * dropped (which is id order), plus the counter that names the next one.
+   *
+   * Per match for the same reason the boxes are: two practice lanes race two
+   * copies of one circuit and share nothing but its geometry. Cleared when the
+   * race ends, like the shells in flight.
+   */
+  slicks: MortarOverdriveSlick[];
+  nextSlickId: number;
+  /** Last tick each racer PAIR announced a bump, keyed by pair index, so the
+   *  throttle is per pair rather than per match and a bigger grid keeps one
+   *  duel from silencing another. */
+  bumpTicks: Map<number, number>;
+  /**
+   * WHICH circuit this race is on, as a `MORTAR_OVERDRIVE_CIRCUITS` id. Every
+   * geometry read resolves through it, so two races on different circuits can
+   * run side by side in the same realm.
+   */
+  circuitId: string;
+  /**
+   * WHERE that circuit's copy sits, as the offset every geometry read adds:
+   * {0, 0} for lane 0, a far z offset for any other lane (see
+   * `mortarOverdriveLaneOffset`). Carrying it on the match rather than reading a
+   * module constant is what lets practice laps run in parallel with the public
+   * race and with each other.
+   */
+  origin: MortarOverdrivePoint;
+  /** Set for a private practice race: whose it is, and which lane it holds. */
+  practice: { ownerPid: number; slot: number } | null;
+  /** How many laps this race runs. Practice is longer than the public race. */
+  totalLaps: number;
+}
+
+/** The Mortar Overdrive fields of PlayerMeta (sim.ts extends this). */
+export interface MortarOverdrivePlayerMeta {
+  // Temporary Mortar Overdrive kit/vehicle marker. Session-only and never
+  // persisted; null outside a live Mortar Overdrive match.
+  mortarOverdriveMatchId: number | null;
+  // Mortar Overdrive (docs/design/deeds.md, the Book of Deeds entry): first-place
+  // finishes in a rated (non-practice) heat, feeding the placing-based win
+  // deeds. Racing is placing-based (a four-pilot heat has a 2nd/3rd/4th, not a
+  // loss), so there is no mortarOverdriveLosses counterpart.
+  mortarOverdriveWins: number;
+}
+
+export interface MortarOverdriveState {
+  queue: number[];
+  /** The one PUBLIC race, on circuit copy 0: what the queue pairs into. */
+  match: MortarOverdriveMatch | null;
+  /**
+   * Private practice races, each on its own copy of the whole circuit. They are
+   * independent of the public slot in both directions: a queued race never
+   * blocks a practice lap, and a practice lap never blocks a queued race.
+   */
+  practices: MortarOverdriveMatch[];
+  nextMatchId: number;
+  /**
+   * The house pilots currently in the world, and the tier each drives at. ONE
+   * marker for "this player is a bot" (a bot set with the tier carried
+   * alongside, so no second structure has to be kept in step), read by
+   * the bot module to steer and reap them, by `racerInfo` to label the
+   * opponent, and by every social surface that must exclude them.
+   */
+  bots: Map<number, MortarOverdriveDriverTier>;
+  /** Tick each queued pid joined, so a lone racer can be backfilled after a
+   *  wait. Kept beside the queue rather than in it: the queue is a plain FIFO
+   *  of pids and every reader of it depends on that. */
+  queuedAtTick: Map<number, number>;
+}
+
+export function createMortarOverdriveState(): MortarOverdriveState {
+  return {
+    queue: [],
+    match: null,
+    practices: [],
+    nextMatchId: 1,
+    bots: new Map(),
+    queuedAtTick: new Map(),
+  };
+}
+
+/** Roster membership: is this pid on that race's frozen grid at all? */
+function matchHas(match: MortarOverdriveMatch | null, pid: number): boolean {
+  return !!match && match.pids.includes(pid);
+}
+
+/**
+ * Roster membership AND still inside the gameplay parenthesis. A racer who has
+ * been returned to where the seat found them (they quit, or the race ended and
+ * their six seconds of tableau are up) is still on `pids` for classification
+ * but must not resolve to this race for anything per-racer: not the HUD
+ * readout, not the mount re-forcing, not their eligibility to queue again.
+ */
+function matchSeats(match: MortarOverdriveMatch | null, pid: number): boolean {
+  return matchHas(match, pid) && match?.progress.get(pid)?.returned === false;
+}
+
+/**
+ * Is this racer still driving: neither across the line nor pulled off it.
+ * Exported because the bot module asks it too, and a second copy of the rule in
+ * the brain is a rule the race does not share.
+ */
+export function mortarOverdriveStillRunning(match: MortarOverdriveMatch, pid: number): boolean {
+  const progress = match.progress.get(pid);
+  return !!progress && progress.finishedTick === null && progress.retiredTick === null;
+}
+
+/**
+ * Is this racer standing on its OWN race's copy of the circuit? Only the race
+ * moves a seated pilot onto or off a lane (the seat and the return), and every
+ * lane is drivable band, which is why being on the band is not enough. Lane
+ * records are stable objects, so identity is the comparison, with no allocation
+ * on this per-racer, per-tick path.
+ */
+function onOwnLane(match: MortarOverdriveMatch, e: Entity): boolean {
+  const here = mortarOverdriveLaneAt(e.pos.x, e.pos.z);
+  return (
+    here !== null &&
+    here ===
+      mortarOverdriveLaneAt(
+        MORTAR_OVERDRIVE_ORIGIN.x + match.origin.x,
+        MORTAR_OVERDRIVE_ORIGIN.z + match.origin.z,
+      )
+  );
+}
+
+/** Seated and held on the grid: the loading lobby or the countdown. */
+function preRace(match: MortarOverdriveMatch): boolean {
+  return match.phase === 'loading' || match.phase === 'countdown';
+}
+
+/** Every live race, public first, as a fresh list for a cold caller. The order
+ *  is the tick order and the search order; nothing else depends on it. The
+ *  per-tick paths walk `match` and `practices` in place instead. */
+export function mortarOverdriveMatches(ctx: SimContext): MortarOverdriveMatch[] {
+  const mortarOverdrive = ctx.mortarOverdrive;
+  return mortarOverdrive.match
+    ? [mortarOverdrive.match, ...mortarOverdrive.practices]
+    : [...mortarOverdrive.practices];
+}
+
+/** The live race standing on the lane at `origin`, public first, or null. */
+function mortarOverdriveMatchAtOrigin(
+  ctx: SimContext,
+  origin: MortarOverdrivePoint,
+): MortarOverdriveMatch | null {
+  const mortarOverdrive = ctx.mortarOverdrive;
+  const at = (m: MortarOverdriveMatch) => m.origin.x === origin.x && m.origin.z === origin.z;
+  if (mortarOverdrive.match && at(mortarOverdrive.match)) return mortarOverdrive.match;
+  for (let i = 0; i < mortarOverdrive.practices.length; i++) {
+    if (at(mortarOverdrive.practices[i])) return mortarOverdrive.practices[i];
+  }
+  return null;
+}
+
+/**
+ * The race this pid is seated in, public or practice. Every per-racer surface
+ * (the HUD readout, the shell, forfeiting, the return position, the countdown
+ * lock) resolves through this, so a practice lap plays exactly like the real
+ * race rather than like a second, lesser mode.
+ */
+export function mortarOverdriveMatchOf(ctx: SimContext, pid: number): MortarOverdriveMatch | null {
+  const mortarOverdrive = ctx.mortarOverdrive;
+  if (matchSeats(mortarOverdrive.match, pid)) return mortarOverdrive.match;
+  // A plain loop: the movement gate and the server epoch ask this per racer
+  // per tick, and a find callback would allocate a closure each time.
+  for (let i = 0; i < mortarOverdrive.practices.length; i++) {
+    if (matchSeats(mortarOverdrive.practices[i], pid)) return mortarOverdrive.practices[i];
+  }
+  return null;
+}
+
+/**
+ * The circuit a race is on. Falls back to the practice circuit for an id no
+ * longer authored, which is a shape a live realm can hit exactly once: a race
+ * seated before a deploy that dropped its circuit.
+ */
+export function mortarOverdriveCircuitOf(match: MortarOverdriveMatch): MortarOverdriveCircuit {
+  return mortarOverdriveCircuitById(match.circuitId) ?? MORTAR_OVERDRIVE_PRACTICE_CIRCUIT;
+}
+
+/** A free private lane of the practice circuit, or -1 when every one is in use.
+ *  The public lane is never handed out. Allocation-free on purpose: this sits
+ *  on the 20 Hz self-wire path for every online player, and both counts here
+ *  are a handful at most. */
+export function mortarOverdriveFreePracticeSlot(ctx: SimContext): number {
+  for (const lane of mortarOverdrivePracticeLanes()) {
+    let used = false;
+    for (const m of ctx.mortarOverdrive.practices) {
+      if (m.practice?.slot === lane.index) {
+        used = true;
+        break;
+      }
+    }
+    if (!used) return lane.index;
+  }
+  return -1;
+}
+
+/** The seat's one eligibility test (combat aside, see mortarOverdriveInCombat),
+ *  for a caller that must refuse before it spends anything on a seat: the
+ *  Practice and dev-race entry points ask it before spawning house pilots. */
+export function mortarOverdriveEligible(ctx: SimContext, pid: number): boolean {
+  return eligible(ctx, pid);
+}
+
+function eligible(ctx: SimContext, pid: number): boolean {
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  if (!meta || !e || meta.leaving || e.dead || e.ghost) return false;
+  if (e.pos.x > DUNGEON_X_THRESHOLD) return false;
+  if (ctx.arenaMatches.has(pid) || isArenaQueued(ctx, pid)) return false;
+  if (ctx.duels.has(pid) || ctx.trades.has(pid)) return false;
+  if (ctx.cardDuelQueue.includes(pid) || ctx.cardDuels.has(pid)) return false;
+  if (mortarOverdriveHeldElsewhere(ctx, meta, e)) return false;
+  return mortarOverdriveMatchOf(ctx, pid) === null;
+}
+
+/**
+ * A pilot still in combat is never SEATED: the seat drops combat and strips
+ * every debuff, so a grid that took a fighter would be an escape from any
+ * fight. Kept apart from `eligible` on purpose: a queued pilot who is pulled
+ * into a fight keeps their place, and the grid seats the pilots behind them.
+ */
+export function mortarOverdriveInCombat(ctx: SimContext, pid: number): boolean {
+  return ctx.entities.get(pid)?.inCombat === true;
+}
+
+/** The first queued pilots free to sit now, in queue order, at most a grid: a
+ *  pilot still in a fight is passed over, never a reason to hold the rest. */
+export function mortarOverdriveSeatableWaiters(ctx: SimContext): number[] {
+  const waiters: number[] = [];
+  for (const pid of ctx.mortarOverdrive.queue) {
+    if (waiters.length === MORTAR_OVERDRIVE_GRID_SIZE) break;
+    if (!mortarOverdriveInCombat(ctx, pid)) waiters.push(pid);
+  }
+  return waiters;
+}
+
+export function mortarOverdriveSeatedOrQueued(ctx: SimContext, pid: number): boolean {
+  return ctx.mortarOverdrive.queue.includes(pid) || mortarOverdriveMatchOf(ctx, pid) !== null;
+}
+
+export function mortarOverdriveQueueJoin(ctx: SimContext, pid?: number): void {
+  const r = ctx.resolve(pid);
+  if (!r) return;
+  const id = r.meta.entityId;
+  if (mortarOverdriveSeatedOrQueued(ctx, id)) return;
+  if (mortarOverdriveInCombat(ctx, id)) {
+    ctx.error(id, "You can't do that while in combat.");
+    return;
+  }
+  if (!eligible(ctx, id)) return;
+  ctx.mortarOverdrive.queue.push(id);
+  ctx.mortarOverdrive.queuedAtTick.set(id, ctx.tickCount);
+  ctx.emit({
+    type: 'mortarOverdriveQueued',
+    position: ctx.mortarOverdrive.queue.length,
+    pid: id,
+  });
+}
+
+export function mortarOverdriveQueueLeave(ctx: SimContext, pid?: number): void {
+  const r = ctx.resolve(pid);
+  const id = r?.meta.entityId ?? pid;
+  if (id === undefined) return;
+  const index = ctx.mortarOverdrive.queue.indexOf(id);
+  if (index < 0) return;
+  ctx.mortarOverdrive.queue.splice(index, 1);
+  ctx.mortarOverdrive.queuedAtTick.delete(id);
+  ctx.emit({ type: 'mortarOverdriveUnqueued', pid: id });
+}
+
+/**
+ * Take a pid out of the queue WITHOUT announcing it. The bot module uses it on
+ * the two paths that seat a waiting racer rather than dropping them: the online
+ * backfill and a Practice start from the queue. Announcing "you left the queue"
+ * to someone who is being put on the grid this same tick would be a lie.
+ */
+export function mortarOverdriveQueueRemove(ctx: SimContext, pid: number): void {
+  const index = ctx.mortarOverdrive.queue.indexOf(pid);
+  if (index >= 0) ctx.mortarOverdrive.queue.splice(index, 1);
+  ctx.mortarOverdrive.queuedAtTick.delete(pid);
+}
+
+/**
+ * A world point on this race's copy of the circuit, expressed in the CANONICAL
+ * frame the spline and the gates are authored in. Every geometry read in this
+ * module goes through here (or its inverse below), which is the whole of what
+ * makes a practice copy work.
+ */
+export function mortarOverdriveToCanonical(match: MortarOverdriveMatch, x: number, z: number) {
+  return { x: x - match.origin.x, z: z - match.origin.z };
+}
+
+/** The inverse: a canonical point placed on this race's copy. */
+export function mortarOverdriveToWorld(match: MortarOverdriveMatch, x: number, z: number) {
+  return { x: x + match.origin.x, z: z + match.origin.z };
+}
+
+/** Reprojects a racer onto the circuit, refreshing the search hint and returning
+ *  the projection for the caller's own use. */
+function reproject(match: MortarOverdriveMatch, pid: number, e: Entity) {
+  const progress = match.progress.get(pid) as MortarOverdriveProgress;
+  const local = mortarOverdriveToCanonical(match, e.pos.x, e.pos.z);
+  const projection = mortarOverdriveTrack(mortarOverdriveCircuitOf(match)).project(
+    local.x,
+    local.z,
+    progress.trackIndex,
+  );
+  progress.trackIndex = projection.index;
+  return projection;
+}
+
+function seedProgress(match: MortarOverdriveMatch, pid: number, e: Entity): void {
+  const progress = match.progress.get(pid) as MortarOverdriveProgress;
+  const projection = reproject(match, pid, e);
+  const lapLength = mortarOverdriveTrack(mortarOverdriveCircuitOf(match)).length;
+  progress.lastS = projection.s;
+  progress.travelled = travelledFromArc(
+    progress.lap,
+    projection.s,
+    lapLength,
+    progress.distanceSinceWrap,
+  );
+  progress.resetS = projection.s;
+  progress.resetLap = progress.lap;
+  progress.resetDistanceSinceWrap = progress.distanceSinceWrap;
+}
+
+function placeRacer(ctx: SimContext, match: MortarOverdriveMatch, e: Entity, slot: number): void {
+  const start = mortarOverdriveStarts(mortarOverdriveCircuitOf(match))[slot];
+  const grid = mortarOverdriveToWorld(match, start.x, start.z);
+  e.pos = ctx.groundPos(grid.x, grid.z);
+  e.prevPos = { ...e.pos };
+  // A pilot seated mid-jump or mid-glide must not carry that fall onto the grid.
+  settleTeleportArrival(e);
+  e.facing = start.facing;
+  e.mountKey = MORTAR_OVERDRIVE_MOUNT_KEY;
+  e.mountCastKey = '';
+  e.mountCastRemaining = 0;
+  ctx.recalcPlayer(e);
+  ctx.rebucket(e);
+  // The seat is a relocation too: the same silent marker as a recovery makes
+  // the owning client snap onto the grid instead of gliding a short hop.
+  ctx.emit({ type: 'mortarOverdriveReset', pid: e.id });
+}
+
+/**
+ * Publish the weapon slot's remaining uses onto the entity's shared charge pool,
+ * which is what the action bar draws the badge from and what the wire already
+ * ships (`achg`). `fixed` is the whole point of the record: it marks the pool a
+ * per-race BUDGET, so the recharge tick leaves it alone and the cast gate can
+ * tell "spent out" from "cooling down".
+ */
+function publishWeaponCharges(e: Entity, held: MortarOverdriveWeaponSlot | null): void {
+  if (!held || held.charges === null) return;
+  e.abilityCharges ??= {};
+  e.abilityCharges[held.abilityId] = {
+    charges: held.charges,
+    // The pool's own ceiling, which nothing renders: the action bar draws its
+    // denominator off the `KnownAbility` the kit resolver built, never off this
+    // field. It is kept honest anyway (a pickup box adds charges with no cap, so
+    // the race's budget can be exceeded) because a pool whose count sits above
+    // its own max is a shape every future reader would have to special-case.
+    maxCharges: Math.max(
+      mortarOverdriveWeaponCharges(held.abilityId) ?? held.charges,
+      held.charges,
+    ),
+    recharge: 0,
+    rechargeLength: 0,
+    fixed: true,
+  };
+}
+
+/**
+ * Publish the HELD pickup effect as a one-charge ability, or take it away again.
+ *
+ * The whole of what makes a held effect castable: it rides the ordinary kit, so
+ * the action bar places it, the keybinds reach it, the gamepad and the mobile
+ * bar follow, and the cast goes down the same path the signature weapon's does.
+ * Spending it removes the ability from `meta.known` rather than leaving a spent
+ * button on the bar.
+ */
+function republishKit(ctx: SimContext, match: MortarOverdriveMatch, pid: number): void {
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  const progress = match.progress.get(pid);
+  if (!meta || !e || !progress) return;
+  const held = progress.heldWeapon;
+  const slots = mortarOverdriveHeldSlots(ctx, progress);
+  meta.known = held ? resolveMortarOverdriveKit(held.abilityId, held.charges, slots) : [];
+  meta.wireRev++;
+  publishWeaponCharges(e, held);
+  publishHeldEffectCharge(e, slots);
+}
+
+/** Every held effect there is, derived from the ability table rather than
+ *  written out again: that record is keyed by the union, so its keys cannot fall
+ *  out of step with it. */
+const MORTAR_OVERDRIVE_HELD_EFFECTS = Object.keys(
+  MORTAR_OVERDRIVE_EFFECT_ABILITIES,
+) as MortarOverdriveHeldEffect[];
+
+/**
+ * What this pilot is holding, as the kit and the charge badges see it: the one
+ * charge a pickup granted, or the dev stack standing in for it.
+ *
+ * The ONE place the two are reconciled, so every reader downstream (the kit, the
+ * bar badges, the spend gate) is looking at the same answer.
+ */
+function mortarOverdriveHeldSlots(
+  ctx: SimContext,
+  progress: MortarOverdriveProgress,
+): readonly MortarOverdriveHeldSlot[] {
+  const stock = ctx.devCommands ? progress.devHeldCharges : null;
+  const stocked = stock
+    ? MORTAR_OVERDRIVE_HELD_EFFECTS.map((effect) => ({ effect, charges: stock[effect] })).filter(
+        (slot) => slot.charges > 0,
+      )
+    : [];
+  // A DRAINED stack stands aside rather than shadowing the slot: the record is
+  // still there once every entry hits zero, and a stack tested by existence
+  // left a pilot who then took an ordinary box holding an effect with no button
+  // and no way to re-acquire it (a full slot turns every later box into a
+  // refill). The spend site falls through the same way, on the same test.
+  if (stocked.length > 0) return stocked;
+  return progress.heldEffect ? [{ effect: progress.heldEffect, charges: 1 }] : [];
+}
+
+/**
+ * The held effects' own charge pools: what the pilot is holding, `fixed` so the
+ * recharge tick never refills them, and REMOVED the moment a slot empties, so a
+ * spent effect cannot be cast a second time even if a stale bar still points at
+ * it.
+ */
+function publishHeldEffectCharge(e: Entity, slots: readonly MortarOverdriveHeldSlot[]): void {
+  for (const abilityId of Object.values(MORTAR_OVERDRIVE_EFFECT_ABILITIES)) {
+    if (slots.some((slot) => MORTAR_OVERDRIVE_EFFECT_ABILITIES[slot.effect] === abilityId))
+      continue;
+    if (e.abilityCharges) delete e.abilityCharges[abilityId];
+  }
+  for (const slot of slots) {
+    e.abilityCharges ??= {};
+    e.abilityCharges[MORTAR_OVERDRIVE_EFFECT_ABILITIES[slot.effect]] = {
+      charges: slot.charges,
+      maxCharges: slot.charges,
+      recharge: 0,
+      rechargeLength: 0,
+      fixed: true,
+    };
+  }
+}
+
+function standardizeRacer(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  meta: PlayerMeta,
+  e: Entity,
+): void {
+  stowPetForDelve(ctx, meta.entityId);
+  meta.mortarOverdriveMatchId = match.id;
+  const held = match.progress.get(meta.entityId)?.heldWeapon ?? null;
+  meta.known = held ? resolveMortarOverdriveKit(held.abilityId, held.charges) : [];
+  meta.wireRev++;
+  // Behind the wheel: the movement kernel drives anyone carrying this, so it is
+  // handed out exactly here and taken back in restoreRacer.
+  e.drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
+  // After the reset, never before: it clears the charge pools outright.
+  ctx.resetForArena(e);
+  // The clean slate stripped every stealth aura, but the cached flag would
+  // only follow at the next tick's aura pass, and the server's interest pin
+  // streams a seated racer past the stealth check from this pass on.
+  e.stealthed = e.auras.some((aura) => aura.kind === 'stealth');
+  publishWeaponCharges(e, held);
+}
+
+function restoreRacer(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  meta: PlayerMeta,
+  e: Entity,
+): void {
+  const ret = match.returns.get(meta.entityId);
+  meta.mortarOverdriveMatchId = null;
+  meta.known = abilitiesKnownAt(meta.cls, e.level, ctx.playerMods(meta));
+  meta.wireRev++;
+  e.mountKey = ret?.mountKey ?? '';
+  e.drive = null;
+  e.mountCastKey = '';
+  e.mountCastRemaining = 0;
+  ctx.resetForArena(e);
+  const stripped = match.strippedAuras.get(meta.entityId);
+  if (stripped) restoreMortarOverdriveStrippedAuras(ctx, e, stripped);
+  const pools = match.preMatchPools.get(meta.entityId);
+  if (pools) restoreArenaReturnPools(ctx, e, pools);
+  if (stripped) restoreMortarOverdriveParkedPools(e, stripped);
+  restorePetFromDelveStash(ctx, meta.entityId);
+  if (ret) {
+    e.pos = ctx.groundPos(ret.x, ret.z);
+    e.prevPos = { ...e.pos };
+    settleTeleportArrival(e);
+    e.facing = ret.facing;
+    ctx.rebucket(e);
+    ctx.emit({ type: 'respawn', pid: meta.entityId });
+  }
+}
+
+/** A private practice race's identity: whose it is, and which copy of the
+ *  circuit it holds for the duration. */
+export interface MortarOverdrivePracticeSeat {
+  ownerPid: number;
+  slot: number;
+}
+
+/**
+ * Seat a full grid and drop the flag. Exported because the bot module starts a
+ * match without going through the queue at all (the Practice button races you
+ * immediately, and the online backfill fills a short queue with house pilots);
+ * `tryMatch` below is the queue's own caller.
+ *
+ * `pids` is the grid, in slot order, and must be exactly
+ * `MORTAR_OVERDRIVE_GRID_SIZE` distinct eligible pilots: a race is four abreast or
+ * it does not start.
+ *
+ * With no `practice` seat this claims the ONE public circuit and refuses if it
+ * is taken; with one it runs on that private copy and refuses nothing, which is
+ * what keeps a practice lap independent of everyone else's race.
+ *
+ * Returns false and changes nothing when it cannot seat them, so the caller can
+ * put them back.
+ */
+export function mortarOverdriveStartMatch(
+  ctx: SimContext,
+  pids: readonly number[],
+  practice?: MortarOverdrivePracticeSeat,
+  circuitId?: string,
+): boolean {
+  return startMatch(ctx, pids, practice, circuitId);
+}
+
+/**
+ * The circuit a queued race runs on: ONE draw from the competition pool.
+ *
+ * One of the Mortar Overdrive's two rng sites, with the pickup take's one weighted draw in
+ * `tickPickups` (a race in progress also reaches the shared stream the way any
+ * combat does: a Ground Blast goes through the ordinary `castAbility` path, and
+ * whatever that draws for the pilot's gear is the combat system's). Where it
+ * sits in the tick is load bearing (src/sim/CLAUDE.md). It happens at SEAT
+ * time, inside the caller that has already committed to starting, so all four
+ * pilots learn the circuit on the same tick, and it happens exactly once per
+ * public race: a start the caller can still refuse must not perturb the shared
+ * stream, which is why every refusal in `startMatch` runs above the call.
+ *
+ * A pool of one still draws. The site must not appear and disappear with the
+ * pool size, or adding the second circuit would silently re-order every draw
+ * that follows it in the world.
+ */
+function drawCompetitionCircuit(ctx: SimContext): MortarOverdriveCircuit {
+  const pool = mortarOverdriveCompetitionCircuits();
+  return pool[ctx.rng.int(0, pool.length - 1)];
+}
+
+/**
+ * `circuitId` FORCES the circuit instead of resolving it from the seat, which is
+ * how a caller races a specific one: an unauthored id falls through to the
+ * ordinary resolution rather than refusing, so a stale id can never wedge a
+ * caller into starting nothing. A circuit forced AND RESOLVED never draws, so
+ * `/dev overdrive` cannot move the world's draw order; an id that does not resolve
+ * falls through to the ordinary resolution and therefore DOES draw, which is
+ * the same fallthrough this comment documents, seen from the stream's side.
+ */
+function startMatch(
+  ctx: SimContext,
+  pids: readonly number[],
+  practice?: MortarOverdrivePracticeSeat,
+  circuitId?: string,
+): boolean {
+  // The public circuit is a single slot; a practice copy is claimed by its
+  // caller and is nobody else's to take.
+  if (!practice && ctx.mortarOverdrive.match) return false;
+  if (pids.length !== MORTAR_OVERDRIVE_GRID_SIZE) return false;
+  if (new Set(pids).size !== pids.length) return false;
+  if (!pids.every((pid) => eligible(ctx, pid) && !mortarOverdriveInCombat(ctx, pid))) return false;
+  const grid = pids.map((pid) => ({
+    pid,
+    e: ctx.entities.get(pid) as Entity,
+    meta: ctx.players.get(pid) as PlayerMeta,
+  }));
+  const profile = vehicleProfile(MORTAR_OVERDRIVE_VEHICLE_KEY);
+  // Practice always takes the practice circuit OUTRIGHT, never a draw: every
+  // offline practice session would otherwise perturb the global draw order. A
+  // queued race draws one from the competition pool, and only reaches the draw
+  // once nothing above can still refuse the start.
+  const forced = circuitId === undefined ? undefined : mortarOverdriveCircuitById(circuitId);
+  const circuit =
+    forced ?? (practice ? MORTAR_OVERDRIVE_PRACTICE_CIRCUIT : drawCompetitionCircuit(ctx));
+  const id = ctx.mortarOverdrive.nextMatchId++;
+  const loadingUntilTick = ctx.tickCount + MORTAR_OVERDRIVE_LOADING_MAX_TICKS;
+  const returns = new Map<number, MortarOverdriveReturn>();
+  const pools = new Map<number, ArenaReturnPools>();
+  const strippedAuras = new Map<number, MortarOverdriveStrippedAuras>();
+  for (const { pid, e } of grid) {
+    returns.set(pid, {
+      x: e.pos.x,
+      z: e.pos.z,
+      facing: e.facing,
+      mountKey: e.mountKey,
+    });
+    pools.set(pid, snapshotArenaReturnPools(e));
+    strippedAuras.set(pid, snapshotMortarOverdriveStrippedAuras(e, ctx.tickCount));
+  }
+  const match: MortarOverdriveMatch = {
+    id,
+    pids: pids.slice(),
+    gridSize: pids.length,
+    phase: 'loading',
+    goTick: loadingUntilTick + MORTAR_OVERDRIVE_COUNTDOWN_TICKS,
+    deadlineTick:
+      loadingUntilTick + MORTAR_OVERDRIVE_COUNTDOWN_TICKS + circuit.timeLimitSeconds * TICK_RATE,
+    loadingUntilTick,
+    ready: new Set(pids.filter((pid) => ctx.mortarOverdrive.bots.has(pid))),
+    voided: false,
+    finishTick: null,
+    winnerPid: null,
+    chaseUntilTick: null,
+    finishOrder: [],
+    seatedAtGo: [],
+    returns,
+    preMatchPools: pools,
+    strippedAuras,
+    progress: new Map(
+      pids.map((pid) => [
+        pid,
+        {
+          lap: 1,
+          finishedTick: null,
+          finishFraction: 1,
+          retiredTick: null,
+          returned: false,
+          trackIndex: 0,
+          lastS: 0,
+          distanceSinceWrap: 0,
+          travelled: 0,
+          nextResetGate: 0,
+          resetS: 0,
+          resetLap: 1,
+          resetDistanceSinceWrap: 0,
+          stuckTicks: 0,
+          resetLockedUntilTick: 0,
+          excursion: noMortarOverdriveExcursion(),
+          excursionLap: 1,
+          excursionDistanceSinceWrap: 0,
+          cutReturnUntilTick: 0,
+          wrongWayTicks: 0,
+          wrongWay: false,
+          heldWeapon: {
+            abilityId: profile.weaponAbilityId,
+            charges: mortarOverdriveWeaponCharges(profile.weaponAbilityId),
+          },
+          pickupCooldownUntilTick: 0,
+          nitroUntilTick: 0,
+          heldEffect: null,
+          slickContactUntilTick: 0,
+          slickContactId: null,
+          slickGripUntilTick: 0,
+          devHeldCharges: null,
+          groundBlastShockUntilTick: 0,
+          ghostClearTick: 0,
+          ghostCapTick: 0,
+          ghostPartingPids: [],
+          ghostPartingEndTick: 0,
+          lapStartTick: ctx.tickCount,
+          hadOffTrackContact: false,
+          hadRivalContact: false,
+          hitByShell: false,
+          wasLastPlace: false,
+        },
+      ]),
+    ),
+    groundBlasts: [],
+    bumpTicks: new Map(),
+    // Every box present at the flag, on every copy of the circuit, and a clean
+    // circuit: no oil is down until somebody draws some.
+    pickups: createMortarOverdrivePickupState(circuit),
+    slicks: [],
+    nextSlickId: 1,
+    circuitId: circuit.id,
+    // A practice race holds the private lane its caller claimed; a queued race
+    // stands on its circuit's PUBLIC lane, which is lane 0 only while the
+    // garden circuit is the one being raced.
+    origin: mortarOverdriveLaneOffset(
+      practice ? practice.slot : mortarOverdrivePublicLane(circuit),
+    ),
+    practice: practice ? { ownerPid: practice.ownerPid, slot: practice.slot } : null,
+    totalLaps: practice ? circuit.practiceLaps : circuit.laps,
+  };
+  if (practice) ctx.mortarOverdrive.practices.push(match);
+  else ctx.mortarOverdrive.match = match;
+  for (const { pid, meta, e } of grid) {
+    standardizeRacer(ctx, match, meta, e);
+    const stripped = strippedAuras.get(pid);
+    if (stripped) settleMortarOverdriveStrippedAuras(stripped, e);
+  }
+  // Slot order IS seat order, so the grid row reads left to right in `pids`.
+  for (let slot = 0; slot < grid.length; slot++) {
+    placeRacer(ctx, match, grid[slot].e, slot);
+  }
+  // Seed the ranking key from the grid so the HUD reads the right order during
+  // the countdown, before the first racing tick reprojects anyone.
+  for (const { pid, e } of grid) seedProgress(match, pid, e);
+  for (const pid of pids) {
+    ctx.emit({
+      type: 'mortarOverdriveFound',
+      matchId: id,
+      // Everyone else on the grid, in slot order. The banner names the field a
+      // pilot is up against, which at four is a list rather than one rival.
+      rivalNames: pids
+        .filter((other) => other !== pid)
+        .map((other) => ctx.players.get(other)?.name ?? ''),
+      pid,
+    });
+  }
+  return true;
+}
+
+/** One racer's row for the shared comparator, live or final. */
+function standingEntry(
+  match: MortarOverdriveMatch,
+  pid: number,
+  slot: number,
+): MortarOverdriveStandingEntry {
+  const p = match.progress.get(pid) as MortarOverdriveProgress;
+  return {
+    pid,
+    travelled: p.travelled,
+    finishedTick: p.finishedTick,
+    finishFraction: p.finishFraction,
+    retiredTick: p.retiredTick,
+    slot,
+  };
+}
+
+/** The whole grid, ordered first to last. The live standings strip and the
+ *  final classification are this same call at different moments. */
+function classify(match: MortarOverdriveMatch): MortarOverdriveStandingEntry[] {
+  return mortarOverdriveClassification(
+    match.pids.map((pid, slot) => standingEntry(match, pid, slot)),
+  );
+}
+
+/**
+ * Is there still a race to run? Three ways there is not, and only the last one
+ * is a judgement call:
+ *
+ *  - nobody is still driving (they all finished, quit, or both);
+ *  - the only pilots still driving are house pilots, so the human who called
+ *    for the race has gone and nobody is watching;
+ *  - one lone survivor is left because everyone else QUIT. Three lonely laps is
+ *    not a race. A survivor left alone because the others FINISHED still gets to
+ *    cross the line for their placing, which is why the finished case is tested.
+ */
+function raceIsDecided(ctx: SimContext, match: MortarOverdriveMatch): boolean {
+  const running = match.pids.filter((pid) => mortarOverdriveStillRunning(match, pid));
+  if (running.length === 0) return true;
+  if (!running.some((pid) => !ctx.mortarOverdrive.bots.has(pid))) return true;
+  const anyFinished = match.pids.some((pid) => match.progress.get(pid)?.finishedTick !== null);
+  return running.length === 1 && !anyFinished;
+}
+
+/**
+ * The result tableau for ONE pilot: what they scored, and how long until the
+ * Society puts them back where it found them.
+ *
+ * The classification is passed in rather than read off the match, because a
+ * quitter is told their result while the race is still running and the match
+ * has no final order yet.
+ */
+function emitResult(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  ranked: readonly MortarOverdriveStandingEntry[],
+  winnerPid: number | null,
+): void {
+  const placing = Math.max(1, ranked.findIndex((entry) => entry.pid === pid) + 1);
+  const winnerName = winnerPid === null ? '' : (ctx.players.get(winnerPid)?.name ?? '');
+  ctx.emit({
+    type: 'mortarOverdriveResult',
+    won: winnerPid === pid,
+    forfeited: match.progress.get(pid)?.retiredTick !== null,
+    winnerName,
+    placing,
+    gridSize: match.gridSize,
+    returnTicks: MORTAR_OVERDRIVE_RETURN_TICKS,
+    voided: match.voided,
+    pid,
+  });
+}
+
+function endMatch(ctx: SimContext, match: MortarOverdriveMatch): void {
+  if (match.phase === 'finished') return;
+  // Only a retirement can decide a race before GO, and a race nobody started
+  // has no winner to credit.
+  match.voided = preRace(match);
+  match.phase = 'finished';
+  match.finishTick = ctx.tickCount;
+  match.groundBlasts.length = 0;
+  // The circuit is swept with the flag: no shell in the air, no oil on the road,
+  // and nobody carrying a ward into a tableau where nothing can hit them. The
+  // whole Mortar Overdrive kit belongs to the race, not to the six seconds after it.
+  match.slicks.length = 0;
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    // A returned pilot is back on their class kit where the seat found them
+    // (possibly seated in a NEWER race): sweeping them here would republish the
+    // old race's kit over whatever they hold now.
+    if (!progress || progress.returned) continue;
+    progress.nitroUntilTick = 0;
+    progress.slickGripUntilTick = 0;
+    progress.slickContactUntilTick = 0;
+    progress.slickContactId = null;
+    // The ward goes with the flag: it is a race effect, and a shield standing
+    // through a tableau where nothing can hit anyone is chrome.
+    const racer = ctx.entities.get(pid);
+    if (racer) consumeMortarOverdriveWard(ctx, racer);
+    // And the ghost: nothing collides in a tableau, so it would only be a veil
+    // telling every rival something that no longer matters.
+    clearMortarOverdriveGhost(racer, progress);
+    // The kit goes with it too: an effect held at the flag is spent on nothing,
+    // and a button that stays on the bar through the tableau is a button that lies.
+    // The dev stack goes with the race that granted it, so a second race never
+    // inherits an armoury nobody asked it for.
+    //
+    // The republish is gated on EITHER emptying, not on the slot alone: a dev
+    // grant fills the stack and leaves `heldEffect` null, so a slot-only test
+    // skipped the republish and left the whole granted kit on the bar for the
+    // tableau, which is the exact thing the sentence above forbids.
+    const heldSomething = progress.heldEffect !== null || progress.devHeldCharges !== null;
+    progress.devHeldCharges = null;
+    progress.heldEffect = null;
+    if (heldSomething) republishKit(ctx, match, pid);
+    // The surface pass stops running the moment the phase leaves `racing`, so a
+    // ceiling raised by a nitro would stand for the whole tableau (and be the
+    // state a `resetVehicleDrive` below does NOT clear: it zeroes the motion,
+    // never the multipliers).
+    const drive = ctx.entities.get(pid)?.drive;
+    if (drive) {
+      drive.speedCap = 1;
+      // And the slide ceiling with it, for the same reason and on the same
+      // clock: it is written by that same surface pass, it rides the wire, and
+      // a mirror would otherwise show a machine free to slide twice as far for
+      // the whole tableau.
+      drive.slipCap = 1;
+    }
+  }
+  const ranked = classify(match);
+  match.finishOrder = ranked.map((entry) => entry.pid);
+  // A dead heat is only ever for the LEAD, and only between two machines that
+  // never crossed the line: the race ran out of time with them level. A tie for
+  // third is a placing, not a draw.
+  match.winnerPid =
+    match.voided || mortarOverdriveLeadIsDeadHeat(ranked, MORTAR_OVERDRIVE_DEAD_HEAT_YARDS)
+      ? null
+      : (ranked[0]?.pid ?? null);
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    // A pilot already back where the seat found them (they quit and their
+    // tableau ran out, or they disconnected) has had their result and is gone.
+    if (progress?.returned) continue;
+    const drive = ctx.entities.get(pid)?.drive;
+    if (drive) {
+      resetVehicleDrive(drive);
+      drive.controlsLocked = true;
+    }
+    // A quitter already saw their own tableau the moment they pulled off; the
+    // race ending later does not owe them a second one.
+    if (progress?.retiredTick !== null) continue;
+    emitResult(ctx, match, pid, ranked, match.winnerPid);
+  }
+  // Book of Deeds (docs/design/deeds.md): placing-based, since a four-pilot
+  // heat has a whole finishing order rather than a win/lose pair. A house
+  // pilot never banks a win or earns a deed; only a rated (non-practice) heat
+  // counts (see onMortarOverdriveRaceEndForDeeds). The practice gate matters here too,
+  // independently of that call: without it a private practice win would
+  // permanently inflate the persisted meter and unlock the win deeds at the
+  // next full deeds pass, the same bug class the retired Vale Cup's `rated`
+  // gate on `applyStanding` existed to prevent.
+  //
+  // A win also needs another human who started the heat and raced it
+  // (mortar_overdrive/credit.ts): a solo queuer the backfill seats against three
+  // house pilots races a rated heat and keeps the finish deeds, but beating
+  // the house (or an idle human) alone banks no win and no win deed.
+  if (match.voided) return;
+  const bots = ctx.mortarOverdrive.bots;
+  if (
+    match.practice === null &&
+    match.winnerPid !== null &&
+    !bots.has(match.winnerPid) &&
+    mortarOverdriveHadHumanRival(match, bots, match.winnerPid)
+  ) {
+    const winnerMeta = ctx.players.get(match.winnerPid);
+    if (winnerMeta) winnerMeta.mortarOverdriveWins++;
+  }
+  const deedEntries: deedsMod.MortarOverdriveRaceDeedEntry[] = match.pids.map((pid) => {
+    const progress = match.progress.get(pid) as MortarOverdriveProgress;
+    return {
+      pid,
+      bot: bots.has(pid),
+      finished: progress.finishedTick !== null,
+      clean: !progress.hadRivalContact && !progress.hadOffTrackContact,
+      won: match.winnerPid === pid,
+      humanRival: mortarOverdriveHadHumanRival(match, bots, pid),
+      comeback: progress.wasLastPlace && progress.hitByShell,
+    };
+  });
+  deedsMod.onMortarOverdriveRaceEndForDeeds(ctx, match.practice !== null, deedEntries);
+}
+
+/** Close the gameplay parenthesis for ONE racer: kit, mount, pools, position.
+ *  They stay on the frozen grid so the classification still names them. */
+function returnRacer(ctx: SimContext, match: MortarOverdriveMatch, pid: number): void {
+  const progress = match.progress.get(pid);
+  if (!progress || progress.returned) return;
+  progress.returned = true;
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  // The ghost and its partings are this race's to time, and the race no longer
+  // holds this pilot: none of it may follow them into the next one.
+  clearMortarOverdriveGhost(e, progress);
+  if (meta && e) restoreRacer(ctx, match, meta, e);
+}
+
+function teardownMatch(ctx: SimContext, match: MortarOverdriveMatch): void {
+  for (const pid of match.pids) returnRacer(ctx, match, pid);
+  if (ctx.mortarOverdrive.match === match) ctx.mortarOverdrive.match = null;
+  // Free the practice copy for the next player. Its house pilots are reaped by
+  // the bot module on the same tick, by its own "not seated anywhere" rule.
+  const practiceIndex = ctx.mortarOverdrive.practices.indexOf(match);
+  if (practiceIndex >= 0) ctx.mortarOverdrive.practices.splice(practiceIndex, 1);
+}
+
+/**
+ * Pull one pilot off the circuit. A forfeit and a disconnect are the same act
+ * and take the same arm: the racer is classified LAST and the race carries on
+ * for everyone else. With four on the grid, one player quitting must not end
+ * three other people's race, which is the one place this module deliberately
+ * does more than generalize its two-pilot self.
+ */
+function retireRacer(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  restoreImmediately: boolean,
+): void {
+  const progress = match.progress.get(pid);
+  if (!progress || progress.returned) return;
+  if (progress.retiredTick !== null) {
+    // Already in their tableau. A disconnect inside the six-second window must
+    // still close the parenthesis before the leave save, or the save captures
+    // full pools, cleared cooldowns, and the loaned kit.
+    if (restoreImmediately) returnRacer(ctx, match, pid);
+    return;
+  }
+  if (match.phase === 'finished' || progress.finishedTick !== null) {
+    // The race is over for them, honorably: a banked crossing survives leaving.
+    // Re-marking them retired would reclassify a finisher as a quitter (handing
+    // the win to someone who never crossed) or restart a tableau they already
+    // had, so leaving now just takes them home.
+    returnRacer(ctx, match, pid);
+    return;
+  }
+  progress.retiredTick = ctx.tickCount;
+  progress.finishedTick = null;
+  const racer = ctx.entities.get(pid);
+  // A quitter is out of the race and no longer a target, so a ward left up
+  // through their tableau is chrome, and every rival would see it as a live
+  // gold veil on a machine nothing can hit.
+  if (racer) consumeMortarOverdriveWard(ctx, racer);
+  clearMortarOverdriveGhost(racer, progress);
+  const drive = racer?.drive;
+  if (drive) {
+    resetVehicleDrive(drive);
+    drive.controlsLocked = true;
+  }
+  if (raceIsDecided(ctx, match)) {
+    endMatch(ctx, match);
+    emitResult(ctx, match, pid, classify(match), match.winnerPid);
+  } else {
+    // The race goes on. This pilot alone gets the tableau, off the
+    // classification as it stands right now: they are last, and nobody has won
+    // anything yet.
+    emitResult(ctx, match, pid, classify(match), null);
+  }
+  // A disconnect must restore the persisted character before the host saves it.
+  // A voluntary forfeit keeps the tableau up for the normal six seconds first.
+  if (restoreImmediately) returnRacer(ctx, match, pid);
+}
+
+export function mortarOverdriveForfeit(
+  ctx: SimContext,
+  pid?: number,
+  restoreImmediately = false,
+): void {
+  const id = ctx.resolve(pid)?.meta.entityId ?? pid;
+  if (id === undefined) return;
+  mortarOverdriveQueueLeave(ctx, id);
+  const match = mortarOverdriveMatchOf(ctx, id);
+  if (!match) return;
+  retireRacer(ctx, match, id, restoreImmediately);
+}
+
+/** The loading lobby's ready command, from the pilot's own client. */
+export function mortarOverdriveReady(ctx: SimContext, pid?: number): void {
+  const id = ctx.resolve(pid)?.meta.entityId;
+  if (id === undefined) return;
+  const match = mortarOverdriveMatchOf(ctx, id);
+  if (match) markMortarOverdriveReady(match, id);
+}
+
+/** A pilot whose client dropped has to say it is ready again. */
+export function mortarOverdriveUnready(ctx: SimContext, pid: number): void {
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  if (match) clearMortarOverdriveReady(match, pid);
+}
+
+/** Where a reset puts a racer, and what it hands back to them. */
+interface MortarOverdriveResetTarget {
+  /** Arc position on the centerline, yards. */
+  s: number;
+  /** The lap bookkeeping to restore with it, so no reset can bank distance. */
+  lap: number;
+  distanceSinceWrap: number;
+  /** Ticks of settle lock after the teleport; 0 hands control straight back. */
+  lockTicks: number;
+}
+
+/**
+ * Put a racer back on the centerline at `target.s`, at a standstill facing
+ * along the track, with their lap bookkeeping rewound to what it was there.
+ *
+ * ONE body for all three resets on the circuit, because the difference between
+ * them is only WHERE and how long the lock is: manual recovery and the stuck
+ * arm go back to the last ordered anchor, and the referee's cut return goes
+ * back to the point the racer left the road.
+ */
+function resetRacerTo(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  target: MortarOverdriveResetTarget,
+): boolean {
+  const racer = ctx.entities.get(pid);
+  const progress = match.progress.get(pid);
+  if (
+    match.phase !== 'racing' ||
+    !racer?.drive ||
+    !progress ||
+    !mortarOverdriveStillRunning(match, pid) ||
+    ctx.tickCount < progress.resetLockedUntilTick
+  )
+    return false;
+
+  const track = mortarOverdriveTrack(mortarOverdriveCircuitOf(match));
+  const anchor = track.pointAt(target.s);
+  const world = mortarOverdriveToWorld(match, anchor.x, anchor.z);
+  racer.pos = ctx.groundPos(world.x, world.z);
+  racer.prevPos = { ...racer.pos };
+  racer.facing = Math.atan2(anchor.tx, anchor.tz);
+  resetVehicleDrive(racer.drive);
+  racer.drive.controlsLocked = target.lockTicks > 0;
+  racer.drive.gripMult = 1;
+  racer.drive.dragMult = 1;
+  racer.drive.speedCap = 1;
+  racer.drive.slipCap = 1;
+
+  progress.lap = target.lap;
+  progress.lastS = anchor.s;
+  progress.distanceSinceWrap = target.distanceSinceWrap;
+  progress.travelled = travelledFromArc(
+    target.lap,
+    anchor.s,
+    track.length,
+    target.distanceSinceWrap,
+  );
+  progress.trackIndex = track.project(anchor.x, anchor.z, progress.trackIndex).index;
+  progress.stuckTicks = 0;
+  progress.wrongWayTicks = 0;
+  progress.wrongWay = false;
+  // A machine put back on the racing line is put back CLEAN: whatever surface
+  // it was fighting is behind it, and a burst it can no longer spend (the
+  // recovery stopped it dead) is not a burst it keeps. The shell shock goes
+  // with the rest (operator call, 2026-08-06): a recovery is a fresh start,
+  // not a way to serve out a control penalty mid-teleport. The ward is
+  // untouched: it is a thing the pilot won, not a state of the ground under
+  // them.
+  progress.nitroUntilTick = 0;
+  progress.slickGripUntilTick = 0;
+  progress.slickContactUntilTick = 0;
+  progress.slickContactId = null;
+  progress.groundBlastShockUntilTick = 0;
+  // A racer put back on the racing line is on it: whatever excursion carried
+  // them here is over, and the odometer starts again from the next one.
+  progress.excursion = noMortarOverdriveExcursion();
+  // Commands land between fixed ticks. The first movement pass observes N+1,
+  // so an exclusive bound needs the extra tick to hold exactly `lockTicks`
+  // passes.
+  progress.resetLockedUntilTick = target.lockTicks > 0 ? ctx.tickCount + target.lockTicks + 1 : 0;
+  racer.auras = racer.auras.filter((aura) => aura.id !== MORTAR_OVERDRIVE_OFF_TRACK_AURA);
+  // Put back where a rival may be arriving at full speed: a ghost until clear.
+  applyMortarOverdriveGhost(ctx, racer, progress);
+  ctx.rebucket(racer);
+  // Recovery is a position discontinuity for the online predictor, but it is
+  // not a resurrection: a dedicated silent event avoids the generic respawn
+  // message while still making a short rewind snap on the owning client.
+  ctx.emit({ type: 'mortarOverdriveReset', pid });
+  return true;
+}
+
+/** Put a racer back on the last ordered recovery anchor. Manual recovery adds a
+ * settle lock; automatic recovery has already charged its three-second stop and
+ * returns control immediately. */
+function resetRacerToRecoveryAnchor(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  manual: boolean,
+): boolean {
+  const progress = match.progress.get(pid);
+  if (!progress) return false;
+  return resetRacerTo(ctx, match, pid, {
+    s: progress.resetS,
+    lap: progress.resetLap,
+    distanceSinceWrap: progress.resetDistanceSinceWrap,
+    lockTicks: manual
+      ? MORTAR_OVERDRIVE_RESET_LOCK_TICKS
+      : MORTAR_OVERDRIVE_AUTO_RECOVERY_LOCK_TICKS,
+  });
+}
+
+/** Authoritative manual recovery entry point, shared by offline and online worlds. */
+export function mortarOverdriveResetPosition(ctx: SimContext, pid?: number): void {
+  const id = ctx.resolve(pid)?.meta.entityId ?? pid;
+  if (id === undefined) return;
+  const match = mortarOverdriveMatchOf(ctx, id);
+  if (match) resetRacerToRecoveryAnchor(ctx, match, id, true);
+}
+
+/**
+ * What serializeCharacter saves for a pilot seated in a Mortar Overdrive heat, laid
+ * over the live fields it already wrote, or null when not seated. The race runs
+ * on the arena clean slate (full pools, no cooldowns, no sickness) and only a
+ * clean return hands the real values back, so a save taken mid-race (the
+ * autosave, a shutdown) writes what the pilot carried in, as that return will
+ * restore it: the pre-race RETURN spot (never a mid-track pose, which would
+ * strand the character on the circuit), the hp and resource, the cooldowns and
+ * charge pools, and the recovery sickness owed. The stowed pet persists via
+ * serializePet's delvePetStash fallback; the kit is session-derived, not saved.
+ * The auras the seat stripped are not here because no save writes auras at
+ * all: a leave hands them back on the live body (`returnRacer`) first.
+ */
+export function mortarOverdriveSaveOverlay(
+  ctx: SimContext,
+  pid: number,
+): Pick<
+  CharacterState,
+  'pos' | 'facing' | 'hp' | 'resource' | 'resSickness' | 'unstuckSickness' | 'cooldowns'
+> | null {
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  const ret = match?.returns.get(pid);
+  const pools = match?.preMatchPools.get(pid);
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  if (!ret || !pools || !meta || !e) return null;
+  const sickness = pools.sickness;
+  // The bar the pilot walked in on, not the race's: a druid seated in a form
+  // drives in caster form, so the live bar says mana while the pooled value is
+  // the form's rage or energy, and the real mana is the one parked at the seat.
+  const stripped = match?.strippedAuras.get(pid);
+  return {
+    pos: { x: ret.x, z: ret.z },
+    facing: ret.facing,
+    hp: pools.hp,
+    resource: persistedResource(
+      CLASSES[meta.cls].resourceType,
+      stripped?.resourceType ?? e.resourceType,
+      pools.resource,
+      stripped?.savedMana ?? e.savedMana,
+    ),
+    resSickness: sickness?.id === RESURRECTION_SICKNESS_ID ? sickness.remaining : null,
+    unstuckSickness: sickness?.id === UNSTUCK_SICKNESS_ID ? sickness.remaining : null,
+    cooldowns: serializeCooldowns(
+      restoreCooldownsPreservingUnstuck(e.cooldowns, pools.cooldowns),
+      e.potionCooldownUntil,
+      ctx.time,
+      pools.abilityCharges,
+    ),
+  };
+}
+
+/**
+ * Fire the held weapon at the ground point the pilot aimed at. The cast that got
+ * here has already paid its cooldown, so a shot the PHASE gate refuses (a
+ * trigger pull on the grid, or after the flag) costs no charge; the empty-slot
+ * refusal happens earlier, in the cast gate, where it can be told apart from a
+ * cooldown.
+ *
+ * `castAim` is where the client's reticle was, already clamped to the ability's
+ * range by the shared cast path and clamped AGAIN here to the shell's own cone
+ * and range band. The second clamp is the load-bearing one: the aim is a wire
+ * value, so a cheat client could otherwise drop a shell anywhere on the circuit.
+ */
+export function mortarOverdriveFireGroundBlast(ctx: SimContext, caster: Entity): void {
+  const match = mortarOverdriveMatchOf(ctx, caster.id);
+  if (!match || match.phase !== 'racing' || caster.dead) return;
+  const progress = match.progress.get(caster.id);
+  // A pilot whose own race is over keeps their machine and can drive it off the
+  // circuit, but they are done shooting: shelling a field you have already
+  // beaten (or quit) is griefing, not racing.
+  if (!progress || !mortarOverdriveStillRunning(match, caster.id)) return;
+  const held = progress.heldWeapon;
+  if (!held || held.charges === 0) return;
+  const aim = resolveGroundBlastAim(
+    { x: caster.pos.x, z: caster.pos.z, facing: caster.facing },
+    caster.castAim,
+  );
+  if (held.charges !== null) {
+    held.charges--;
+    publishWeaponCharges(caster, held);
+  }
+  match.groundBlasts.push({
+    ownerPid: caster.id,
+    x: aim.x,
+    z: aim.z,
+    impactTick: ctx.tickCount + aim.flightTicks,
+  });
+  ctx.emit({
+    type: 'mortarOverdriveGroundBlastFired',
+    sourceId: caster.id,
+    x: caster.pos.x + Math.sin(caster.facing) * GROUND_BLAST_MUZZLE_NOSE_YD,
+    z: caster.pos.z + Math.cos(caster.facing) * GROUND_BLAST_MUZZLE_NOSE_YD,
+    targetX: aim.x,
+    targetZ: aim.z,
+    flightSeconds: aim.flightTicks / TICK_RATE,
+  });
+}
+
+/**
+ * Land every shell whose tick has come. The blast catches EVERY racer inside it,
+ * not one nominated target, so a shell dropped between two machines fighting
+ * over a corner throws both.
+ *
+ * The caster is the one exclusion. The geometric argument for including them
+ * (the minimum range is wider than the blast) only holds for a caster standing
+ * still: at 58 yd/s a pilot drives through their own impact point long before it
+ * lands, and shooting yourself in the back is frustration, not a mechanic.
+ */
+function tickGroundBlasts(ctx: SimContext, match: MortarOverdriveMatch): void {
+  for (let i = match.groundBlasts.length - 1; i >= 0; i--) {
+    const shot = match.groundBlasts[i];
+    if (ctx.tickCount < shot.impactTick) continue;
+    match.groundBlasts.splice(i, 1);
+    let nearestPid: number | null = null;
+    let nearestImpact = 0;
+    let hits: number[] | undefined;
+    for (const pid of match.pids) {
+      if (pid === shot.ownerPid) continue;
+      // A pilot whose race is over is not a target: they are parked, waiting to
+      // be returned, and cannot dodge what they cannot drive away from.
+      if (!mortarOverdriveStillRunning(match, pid)) continue;
+      const racer = ctx.entities.get(pid);
+      if (!racer?.drive || racer.dead) continue;
+      // Asked BEFORE the impact is resolved, because resolving it already shoves
+      // the machine: a ward has to be able to say no while there is still
+      // nothing to undo. It costs the shot its victim outright, so this racer is
+      // not the shell's nearest hit either.
+      if (
+        groundBlastFalloff(racer.pos.x, racer.pos.z, shot.x, shot.z) > 0 &&
+        consumeMortarOverdriveWard(ctx, racer)
+      ) {
+        ctx.emit({ type: 'mortarOverdriveWardBroken', pid });
+        continue;
+      }
+      const blast = resolveGroundBlastImpact(
+        { x: racer.pos.x, z: racer.pos.z, facing: racer.facing, drive: racer.drive },
+        shot.x,
+        shot.z,
+      );
+      if (blast.falloff <= 0) continue;
+      // The pop rides the entity's own air pass, so the machine really leaves
+      // the ground and comes back down under the same gravity a jump uses. The
+      // fall origin is re-anchored here or a stale one would bill the landing
+      // for a drop the shell never caused.
+      racer.vy += blast.pop;
+      racer.onGround = false;
+      racer.fallStartY = racer.pos.y;
+      const progress = match.progress.get(pid);
+      if (progress) {
+        progress.groundBlastShockUntilTick = ctx.tickCount + GROUND_BLAST_SHOCK_TICKS;
+        progress.hitByShell = true; // deed-tracking only (docs/design/deeds.md)
+      }
+      ctx.applyAura(racer, {
+        id: MORTAR_OVERDRIVE_GROUND_BLAST_AURA,
+        name: 'Ground Blast',
+        kind: 'slow',
+        remaining: GROUND_BLAST_CONTROL_SECONDS,
+        duration: GROUND_BLAST_CONTROL_SECONDS,
+        value: GROUND_BLAST_CONTROL_SPEED_MULT,
+        sourceId: shot.ownerPid,
+        school: 'physical',
+      });
+      if (blast.falloff > nearestImpact) {
+        nearestImpact = blast.falloff;
+        nearestPid = pid;
+      }
+      hits ??= [];
+      hits.push(pid, groundBlastHitFalloffWire(blast.falloff));
+    }
+    // Announced whether or not it caught anyone: a shot that lands on empty
+    // track still craters, and that crater is most of the feedback the first
+    // version was missing.
+    ctx.emit({
+      type: 'mortarOverdriveGroundBlastHit',
+      sourceId: shot.ownerPid,
+      targetId: nearestPid,
+      x: shot.x,
+      z: shot.z,
+      impact: nearestImpact,
+      ...(hits ? { hits } : {}),
+    });
+  }
+}
+
+/** The contact body behind a seated racer: its live pose plus the two numbers
+ *  the profile owns (the SAME radius the movement kernel sweeps, and the mass
+ *  the shove is split by). */
+function contactBodyFor(racer: Entity, drive: VehicleDrive): SweptContactBody {
+  const profile = vehicleProfile(drive.profileKey);
+  return {
+    x: racer.pos.x,
+    z: racer.pos.z,
+    // Where the tick started (stamped by the prologue's runDespawnDecay):
+    // together with pos this is the segment the machine covered this tick,
+    // which is what the swept resolve tests.
+    prevX: racer.prevPos.x,
+    prevZ: racer.prevPos.z,
+    facing: racer.facing,
+    drive,
+    radius: profile.bodyRadius,
+    mass: profile.mass,
+  };
+}
+
+/** Move a bumped racer to where the contact put it, THROUGH static collision:
+ *  a shove into the garden wall has to slide along the wall, never through it,
+ *  and the swept resolve from the pre-bump position is what guarantees it. */
+function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void {
+  const settled = ctx.resolveMove(racer.pos.x, racer.pos.z, body.x, body.z, body.radius, racer);
+  racer.pos.x = settled.x;
+  racer.pos.z = settled.z;
+  // The spatial grid is bucketed by position and read for the rest of the tick.
+  ctx.rebucket(racer);
+}
+
+/**
+ * End every recovery ghost whose window allows it (unlocked, and old enough for
+ * a follower to have passed) and whose machine is clear of every other machine
+ * on the grid, over the tick's whole motion; or whose cap has run out. Runs right before the contact
+ * pass, so a ghost that ends here is solid for that same pass, and one that
+ * stays is skipped by it. Clear means clear of the SAME set the contact pass
+ * resolves (any living machine still racing), over the same hull circles. A ghost
+ * the cap ends inside a rival leaves the pair PARTING, and this pass ends each
+ * parting the first tick its pair is apart, again before the contact pass reads
+ * it. Draws no rng.
+ */
+function tickGhosts(ctx: SimContext, match: MortarOverdriveMatch): void {
+  for (const pid of match.pids) {
+    const racer = ctx.entities.get(pid);
+    const progress = match.progress.get(pid);
+    // A returned pilot is no longer this race's: a ghost they carry now was
+    // made by the race seating them since, and only its progress can time it.
+    if (!racer || !progress || progress.returned) continue;
+    const drive = racer.drive;
+    if (progress.ghostPartingPids.length > 0) {
+      if (drive) {
+        const hull = contactBodyFor(racer, drive);
+        mortarOverdriveKeepParting(
+          progress.ghostPartingPids,
+          ctx.tickCount,
+          progress.ghostPartingEndTick,
+          (otherPid) => hullMeetsMachine(ctx, match, hull, otherPid),
+        );
+      } else {
+        progress.ghostPartingPids.length = 0;
+      }
+    }
+    if (!mortarOverdriveGhosted(racer)) continue;
+    let inside: number[] | null = null;
+    if (drive) {
+      const hull = contactBodyFor(racer, drive);
+      for (const otherPid of match.pids) {
+        if (otherPid !== pid && hullMeetsMachine(ctx, match, hull, otherPid)) {
+          if (inside === null) inside = [];
+          inside.push(otherPid);
+        }
+      }
+    }
+    if (
+      mortarOverdriveGhostMayClear({
+        tick: ctx.tickCount,
+        earliestClearTick: progress.ghostClearTick,
+        capTick: progress.ghostCapTick,
+        overlapping: inside !== null,
+      })
+    ) {
+      clearMortarOverdriveGhost(racer, progress);
+      if (inside) {
+        progress.ghostPartingPids.push(...inside);
+        progress.ghostPartingEndTick = mortarOverdrivePartingEndTick(ctx.tickCount);
+      }
+    }
+  }
+}
+
+/** Does another machine on the grid meet this hull at any point of the tick?
+ *  The same machines (still racing, living, behind the wheel), and the same
+ *  circles, the contact pass resolves. */
+function hullMeetsMachine(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  hull: SweptContactBody,
+  otherPid: number,
+): boolean {
+  if (!mortarOverdriveStillRunning(match, otherPid)) return false;
+  const other = ctx.entities.get(otherPid);
+  return (
+    !!other?.drive &&
+    !other.dead &&
+    mortarOverdriveHullsMeetInTick(hull, contactBodyFor(other, other.drive))
+  );
+}
+
+/**
+ * Wheel-to-wheel contact between racers. Written as a loop over every unordered
+ * PAIR rather than as "A versus B", so a four-pilot grid is a longer `pids`
+ * array and nothing else.
+ *
+ * It runs at the END of the tick, which is exactly where it has to: the
+ * per-player movement loop ran earlier in this same tick, so both machines have
+ * already moved and this pass corrects their final positions. Unlike the
+ * surface multipliers above there is no tick of lag, and unlike a new tick
+ * phase there is no reordering: this pass itself draws zero rng. (The MODULE no
+ * longer does: since 22b a pickup take draws exactly one value, in
+ * `tickPickups`. This pass is upstream of it and unaffected.)
+ *
+ * The test is SWEPT over the tick's motion: the ordinary same-way rub (closing
+ * speed of a few yards per second, far under the body width one tick covers)
+ * still resolves on the plain end-of-tick overlap, byte-identically, and the
+ * sweep arm only wakes for a pair whose closing speed crosses the whole reach
+ * inside one tick (~68 yd/s): a head-on meeting, or a machine a shell threw
+ * across the road, which used to pass clean through between two discrete
+ * tests (the miss a player reads as "we visibly touched and nothing
+ * happened").
+ */
+function tickContacts(ctx: SimContext, match: MortarOverdriveMatch): void {
+  for (let i = 0; i < match.pids.length; i++) {
+    // A machine out of the race (across the line and free to drive through the
+    // chase window, or pulled off and parked for its tableau) is no longer
+    // solid: it may not ram, block, or spoil the clean run of anyone racing.
+    if (!mortarOverdriveStillRunning(match, match.pids[i])) continue;
+    for (let j = i + 1; j < match.pids.length; j++) {
+      if (!mortarOverdriveStillRunning(match, match.pids[j])) continue;
+      const a = ctx.entities.get(match.pids[i]);
+      const b = ctx.entities.get(match.pids[j]);
+      if (!a?.drive || !b?.drive || a.dead || b.dead) continue;
+      // A recovery ghost touches nobody, on either side of the pair.
+      if (mortarOverdriveGhosted(a) || mortarOverdriveGhosted(b)) continue;
+      const bodyA = contactBodyFor(a, a.drive);
+      const bodyB = contactBodyFor(b, b.drive);
+      // No forward window: both screens draw their rivals in their own
+      // kart's time frame, so the touch a pilot sees is this same-tick one
+      // (docs/prd/mortar-overdrive-contact-lag-compensation.md).
+      const contact = resolveVehicleContactSwept(bodyA, bodyB);
+      if (!contact.contacted) continue;
+      settleContact(ctx, a, bodyA);
+      settleContact(ctx, b, bodyB);
+      if (contact.impact < MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT) continue;
+      // Deed-tracking only (docs/design/deeds.md): a real, announced bump
+      // (the same floor the event above uses) disqualifies a clean race for
+      // BOTH cars, not just the one that gets the announce credit. Only pairs
+      // still racing reach here (a finisher keeps a clean run through the
+      // tableau). A pair still parting from a ghost the cap ended inside the
+      // other is being separated by the race, not racing.
+      const progressA = match.progress.get(match.pids[i]);
+      const progressB = match.progress.get(match.pids[j]);
+      const counts = mortarOverdriveContactCounts(
+        match.pids[i],
+        progressA?.ghostPartingPids,
+        match.pids[j],
+        progressB?.ghostPartingPids,
+      );
+      if (counts && progressA) progressA.hadRivalContact = true;
+      if (counts && progressB) progressB.hadRivalContact = true;
+      const pair = i * match.pids.length + j;
+      const last = match.bumpTicks.get(pair);
+      if (last !== undefined && ctx.tickCount - last < MORTAR_OVERDRIVE_BUMP_EVENT_TICKS) continue;
+      match.bumpTicks.set(pair, ctx.tickCount);
+      ctx.emit({
+        type: 'mortarOverdriveBump',
+        aId: a.id,
+        bId: b.id,
+        x: contact.x,
+        z: contact.z,
+        impact: contact.impact,
+      });
+    }
+  }
+}
+
+/**
+ * How far past the road edge a racer is, and therefore what it costs. Leaving
+ * the circuit is a PENALTY, not a wall: the garden's perimeter is the only hard
+ * stop on the whole circuit, and everything inside it is drivable at a price.
+ * Returns null while the racer is still on the road.
+ *
+ * There were three bands and there are two: the wading margin was the last
+ * thing between the circuit and a shortcut across the middle, the referee
+ * (`mortar_overdrive/track_limits.ts`) does that job now, and water is decoration a
+ * machine drives straight through. Both bands are therefore pure FEEL: no
+ * fairness argument rests on their values any more, only the ordering (further
+ * out is slower) that makes running wide legible.
+ */
+export function mortarOverdriveOffTrackBand(
+  circuit: MortarOverdriveCircuit,
+  projection: MortarOverdriveProjection,
+): MortarOverdriveSlowBand | null {
+  const track = mortarOverdriveTrack(circuit);
+  // The road narrows and widens around the lap, so track limits follow the
+  // LOCAL half-width rather than one fixed distance.
+  const over = Math.abs(projection.lateral) - track.halfWidthAt(projection.s);
+  if (over <= MORTAR_OVERDRIVE_VERGE_MARGIN) return null;
+  if (over <= MORTAR_OVERDRIVE_VERGE_MARGIN + MORTAR_OVERDRIVE_RUNOFF_WIDTH) {
+    return MORTAR_OVERDRIVE_VERGE_BAND;
+  }
+  // Garden all the way to the wall, both ways. A pond is decoration a machine
+  // drives through: it used to be a third, harsher band, back when how deep the
+  // water got was the only thing keeping anyone out of the infield.
+  return MORTAR_OVERDRIVE_GARDEN_BAND;
+}
+
+/**
+ * Is a machine on the RACING SURFACE, which is the road plus its verge?
+ *
+ * The referee's on/off test, and the verge counts because every apex clips it:
+ * an excursion that armed on the ordinary racing line would arm on every corner
+ * of every lap. Exported because the bot brain and the tests ask the same
+ * question, and a second copy of the rule is a rule the race does not share.
+ */
+export function mortarOverdriveOnTrack(band: MortarOverdriveSlowBand | null): boolean {
+  return band === null || band === MORTAR_OVERDRIVE_VERGE_BAND;
+}
+
+/**
+ * Hand the driving model the surface under the machine. The road is the neutral
+ * 1/1; every off-track band is looser and draggier than it, and a shell shock or
+ * a patch of oil cuts whatever grip is left on top of that.
+ *
+ * Both grip losses ride the SURFACE seam rather than a mechanism of their own
+ * precisely because this is already rewritten every tick: a shocked machine
+ * sliding through oil on the grass is simply all three, they multiply, and each
+ * expires by the tick clock with nothing to clean up.
+ *
+ * `speedBoost` is the same seam seen from the other side, and it is the whole of
+ * the nitro: the knob was already documented as the one for a surface that caps
+ * speed without a visible debuff, and a burst is that knob standing ABOVE 1.
+ */
+function applyVehicleSurface(
+  racer: Entity,
+  band: MortarOverdriveSlowBand | null,
+  gripPenalty: number,
+  speedBoost: number,
+  slicked: boolean,
+): void {
+  if (!racer.drive) return;
+  // The oil goes on last, through the step the client's own-kart prediction
+  // shares. It is also the only thing that raises the slide ceiling: a shove
+  // has nowhere to put a machine that is already at its ceiling, which is
+  // where a pilot attacking a corner lives.
+  applyMortarOverdriveSlickSurface(racer.drive, (band ? band.gripMult : 1) * gripPenalty, slicked);
+  racer.drive.dragMult = band ? band.dragMult : 1;
+  // The band's speed loss rides its slow AURA, which the kernel already folds
+  // into the top speed, so the surface cap stays neutral off a nitro and nothing
+  // is charged twice.
+  racer.drive.speedCap = speedBoost;
+}
+
+/**
+ * The track-limits REFEREE, applied to one racer.
+ *
+ * Runs only for a racer still in the race: a pilot who has crossed the line or
+ * pulled off keeps their machine and may drive it wherever they like.
+ */
+function refereeTrackLimits(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  racer: Entity,
+  progress: MortarOverdriveProgress,
+  projection: MortarOverdriveProjection,
+  onTrack: boolean,
+): boolean {
+  if (!mortarOverdriveStillRunning(match, pid)) return false;
+  if (ctx.tickCount < progress.resetLockedUntilTick) return false;
+  const started = progress.excursion.exitS === null;
+  const step = stepMortarOverdriveTrackLimits(progress.excursion, {
+    onTrack,
+    s: projection.s,
+    // Where the machine stood at the end of the LAST tick, which is the last
+    // place it held on the road and the position `lap` / `distanceSinceWrap`
+    // are in step with (the referee runs before `tickProgress` advances them).
+    previousS: progress.lastS,
+    moved: Math.hypot(racer.pos.x - racer.prevPos.x, racer.pos.z - racer.prevPos.z),
+    lapLength: mortarOverdriveTrack(mortarOverdriveCircuitOf(match)).length,
+  });
+  if (started && step.excursion.exitS !== null) {
+    progress.excursionLap = progress.lap;
+    progress.excursionDistanceSinceWrap = progress.distanceSinceWrap;
+  }
+  progress.excursion = step.excursion;
+  if (step.verdict === 'cutReturn' && step.returnS !== null) {
+    const returned = resetRacerTo(ctx, match, pid, {
+      s: step.returnS,
+      lap: progress.excursionLap,
+      distanceSinceWrap: progress.excursionDistanceSinceWrap,
+      lockTicks: MORTAR_OVERDRIVE_CUT_LOCK_TICKS,
+    });
+    if (returned) progress.cutReturnUntilTick = ctx.tickCount + MORTAR_OVERDRIVE_CUT_NOTICE_TICKS;
+    return returned;
+  }
+  // Loitering off the road, moving or not: back to the last ordered anchor,
+  // which is the same recovery the stuck arm and the manual control use.
+  if (step.verdict === 'loiter') return resetRacerToRecoveryAnchor(ctx, match, pid, false);
+  return false;
+}
+
+function tickTrackLimits(ctx: SimContext, match: MortarOverdriveMatch): void {
+  const circuit = mortarOverdriveCircuitOf(match);
+  for (const pid of match.pids) {
+    const racer = ctx.entities.get(pid);
+    const progress = match.progress.get(pid);
+    // A returned pilot's body is back where the seat found it: reprojecting it
+    // onto the circuit copy reads as deep garden and would pin the off-track
+    // slow on a player who is not racing.
+    if (!racer || !progress || progress.returned) continue;
+    const projection = reproject(match, pid, racer);
+    const band = mortarOverdriveOffTrackBand(circuit, projection);
+    // Deed-tracking only: the soft verge is a normal racing-line overshoot
+    // (every apex clips it), so only the garden beyond it counts as really
+    // leaving the circuit. Gated on still racing, same as the rival-contact
+    // flag above: a finished pilot wandering the post-race tableau does not
+    // retroactively lose a clean run.
+    if (progress.finishedTick === null && band === MORTAR_OVERDRIVE_GARDEN_BAND) {
+      progress.hadOffTrackContact = true;
+    }
+    const forwardDot = mortarOverdriveForwardDot(
+      projection,
+      Math.sin(racer.facing),
+      Math.cos(racer.facing),
+    );
+    if (forwardDot < -0.2) {
+      progress.wrongWayTicks++;
+      progress.wrongWay = progress.wrongWayTicks >= MORTAR_OVERDRIVE_WRONG_WAY_TICKS;
+    } else if (forwardDot > 0.2) {
+      progress.wrongWayTicks = 0;
+      progress.wrongWay = false;
+    }
+
+    const resetLocked = ctx.tickCount < progress.resetLockedUntilTick;
+    // Still-running only: the recovery refuses a finished pilot anyway, and the
+    // `continue` it exits on would skip the surface pass below every tick,
+    // freezing a parked finisher's grip and letting their band aura go stale.
+    if (
+      band &&
+      !resetLocked &&
+      mortarOverdriveStillRunning(match, pid) &&
+      Math.abs(racer.drive?.speed ?? 0) <= MORTAR_OVERDRIVE_STUCK_SPEED
+    ) {
+      progress.stuckTicks++;
+      if (progress.stuckTicks >= MORTAR_OVERDRIVE_STUCK_TICKS) {
+        resetRacerToRecoveryAnchor(ctx, match, pid, false);
+        continue;
+      }
+    } else {
+      progress.stuckTicks = 0;
+    }
+
+    // The referee, AFTER the wedged arm above: a machine that has been sitting
+    // still off the road for three seconds is stuck, not cutting, and the
+    // shorter recovery is the better answer for it.
+    if (
+      refereeTrackLimits(ctx, match, pid, racer, progress, projection, mortarOverdriveOnTrack(band))
+    ) {
+      continue;
+    }
+
+    const shocked = ctx.tickCount < progress.groundBlastShockUntilTick;
+    const slicked = ctx.tickCount < progress.slickGripUntilTick;
+    applyVehicleSurface(
+      racer,
+      band,
+      shocked ? GROUND_BLAST_SHOCK_GRIP : 1,
+      ctx.tickCount < progress.nitroUntilTick ? MORTAR_OVERDRIVE_NITRO_SPEED_MULT : 1,
+      slicked,
+    );
+    const existing = racer.auras.find((aura) => aura.id === MORTAR_OVERDRIVE_OFF_TRACK_AURA);
+    if (!band) {
+      if (existing) racer.auras = racer.auras.filter((aura) => aura !== existing);
+      continue;
+    }
+    // Deeper is slower, and stepping back toward the road relaxes it again on
+    // the same tick, so the penalty tracks where the racer actually is.
+    if (existing) {
+      existing.remaining = existing.duration;
+      existing.value = band.speedMult;
+      existing.name = band.name;
+      continue;
+    }
+    ctx.applyAura(racer, {
+      id: MORTAR_OVERDRIVE_OFF_TRACK_AURA,
+      name: band.name,
+      kind: 'slow',
+      remaining: 0.2,
+      duration: 0.2,
+      value: band.speedMult,
+      sourceId: racer.id,
+      school: 'physical',
+    });
+  }
+}
+
+function tickProgress(ctx: SimContext, match: MortarOverdriveMatch): void {
+  const circuit = mortarOverdriveCircuitOf(match);
+  const lapLength = mortarOverdriveTrack(circuit).length;
+  const gates = mortarOverdriveGates(circuit);
+  let anyFinished = false;
+  for (let slot = 0; slot < match.pids.length; slot++) {
+    const pid = match.pids[slot];
+    const e = ctx.entities.get(pid);
+    const progress = match.progress.get(pid);
+    if (!e || !progress || !mortarOverdriveStillRunning(match, pid)) continue;
+    const previousLap = progress.lap;
+    const previousLastS = progress.lastS;
+    const previousDistanceSinceWrap = progress.distanceSinceWrap;
+    const projection = reproject(match, pid, e);
+    const step = stepMortarOverdriveProgress({
+      lap: progress.lap,
+      lastS: progress.lastS,
+      s: projection.s,
+      distanceSinceWrap: progress.distanceSinceWrap,
+      lapLength,
+      totalLaps: match.totalLaps,
+    });
+    progress.lap = step.lap;
+    progress.lastS = step.lastS;
+    progress.distanceSinceWrap = step.distanceSinceWrap;
+    progress.travelled = step.travelled;
+    const from = mortarOverdriveToCanonical(match, e.prevPos.x, e.prevPos.z);
+    const to = mortarOverdriveToCanonical(match, e.pos.x, e.pos.z);
+    // The next gate, or one of the few after it (MORTAR_OVERDRIVE_GATE_RESYNC_WINDOW),
+    // nearest first: a machine shoved wide of one gate's band resyncs on the
+    // next one it really crosses instead of losing every anchor for the lap.
+    // Never so wide it wraps onto the gate behind the last one crossed, which
+    // a short circuit's few gates would otherwise put inside the window.
+    let gate: MortarOverdriveGate | undefined;
+    let crossing: number | null = null;
+    const span = Math.max(1, Math.min(MORTAR_OVERDRIVE_GATE_RESYNC_WINDOW, gates.length - 2));
+    for (let k = 0; k < span && k < gates.length; k++) {
+      const candidate = gates[(progress.nextResetGate + k) % gates.length];
+      crossing = mortarOverdriveGateCrossingFraction(from, to, candidate);
+      if (crossing !== null) {
+        gate = candidate;
+        break;
+      }
+    }
+    if (gate && crossing !== null) {
+      // Snapshot progress AT the recovery plane, not at the end of this tick's
+      // segment. Otherwise the piece after the gate is retained by a reset and
+      // counted a second time when the racer drives it again.
+      const forwardThisTick = Math.max(0, forwardArcDelta(previousLastS, projection.s, lapLength));
+      progress.resetS = gate.s;
+      progress.resetLap = previousLap;
+      progress.resetDistanceSinceWrap = previousDistanceSinceWrap + forwardThisTick * crossing;
+      // A valid start-line wrap begins the next lap exactly on the line. The
+      // finish case is terminal, so keeping the prior lap there is harmless;
+      // this branch matters for ordinary lap transitions.
+      if (gate.index === 0 && step.wrapped && !step.finished) {
+        progress.resetLap = step.lap;
+        progress.resetDistanceSinceWrap = 0;
+      }
+      progress.nextResetGate = (gate.index + 1) % gates.length;
+    }
+    if (!step.wrapped) continue;
+    // Deed-tracking only (docs/design/deeds.md): the lap that just closed,
+    // timed off this racer's OWN lap clock rather than the race clock, so a
+    // pit stop for someone else never counts against a fast one here.
+    deedsMod.onMortarOverdriveLapForDeeds(
+      ctx,
+      match.practice !== null,
+      ctx.mortarOverdrive.bots.has(pid),
+      match.circuitId,
+      pid,
+      (ctx.tickCount - progress.lapStartTick) / TICK_RATE,
+    );
+    progress.lapStartTick = ctx.tickCount;
+    if (step.finished) {
+      progress.finishedTick = ctx.tickCount;
+      progress.finishFraction = step.finishFraction ?? 1;
+      // Over the line is out of the fight: nothing can shell a finisher, so a
+      // ward (and the gold veil every rival sees on it) goes with the crossing.
+      const finisher = ctx.entities.get(pid);
+      if (finisher) consumeMortarOverdriveWard(ctx, finisher);
+      anyFinished = true;
+      // The winner starts everyone else's clock, and only the winner: a second
+      // crossing must not push the window back and let the field wait again.
+      match.chaseUntilTick ??= ctx.tickCount + MORTAR_OVERDRIVE_CHASE_TICKS;
+    } else {
+      ctx.emit({
+        type: 'mortarOverdriveLap',
+        lap: progress.lap,
+        totalLaps: match.totalLaps,
+        pid,
+      });
+    }
+  }
+  // Deed-tracking only: whichever STILL-RUNNING racer trails the field this
+  // tick was, for at least this moment, dead last. A cheap argmin over
+  // travelled rather than classify(), which sorts and allocates a fresh array
+  // every tick for tracking that only ever needs the minimum. Restricted to
+  // racers still driving, for two reasons: the frozen-grid-slot tie-break
+  // that ranks a finished classification must not decide this (every racer
+  // is still tied on the exact same travelled at the green light, and
+  // flagging one of them dead last before anybody has actually fallen behind
+  // is not the comeback story this tracks), and a retired quitter sorts last
+  // in the FINAL classification forever after, which would otherwise steal
+  // the flag from whichever driving racer is really trailing.
+  let trailingPid: number | null = null;
+  let trailingTravelled = Number.POSITIVE_INFINITY;
+  for (const pid of match.pids) {
+    if (!mortarOverdriveStillRunning(match, pid)) continue;
+    const runnerProgress = match.progress.get(pid);
+    if (!runnerProgress) continue;
+    if (runnerProgress.travelled < trailingTravelled) {
+      trailingTravelled = runnerProgress.travelled;
+      trailingPid = pid;
+    }
+  }
+  if (trailingPid !== null) {
+    const trailingProgress = match.progress.get(trailingPid);
+    if (trailingProgress) trailingProgress.wasLastPlace = true;
+  }
+  // Crossing the line no longer ends the race: with four on the grid the fight
+  // for the last podium step is the race, for everyone not leading it. The
+  // classification closes when nobody is left driving (or on the deadline).
+  if (anyFinished && raceIsDecided(ctx, match)) endMatch(ctx, match);
+}
+
+/** Hundredths of a yard: the precision the readout ships anything positional at.
+ *  See the note at the slick list in `matchInfoFor`. */
+function roundReadout(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** The path a machine covered this tick, in the circuit's canonical frame. */
+function segmentOf(
+  match: MortarOverdriveMatch,
+  e: Entity,
+): { fromX: number; fromZ: number; toX: number; toZ: number } {
+  const from = mortarOverdriveToCanonical(match, e.prevPos.x, e.prevPos.z);
+  const to = mortarOverdriveToCanonical(match, e.pos.x, e.pos.z);
+  return { fromX: from.x, fromZ: from.z, toX: to.x, toZ: to.z };
+}
+
+/**
+ * The pickup boxes, one tick.
+ *
+ * Everything it decides is in `mortar_overdrive/pickups.ts`; what lives here is the
+ * three facts only a race knows: which machines are allowed to take (the ones
+ * still driving), which lap the LEADER is on, and what a take does to the
+ * weapon slot.
+ *
+ * The leader is the most TRAVELLED racer STILL DRIVING, the same monotonic key
+ * and the same restriction the dead-last tracking above uses, and their lap
+ * going up is the crossing that puts every taken box back. Reading the lap
+ * rather than watching for a line crossing is what makes the rule survive a
+ * leader change: the number only ever goes up, so a new leader on the same lap
+ * respawns nothing. Restricting it to racers still driving is what makes the
+ * rule survive a leader LEAVING: a pilot who forfeits from the front keeps the
+ * biggest `travelled` for the rest of the race, so an unfiltered argmin would
+ * freeze the boxes on a lap number nobody can advance any more.
+ *
+ * THE PHASE draws EXACTLY ONE value off the shared stream per box that changes
+ * hands (22b): what the box gives is a weighted draw, and it is taken here, at
+ * the take, so the count is a plain function of what happened on the circuit
+ * rather than of how many racers were offered a box. A tick with no take draws
+ * nothing, which is what keeps the boxes appendable to the tick at all.
+ */
+function tickPickups(ctx: SimContext, match: MortarOverdriveMatch): void {
+  const boxes = mortarOverdrivePickupBoxes(mortarOverdriveCircuitOf(match));
+  if (boxes.length === 0) return;
+  let leaderLap = 0;
+  let leaderTravelled = Number.NEGATIVE_INFINITY;
+  const racers: MortarOverdrivePickupRacer[] = [];
+  // How far every racer STILL DRIVING has come. It is what a take is ranked
+  // against, and it is deliberately not `classify()`: the catch-up weighting is
+  // about the race still being run, and a classification sorts finishers and
+  // quitters into the order too.
+  const runningTravelled: number[] = [];
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    if (!progress) continue;
+    const stillRunning = mortarOverdriveStillRunning(match, pid);
+    if (stillRunning) {
+      runningTravelled.push(progress.travelled);
+      if (progress.travelled > leaderTravelled) {
+        leaderTravelled = progress.travelled;
+        leaderLap = progress.lap;
+      }
+    }
+    const e = ctx.entities.get(pid);
+    if (!e) continue;
+    racers.push({
+      pid,
+      // The whole SEGMENT this machine covered, so a box is taken by the path
+      // rather than by the two endpoints: at race speed a tick is about three
+      // yards, which steps clean over a catch zone.
+      ...segmentOf(match, e),
+      cooldownUntilTick: progress.pickupCooldownUntilTick,
+      // A pilot who has crossed the line or pulled off keeps their machine and
+      // may drive it anywhere; they are not collecting ammunition for a race
+      // they are no longer in. Nor is a machine under the control lock, which
+      // is the tick or two after the referee or the recovery control PUT it
+      // somewhere: a recovery anchor can stand inside a box's catch radius (the
+      // Express Tour's own gate 6 sits 2.28 yd from a box, against a 2.3 yd
+      // reach), and a box collected by being teleported onto it is a free
+      // charge for driving off the road.
+      eligible: stillRunning && ctx.tickCount >= progress.resetLockedUntilTick,
+    });
+  }
+  const step = stepMortarOverdrivePickups(boxes, match.pickups, {
+    tick: ctx.tickCount,
+    leaderLap,
+    racers,
+  });
+  for (const take of step.takes) {
+    const progress = match.progress.get(take.pid);
+    if (!progress) continue;
+    progress.pickupCooldownUntilTick = ctx.tickCount + MORTAR_OVERDRIVE_PICKUP_COOLDOWN_TICKS;
+    // ONE draw per take, here, and nowhere else in the phase. The rank is how
+    // many still-driving machines are ahead of this one, so the leader is 0 and
+    // the field's tail draws the catch-up table.
+    let ahead = 0;
+    for (const travelled of runningTravelled) {
+      if (travelled > progress.travelled) ahead++;
+    }
+    const band = mortarOverdrivePickupBand(ahead, runningTravelled.length);
+    const effect = resolvePickupEffect(
+      drawMortarOverdrivePickupEffect(band, ctx.rng.next()),
+      progress,
+      mortarOverdriveWarded(ctx.entities.get(take.pid)),
+    );
+    applyPickupEffect(ctx, match, take.pid, progress, effect);
+    // Named to the taker, in their own language: the event carries the EFFECT
+    // the box actually gave, never a sentence (`mortar_overdrive/pickup_i18n.ts`
+    // owns the words, and whether that effect was applied or is now HELD is
+    // presentation's business).
+    ctx.emit({ type: 'mortarOverdrivePickup', effect, pid: take.pid });
+    const box = boxes[take.box];
+    if (box) {
+      const at = mortarOverdriveToWorld(match, box.x, box.z);
+      ctx.emit({
+        type: 'mortarOverdrivePickupTaken',
+        takerId: take.pid,
+        x: roundReadout(at.x),
+        z: roundReadout(at.z),
+      });
+    }
+  }
+}
+
+/**
+ * The stacking rule, applied AFTER the draw and never instead of it.
+ *
+ * A racer already holding an unused effect (or already warded) falls back to the
+ * refill rather than overwriting what they have or stocking a second one. It is
+ * deliberately a second step: the draw itself must stay one value off the shared
+ * stream from the band's own table, or the tables would silently mean something
+ * different for a racer whose slot happened to be full.
+ */
+function resolvePickupEffect(
+  drawn: MortarOverdrivePickupEffect,
+  progress: MortarOverdriveProgress,
+  warded: boolean,
+): MortarOverdrivePickupEffect {
+  if (isMortarOverdriveHeldEffect(drawn)) return progress.heldEffect === null ? drawn : 'charge';
+  // `warded` is read off the AURA by the caller, which is the source of truth:
+  // a second ward would be a shield nobody could see they had two of.
+  if (drawn === 'ward') return warded ? 'charge' : drawn;
+  return drawn;
+}
+
+/** Compile-time exhaustiveness: a fifth effect is an error here (and in the
+ *  i18n `Record` that gives it words) until it has been handled. */
+function assertNever(value: never): never {
+  throw new Error(`unhandled pickup effect: ${String(value)}`);
+}
+
+/**
+ * What a resolved effect does at the moment the box is taken.
+ *
+ * Two of the four are INSTANT: the refill is ammunition (there is nothing to
+ * decide) and the ward is a shield a pilot would arm immediately anyway. The
+ * other two are HELD (the operator's mid-review override): they land in the
+ * racer's kit as a one-charge ability and happen when the pilot casts them.
+ */
+function applyPickupEffect(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  progress: MortarOverdriveProgress,
+  effect: MortarOverdrivePickupEffect,
+): void {
+  switch (effect) {
+    case 'charge': {
+      const held = progress.heldWeapon;
+      // Unlimited fire (a null budget) has nothing to add to, and a machine with
+      // no weapon slot at all has nowhere to put it. Both still took the box and
+      // still armed the cooldown: what a box gives is the slot's business.
+      if (!held || held.charges === null) return;
+      held.charges += MORTAR_OVERDRIVE_PICKUP_CHARGE_GRANT;
+      const racer = ctx.entities.get(pid);
+      if (racer) publishWeaponCharges(racer, held);
+      return;
+    }
+    case 'ward': {
+      const racer = ctx.entities.get(pid);
+      if (racer) applyMortarOverdriveWard(ctx, racer);
+      return;
+    }
+    case 'nitro':
+    case 'slick':
+      // Into the pilot's hands, not onto the machine: the kit republish is what
+      // puts the button on the bar (and the keybind, the gamepad and the mobile
+      // control behind it).
+      progress.heldEffect = effect;
+      republishKit(ctx, match, pid);
+      return;
+    default:
+      assertNever(effect);
+  }
+}
+
+/**
+ * Spend the held effect a pilot just cast.
+ *
+ * Reached through the ordinary ability path (`castAbility` -> the effect
+ * dispatcher -> `ctx.mortarOverdriveSpendPickupEffect`), so the cost, the phase gate
+ * and the charge accounting are the ones every Mortar Overdrive cast already obeys. It
+ * draws ZERO rng: the randomness was spent at the box.
+ */
+export function mortarOverdriveSpendPickupEffect(
+  ctx: SimContext,
+  caster: Entity,
+  effect: MortarOverdriveHeldEffect,
+): void {
+  const match = mortarOverdriveMatchOf(ctx, caster.id);
+  if (!match || match.phase !== 'racing' || caster.dead) return;
+  const progress = match.progress.get(caster.id);
+  // The same gate the weapon takes: a pilot whose own race is over keeps their
+  // machine, but they are done spending anything on the field.
+  if (!progress || !mortarOverdriveStillRunning(match, caster.id)) return;
+  // The slot is the authority, never the button: a stale bar (or a cheat client
+  // casting an id it no longer holds) spends nothing.
+  // The dev stack stands in for the slot while it lasts, so a weapon under
+  // tuning can be felt lap after lap without a chat command between crossings.
+  // Gated here as well as at the grant, so a stack is inert in production even
+  // if some future load path resurrected one.
+  const stock = ctx.devCommands ? progress.devHeldCharges : null;
+  if (stock && stock[effect] > 0) {
+    stock[effect] -= 1;
+  } else if (progress.heldEffect !== effect) {
+    return;
+  } else {
+    progress.heldEffect = null;
+  }
+  if (effect === 'nitro') {
+    progress.nitroUntilTick = ctx.tickCount + MORTAR_OVERDRIVE_NITRO_TICKS;
+    const drive = caster.drive;
+    if (drive) {
+      // The ceiling is rewritten by the surface pass at the END of every tick,
+      // so it is raised here too rather than waited for: a burst felt a tick
+      // after the button is a burst a pilot cannot place.
+      drive.speedCap = MORTAR_OVERDRIVE_NITRO_SPEED_MULT;
+      // Forward, whichever way the machine is travelling: a nitro spent in
+      // reverse is a shove toward where the nose points, not a faster crash.
+      drive.speed += MORTAR_OVERDRIVE_NITRO_KICK;
+    }
+  } else {
+    // Under the machine, in the circuit's own frame. Dropping it where the pilot
+    // IS (rather than at the row the box stood on) is what makes it a decision:
+    // the oil goes into the corner they choose, and the machine that laid it is
+    // already past it.
+    const here = mortarOverdriveToCanonical(match, caster.pos.x, caster.pos.z);
+    dropMortarOverdriveSlick(ctx, match, caster.id, here.x, here.z);
+    ctx.emit({
+      type: 'mortarOverdriveSlickDropped',
+      sourceId: caster.id,
+      x: roundReadout(caster.pos.x),
+      z: roundReadout(caster.pos.z),
+    });
+  }
+  republishKit(ctx, match, caster.id);
+}
+
+/**
+ * DEV ONLY: hand the seated pilot a full armoury, so a weapon can be felt over
+ * and over while it is being tuned.
+ *
+ * Gated by `ctx.devCommands` at the call site, exactly like `mortarOverdriveDevRace`
+ * beside it, and again here so a caller that forgets cannot reach it. It
+ * grants what a race can actually hold: the signature weapon's
+ * budget is a real count and is set outright, while a pickup effect is a
+ * one-charge slot by design, so "a stack of them" is expressed as the refill
+ * latch rather than by inventing a second counter the rest of the code would
+ * have to learn. `ward` is neither: it is an aura, granted once.
+ *
+ * Returns false when the pilot is not in a race, which is the only way to fail.
+ */
+export function mortarOverdriveDevGrantKit(ctx: SimContext, pid: number, charges: number): boolean {
+  if (!ctx.devCommands) return false;
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  const racer = ctx.entities.get(pid);
+  const progress = match?.progress.get(pid);
+  if (!match || !racer || !progress) return false;
+  const held = progress.heldWeapon;
+  // Zero hands the race back its own rules, which is what a tuning session needs
+  // at the end of one: the ordinary budget and the one-charge pickup are the
+  // things being judged. So the weapon goes back to what a race grants it,
+  // rather than to nothing: `0` is "stop cheating", never "leave me empty".
+  // A null budget is unlimited fire already and has nothing to be topped up to.
+  if (held && held.charges !== null) {
+    held.charges = charges > 0 ? charges : (mortarOverdriveWeaponCharges(held.abilityId) ?? 0);
+  }
+  progress.devHeldCharges =
+    charges > 0
+      ? (Object.fromEntries(
+          MORTAR_OVERDRIVE_HELD_EFFECTS.map((effect) => [effect, charges]),
+        ) as Record<MortarOverdriveHeldEffect, number>)
+      : null;
+  // The ward is NOT granted, deliberately: it eats the next hostile effect, so a
+  // kit that included one would silently swallow the first hit of whatever the
+  // session was convened to feel.
+  republishKit(ctx, match, pid);
+  return true;
+}
+
+/**
+ * Put one patch of oil on this race's circuit, holding the field to the cap the
+ * renderer can actually draw.
+ *
+ * Past the cap the OLDEST patch is evicted, which is both the least surprising
+ * rule (the one that has been there longest goes first) and the one that keeps
+ * what bites identical to what is drawn: a slick nobody can see is a trap.
+ */
+function dropMortarOverdriveSlick(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  ownerPid: number,
+  x: number,
+  z: number,
+): void {
+  match.slicks.push({
+    id: match.nextSlickId++,
+    x,
+    z,
+    ownerPid,
+    // The oil goes down under the machine, so the pilot is standing in it: it
+    // arms against them the moment they drive out (`stepMortarOverdriveSlicks`).
+    ownerClear: false,
+    expiresTick: ctx.tickCount + MORTAR_OVERDRIVE_SLICK_LIFETIME_TICKS,
+  });
+  while (match.slicks.length > MORTAR_OVERDRIVE_SLICK_CAP) match.slicks.shift();
+}
+
+/**
+ * The oil slicks, one tick: sweep the expired patches, then hand the grip loss
+ * to whoever drove through one.
+ *
+ * Runs BEFORE the boxes, so a slick dropped this tick cannot catch a rival on
+ * the same tick it appears: the oil is down where the taker just was, and a
+ * machine level with them has already driven that ground. It draws no rng.
+ */
+function tickSlicks(ctx: SimContext, match: MortarOverdriveMatch): void {
+  if (match.slicks.length === 0) return;
+  const racers: MortarOverdriveSlickRacer[] = [];
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    const e = ctx.entities.get(pid);
+    if (!progress || !e) continue;
+    racers.push({
+      pid,
+      ...segmentOf(match, e),
+      // The same eligibility the boxes use, and for the same reason: a pilot
+      // whose race is over is not racing through anyone's hazard, and a machine
+      // the referee has just PUT somewhere did not drive into what it landed on.
+      eligible:
+        mortarOverdriveStillRunning(match, pid) && ctx.tickCount >= progress.resetLockedUntilTick,
+    });
+  }
+  const step = stepMortarOverdriveSlicks(match.slicks, { tick: ctx.tickCount, racers });
+  for (const hit of step.hits) {
+    const progress = match.progress.get(hit.pid);
+    if (!progress) continue;
+    // What makes a hit a NEW crossing, and what a crossing does, is shared with
+    // the online client's own-kart prediction (`mortar_overdrive/slick_contact.ts`).
+    const racer = ctx.entities.get(hit.pid);
+    const local = racer ? mortarOverdriveToCanonical(match, racer.pos.x, racer.pos.z) : null;
+    const remembered =
+      local && progress.slickContactId !== null && progress.slickContactId !== hit.slick
+        ? match.slicks.find((slick) => slick.id === progress.slickContactId)
+        : undefined;
+    if (
+      !mortarOverdriveSlickCrossing(
+        progress,
+        hit,
+        ctx.tickCount,
+        remembered,
+        local?.x ?? 0,
+        local?.z ?? 0,
+      )
+    ) {
+      continue;
+    }
+    if (racer && consumeMortarOverdriveWard(ctx, racer)) {
+      ctx.emit({ type: 'mortarOverdriveWardBroken', pid: hit.pid });
+      continue;
+    }
+    // The ward above absorbs the grip loss and the shove alike, as one contact,
+    // which is why the bite sits after it.
+    const impact = biteMortarOverdriveSlick(
+      progress,
+      racer?.drive,
+      ctx.tickCount,
+      { pid: hit.pid, facing: racer?.facing ?? 0, x: local?.x ?? 0, z: local?.z ?? 0 },
+      hit,
+    );
+    // A machine that is not moving is not thrown by a puddle, and must not
+    // ANNOUNCE being thrown either: the event plays the slick's cue, so firing
+    // one for a shove of zero would play the noise for nothing.
+    if (!racer || impact <= 0) continue;
+    // World coordinates, and the MACHINE's rather than the patch's: the noise
+    // and the smoke come off the tyres that lost, not off the ground.
+    ctx.emit({
+      type: 'mortarOverdriveSlicked',
+      targetId: hit.pid,
+      x: racer.pos.x,
+      z: racer.pos.z,
+      impact,
+    });
+  }
+}
+
+function pruneQueue(ctx: SimContext): void {
+  // The steady state of a realm: nobody queued, nothing to prune, nothing built.
+  if (ctx.mortarOverdrive.queue.length === 0 && ctx.mortarOverdrive.queuedAtTick.size === 0) return;
+  const seen = new Set<number>();
+  ctx.mortarOverdrive.queue = ctx.mortarOverdrive.queue.filter((pid) => {
+    if (seen.has(pid)) return false;
+    if (!eligible(ctx, pid)) {
+      // An eviction is announced like a voluntary leave: the queued/unqueued
+      // event pair stays balanced, and a player who died or started a duel is
+      // told the queue let them go rather than silently forgetting them.
+      ctx.emit({ type: 'mortarOverdriveUnqueued', pid });
+      return false;
+    }
+    seen.add(pid);
+    return true;
+  });
+  // The wait clock follows the queue exactly, or a pid pruned out and re-queued
+  // later would inherit its old join tick and be backfilled instantly.
+  for (const pid of ctx.mortarOverdrive.queuedAtTick.keys()) {
+    if (!seen.has(pid)) ctx.mortarOverdrive.queuedAtTick.delete(pid);
+  }
+}
+
+function tryMatch(ctx: SimContext): void {
+  const mortarOverdrive = ctx.mortarOverdrive;
+  if (mortarOverdrive.match || mortarOverdrive.queue.length < MORTAR_OVERDRIVE_GRID_SIZE) return;
+  // The first four queued pilots free to sit now. A pilot still in a fight
+  // keeps their place and holds nobody behind them; short of a full grid,
+  // nobody is taken out and the start draws nothing.
+  const grid = mortarOverdriveSeatableWaiters(ctx);
+  if (grid.length < MORTAR_OVERDRIVE_GRID_SIZE) return;
+  const queued = mortarOverdrive.queue;
+  mortarOverdrive.queue = queued.filter((pid) => !grid.includes(pid));
+  if (startMatch(ctx, grid)) return;
+  // Refused: the queue as it stood, in its ORIGINAL order, less any of the
+  // grid no longer eligible. (The old two-pilot code unshifted them one at a
+  // time, which reverses the pair; at four that silently reorders the head of
+  // the queue on every refusal.)
+  mortarOverdrive.queue = queued.filter((pid) => !grid.includes(pid) || eligible(ctx, pid));
+}
+
+export function updateMortarOverdrive(ctx: SimContext): void {
+  pruneQueue(ctx);
+  tryMatch(ctx);
+  // The public race first, then each private practice copy. Every race runs the
+  // SAME body: a practice lap is not a lesser mode with its own rules, it is the
+  // race on a different copy of the circuit. Walked in place rather than over a
+  // copied list: a practice race its own tick tears down is spliced out under
+  // the walk, so the index moves on only past a race that is still there. That
+  // holds because a race's tick removes only itself and nothing in this phase
+  // starts one (practice starts arrive as commands between ticks).
+  const mortarOverdrive = ctx.mortarOverdrive;
+  if (mortarOverdrive.match) tickMatch(ctx, mortarOverdrive.match);
+  for (let i = 0; i < mortarOverdrive.practices.length; ) {
+    const match = mortarOverdrive.practices[i];
+    tickMatch(ctx, match);
+    if (mortarOverdrive.practices[i] === match) i++;
+  }
+}
+
+function tickMatch(ctx: SimContext, match: MortarOverdriveMatch): void {
+  // Anyone who quit and has watched their six seconds of tableau goes home,
+  // while the race carries on for the rest. Before the roster loop, so a
+  // returned racer is not re-seated on the machine it just got out of.
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    if (!progress || progress.returned || progress.retiredTick === null) continue;
+    if (ctx.tickCount - progress.retiredTick >= MORTAR_OVERDRIVE_RETURN_TICKS) {
+      returnRacer(ctx, match, pid);
+    }
+  }
+  for (const pid of match.pids) {
+    if (!matchSeats(match, pid)) continue;
+    const meta = ctx.players.get(pid);
+    const e = ctx.entities.get(pid);
+    if (!meta || !e || meta.leaving || e.dead || e.ghost || !onOwnLane(match, e)) {
+      // A disconnect is a forfeit: this pilot is classified last and returned
+      // at once, and three other people's race is not ended by it. So is a
+      // body carried off its copy of the circuit by something that never went
+      // through the race (a summon, a portal, a GM move): re-forcing the
+      // machine there would leave a seated pilot driving in the open world.
+      retireRacer(ctx, match, pid, true);
+      continue;
+    }
+    if (e.mountKey !== MORTAR_OVERDRIVE_MOUNT_KEY) {
+      e.mountKey = MORTAR_OVERDRIVE_MOUNT_KEY;
+      e.mountCastKey = '';
+      e.mountCastRemaining = 0;
+      ctx.recalcPlayer(e);
+    }
+    // Anything that can strip a mount can strip the wheel with it (a death, a
+    // forced dismount); a racer without a drive state would silently revert to
+    // running, so re-seat it the same way the mount is re-forced.
+    if (!e.drive) e.drive = createVehicleDrive(MORTAR_OVERDRIVE_VEHICLE_KEY);
+    // Held on the grid before the flag, and again in the finished tableau: the
+    // controls are the Society's, not the pilot's. Written every tick and read
+    // by the CAST gate, so a trigger pull outside the race arms no cooldown and
+    // the action bar can grey the slot rather than pretending it is ready.
+    const progress = match.progress.get(pid) as MortarOverdriveProgress;
+    const resetLocked = ctx.tickCount < progress.resetLockedUntilTick;
+    // A pilot who quit is a passenger until the Society returns them; a pilot
+    // who FINISHED keeps the wheel and can drive off the circuit under their
+    // own steam, which is what every real race lets you do.
+    e.drive.controlsLocked =
+      match.phase !== 'racing' || resetLocked || progress.retiredTick !== null;
+    if (resetLocked) resetVehicleDrive(e.drive);
+  }
+
+  if (match.phase === 'loading' || match.phase === 'countdown') {
+    // The start lock is real: Sim.updatePlayerMovement returns before the
+    // kernel runs. Zero the machine anyway, every pre-race tick, so nothing
+    // (a queued input, a bump on the grid) can bank speed before GO.
+    for (const pid of match.pids) {
+      const drive = ctx.entities.get(pid)?.drive;
+      if (drive) resetVehicleDrive(drive);
+    }
+    if (match.phase === 'loading') {
+      if (mortarOverdriveLoadingDone(ctx, match)) {
+        const timeLimitTicks = mortarOverdriveCircuitOf(match).timeLimitSeconds * TICK_RATE;
+        beginMortarOverdriveCountdown(ctx, match, MORTAR_OVERDRIVE_COUNTDOWN_TICKS, timeLimitTicks);
+      }
+      return;
+    }
+    if (ctx.tickCount >= match.goTick) {
+      match.phase = 'racing';
+      // After this tick's roster pass, so a pilot it just retired is not on it.
+      match.seatedAtGo = match.pids.filter((pid) => mortarOverdriveStillRunning(match, pid));
+      for (const pid of match.pids) {
+        ctx.emit({ type: 'mortarOverdriveGo', pid });
+        const progress = match.progress.get(pid);
+        if (progress) progress.lapStartTick = ctx.tickCount;
+      }
+    }
+    return;
+  }
+  if (match.phase === 'finished') {
+    if (
+      match.finishTick !== null &&
+      ctx.tickCount - match.finishTick >= MORTAR_OVERDRIVE_RETURN_TICKS
+    ) {
+      teardownMatch(ctx, match);
+    }
+    return;
+  }
+  // Two clocks close a race nobody is finishing: the 180 s limit, and the much
+  // shorter chase window the winner started. Whichever comes first.
+  if (
+    ctx.tickCount >= match.deadlineTick ||
+    (match.chaseUntilTick !== null && ctx.tickCount >= match.chaseUntilTick)
+  ) {
+    endMatch(ctx, match);
+    return;
+  }
+  // Contact FIRST: the progress test reads the segment from where a racer was
+  // to where it ended the tick, so the shove has to be part of that segment
+  // rather than an unrecorded correction applied after the line was judged.
+  // (Only the racing phase reaches here: the countdown and finished arms return
+  // above, which is also what keeps a nudge on the grid from doing anything.)
+  // The recovery ghosts settle first, so the pass reads who is solid NOW.
+  tickGhosts(ctx, match);
+  tickContacts(ctx, match);
+  // Track limits BEFORE progress, which is what makes the referee's guarantee
+  // structural rather than nearly true. A cut is a position the racer must not
+  // be credited for, and `tickProgress` is what credits it: judged afterwards,
+  // a machine that cut across the infield and crossed the line would already
+  // have FINISHED by the time the referee had anything to say, and the return
+  // would have to unpick a classification. Judged first, the racer is back at
+  // the point they left the road (at a standstill, with `prevPos` collapsed
+  // onto `pos`) before progress reads the tick at all, so the tick it cheated
+  // on is worth exactly zero arc and no gate.
+  //
+  // Neither pass draws rng, so the shared stream is unmoved by the order.
+  tickTrackLimits(ctx, match);
+  tickProgress(ctx, match);
+  // `tickProgress` can END the race (the last racer home), and neither a shell
+  // nor a pickup may land into a classification that is already closed. The
+  // boxes go AFTER progress for the same reason the referee goes before it: the
+  // leader's lap is what puts them back, and that number is written there.
+  //
+  // For the BOXES this guard is belt and braces rather than a rule with a test
+  // behind it: the countdown and finished arms return above, and a race decided
+  // inside `tickProgress` leaves every racer either finished or retired, so the
+  // eligibility test already refuses all of them. It is kept because the shell's
+  // own guard beside it is not defensive, and one of the two silently not
+  // applying to the other would be the next reader's trap.
+  if (match.phase === 'racing') {
+    // Oil BEFORE the boxes, which is what stops a slick from catching a rival on
+    // the tick it is dropped (see `tickSlicks`), and neither pass may draw rng
+    // ahead of the take: the boxes' one draw per take is the whole of this
+    // phase's contribution to the shared stream.
+    tickSlicks(ctx, match);
+    tickPickups(ctx, match);
+    tickGroundBlasts(ctx, match);
+  }
+}
+
+function racerInfo(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+  position: number,
+): MortarOverdriveRacerInfo {
+  const p = match.progress.get(pid) as MortarOverdriveProgress;
+  const meta = ctx.players.get(pid);
+  return {
+    pid,
+    name: meta?.name ?? '',
+    // The class the PODIUM draws its portrait from, exactly as a party frame
+    // does. A racer's class has no effect on the machine: it is who is in the
+    // seat, which is the whole job of an avatar. Which is also why the live
+    // standings rows draw no portrait: there, decoration cost the pilot's name
+    // the width it needed to be read at speed.
+    cls: meta?.cls ?? 'warrior',
+    lap: Math.min(match.totalLaps, p.lap),
+    finished: p.finishedTick !== null,
+    // Null for a human. A racer is told which they are up against: a practice
+    // lap against house pilots is not the same result as beating players.
+    botTier: ctx.mortarOverdrive.bots.get(pid) ?? null,
+    position,
+    // The crossing happened somewhere inside the tick that detected it: the
+    // segment it was judged on runs from the previous tick to this one, so the
+    // real moment is `finishedTick - 1 + fraction`. Folding it in is what makes
+    // two machines finishing on the same tick two different times.
+    finishSeconds:
+      p.finishedTick === null
+        ? null
+        : Math.max(0, (p.finishedTick - 1 + p.finishFraction - match.goTick) / TICK_RATE),
+    retired: p.retiredTick !== null,
+  };
+}
+
+/**
+ * The viewer-independent half of the match readout, built once per match per
+ * tick: the 20 Hz broadcast builds `mo` for every seated pilot (and the online
+ * self wire asks once per PLAYER, racing or not), so the classification walk,
+ * the standings rows, the box list and the oil list are shared instead of
+ * re-derived per viewer. The arrays are shared by every reader on the tick and
+ * are treated as frozen presentation data: nothing downstream writes into a
+ * readout. Keyed by the match OBJECT (multi-Sim isolation) and the sim clock;
+ * a mid-tick mutation (a forfeit landing between ticks) is picked up by the
+ * next tick's build, which is also when the wire reads it.
+ */
+interface MortarOverdriveSharedReadout {
+  tick: number;
+  participantIds: number[];
+  standings: MortarOverdriveRacerInfo[];
+  pickupsTaken: number[];
+  slicks: MortarOverdriveSlickInfo[];
+  loading: MortarOverdriveLoadingInfo | null;
+}
+const sharedReadouts = new WeakMap<MortarOverdriveMatch, MortarOverdriveSharedReadout>();
+
+function sharedMatchReadout(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+): MortarOverdriveSharedReadout {
+  const cached = sharedReadouts.get(match);
+  if (cached && cached.tick === ctx.tickCount) return cached;
+  const ranked = classify(match);
+  const fresh: MortarOverdriveSharedReadout = {
+    tick: ctx.tickCount,
+    participantIds: [...match.pids],
+    standings: ranked.map((entry, index) => racerInfo(ctx, match, entry.pid, index + 1)),
+    // Which boxes are GONE, never which are there: on a full circuit this is an
+    // empty array, and it is the shorter list at every moment of a race.
+    pickupsTaken: mortarOverdrivePickupTakenIndices(match.pickups),
+    // The oil on the road, in the circuit's own frame like the boxes. Every
+    // pilot in the race sees every patch, whoever dropped it: a hazard nobody
+    // could see coming would not be a decision, and hiding one from the machine
+    // that is about to hit it is exactly what the graphics-fairness rule forbids.
+    slicks: match.slicks.map((slick) => ({
+      id: slick.id,
+      // Rounded HERE, in the readout both hosts build, rather than at the wire:
+      // a patch is a fixed point on a 2.6 yard disk, so a hundredth of a yard is
+      // far below anything a player or the renderer can tell apart, and doing it
+      // in the shared builder halves the per-tick `mo` payload with no chance of
+      // the two hosts disagreeing about where the oil is.
+      x: roundReadout(slick.x),
+      z: roundReadout(slick.z),
+      endsAt: slick.expiresTick - match.goTick,
+      ...(slick.ownerClear ? {} : { immunePid: slick.ownerPid }),
+    })),
+    loading: mortarOverdriveLoadingInfo(ctx, match),
+  };
+  sharedReadouts.set(match, fresh);
+  return fresh;
+}
+
+function matchInfoFor(
+  ctx: SimContext,
+  match: MortarOverdriveMatch,
+  pid: number,
+): MortarOverdriveMatchInfo {
+  const me = match.progress.get(pid) as MortarOverdriveProgress;
+  const shared = sharedMatchReadout(ctx, match);
+  const standings = shared.standings;
+  const mine = standings.find((racer) => racer.pid === pid) as MortarOverdriveRacerInfo;
+  const countdownTicks =
+    match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0;
+  const countdown = countdownTicks > 3 * TICK_RATE ? 0 : Math.ceil(countdownTicks / TICK_RATE);
+  // A pilot who quit is finished as far as THEY are concerned, even while the
+  // rest of the field is still racing: their tableau and their return clock run
+  // off the tick they pulled off, not off the tick the race is decided.
+  const myEndTick = me.retiredTick ?? (match.phase === 'finished' ? match.finishTick : null);
+  const returnIn =
+    myEndTick === null
+      ? 0
+      : Math.max(
+          0,
+          Math.ceil((MORTAR_OVERDRIVE_RETURN_TICKS - (ctx.tickCount - myEndTick)) / TICK_RATE),
+        );
+  // Only shown to a pilot who is still driving: the racers already home are
+  // waiting on this clock, not racing it.
+  const chaseIn =
+    match.chaseUntilTick === null ||
+    match.phase !== 'racing' ||
+    !mortarOverdriveStillRunning(match, pid)
+      ? 0
+      : Math.max(0, Math.ceil((match.chaseUntilTick - ctx.tickCount) / TICK_RATE));
+  const elapsedTicks = preRace(match)
+    ? 0
+    : Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick);
+  const racerEntity = ctx.entities.get(pid);
+  const info: MortarOverdriveMatchInfo = {
+    id: match.id,
+    circuitId: match.circuitId,
+    participantIds: shared.participantIds,
+    phase: myEndTick !== null ? 'finished' : match.phase,
+    countdown,
+    countdownTicks,
+    elapsed: Math.floor(elapsedTicks / TICK_RATE),
+    elapsedTicks,
+    chaseIn,
+    returnIn,
+    me: mine,
+    standings,
+    gridSize: match.gridSize,
+    decided: match.phase === 'finished',
+    // Hundredths, like every positional readout: it rides the per-tick clock
+    // key (mortar_overdrive/readout_clock.ts), and the strip shows whole yd/s.
+    speed: roundReadout(Math.abs(racerEntity?.drive?.speed ?? 0)),
+    wrongWay: me.wrongWay,
+    // The referee's two banners, both derived rather than stored: how long this
+    // pilot has left off the road before they are put back, and whether they
+    // were JUST put back for cutting. Neither needs a wire field of its own,
+    // because the whole info object already rides `mo`.
+    offTrackIn: Math.ceil(mortarOverdriveLoiterCountdownTicks(me.excursion) / TICK_RATE),
+    cutReturned: ctx.tickCount < me.cutReturnUntilTick,
+    pickupsTaken: shared.pickupsTaken,
+    slicks: shared.slicks,
+    // Whether this pilot is carrying a ward, DERIVED from the aura that is the
+    // source of truth rather than tracked twice. The strip's pip reads this; the
+    // buff bar under the portrait (and a rival's target frame) get the aura
+    // itself off the ordinary entity wire.
+    warded: mortarOverdriveWarded(racerEntity),
+    resetLocked: ctx.tickCount < me.resetLockedUntilTick,
+    totalLaps: match.totalLaps,
+    // A practice lap is a real race on a private copy of the circuit, and the
+    // readout says which it is rather than dressing one up as the other.
+    practice: match.practice !== null,
+    result:
+      me.retiredTick !== null
+        ? 'forfeit'
+        : match.phase !== 'finished'
+          ? null
+          : match.voided
+            ? 'void'
+            : match.winnerPid === pid
+              ? 'won'
+              : // A null winner is a dead heat for the LEAD, so it is a draw for
+                // the two machines that tied and a loss for everyone behind them.
+                // Reading it as a draw for the whole field would tell a pilot who
+                // came fourth that the stewards could not separate them.
+                match.winnerPid === null && mine.position <= 2
+                ? 'draw'
+                : 'lost',
+  };
+  if (shared.loading && myEndTick === null) info.loading = shared.loading;
+  if (match.voided) info.voided = true;
+  const wardIn = mortarOverdriveWardSecondsLeft(racerEntity);
+  if (wardIn > 0) info.wardIn = wardIn;
+  return info;
+}
+
+/**
+ * The race on the lane `pid` is STANDING on while not seated in it, or null
+ * anywhere else. A returned quitter watching the end of their race, or a
+ * spectator walked to the fence, sees the viewer-independent slice a lane
+ * shows: the lights, the boxes taken, the oil. Reads the same per-tick shared
+ * readout the seated pilots ride, so a stand full of watchers costs one build.
+ */
+export function mortarOverdriveTracksideFor(
+  ctx: SimContext,
+  pid: number,
+): MortarOverdriveLaneView | null {
+  if (mortarOverdriveMatchOf(ctx, pid)) return null;
+  const e = ctx.entities.get(pid);
+  if (!e) return null;
+  const lane = mortarOverdriveLaneAt(e.pos.x, e.pos.z);
+  if (!lane) return null;
+  const origin = mortarOverdriveLaneOffset(lane.index);
+  const match = mortarOverdriveMatchAtOrigin(ctx, origin);
+  if (!match) return null;
+  const shared = sharedMatchReadout(ctx, match);
+  return {
+    circuitId: match.circuitId,
+    phase: match.phase,
+    countdownTicks: match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0,
+    elapsed: preRace(match)
+      ? 0
+      : Math.floor(
+          Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE,
+        ),
+    pickupsTaken: shared.pickupsTaken,
+    slicks: shared.slicks,
+  };
+}
+
+/**
+ * A racing pilot's standing with the oil at this tick, for their own `rdv`
+ * (the drive state their client replays from), or null outside a racing heat.
+ */
+export function mortarOverdriveSlickReconFor(
+  ctx: SimContext,
+  pid: number,
+): MortarOverdriveSlickRecon | null {
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  const progress = match?.progress.get(pid);
+  if (!match || !progress || match.phase !== 'racing') return null;
+  return mortarOverdriveSlickRecon(progress, ctx.tickCount, match.slicks);
+}
+
+export function mortarOverdriveInfoFor(ctx: SimContext, pid: number): MortarOverdriveInfo {
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  const queueIndex = ctx.mortarOverdrive.queue.indexOf(pid);
+  return {
+    queued: queueIndex >= 0,
+    queuePosition: queueIndex >= 0 ? queueIndex + 1 : 0,
+    queueSize: ctx.mortarOverdrive.queue.length,
+    match: match ? matchInfoFor(ctx, match, pid) : null,
+    // Practice runs on its own copy of the circuit, so nobody else's race can
+    // ever block it. The only thing that can is the realm running out of copies,
+    // and the client needs to be able to say so without the sim emitting a
+    // sentence for it to re-localize.
+    // `>= 0`, never truthiness: lane 0 is a real private copy the moment the
+    // practice circuit stops serving competition and loses its public lane.
+    practiceAvailable: match === null && mortarOverdriveFreePracticeSlot(ctx) >= 0,
+    // The queue can seat a race when house pilots backfill it (the online
+    // server always enables that) or enough humans are connected to fill a
+    // grid without them. Offline neither holds, and a queue that can never
+    // fill is an affordance that lies.
+    queueViable: ctx.cfg.mortarOverdriveBackfill || ctx.players.size >= MORTAR_OVERDRIVE_GRID_SIZE,
+  };
+}
+
+/**
+ * Is this racer held on the grid by the start countdown? The coordinator's
+ * movement gate asks; keeping the answer here means the gate never has to know
+ * which of the live races the racer is in.
+ */
+export function mortarOverdriveMovementLocked(ctx: SimContext, pid: number): boolean {
+  return mortarOverdriveMovementLockedAt(ctx, pid, ctx.tickCount);
+}
+
+/**
+ * The same lock as the movement pass of `tick` reads it. Asked between ticks for
+ * `tickCount + 1`, it is exact for the next pass: that pass runs before the Mortar Overdrive
+ * pass that could flip the phase. The server's override epoch asks it that way.
+ */
+export function mortarOverdriveMovementLockedAt(
+  ctx: SimContext,
+  pid: number,
+  tick: number,
+): boolean {
+  const match = mortarOverdriveMatchOf(ctx, pid);
+  if (!match) return false;
+  if (match.phase !== 'racing') return true;
+  const progress = match.progress.get(pid);
+  // matchSeats already refuses a pid with no progress row, so this arm never
+  // resolves on a missing entry; the explicit check keeps `undefined !== null`
+  // from reading as a permanent lock if that ever changes.
+  if (!progress) return false;
+  // A pilot who quit is held where they stopped until the Society returns them,
+  // even though the race around them is still live.
+  if (progress.retiredTick !== null) return true;
+  return tick < progress.resetLockedUntilTick;
+}

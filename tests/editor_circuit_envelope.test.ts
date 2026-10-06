@@ -21,20 +21,23 @@ import {
   suggestEnvelope,
   suggestGroundOutline,
 } from '../src/editor/circuit/envelope_core';
-import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
+import type { MortarOverdriveCircuit } from '../src/sim/content/mortar_overdrive/circuits';
 import {
-  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
-  REALM_RACERS_CIRCUIT_LIST,
-} from '../src/sim/content/realm_racers_circuits';
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT as GARDEN,
+  MORTAR_OVERDRIVE_CIRCUIT_LIST,
+} from '../src/sim/content/mortar_overdrive/circuits';
 import { polygonSelfIntersects } from '../src/sim/geometry2d';
-import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
-import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
+import { mortarOverdriveCircuitMetrics } from '../src/sim/mortar_overdrive/circuit_metrics';
+import { mortarOverdriveGroundShape } from '../src/sim/mortar_overdrive/ground';
 import {
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_ORIGIN,
-} from '../src/sim/realm_racers_layout';
-import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_X,
+  MORTAR_OVERDRIVE_MAX_REGION_HALF_Z,
+  MORTAR_OVERDRIVE_ORIGIN,
+} from '../src/sim/mortar_overdrive/layout';
+import {
+  mortarOverdriveGardenEdgeOffsetAt,
+  mortarOverdriveTrack,
+} from '../src/sim/mortar_overdrive/spline';
 
 /** The abandoned Competition A shape: a 1094 yard lap, which is the size the
  *  competition pool is being authored at and the one the garden's inherited
@@ -68,7 +71,7 @@ const BIG_LAP_CONTROL_POINTS = [
 ];
 
 function fitted(id: string, controlPoints: readonly { x: number; z: number }[]) {
-  const drawn: RealmRacersCircuit = {
+  const drawn: MortarOverdriveCircuit = {
     ...GARDEN,
     id: `${id}_drawn`,
     controlPoints,
@@ -77,10 +80,10 @@ function fitted(id: string, controlPoints: readonly { x: number; z: number }[]) 
       { s: 1, halfWidth: 10 },
     ],
   };
-  const before = realmRacersCircuitMetrics(drawn);
+  const before = mortarOverdriveCircuitMetrics(drawn);
   const suggestion = suggestEnvelope(before.roadHalfX, before.roadHalfZ, drawn.perimeter);
-  const after: RealmRacersCircuit = { ...drawn, id, perimeter: suggestion.perimeter };
-  return { before, suggestion, after, metrics: realmRacersCircuitMetrics(after) };
+  const after: MortarOverdriveCircuit = { ...drawn, id, perimeter: suggestion.perimeter };
+  return { before, suggestion, after, metrics: mortarOverdriveCircuitMetrics(after) };
 }
 
 describe('circuit editor enclosure', () => {
@@ -150,16 +153,16 @@ describe('circuit editor enclosure', () => {
     // landing level with the ceiling would be the repair authoring the error.
     // Asserted against the volume's own constants rather than against the
     // exported ceilings, or the check would be the implementation restated.
-    expect(MAX_PERIMETER_HALF_X).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_X);
-    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(MAX_PERIMETER_HALF_X).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
+    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z);
     const clamped = suggestEnvelope(2000, 2000);
-    const circuit: RealmRacersCircuit = {
+    const circuit: MortarOverdriveCircuit = {
       ...GARDEN,
       id: 'envelope_clamp_ceiling',
       perimeter: clamped.perimeter,
     };
     expect(
-      realmRacersCircuitMetrics(circuit).problems.map((problem) => problem.code),
+      mortarOverdriveCircuitMetrics(circuit).problems.map((problem) => problem.code),
     ).not.toContain('perimeter_outside_region');
   });
 
@@ -175,8 +178,8 @@ describe('circuit editor enclosure', () => {
       expect(suggestion.perimeter.halfZ, `z at ${halfZ}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_Z);
       // Every circuit carries the volume at its ceiling, so the wall clearing
       // the exported bound IS the wall clearing the volume it will stand in.
-      expect(REALM_RACERS_MAX_REGION_HALF_X).toBeGreaterThan(suggestion.perimeter.halfX);
-      expect(REALM_RACERS_MAX_REGION_HALF_Z).toBeGreaterThan(suggestion.perimeter.halfZ);
+      expect(MORTAR_OVERDRIVE_MAX_REGION_HALF_X).toBeGreaterThan(suggestion.perimeter.halfX);
+      expect(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z).toBeGreaterThan(suggestion.perimeter.halfZ);
     }
   });
 
@@ -189,7 +192,7 @@ describe('circuit editor enclosure', () => {
 
 describe('the ground outline suggester', () => {
   /** A circuit wearing the proposal, so the readout can judge it. */
-  const fitted = (circuit: RealmRacersCircuit, id: string): RealmRacersCircuit => ({
+  const fitted = (circuit: MortarOverdriveCircuit, id: string): MortarOverdriveCircuit => ({
     ...circuit,
     id,
     groundOutline: suggestGroundOutline(circuit),
@@ -199,25 +202,25 @@ describe('the ground outline suggester', () => {
     // The property that matters, and the same one `suggestEnvelope` is held to:
     // a repair must never hand back something the panel then refuses. Here that
     // is `road_outside_ground_outline`, measured at the garden edge either side.
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    for (const circuit of MORTAR_OVERDRIVE_CIRCUIT_LIST) {
       const island = fitted(circuit, `ground_fit_${circuit.id}`);
-      const codes = realmRacersCircuitMetrics(island).problems.map((problem) => problem.code);
+      const codes = mortarOverdriveCircuitMetrics(island).problems.map((problem) => problem.code);
       expect(codes, circuit.id).not.toContain('road_outside_ground_outline');
     }
   });
 
   it('leaves the road real lawn on both sides rather than tracing its edge', () => {
     const island = fitted(GARDEN, 'ground_fit_margin');
-    const outline = realmRacersGroundShape(island).outline;
-    const track = realmRacersTrack(island);
+    const outline = mortarOverdriveGroundShape(island).outline;
+    const track = mortarOverdriveTrack(island);
     let tightest = Number.POSITIVE_INFINITY;
     for (const sample of track.samples) {
-      const x = sample.x - REALM_RACERS_ORIGIN.x;
-      const z = sample.z - REALM_RACERS_ORIGIN.z;
+      const x = sample.x - MORTAR_OVERDRIVE_ORIGIN.x;
+      const z = sample.z - MORTAR_OVERDRIVE_ORIGIN.z;
       let nearest = Number.POSITIVE_INFINITY;
       for (const point of outline)
         nearest = Math.min(nearest, Math.hypot(point.x - x, point.z - z));
-      tightest = Math.min(tightest, nearest - rallyGardenEdgeOffsetAt(island, sample.s));
+      tightest = Math.min(tightest, nearest - mortarOverdriveGardenEdgeOffsetAt(island, sample.s));
     }
     // Room for what stands between a road and a shore: a barrier run, a bench,
     // the clumps the shore is planted with.
@@ -228,7 +231,7 @@ describe('the ground outline suggester', () => {
     // The inner offset folds through itself at any corner tighter than the
     // offset, so the side is picked by area rather than by winding. A circuit
     // listed backwards has to get the same island, not its infield.
-    const backwards: RealmRacersCircuit = {
+    const backwards: MortarOverdriveCircuit = {
       ...GARDEN,
       id: 'ground_fit_backwards',
       controlPoints: [...GARDEN.controlPoints].reverse(),
@@ -249,13 +252,13 @@ describe('the ground outline suggester', () => {
     // winding-only implementation would hand back the infield on one arm and
     // the island on the other, and a relative bound between the two passes
     // whichever way round that fell.
-    const metrics = realmRacersCircuitMetrics(GARDEN);
+    const metrics = mortarOverdriveCircuitMetrics(GARDEN);
     const floor = metrics.roadHalfX * metrics.roadHalfZ;
     expect(forward).toBeGreaterThan(floor);
     expect(reversed).toBeGreaterThan(floor);
     // ...and the reversed proposal is one the readout accepts, which is the
     // whole point of taking the outer side.
-    const codes = realmRacersCircuitMetrics(
+    const codes = mortarOverdriveCircuitMetrics(
       fitted(backwards, 'ground_fit_backwards_island'),
     ).problems.map((problem) => problem.code);
     expect(codes).not.toContain('road_outside_ground_outline');
@@ -267,15 +270,17 @@ describe('the ground outline suggester', () => {
     // and the garden's hairpin is tighter than the 26 yard margin. Even-odd
     // reads that loop as a HOLE, so the repair was handing an operator an island
     // with bald patches in the middle of its own lawn.
-    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    for (const circuit of MORTAR_OVERDRIVE_CIRCUIT_LIST) {
       const outline = suggestGroundOutline(circuit);
       expect(polygonSelfIntersects(outline), `${circuit.id} handles`).toBe(false);
       // The SAMPLED curve too, which is what every consumer actually reads: a
       // simple control ring can still be smoothed into a crossing one.
-      const sampled = realmRacersGroundShape(fitted(circuit, `ground_fold_${circuit.id}`)).outline;
+      const sampled = mortarOverdriveGroundShape(
+        fitted(circuit, `ground_fold_${circuit.id}`),
+      ).outline;
       expect(polygonSelfIntersects([...sampled]), `${circuit.id} sampled`).toBe(false);
       // ...and the readout agrees, which is the rule an operator meets.
-      const codes = realmRacersCircuitMetrics(
+      const codes = mortarOverdriveCircuitMetrics(
         fitted(circuit, `ground_fold_read_${circuit.id}`),
       ).problems.map((problem) => problem.code);
       expect(codes, circuit.id).not.toContain('ground_outline_folds');
@@ -288,7 +293,7 @@ describe('the ground outline suggester', () => {
     const outline = suggestGroundOutline(GARDEN);
     expect(outline.length).toBeGreaterThanOrEqual(8);
     expect(outline.length).toBeLessThanOrEqual(40);
-    expect(realmRacersTrack(GARDEN).samples.length).toBeGreaterThan(400);
+    expect(mortarOverdriveTrack(GARDEN).samples.length).toBeGreaterThan(400);
   });
 
   it('is deterministic, so re-fitting settles rather than wandering', () => {
@@ -301,11 +306,11 @@ describe('what a Fit wall leaves behind', () => {
     // The two region fields left every panel in packet 28, so a draft authored
     // before the ceiling rule has no way to type its way up. A fit is one of the
     // two doors that migrate it; a load is the other.
-    const legacy: RealmRacersCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
-    const metrics = realmRacersCircuitMetrics(legacy);
+    const legacy: MortarOverdriveCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
+    const metrics = mortarOverdriveCircuitMetrics(legacy);
     const { circuit } = fittedCircuit(legacy, metrics.roadHalfX, metrics.roadHalfZ);
-    expect(circuit.regionHalfX).toBe(REALM_RACERS_MAX_REGION_HALF_X);
-    expect(circuit.regionHalfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(circuit.regionHalfX).toBe(MORTAR_OVERDRIVE_MAX_REGION_HALF_X);
+    expect(circuit.regionHalfZ).toBe(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z);
     // ...and the wall really was fitted at the same time, so the two halves of
     // the action are one call rather than a page remembering to do both.
     expect(circuit.perimeter).not.toEqual(legacy.perimeter);
@@ -316,8 +321,8 @@ describe('what a Fit wall leaves behind', () => {
     // A load runs this on every record, including the two shipped ones, and an
     // identity change there would read as an edit to the undo stack.
     expect(circuitWithCeilingVolume(GARDEN)).toBe(GARDEN);
-    const legacy: RealmRacersCircuit = { ...GARDEN, regionHalfZ: 140 };
+    const legacy: MortarOverdriveCircuit = { ...GARDEN, regionHalfZ: 140 };
     expect(circuitWithCeilingVolume(legacy)).not.toBe(legacy);
-    expect(circuitWithCeilingVolume(legacy).regionHalfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(circuitWithCeilingVolume(legacy).regionHalfZ).toBe(MORTAR_OVERDRIVE_MAX_REGION_HALF_Z);
   });
 });

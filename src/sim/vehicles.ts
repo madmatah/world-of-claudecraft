@@ -75,7 +75,7 @@ export function enterVehicle(ctx: SimContext, stationId: string, pid?: number): 
   const { meta, e: player } = resolved;
   if (
     meta.vehicle ||
-    meta.realmRacersMatchId !== null ||
+    meta.mortarOverdriveMatchId !== null ||
     ctx.tickCount < (meta.vehicleRetryAtTick ?? 0) ||
     !eligible(ctx, meta, player, def)
   )

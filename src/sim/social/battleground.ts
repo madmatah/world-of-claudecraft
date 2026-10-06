@@ -32,6 +32,7 @@ import { applyGreaterInvisibilityAftereffect } from '../combat/greater_invisibil
 import { BG_SLOT_COUNT, battlegroundOrigin } from '../data';
 import { createGroundObject } from '../entity';
 import { detachFromDungeon } from '../instances/dungeons';
+import { inMortarOverdriveHeat } from '../mortar_overdrive/seat';
 import { PLAYER_BODY_RADIUS } from '../pathfind';
 import { type MatchPetSnapshot, restoreMatchPet, snapshotMatchPet } from '../pet/pet_match_return';
 import { restorePetOnOwnerRevive } from '../pet/pet_owner_revive';
@@ -70,7 +71,6 @@ import {
   openBgProposal,
   sweepBgProposals,
 } from './battleground_proposal';
-import { inRealmRacersHeat } from './realm_racers_seat';
 
 // --- Thornhollow Fields tuning consts (rating reuses the arena's exported eloDelta) ---
 export const BG_BASE_RATING = 1500; // every character starts here on the ladder
@@ -375,7 +375,7 @@ export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?
   // was the single most common way players lost a spot without noticing. The
   // seat handles both: placeInBg revives and clears the spirit arm, and the pop
   // detaches an instanced fighter through the dungeon door (startBgMatch).
-  if (ctx.arenaMatches.has(id) || inRealmRacersHeat(ctx, id)) {
+  if (ctx.arenaMatches.has(id) || inMortarOverdriveHeat(ctx, id)) {
     ctx.error(id, 'You cannot queue for Thornhollow Fields while in another match.');
     return;
   }
@@ -428,7 +428,7 @@ export function bgQueueJoin(ctx: SimContext, pid?: number, opts?: { bypassLevel?
     if (
       ctx.bgMatches.has(m) ||
       ctx.arenaMatches.has(m) ||
-      inRealmRacersHeat(ctx, m) ||
+      inMortarOverdriveHeat(ctx, m) ||
       bgGroupContaining(ctx, m) ||
       bgProposalFor(ctx, m)
     ) {
@@ -694,15 +694,15 @@ function backfillBgMatches(ctx: SimContext): void {
     // the ONE site that unqueues and tells the player why.
     //
     // The rule mirrors matchmakeBg's hygiene, which is now three causes: gone
-    // offline, already seated, or committed to an arena match or a Realm
-    // Racers heat. Dying and standing in a dungeon deliberately no longer
+    // offline, already seated, or committed to an arena match or a Mortar
+    // Overdrive heat. Dying and standing in a dungeon deliberately no longer
     // disqualify anyone (the seat revives and detaches them), so a corpse in
     // the queue is a valid backfill.
     const eligible: { index: number; size: number; waited: number }[] = [];
     ctx.bgQueue.forEach((g, i) => {
       const cand = g.pids[0];
       if (!ctx.entities.get(cand) || ctx.bgMatches.has(cand) || ctx.arenaMatches.has(cand)) return;
-      if (inRealmRacersHeat(ctx, cand)) return;
+      if (inMortarOverdriveHeat(ctx, cand)) return;
       // ...and never double-offer: a solo already holding a queue-pop offer, or
       // sitting out the lockout from one they just failed, is not available.
       if (bgProposalFor(ctx, cand) || bgRequeueLockedUntil(ctx, cand) > 0) return;
@@ -789,14 +789,14 @@ function matchmakeBg(ctx: SimContext): void {
   // last of them is the player's own doing worth a line of text:
   //   offline        the entity is gone, so there is nobody left to tell
   //   already seated a match claimed them (backfill, /dev); silent by design
-  //   arena match    they committed to a different rated fight (a Realm
-  //                  Racers heat counts: its seat owns them the same way)
+  //   arena match    they committed to a different rated fight (a Mortar
+  //                  Overdrive heat counts: its seat owns them the same way)
   // Anything else HOLDS the spot, and the pop cleans up after them instead.
   for (const g of ctx.bgQueue) {
     g.pids = g.pids.filter((p) => {
       const e = ctx.entities.get(p);
       if (!e || ctx.bgMatches.has(p)) return false;
-      if (!ctx.arenaMatches.has(p) && !inRealmRacersHeat(ctx, p)) return true;
+      if (!ctx.arenaMatches.has(p) && !inMortarOverdriveHeat(ctx, p)) return true;
       ctx.emit({ type: 'bgUnqueued', pid: p });
       ctx.emit({
         type: 'log',
