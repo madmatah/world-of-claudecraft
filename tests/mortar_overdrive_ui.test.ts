@@ -776,6 +776,49 @@ describe('Mortar Overdrive queue start card', () => {
     expect(h.startMortarOverdriveNow).toHaveBeenCalledTimes(1);
   });
 
+  it('tells a viewer past the grid that they race the next one', () => {
+    const h = harness();
+    queue(h, {
+      seats: ['Briar', 'Cass', 'Dell', 'Eryn'].map((name) => ({ name, you: false })),
+      startsInTicks: 400,
+      laneBusy: false,
+      backfill: true,
+    });
+    h.info.queuePosition = 5;
+    h.info.queueSize = 5;
+    h.ui.toggle();
+    expect(card(h.root)?.textContent).toContain(
+      t('hudChrome.mortarOverdrive.queueCardNextGrid', { position: '5' }),
+    );
+    expect(h.root.querySelector('.mortar-overdrive-start-seat.me')).toBeNull();
+  });
+
+  it('keeps keyboard focus on its control when the grid changes under it', () => {
+    const h = harness();
+    queue(h, {
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: 400,
+      laneBusy: false,
+      backfill: true,
+    });
+    h.ui.toggle();
+    startNow(h.root)?.focus();
+    expect(document.activeElement).toBe(startNow(h.root));
+    const before = startNow(h.root);
+    h.info.start = {
+      ...(h.info.start as NonNullable<MortarOverdriveInfo['start']>),
+      seats: [
+        { name: 'Aster', you: true },
+        { name: 'Briar', you: false },
+      ],
+    };
+    h.info.queueSize = 2;
+    h.ui.update();
+    // A rebuild (new nodes), yet the same control holds the keyboard.
+    expect(startNow(h.root)).not.toBe(before);
+    expect(document.activeElement).toBe(startNow(h.root));
+  });
+
   it('drops the solo note once a second human is queued', () => {
     const h = harness();
     queue(h, {

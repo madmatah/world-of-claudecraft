@@ -15476,13 +15476,15 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.queueCardOpenSeat': '空き枠：協会のハウスパイロットが入ります',
   'hudChrome.mortarOverdrive.queueCardSolo':
     'ハウスパイロットだけが相手のレースでは、勝利は記録されません。',
+  'hudChrome.mortarOverdrive.queueCardNextGrid':
+    'あなたは待機列の{position}番目です。このグリッドは満員なので、次のレースに出場します。',
   'hudChrome.mortarOverdrive.queueCardBusy':
     'コースは使用中です：現在のレースが終わり次第スタートします。',
   'hudChrome.mortarOverdrive.queueCardManual':
     'このワールドには他の誰も参加できないため、「今すぐスタート」を押すとレースが始まります。',
   'hudChrome.mortarOverdrive.queueCardStartNow': '今すぐスタート',
   'hudChrome.mortarOverdrive.queueCardStartNowHint':
-    '待機列の全員でレースを始めます。空き枠にはハウスパイロットが入ります。',
+    'ここに並ぶパイロットで今すぐレースを始めます。空き枠にはハウスパイロットが入ります。',
   'hudChrome.mortarOverdrive.racingAgainst':
     'レースが始まりました。現在{total}台中{position}位です。',
   'hudChrome.mortarOverdrive.practice': '練習',

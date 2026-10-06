@@ -15433,12 +15433,14 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.queueCardOpenSeat': '빈자리: 협회 소속 파일럿이 채웁니다',
   'hudChrome.mortarOverdrive.queueCardSolo':
     '협회 소속 파일럿만 상대하면 승리가 기록되지 않습니다.',
+  'hudChrome.mortarOverdrive.queueCardNextGrid':
+    '대기열 {position}번째입니다. 이번 그리드는 가득 찼으니 다음 레이스에 출전합니다.',
   'hudChrome.mortarOverdrive.queueCardBusy': '트랙 사용 중: 현재 레이스가 끝나면 시작합니다.',
   'hudChrome.mortarOverdrive.queueCardManual':
     '이 세계에는 다른 누구도 참가할 수 없으므로, "지금 시작"을 누르면 레이스가 시작됩니다.',
   'hudChrome.mortarOverdrive.queueCardStartNow': '지금 시작',
   'hudChrome.mortarOverdrive.queueCardStartNowHint':
-    '대기열의 모든 사람과 레이스를 시작하며, 빈자리는 협회 소속 파일럿이 채웁니다.',
+    '위에 표시된 조종사들과 지금 바로 레이스를 시작하며, 빈자리는 협회 소속 파일럿이 채웁니다.',
   'hudChrome.mortarOverdrive.racingAgainst':
     '경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
   'hudChrome.mortarOverdrive.practice': '연습',

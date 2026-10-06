@@ -14749,12 +14749,14 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.queueCardStarting': '比賽即將開始',
   'hudChrome.mortarOverdrive.queueCardOpenSeat': '空位：由協會的陪練車手補上',
   'hudChrome.mortarOverdrive.queueCardSolo': '只與陪練車手比賽時，勝利不計入戰績。',
+  'hudChrome.mortarOverdrive.queueCardNextGrid':
+    '你在佇列中排第 {position} 位：這一場的發車格已滿，你將參加下一場。',
   'hudChrome.mortarOverdrive.queueCardBusy': '賽道正在使用中：本場比賽結束後開始。',
   'hudChrome.mortarOverdrive.queueCardManual':
     '這個世界裡沒有其他人能加入，所以比賽會在你按下「立即開始」時開始。',
   'hudChrome.mortarOverdrive.queueCardStartNow': '立即開始',
   'hudChrome.mortarOverdrive.queueCardStartNowHint':
-    '為佇列中的所有人開始比賽，空位由陪練車手補上。',
+    '立即為上面列出的車手開始比賽，空位由陪練車手補上。',
   'hudChrome.mortarOverdrive.racingAgainst': '你的比賽已經開始。你目前名次 {position}/{total}。',
   'hudChrome.mortarOverdrive.practice': '試車',
   'hudChrome.mortarOverdrive.practiceIntro':

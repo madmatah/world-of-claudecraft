@@ -12131,6 +12131,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.mortarOverdrive.promiseSlide'
   | 'hudChrome.mortarOverdrive.queueCardBusy'
   | 'hudChrome.mortarOverdrive.queueCardManual'
+  | 'hudChrome.mortarOverdrive.queueCardNextGrid'
   | 'hudChrome.mortarOverdrive.queueCardOpenSeat'
   | 'hudChrome.mortarOverdrive.queueCardSolo'
   | 'hudChrome.mortarOverdrive.queueCardStartNow'

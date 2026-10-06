@@ -15739,12 +15739,14 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.queueCardOpenSeat': 'Свободное место: его займёт пилот Общества',
   'hudChrome.mortarOverdrive.queueCardSolo':
     'В гонке только с пилотами Общества победа не засчитывается.',
+  'hudChrome.mortarOverdrive.queueCardNextGrid':
+    'Вы {position}-й в очереди: эта решётка заполнена, вы поедете в следующей гонке.',
   'hudChrome.mortarOverdrive.queueCardBusy': 'Трасса занята: старт после текущей гонки.',
   'hudChrome.mortarOverdrive.queueCardManual':
     'В этот мир больше никто не может войти, поэтому гонка начнётся, когда вы нажмёте «Начать сейчас».',
   'hudChrome.mortarOverdrive.queueCardStartNow': 'Начать сейчас',
   'hudChrome.mortarOverdrive.queueCardStartNowHint':
-    'Запускает гонку для всех в очереди, свободные места займут пилоты Общества.',
+    'Запускает гонку сейчас для пилотов из списка, свободные места займут пилоты Общества.',
   'hudChrome.mortarOverdrive.racingAgainst': 'Гонка началась. Вы идёте {position} из {total}.',
   'hudChrome.mortarOverdrive.practice': 'Тренировка',
   'hudChrome.mortarOverdrive.practiceIntro':

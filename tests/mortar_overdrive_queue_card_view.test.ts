@@ -11,6 +11,7 @@ import {
   stepMortarOverdriveQueueCountdown,
 } from '../src/ui/hud/mortar_overdrive/queue_card_view';
 import type { MortarOverdriveQueueStart } from '../src/world_api';
+import { addAt, makeWorld } from './mortar_overdrive_util';
 import { assertAllocationStable } from './util/alloc_probe';
 
 function start(over: Partial<MortarOverdriveQueueStart> = {}): MortarOverdriveQueueStart {
@@ -151,5 +152,42 @@ describe('Mortar Overdrive queue countdown', () => {
         'mortar overdrive queue countdown',
       ),
     ).not.toThrow();
+  });
+
+  it('never counts up or stutters over a real Sim readout and a jittered mirror cadence', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const pid = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.mortarOverdriveQueueJoin(pid);
+    sim.tick();
+    // Offline: a fresh reading every 50 ms tick, the client clock in step.
+    const offline = createMortarOverdriveQueueCountdown();
+    let last = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < 400; i++) {
+      stepMortarOverdriveQueueCountdown(offline, sim.mortarOverdriveInfoFor(pid).start, i * 50);
+      expect(offline.seconds).toBeLessThanOrEqual(last);
+      last = offline.seconds;
+      sim.tick();
+    }
+    // Online: the mirror derives the ticks left from one absolute deadline
+    // against snapshots that land 50 to 100 ms apart, painted every 16 ms.
+    const deadline = 900;
+    const online = createMortarOverdriveQueueCountdown();
+    let tick = 0;
+    let nextSnap = 0;
+    let reading: MortarOverdriveQueueStart = start({ startsInTicks: deadline });
+    last = Number.POSITIVE_INFINITY;
+    for (let now = 0; now < 20_000; now += 16) {
+      if (now >= nextSnap) {
+        tick = Math.floor(now / 50);
+        reading = start({ startsInTicks: Math.max(0, deadline - tick) });
+        nextSnap = now + 50 + ((tick * 37) % 51);
+      }
+      stepMortarOverdriveQueueCountdown(online, reading, now);
+      expect(online.seconds).toBeLessThanOrEqual(last);
+      last = online.seconds;
+    }
+    // And it lands where the deadline says (45 s out, the last paint just
+    // under 20 s in), within the one second a whole-second display rounds.
+    expect(Math.abs(online.seconds - (deadline * 50 - 20_000) / 1000)).toBeLessThanOrEqual(1);
   });
 });

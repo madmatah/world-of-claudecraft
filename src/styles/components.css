@@ -26765,7 +26765,8 @@
   }
   /* Refused while the lane is busy, yet still focusable (aria-disabled), so it
    borrows the .btn:disabled look explicitly. */
-  #mortar-overdrive-window .mortar-overdrive-start-now[aria-disabled="true"] {
+  #mortar-overdrive-window .mortar-overdrive-start-now[aria-disabled="true"],
+  #mortar-overdrive-window .mortar-overdrive-start-now[aria-disabled="true"]:hover {
     filter: grayscale(1) brightness(0.7);
     cursor: default;
   }
@@ -26779,6 +26780,12 @@
   @media (prefers-reduced-motion: reduce) {
     .mortar-overdrive-start-fill {
       transition: none;
+    }
+  }
+  @media (forced-colors: active) {
+    #mortar-overdrive-window .mortar-overdrive-start-now[aria-disabled="true"] {
+      color: GrayText;
+      border-color: GrayText;
     }
   }
 
@@ -27738,6 +27745,8 @@
     color: var(--color-text-secondary);
     font-size: 13px;
   }
+  /* Shared with the queue card's grid; its open-seat overrides in the window
+     section outrank these on specificity (two classes), not source order. */
   .mortar-overdrive-lobby-pilots,
   .mortar-overdrive-start-seats {
     display: flex;

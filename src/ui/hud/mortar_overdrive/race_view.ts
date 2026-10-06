@@ -247,7 +247,7 @@ export function buildMortarOverdriveWindowView(
   }
   const open = info.practiceAvailable;
   if (info.queued) {
-    const card = buildMortarOverdriveQueueCardView(info.start);
+    const card = buildMortarOverdriveQueueCardView(info.start, info.queuePosition);
     return {
       kind: 'queued',
       card,

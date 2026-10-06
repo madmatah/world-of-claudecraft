@@ -106,6 +106,13 @@ export class MortarOverdriveQueueCard {
       `<div class="mortar-overdrive-start-fill ui-bar-fill" data-mo-start-fill></div></div>` +
       `<p class="mortar-overdrive-start-note" id="${NOTE_ID}" role="status" data-mo-start-note></p>` +
       `<ol class="mortar-overdrive-start-seats">${seats}</ol>` +
+      (view.behind > 0
+        ? `<p class="mortar-overdrive-start-solo">${esc(
+            t('hudChrome.mortarOverdrive.queueCardNextGrid', {
+              position: formatNumber(view.behind, { maximumFractionDigits: 0 }),
+            }),
+          )}</p>`
+        : '') +
       (view.solo
         ? `<p class="mortar-overdrive-start-solo">${esc(t('hudChrome.mortarOverdrive.queueCardSolo'))}</p>`
         : '') +

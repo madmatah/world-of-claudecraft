@@ -23,11 +23,15 @@ export interface MortarOverdriveQueueCardView {
   /** The viewer is the only human queued, so the race would be against house
    *  pilots alone, which banks no win (`src/sim/mortar_overdrive/credit.ts`). */
   solo: boolean;
+  /** The viewer's place in the queue when it is past this grid (they race the
+   *  next one), or 0 while they hold one of these seats. */
+  behind: number;
   sig: string;
 }
 
 export function buildMortarOverdriveQueueCardView(
   start: MortarOverdriveQueueStart | undefined,
+  position = 0,
 ): MortarOverdriveQueueCardView {
   const seats: MortarOverdriveQueueCardSeat[] = [];
   const humans = start?.seats ?? [];
@@ -36,10 +40,11 @@ export function buildMortarOverdriveQueueCardView(
     seats.push(seat ? { name: seat.name, you: seat.you } : { name: null, you: false });
   }
   const solo = humans.length === 1 && humans[0]?.you === true;
+  const behind = humans.some((seat) => seat.you) ? 0 : position;
   // Names are joined on a separator no name can hold, so two grids never share
   // a signature by concatenation.
-  const sig = `${solo ? 'solo' : 'field'}\u0000${humans.map((seat) => `${seat.you ? '*' : ''}${seat.name}`).join('\u0000')}`;
-  return { seats, solo, sig };
+  const sig = `${solo ? 'solo' : 'field'}\u0000${behind}\u0000${humans.map((seat) => `${seat.you ? '*' : ''}${seat.name}`).join('\u0000')}`;
+  return { seats, solo, behind, sig };
 }
 
 /**

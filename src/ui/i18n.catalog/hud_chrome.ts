@@ -2471,6 +2471,10 @@ export const hudChromeStrings = {
     // Only when you are the one human queued: the win credit rule needs a
     // human rival who raced the heat.
     queueCardSolo: 'Against house pilots alone, a win does not count.',
+    // When the viewer is past the grid shown (the queue holds more than one
+    // grid): their place, and that they race the next grid.
+    queueCardNextGrid:
+      'You are number {position} in the queue: this grid is full, so you race the next one.',
     // One public race runs at a time; the queue starts after it, and Start now
     // is refused until then (this line is its stated reason).
     queueCardBusy: 'The track is busy: starting after the current race.',
@@ -2480,7 +2484,7 @@ export const hudChromeStrings = {
       'Nobody else can join on this world, so the race starts when you press Start now.',
     queueCardStartNow: 'Start now',
     queueCardStartNowHint:
-      'Starts the race for everyone in the queue, with house pilots in the open seats.',
+      'Starts the race now for the pilots listed, with house pilots in the open seats.',
     // Every race is a full grid, so the window reports where you sit in the
     // field rather than naming one rival.
     racingAgainst: 'Your race is underway. You are running {position} of {total}.',

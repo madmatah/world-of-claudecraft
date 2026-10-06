@@ -23,6 +23,29 @@ import {
 
 const num = (value: number): string => formatNumber(value, { maximumFractionDigits: 0 });
 
+/** The marker attribute (`data-close`, `data-mortar-overdrive-*`) and value of
+ *  the window control holding focus, or null when focus is elsewhere. */
+function focusedControl(root: HTMLElement): { name: string; value: string } | null {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !root.contains(active)) return null;
+  for (const name of active.getAttributeNames()) {
+    if (name === 'data-close' || name.startsWith('data-mortar-overdrive-')) {
+      return { name, value: active.getAttribute(name) ?? '' };
+    }
+  }
+  return null;
+}
+
+/** Hand focus back to the rebuilt control carrying the same marker. */
+function refocusControl(root: HTMLElement, control: { name: string; value: string }): void {
+  for (const el of root.querySelectorAll(`[${control.name}]`)) {
+    if (el.getAttribute(control.name) === control.value) {
+      (el as HTMLElement).focus();
+      return;
+    }
+  }
+}
+
 /** Difficulty tier -> its copy keys. Closed maps, so an unlabelled tier is a
  *  compile error rather than a button reading its own wire token. */
 const TIER_LABEL_KEYS: Record<MortarOverdriveDriverTier, TranslationKey> = {
@@ -126,6 +149,7 @@ export class MortarOverdriveWindow {
     const root = this.deps.root();
     if (root.style.display !== 'block') return;
     root.style.display = 'none';
+    this.queueCard.reset();
     this.deps.restoreFocus(this.openerFocus);
     this.openerFocus = null;
   }
@@ -168,18 +192,21 @@ export class MortarOverdriveWindow {
     // The queue card's countdown is live outside the signature: stepped and
     // painted through the elided writers every frame the card is up.
     const queued = view?.kind === 'queued';
-    if (queued) {
-      this.queueCard.step(info.start, this.deps.now());
-      this.queueCard.paint();
-    }
+    if (queued) this.queueCard.step(info.start, this.deps.now());
+    // A rebuild paints the card in bind(), on its new nodes.
+    if (queued && sig === this.lastWindowSig) this.queueCard.paint();
     if (sig === this.lastWindowSig) return;
     this.lastWindowSig = sig;
     const root = this.deps.root();
+    // A rebuild must not drop the keyboard: the queue card's grid moves with
+    // every join, so the control that held focus takes it back by its marker.
+    const focused = focusedControl(root);
     root.innerHTML = view
       ? this.windowHtml(view)
       : this.setupHtml(setup as MortarOverdriveSetupView);
     if (queued) this.queueCard.bind(root);
     else this.queueCard.reset();
+    if (focused) refocusControl(root, focused);
     root.querySelector('[data-close]')?.addEventListener('click', () => this.close());
     root.querySelector('[data-mortar-overdrive-start-now]')?.addEventListener('click', () => {
       if (this.queueCard.canStart) this.deps.world().startMortarOverdriveNow();
