@@ -43,7 +43,7 @@ import {
   type MortarOverdriveDriverBlast,
   type MortarOverdriveDriverTier,
 } from './driver';
-import { MORTAR_OVERDRIVE_GRID_SIZE } from './layout';
+import { MORTAR_OVERDRIVE_GRID_SIZE, mortarOverdrivePublicLane } from './layout';
 import {
   type MortarOverdriveMatch,
   mortarOverdriveCircuitOf,
@@ -197,7 +197,8 @@ export function startMortarOverdrivePractice(
  * wait out the backfill, which is minutes per attempt while a circuit is being
  * tuned. It takes the circuit's PUBLIC lane rather than a private copy, since
  * that is the lane a real race drives and the one worth testing, so it refuses
- * while a public race is already running. Gated by `ctx.devCommands` at its
+ * while a public race is already running. The practice circuit has no public
+ * lane, so naming it takes a free private copy, as Practice does. Gated by `ctx.devCommands` at its
  * caller and again here, never reachable in production.
  */
 export function startMortarOverdriveDevRace(
@@ -211,8 +212,15 @@ export function startMortarOverdriveDevRace(
   if (!resolved) return false;
   const id = resolved.meta.entityId;
   if (mortarOverdriveMatchOf(sim.ctx, id)) return false;
-  if (!mortarOverdriveCircuitById(circuitId)) return false;
+  const circuit = mortarOverdriveCircuitById(circuitId);
+  if (!circuit) return false;
   if (!mortarOverdriveEligible(sim.ctx, id) || mortarOverdriveInCombat(sim.ctx, id)) return false;
+  // The practice circuit has no public lane: it is raced on one of its private
+  // copies, the lane the roster pass then holds the pilot to.
+  if (mortarOverdrivePublicLane(circuit) < 0) {
+    const slot = mortarOverdriveFreePracticeSlot(sim.ctx);
+    return slot >= 0 && seatWithBots(sim, [id], tier, slot);
+  }
   return seatWithBots(sim, [id], tier, -1, circuitId);
 }
 

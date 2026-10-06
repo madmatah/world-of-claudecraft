@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { mountVisualSpec, mountVisualSpecFor } from '../src/render/mount_visuals';
 import { resolvePosition } from '../src/sim/colliders';
-import { mortarOverdriveCompetitionCircuits } from '../src/sim/content/mortar_overdrive/circuits';
+import {
+  MORTAR_OVERDRIVE_PRACTICE_CIRCUIT,
+  mortarOverdriveCompetitionCircuits,
+} from '../src/sim/content/mortar_overdrive/circuits';
 import { MORTAR_OVERDRIVE_ABILITY_ID } from '../src/sim/content/mortar_overdrive/kit';
 import { mountPresentationKey, riderSkin } from '../src/sim/content/mount_skins';
 import { MOUNTS, type MountKey } from '../src/sim/content/mounts';
@@ -16,6 +19,7 @@ import { vehicleProfile } from '../src/sim/content/vehicles';
 import { updateDeeds } from '../src/sim/deeds';
 import { startMortarOverdriveDevRace } from '../src/sim/mortar_overdrive/bots';
 import { freshMortarOverdriveMeta } from '../src/sim/mortar_overdrive/context';
+import { MORTAR_OVERDRIVE_LOADING_MAX_TICKS } from '../src/sim/mortar_overdrive/loading';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/mortar_overdrive/ground_blast';
 import {
   MORTAR_OVERDRIVE_GRID_SIZE,
@@ -1903,6 +1907,27 @@ describe('The Mortar Overdrive Book of Deeds credit (docs/design/deeds.md)', () 
       expect(meta.deedsEarned.has('pvp_mortar_overdrive_first_race'), `bot ${pid}`).toBe(false);
       expect(meta.mortarOverdriveWins, `bot ${pid}`).toBe(0);
     }
+  });
+
+  it('races the practice-only circuit through the dev race on a private copy, never an off-lane retire', () => {
+    // The practice circuit has no public lane, so the dev race must take one of its
+    // private copies: seated on lane -1 the roster pass saw a pilot off their own
+    // copy and retired them on the first tick, voiding the race.
+    const sim = makeWorld({ devCommands: true });
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect(
+      startMortarOverdriveDevRace(sim, MORTAR_OVERDRIVE_PRACTICE_CIRCUIT.id, 'ace', human),
+    ).toBe(true);
+    const liveMatch = required(
+      sim.mortarOverdrive.practices.find((race) => race.pids.includes(human)),
+      'practice match',
+    );
+    expect(liveMatch.practice).not.toBeNull();
+    const budget =
+      MORTAR_OVERDRIVE_LOADING_MAX_TICKS + MORTAR_OVERDRIVE_COUNTDOWN_TICKS + TICK_RATE;
+    for (let tick = 0; tick < budget && liveMatch.phase !== 'racing'; tick++) sim.tick();
+    expect(liveMatch.phase).toBe('racing');
+    expect(required(liveMatch.progress.get(human), 'human progress').retiredTick).toBeNull();
   });
 
   it('tracks a real off-track excursion (garden or water), but never the soft verge alone', () => {
