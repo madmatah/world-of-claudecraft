@@ -6545,6 +6545,42 @@ function bankSocketRoundTrip(): Scenario {
   };
 }
 
+// Mortar Overdrive Start now: the competition-circuit draw reached from a
+// COMMAND between ticks rather than from the tick's queue pop or backfill. A
+// lone pilot queues on a world with no backfill, waits a tick (nothing draws),
+// presses Start now (exactly one draw, the circuit, before the next tick), and
+// the grid of house pilots runs its loading lobby, countdown and first
+// seconds of driving inside the digest. Any change to where or when that draw
+// lands, or to the seat it shares with the backfill, moves this golden.
+function mortarOverdriveStartNow(): Scenario {
+  return {
+    name: 'mortar_overdrive_start_now',
+    coverage: [
+      'mortar overdrive Start now: one competition-circuit draw from a command between ticks',
+      'the backfill seat: house pilots at the backfill tier fill the open seats',
+      'loading lobby closed by the human ready, countdown, GO, house pilots driving',
+    ],
+    build: () => new Sim({ seed: 7602, playerClass: 'warrior', noPlayer: true }),
+    drive(rec: Recorder) {
+      const sim = rec.sim as AnySim;
+      const pid = sim.addPlayer('warrior', 'Aster');
+      sim.mortarOverdriveQueueJoin(pid);
+      rec.tick(1); // queued alone: no backfill on this world, nothing draws
+      rec.snapshot('queued');
+      sim.startMortarOverdriveNow(pid); // the one circuit draw, between ticks
+      rec.snapshot('started');
+      rec.notes.seated = sim.mortarOverdrive.match?.pids.length ?? 0;
+      mortarOverdriveReady(sim.ctx, pid); // house pilots are ready from the seat
+      rec.tick(1); // the lobby closes and the countdown starts
+      rec.tick(MORTAR_OVERDRIVE_COUNTDOWN_TICKS); // the start lock, then GO
+      const meta = sim.players.get(pid);
+      if (meta) meta.moveInput.forward = true;
+      rec.tick(40); // two seconds of the human and the house pilots driving
+      rec.snapshot('driving');
+    },
+  };
+}
+
 // Mortar Overdrive: Mortar Overdrive's two shared-stream draw sites (the competition
 // circuit pick when a grid seats, and the weighted pickup-effect draw when a
 // box changes hands) plus the vehicle kernel, the countdown lock, the surface
@@ -8153,4 +8189,6 @@ export const SCENARIOS: Scenario[] = [
   // Appended on the same tiling rule: this branch's own scenario lands after
   // every release scenario, so no release scenario moves between shards.
   mortarOverdriveRace(),
+  // Appended last on the same rule, so the mortar_overdrive golden stays put.
+  mortarOverdriveStartNow(),
 ];

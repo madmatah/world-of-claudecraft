@@ -1563,6 +1563,22 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     expect(SCENARIOS.filter((s) => s.name.startsWith('rift_clear_rewards')).length).toBe(4);
   });
 
+  it('mortar_overdrive_start_now: Start now draws the circuit once, between ticks, and the backfill seat races', () => {
+    const { trace, rec } = record(SCENARIOS.find((s) => s.name === 'mortar_overdrive_start_now')!);
+    const drawsAt = (label: string): number => {
+      const frame = trace.frames.find((f) => f.label === label);
+      if (!frame) throw new Error(`missing the ${label} checkpoint frame`);
+      return frame.rng.draws;
+    };
+    // Queued alone on a world with no backfill: nothing draws. The press
+    // between ticks draws exactly the one circuit value.
+    expect(drawsAt('queued')).toBe(0);
+    expect(drawsAt('started')).toBe(1);
+    expect(rec.notes.seated).toBe(4);
+    const ev = rec.allEvents as Ev[];
+    expect(ev.filter((e) => e.type === 'mortarOverdriveGo').length).toBeGreaterThan(0);
+  });
+
   it('mortar_overdrive: seats a grid, drives, bumps, ghosts a recovery, takes a box, and classifies the forfeit cascade', () => {
     const rec = run('mortar_overdrive');
     const ev = rec.allEvents as Ev[];

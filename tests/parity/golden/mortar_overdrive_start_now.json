@@ -1,0 +1,2328 @@
+{
+  "scenario": "mortar_overdrive_start_now",
+  "seed": 7602,
+  "sampleEvery": 20,
+  "ticks": 222,
+  "coverage": [
+    "mortar overdrive Start now: one competition-circuit draw from a command between ticks",
+    "the backfill seat: house pilots at the backfill tier fill the open seats",
+    "loading lobby closed by the human ready, countdown, GO, house pilots driving"
+  ],
+  "draws": 1857,
+  "drawDigest": "b738c7de",
+  "frames": [
+    {
+      "tick": 0,
+      "time": 0,
+      "nextId": 1010,
+      "state": "5bc471b0",
+      "events": "741638a5",
+      "rng": {
+        "draws": 0,
+        "digest": "811c9dc5"
+      },
+      "label": "init",
+      "players": [],
+      "entities": []
+    },
+    {
+      "tick": 1,
+      "time": 0.05,
+      "nextId": 1011,
+      "state": "88dbb1fe",
+      "events": "27ef6db0",
+      "rng": {
+        "draws": 0,
+        "digest": "811c9dc5"
+      },
+      "label": "queued",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "recruit_tunic",
+              "worn_sword"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1010,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        }
+      ],
+      "entities": [
+        {
+          "aiState": "idle",
+          "attackPower": 46,
+          "auras": [
+            {
+              "duration": 3600,
+              "id": "battle_stance",
+              "kind": "battle_stance",
+              "name": "Battle Stance",
+              "remaining": 3599.95,
+              "school": "physical",
+              "sourceId": 1010
+            }
+          ],
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "combatTimer": 99.05,
+          "comboUntil": -1,
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "fallStartY": -2,
+          "fiveSecondRule": 99.05,
+          "healPower": 5,
+          "hp": 100,
+          "id": 1010,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        }
+      ]
+    },
+    {
+      "tick": 1,
+      "time": 0.05,
+      "nextId": 1014,
+      "state": "c205d738",
+      "events": "b02c7c06",
+      "rng": {
+        "draws": 1,
+        "digest": "5dd52320"
+      },
+      "label": "started",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "recruit_tunic",
+              "worn_sword"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1010,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "rogue",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "footpad_jerkin",
+              "rusty_dagger"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1011,
+          "equipment": {
+            "chest": "footpad_jerkin",
+            "mainhand": "rusty_dagger",
+            "offhand": "rusty_dagger"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "mage",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1012,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "priest",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1013,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        }
+      ],
+      "entities": [
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 46,
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "combatTimer": 99,
+          "comboUntil": -1,
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "mo_loaner",
+            "slipCap": 1,
+            "speedCap": 1
+          },
+          "facing": 1.329434,
+          "fiveSecondRule": 99.05,
+          "healPower": 5,
+          "hp": 100,
+          "id": 1010,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113673.665779,
+            "z": 2903.672921
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 42,
+          "combatTimer": 99,
+          "comboUntil": -1,
+          "critChance": 0.0625,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0625,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "mo_loaner",
+            "slipCap": 1,
+            "speedCap": 1
+          },
+          "dualWielding": true,
+          "facing": 1.329434,
+          "fiveSecondRule": 99,
+          "healPower": 6,
+          "hp": 62,
+          "id": 1011,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 62,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "rusty_dagger",
+          "offhandWeapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          },
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113672.470651,
+            "z": 2908.527987
+          },
+          "potionCooldownUntil": -1,
+          "resource": 100,
+          "resourceType": "energy",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 6,
+          "stats": {
+            "agi": 25,
+            "armor": 104,
+            "int": 11,
+            "spi": 12,
+            "sta": 17,
+            "str": 17
+          },
+          "templateId": "rogue",
+          "weapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "combatTimer": 99,
+          "comboUntil": -1,
+          "critChance": 0.056,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.056,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "mo_loaner",
+            "slipCap": 1,
+            "speedCap": 1
+          },
+          "facing": 1.329434,
+          "fiveSecondRule": 99,
+          "healPower": 13,
+          "hp": 54,
+          "id": 1012,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 54,
+          "maxResource": 195,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113671.275522,
+            "z": 2913.383054
+          },
+          "potionCooldownUntil": -1,
+          "resource": 195,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 13,
+          "stats": {
+            "agi": 12,
+            "armor": 57,
+            "int": 25,
+            "spi": 22,
+            "sta": 14,
+            "str": 10
+          },
+          "templateId": "mage",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "combatTimer": 99,
+          "comboUntil": -1,
+          "critChance": 0.0555,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0555,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 1,
+            "profileKey": "mo_loaner",
+            "slipCap": 1,
+            "speedCap": 1
+          },
+          "facing": 1.329434,
+          "fiveSecondRule": 99,
+          "healPower": 12,
+          "hp": 51,
+          "id": 1013,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 51,
+          "maxResource": 175,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113670.080393,
+            "z": 2918.23812
+          },
+          "potionCooldownUntil": -1,
+          "resource": 175,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 12,
+          "stats": {
+            "agi": 11,
+            "armor": 50,
+            "int": 23,
+            "spi": 24,
+            "sta": 13,
+            "str": 10
+          },
+          "templateId": "priest",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        }
+      ]
+    },
+    {
+      "tick": 20,
+      "time": 1,
+      "nextId": 1014,
+      "state": "cdcb4219",
+      "events": "fd027a81",
+      "rng": {
+        "draws": 1,
+        "digest": "5dd52320"
+      }
+    },
+    {
+      "tick": 40,
+      "time": 2,
+      "nextId": 1014,
+      "state": "78b6dede",
+      "events": "741638a5",
+      "rng": {
+        "draws": 1,
+        "digest": "5dd52320"
+      }
+    },
+    {
+      "tick": 60,
+      "time": 3,
+      "nextId": 1014,
+      "state": "39af6c09",
+      "events": "741638a5",
+      "rng": {
+        "draws": 147,
+        "digest": "9245287d"
+      }
+    },
+    {
+      "tick": 80,
+      "time": 4,
+      "nextId": 1014,
+      "state": "526c9fe0",
+      "events": "741638a5",
+      "rng": {
+        "draws": 324,
+        "digest": "71b129da"
+      }
+    },
+    {
+      "tick": 100,
+      "time": 5,
+      "nextId": 1014,
+      "state": "37a4f85b",
+      "events": "741638a5",
+      "rng": {
+        "draws": 505,
+        "digest": "53c07b4d"
+      }
+    },
+    {
+      "tick": 120,
+      "time": 6,
+      "nextId": 1014,
+      "state": "2033f58a",
+      "events": "741638a5",
+      "rng": {
+        "draws": 734,
+        "digest": "bba76cd3"
+      }
+    },
+    {
+      "tick": 140,
+      "time": 7,
+      "nextId": 1014,
+      "state": "cf3258d5",
+      "events": "741638a5",
+      "rng": {
+        "draws": 929,
+        "digest": "b21b38ce"
+      }
+    },
+    {
+      "tick": 160,
+      "time": 8,
+      "nextId": 1014,
+      "state": "8119b10c",
+      "events": "741638a5",
+      "rng": {
+        "draws": 1160,
+        "digest": "9951320f"
+      }
+    },
+    {
+      "tick": 180,
+      "time": 9,
+      "nextId": 1014,
+      "state": "651889e7",
+      "events": "741638a5",
+      "rng": {
+        "draws": 1403,
+        "digest": "8c922232"
+      }
+    },
+    {
+      "tick": 200,
+      "time": 10,
+      "nextId": 1014,
+      "state": "656b49f8",
+      "events": "851ebe0e",
+      "rng": {
+        "draws": 1696,
+        "digest": "146f1448"
+      }
+    },
+    {
+      "tick": 220,
+      "time": 11,
+      "nextId": 1014,
+      "state": "9045d79f",
+      "events": "58e50b5a",
+      "rng": {
+        "draws": 1846,
+        "digest": "a2e1c0d4"
+      }
+    },
+    {
+      "tick": 222,
+      "time": 11.1,
+      "nextId": 1014,
+      "state": "b73275ac",
+      "events": "1aed7acc",
+      "rng": {
+        "draws": 1857,
+        "digest": "b738c7de"
+      },
+      "label": "driving",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "recruit_tunic",
+              "worn_sword"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1010,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "rogue",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "footpad_jerkin",
+              "rusty_dagger"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1011,
+          "equipment": {
+            "chest": "footpad_jerkin",
+            "mainhand": "rusty_dagger",
+            "offhand": "rusty_dagger"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "mage",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1012,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "priest",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1013,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        }
+      ],
+      "entities": [
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 46,
+          "auras": [
+            {
+              "duration": 3600,
+              "id": "battle_stance",
+              "kind": "battle_stance",
+              "name": "Battle Stance",
+              "remaining": 3588.95,
+              "school": "physical",
+              "sourceId": 1010
+            },
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.75,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            }
+          ],
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 0.25,
+            "profileKey": "mo_loaner",
+            "slip": -14,
+            "slipCap": 1,
+            "speed": 9.454511,
+            "speedCap": 1,
+            "spin": -1.29573
+          },
+          "facing": -0.467776,
+          "fiveSecondRule": 110.1,
+          "healPower": 5,
+          "hp": 100,
+          "id": 1010,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113701.029841,
+            "z": 2913.450759
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 2,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 42,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.75,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            },
+            {
+              "duration": 0.2,
+              "id": "mortar_overdrive_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.75
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "cooldowns": [
+            [
+              "mortar_overdrive_ground_blast",
+              3.35
+            ]
+          ],
+          "critChance": 0.0625,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0625,
+          "drive": {
+            "dragMult": 3,
+            "gripMult": 0.175,
+            "profileKey": "mo_loaner",
+            "slip": 12.855612,
+            "slipCap": 1,
+            "speed": -0.842614,
+            "speedCap": 1,
+            "spin": 1.231564,
+            "steerAngle": -0.825,
+            "yawRate": -0.356563
+          },
+          "dualWielding": true,
+          "facing": -2.395617,
+          "fallStartY": 4.2,
+          "fiveSecondRule": 110.05,
+          "healPower": 6,
+          "hp": 62,
+          "id": 1011,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 62,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "rusty_dagger",
+          "offhandWeapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          },
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113694.871782,
+            "y": 4.2,
+            "z": 2904.763415
+          },
+          "potionCooldownUntil": -1,
+          "resource": 100,
+          "resourceType": "energy",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 6,
+          "stats": {
+            "agi": 25,
+            "armor": 104,
+            "int": 11,
+            "spi": 12,
+            "sta": 17,
+            "str": 17
+          },
+          "templateId": "rogue",
+          "weapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 2,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.8,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.6
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "cooldowns": [
+            [
+              "mortar_overdrive_ground_blast",
+              3.3
+            ]
+          ],
+          "critChance": 0.056,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.056,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 0.25,
+            "profileKey": "mo_loaner",
+            "slip": -3.686064,
+            "slipCap": 1,
+            "speed": -2.491179,
+            "speedCap": 1,
+            "spin": -0.038127,
+            "steerAngle": 0.65,
+            "yawRate": 0.109748
+          },
+          "facing": 1.183447,
+          "fallStartY": 4.16,
+          "fiveSecondRule": 110.05,
+          "healPower": 13,
+          "hp": 54,
+          "id": 1012,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 54,
+          "maxResource": 195,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113685.526586,
+            "y": 4.2,
+            "z": 2912.363958
+          },
+          "potionCooldownUntil": -1,
+          "resource": 195,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 13,
+          "stats": {
+            "agi": 12,
+            "armor": 57,
+            "int": 25,
+            "spi": 22,
+            "sta": 14,
+            "str": 10
+          },
+          "templateId": "mage",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.8,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.6
+            },
+            {
+              "duration": 0.2,
+              "id": "mortar_overdrive_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1013,
+              "value": 0.75
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "critChance": 0.0555,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0555,
+          "drive": {
+            "dragMult": 3,
+            "gripMult": 0.175,
+            "handbrake": 1,
+            "profileKey": "mo_loaner",
+            "slip": -9.669858,
+            "slipCap": 1,
+            "speed": 16.796159,
+            "speedCap": 1,
+            "spin": -0.54991,
+            "steerAngle": 1,
+            "yawRate": 0.570709
+          },
+          "facing": 0.311241,
+          "fallStartY": 1.028431,
+          "fiveSecondRule": 110.05,
+          "healPower": 12,
+          "hp": 51,
+          "id": 1013,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 51,
+          "maxResource": 175,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113695.008366,
+            "y": 0.096862,
+            "z": 2927.989322
+          },
+          "potionCooldownUntil": -1,
+          "resource": 175,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 12,
+          "stats": {
+            "agi": 11,
+            "armor": 50,
+            "int": 23,
+            "spi": 24,
+            "sta": 13,
+            "str": 10
+          },
+          "templateId": "priest",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        }
+      ]
+    },
+    {
+      "tick": 222,
+      "time": 11.1,
+      "nextId": 1014,
+      "state": "b73275ac",
+      "events": "741638a5",
+      "rng": {
+        "draws": 1857,
+        "digest": "b738c7de"
+      },
+      "label": "final",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "recruit_tunic",
+              "worn_sword"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1010,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "rogue",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "footpad_jerkin",
+              "rusty_dagger"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1011,
+          "equipment": {
+            "chest": "footpad_jerkin",
+            "mainhand": "rusty_dagger",
+            "offhand": "rusty_dagger"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "mage",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1012,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        },
+        {
+          "activeLoadout": -1,
+          "archetype": {},
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "bgRating": 1500,
+          "cls": "priest",
+          "companionUpgrades": {},
+          "counters": {},
+          "craftDaily": {},
+          "craftSkills": {},
+          "deedStats": {
+            "counters": {},
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "apprentice_robe",
+              "baked_bread",
+              "gnarled_staff",
+              "spring_water"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 1013,
+          "equipment": {
+            "chest": "apprentice_robe",
+            "mainhand": "gnarled_staff"
+          },
+          "equipmentInstance": {},
+          "factionCurrencies": {},
+          "factions": {},
+          "gatheringProficiency": {},
+          "gliderRecords": {},
+          "harvestPreference": {
+            "kind": "all"
+          },
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 5,
+              "itemId": "spring_water"
+            }
+          ],
+          "mailWelcomed": true,
+          "mortarOverdriveMatchId": 1,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
+          "talents": {
+            "rows": {}
+          },
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          },
+          "vaultAttemptDurable": true,
+          "worldQuestReplacements": {},
+          "wyrmfallDaily": {}
+        }
+      ],
+      "entities": [
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 46,
+          "auras": [
+            {
+              "duration": 3600,
+              "id": "battle_stance",
+              "kind": "battle_stance",
+              "name": "Battle Stance",
+              "remaining": 3588.95,
+              "school": "physical",
+              "sourceId": 1010
+            },
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.75,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            }
+          ],
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 0.25,
+            "profileKey": "mo_loaner",
+            "slip": -14,
+            "slipCap": 1,
+            "speed": 9.454511,
+            "speedCap": 1,
+            "spin": -1.29573
+          },
+          "facing": -0.467776,
+          "fiveSecondRule": 110.1,
+          "healPower": 5,
+          "hp": 100,
+          "id": 1010,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113701.029841,
+            "z": 2913.450759
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 2,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 42,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.75,
+              "school": "physical",
+              "sourceId": 1012,
+              "value": 0.6
+            },
+            {
+              "duration": 0.2,
+              "id": "mortar_overdrive_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.75
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "cooldowns": [
+            [
+              "mortar_overdrive_ground_blast",
+              3.35
+            ]
+          ],
+          "critChance": 0.0625,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0625,
+          "drive": {
+            "dragMult": 3,
+            "gripMult": 0.175,
+            "profileKey": "mo_loaner",
+            "slip": 12.855612,
+            "slipCap": 1,
+            "speed": -0.842614,
+            "speedCap": 1,
+            "spin": 1.231564,
+            "steerAngle": -0.825,
+            "yawRate": -0.356563
+          },
+          "dualWielding": true,
+          "facing": -2.395617,
+          "fallStartY": 4.2,
+          "fiveSecondRule": 110.05,
+          "healPower": 6,
+          "hp": 62,
+          "id": 1011,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 62,
+          "maxResource": 100,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "offhandItemId": "rusty_dagger",
+          "offhandWeapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          },
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113694.871782,
+            "y": 4.2,
+            "z": 2904.763415
+          },
+          "potionCooldownUntil": -1,
+          "resource": 100,
+          "resourceType": "energy",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 6,
+          "stats": {
+            "agi": 25,
+            "armor": 104,
+            "int": 11,
+            "spi": 12,
+            "sta": 17,
+            "str": 17
+          },
+          "templateId": "rogue",
+          "weapon": {
+            "dagger": true,
+            "max": 4,
+            "min": 2,
+            "speed": 1.8
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 2,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.8,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.6
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "cooldowns": [
+            [
+              "mortar_overdrive_ground_blast",
+              3.3
+            ]
+          ],
+          "critChance": 0.056,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.056,
+          "drive": {
+            "dragMult": 1,
+            "gripMult": 0.25,
+            "profileKey": "mo_loaner",
+            "slip": -3.686064,
+            "slipCap": 1,
+            "speed": -2.491179,
+            "speedCap": 1,
+            "spin": -0.038127,
+            "steerAngle": 0.65,
+            "yawRate": 0.109748
+          },
+          "facing": 1.183447,
+          "fallStartY": 4.16,
+          "fiveSecondRule": 110.05,
+          "healPower": 13,
+          "hp": 54,
+          "id": 1012,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 54,
+          "maxResource": 195,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113685.526586,
+            "y": 4.2,
+            "z": 2912.363958
+          },
+          "potionCooldownUntil": -1,
+          "resource": 195,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 13,
+          "stats": {
+            "agi": 12,
+            "armor": 57,
+            "int": 25,
+            "spi": 22,
+            "sta": 14,
+            "str": 10
+          },
+          "templateId": "mage",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        },
+        {
+          "abilityCharges": {
+            "mortar_overdrive_ground_blast": {
+              "charges": 3,
+              "fixed": true,
+              "maxCharges": 3
+            }
+          },
+          "aiState": "idle",
+          "attackPower": 10,
+          "auras": [
+            {
+              "duration": 1.5,
+              "id": "mortar_overdrive_ground_blast_control",
+              "kind": "slow",
+              "name": "Ground Blast",
+              "remaining": 0.8,
+              "school": "physical",
+              "sourceId": 1011,
+              "value": 0.6
+            },
+            {
+              "duration": 0.2,
+              "id": "mortar_overdrive_soft_verge",
+              "kind": "slow",
+              "name": "Soft Verge",
+              "remaining": 0.2,
+              "school": "physical",
+              "sourceId": 1013,
+              "value": 0.75
+            }
+          ],
+          "combatTimer": 110.05,
+          "comboUntil": -1,
+          "critChance": 0.0555,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.0555,
+          "drive": {
+            "dragMult": 3,
+            "gripMult": 0.175,
+            "handbrake": 1,
+            "profileKey": "mo_loaner",
+            "slip": -9.669858,
+            "slipCap": 1,
+            "speed": 16.796159,
+            "speedCap": 1,
+            "spin": -0.54991,
+            "steerAngle": 1,
+            "yawRate": 0.570709
+          },
+          "facing": 0.311241,
+          "fallStartY": 1.028431,
+          "fiveSecondRule": 110.05,
+          "healPower": 12,
+          "hp": 51,
+          "id": 1013,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 51,
+          "maxResource": 175,
+          "mountKey": "terrorspark_groundshaker",
+          "moveSpeed": 7,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 113695.008366,
+            "y": 0.096862,
+            "z": 2927.989322
+          },
+          "potionCooldownUntil": -1,
+          "resource": 175,
+          "resourceType": "mana",
+          "spawnPos": {
+            "x": -94,
+            "y": -2,
+            "z": -58
+          },
+          "spellPower": 12,
+          "stats": {
+            "agi": 11,
+            "armor": 50,
+            "int": 23,
+            "spi": 24,
+            "sta": 13,
+            "str": 10
+          },
+          "templateId": "priest",
+          "weapon": {
+            "max": 6,
+            "min": 3,
+            "speed": 2.9
+          }
+        }
+      ]
+    }
+  ]
+}
