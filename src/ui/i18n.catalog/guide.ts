@@ -2380,7 +2380,7 @@ export const guideStrings = {
       "The Evergarden's head gardeners never meant the service paths between the hedgerows for anything faster than a wheelbarrow, but a groundskeeper with too much time and a loaned mount found otherwise. The Society that grew out of that first dare now marks out a proper circuit, seats a full grid, and drops the flag whenever four pilots are ready to go.",
     howHeading: 'How to play',
     howQueueBody:
-      'Queue for a race from the Mortar Overdrive window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.',
+      'Queue for a race from the Mortar Overdrive window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins. If nobody else turns up in time, house pilots take the open seats. While you wait, the window shows who is on the grid and when the race starts, and any queued pilot can press Start now to begin at once. A win only counts when another player raced the heat with you.',
     howRaceBody:
       'Steer, throttle, and brake with your usual movement keys, and hold the jump control to pull the handbrake and slide through a tight corner. Every pilot carries Ground Blast, a forward shot that unsteadies whoever it catches, so a rival in your way is never quite safe. First across the line after the final lap takes the win, and the whole field is ranked by where each pilot stands when the race is decided.',
     howLimitsBody:
