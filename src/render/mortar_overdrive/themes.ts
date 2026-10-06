@@ -138,7 +138,7 @@ export interface MortarOverdriveCircuitTheme {
   props: readonly string[];
   /**
    * The water's own colour ramp, if this theme wants one. Absent leaves the
-   * world's shipped ramp, which is what every pond outside the Mortar Overdrive uses.
+   * world's shipped ramp, which is what every pond outside the race uses.
    */
   water?: { shallow: number; deep: number };
   /**

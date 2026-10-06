@@ -2228,7 +2228,7 @@ export const en_XA: EnTranslations = {
       "logForfeit": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé. {name} ŵíñš.]",
       "bannerForfeit": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé.]",
       "logForfeitRaceOn": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé. Ţĥé ƒíéļð ŕáçéš óñ ŵíţĥóúţ ýóú.]",
-      "mobileLabel": "[Ŕáçéŕš]"
+      "mobileLabel": "[Óʋéŕðŕíʋé]"
     },
     "options": {
       "clickMoveLeft": "[Ļéƒţ Çļíçķ]",

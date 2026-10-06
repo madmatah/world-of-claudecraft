@@ -15579,7 +15579,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.bannerForfeit': 'レースを棄権しました。',
   'hudChrome.mortarOverdrive.logForfeitRaceOn':
     'レースを棄権しました。レースはあなた抜きで続きます。',
-  'hudChrome.mortarOverdrive.mobileLabel': 'レーサーズ',
+  'hudChrome.mortarOverdrive.mobileLabel': 'オーバードライブ',
   'entities.abilities.mortar_overdrive_ground_blast.name': 'グラウンドブラスト',
   'entities.abilities.mortar_overdrive_ground_blast.description':
     '前方{minRange}ヤード以上先、車体の正面から{coneDegrees}度以内の地面の一点に砲弾を撃つ。砲弾は{minFlight}～{maxFlight}秒後に着弾する。着弾点から{radius}ヤード以内のライバルは全員打ち上げられて吹き飛ばされ、{coreRadius}ヤード以内では最大の威力、外側ほど弱くなる。さらに{gripSeconds}秒間グリップを{gripPct}%失い、{slowSeconds}秒間{slowPct}%減速する。レースの守護はこの命中を吸収する。',

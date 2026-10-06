@@ -15534,7 +15534,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.logForfeit': '경기를 포기했습니다. {name}님이 승리합니다.',
   'hudChrome.mortarOverdrive.bannerForfeit': '경기를 포기했습니다.',
   'hudChrome.mortarOverdrive.logForfeitRaceOn': '경기를 포기했습니다. 경기는 당신 없이 계속됩니다.',
-  'hudChrome.mortarOverdrive.mobileLabel': '레이서즈',
+  'hudChrome.mortarOverdrive.mobileLabel': '오버드라이브',
   'entities.abilities.mortar_overdrive_ground_blast.name': '그라운드 블래스트',
   'entities.abilities.mortar_overdrive_ground_blast.description':
     '전방 최소 {minRange}미터, 기체 정면 기준 {coneDegrees}도 이내의 지면 지점에 포탄을 발사합니다. 포탄은 {minFlight}~{maxFlight}초 뒤에 착탄합니다. 착탄 지점에서 {radius}미터 내의 모든 경쟁자가 공중으로 띄워지며 밀려나는데, {coreRadius}미터 이내에서는 최대 위력이고 가장자리로 갈수록 약해집니다. 또한 {gripSeconds}초 동안 접지력을 {gripPct}% 잃고 {slowSeconds}초 동안 {slowPct}% 느려집니다. 레이스 보호막이 이 공격을 흡수합니다.',

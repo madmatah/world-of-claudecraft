@@ -2228,7 +2228,7 @@ export const ko_KR: EnTranslations = {
       "logForfeit": "경기를 포기했습니다. {name}님이 승리합니다.",
       "bannerForfeit": "경기를 포기했습니다.",
       "logForfeitRaceOn": "경기를 포기했습니다. 경기는 당신 없이 계속됩니다.",
-      "mobileLabel": "레이서즈"
+      "mobileLabel": "오버드라이브"
     },
     "options": {
       "clickMoveLeft": "왼쪽 클릭",

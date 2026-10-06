@@ -2601,7 +2601,7 @@ export const hudChromeStrings = {
     // A forfeit the race outlives: nobody has won yet, so there is no name to give.
     bannerForfeit: 'You forfeited the race.',
     logForfeitRaceOn: 'You forfeited the race. The field races on without you.',
-    mobileLabel: 'Racers',
+    mobileLabel: 'Overdrive',
   },
   // Click-to-move mouse-button toggle labels (Key Bindings panel). The button id
   // 0/2 maps to these at the HUD render boundary.

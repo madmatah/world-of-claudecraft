@@ -115,7 +115,7 @@ export interface MortarOverdriveBasin {
 /** The wrought-iron garden wall: the circuit's OUTER bound, and the only thing
  *  on the whole circuit that stops a racer unless the dressing authors
  *  something solid. Half-extents from the circuit's origin, inside the region
- *  envelope so collision still belongs to the Mortar Overdrive at the wall. */
+ *  envelope so collision still belongs to the race at the wall. */
 export interface MortarOverdrivePerimeter {
   halfX: number;
   halfZ: number;

@@ -2228,7 +2228,7 @@ export const ja_JP: EnTranslations = {
       "logForfeit": "レースを棄権しました。{name}の勝利です。",
       "bannerForfeit": "レースを棄権しました。",
       "logForfeitRaceOn": "レースを棄権しました。レースはあなた抜きで続きます。",
-      "mobileLabel": "レーサーズ"
+      "mobileLabel": "オーバードライブ"
     },
     "options": {
       "clickMoveLeft": "左クリック",

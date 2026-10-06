@@ -184,7 +184,7 @@ function harness() {
     ui.update();
   };
   const forfeitButton = (): HTMLButtonElement | null =>
-    layer.querySelector('.mortarOverdriveHud-forfeit') as HTMLButtonElement | null;
+    layer.querySelector('.mortar-overdrive-hud-forfeit') as HTMLButtonElement | null;
   return {
     ui,
     root,
@@ -786,7 +786,7 @@ describe('Mortar Overdrive podium', () => {
     const podium = h.layer.querySelector('#mortar-overdrive-podium') as HTMLElement;
     expect(podium.classList.contains('shown')).toBe(false);
     // ...and the strip keeps saying it, because nothing else will.
-    expect(h.layer.querySelector('.mortarOverdriveHud-phase')?.textContent).toBe(
+    expect(h.layer.querySelector('.mortar-overdrive-hud-phase')?.textContent).toBe(
       t('hudChrome.mortarOverdrive.lostReturn', { seconds: '4' }),
     );
   });
@@ -803,7 +803,7 @@ describe('Mortar Overdrive podium', () => {
     quitter.ui.update();
     const quitterPodium = quitter.layer.querySelector('#mortar-overdrive-podium') as HTMLElement;
     expect(quitterPodium.classList.contains('shown')).toBe(false);
-    expect(quitter.layer.querySelector('.mortarOverdriveHud-phase')?.textContent).toBe(
+    expect(quitter.layer.querySelector('.mortar-overdrive-hud-phase')?.textContent).toBe(
       t('hudChrome.mortarOverdrive.voidReturn', { seconds: '5' }),
     );
     quitter.ui.toggle();
@@ -824,7 +824,7 @@ describe('Mortar Overdrive podium', () => {
     h.ui.update();
     const podium = h.layer.querySelector('#mortar-overdrive-podium') as HTMLElement;
     expect(podium.classList.contains('shown')).toBe(false);
-    expect(h.layer.querySelector('.mortarOverdriveHud-phase')?.textContent).toBe(
+    expect(h.layer.querySelector('.mortar-overdrive-hud-phase')?.textContent).toBe(
       t('hudChrome.mortarOverdrive.voidReturn', { seconds: '5' }),
     );
     h.ui.toggle();
@@ -903,7 +903,7 @@ describe('Mortar Overdrive podium', () => {
       t('hudChrome.mortarOverdrive.lostReturn', { seconds: '6' }),
     );
     // The strip's own phase line stands down, so the sentence lives in one place.
-    expect(h.layer.querySelector('.mortarOverdriveHud-phase')?.textContent).toBe('');
+    expect(h.layer.querySelector('.mortar-overdrive-hud-phase')?.textContent).toBe('');
 
     h.info.match = finished({ returnIn: 3 });
     h.ui.update();
@@ -1125,13 +1125,13 @@ describe('Mortar Overdrive race-feel HUD', () => {
     h.info.match = match({ phase: 'racing', speed: 47.4, wrongWay: true });
     h.ui.update();
 
-    expect(h.layer.querySelector('.mortarOverdriveHud-speed')?.textContent).toBe(
+    expect(h.layer.querySelector('.mortar-overdrive-hud-speed')?.textContent).toBe(
       t('hudChrome.mortarOverdrive.speed', { speed: '47' }),
     );
-    const warning = h.layer.querySelector('.mortarOverdriveHud-wrong-way') as HTMLElement;
+    const warning = h.layer.querySelector('.mortar-overdrive-hud-wrong-way') as HTMLElement;
     expect(warning.textContent).toBe(t('hudChrome.mortarOverdrive.wrongWay'));
     expect(warning.style.display).toBe('block');
-    (h.layer.querySelector('.mortarOverdriveHud-reset') as HTMLButtonElement).click();
+    (h.layer.querySelector('.mortar-overdrive-hud-reset') as HTMLButtonElement).click();
     expect(h.resetMortarOverdrivePosition).toHaveBeenCalledTimes(1);
   });
 
@@ -1139,13 +1139,13 @@ describe('Mortar Overdrive race-feel HUD', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing', warded: true, wardIn: 7 });
     h.ui.update();
-    const chip = h.layer.querySelector('.mortarOverdriveHud-ward') as HTMLElement;
+    const chip = h.layer.querySelector('.mortar-overdrive-hud-ward') as HTMLElement;
     expect(chip.textContent).toBe(t('hudChrome.mortarOverdrive.wardHeldFor', { seconds: '7' }));
     expect(chip.textContent).toBe('WARD 7');
     expect(chip.style.display).toBe('block');
     h.info.match = match({ phase: 'racing', warded: true, wardIn: 1 });
     h.ui.update();
-    expect(h.layer.querySelector('.mortarOverdriveHud-ward')).toBe(chip);
+    expect(h.layer.querySelector('.mortar-overdrive-hud-ward')).toBe(chip);
     expect(chip.textContent).toBe(t('hudChrome.mortarOverdrive.wardHeldFor', { seconds: '1' }));
     // A mirror that has not carried the count yet still shows the ward.
     h.info.match = match({ phase: 'racing', warded: true });
@@ -1161,12 +1161,12 @@ describe('Mortar Overdrive race-feel HUD', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing', resetLocked: false });
     h.ui.update();
-    const button = h.layer.querySelector('.mortarOverdriveHud-reset') as HTMLButtonElement;
+    const button = h.layer.querySelector('.mortar-overdrive-hud-reset') as HTMLButtonElement;
     button.focus();
     h.info.match = match({ phase: 'racing', resetLocked: true });
     h.ui.update();
     expect(button.disabled).toBe(true);
-    expect(h.layer.querySelector('.mortarOverdriveHud-reset')).toBe(button);
+    expect(h.layer.querySelector('.mortar-overdrive-hud-reset')).toBe(button);
     expect(document.activeElement).toBe(button);
     button.click();
     expect(h.resetMortarOverdrivePosition).not.toHaveBeenCalled();
@@ -1177,7 +1177,7 @@ describe('Mortar Overdrive race-feel HUD', () => {
     h.info.match = match({ phase: 'countdown', countdown: 0, countdownTicks: 140 });
     h.ui.update();
     expect(h.countdownTick).not.toHaveBeenCalled();
-    expect(h.layer.querySelector('.mortarOverdriveHud-phase')?.textContent).toBe('');
+    expect(h.layer.querySelector('.mortar-overdrive-hud-phase')?.textContent).toBe('');
     h.info.match = match({ phase: 'countdown', countdown: 3 });
     h.ui.update();
     h.ui.update();
@@ -1727,7 +1727,7 @@ describe('Mortar Overdrive circuit announcement', () => {
   /** The pill at the head of the race strip: the minigame's name outside a
    *  race, the drawn circuit's name during one. */
   const pill = (h: ReturnType<typeof harness>): HTMLElement =>
-    h.layer.querySelector('.mortarOverdriveHud-title') as HTMLElement;
+    h.layer.querySelector('.mortar-overdrive-hud-title') as HTMLElement;
   /** The off-screen live region that SPEAKS the circuit. */
   const announcer = (h: ReturnType<typeof harness>): HTMLElement =>
     h.layer.querySelector('[data-mortar-overdrive-circuit-announce]') as HTMLElement;
@@ -1809,15 +1809,15 @@ describe('Mortar Overdrive circuit announcement', () => {
       h.info.match = match({ phase, circuitId: 'evergarden_express_tour' });
       h.ui.update();
       texts.push(pill(h).textContent ?? '');
-      expect(pill(h).classList.contains('mortarOverdriveHud-title'), phase).toBe(true);
+      expect(pill(h).classList.contains('mortar-overdrive-hud-title'), phase).toBe(true);
     }
     expect(new Set(texts).size, 'the pill text changed mid-race').toBe(1);
     // And the old separate countdown line is gone, not merely hidden: a second
     // circuit label under the pill would be the layout jump this replaced.
-    expect(h.layer.querySelector('.mortarOverdriveHud-circuit')).toBeNull();
+    expect(h.layer.querySelector('.mortar-overdrive-hud-circuit')).toBeNull();
     // The gold "G" medallion is gone with it: it stood for nothing a player
     // could read, and the pill now holds the circuit name alone.
-    expect(h.layer.querySelector('.mortarOverdriveHud-mark')).toBeNull();
+    expect(h.layer.querySelector('.mortar-overdrive-hud-mark')).toBeNull();
   });
 
   it('follows the draw rather than assuming one circuit', () => {
@@ -1933,7 +1933,7 @@ describe('Mortar Overdrive circuit announcement', () => {
       h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
       h.ui.update();
       const pill = (): string =>
-        h.layer.querySelector('.mortarOverdriveHud-title')?.textContent ?? '';
+        h.layer.querySelector('.mortar-overdrive-hud-title')?.textContent ?? '';
       const spoken = (): string =>
         h.layer.querySelector('[data-mortar-overdrive-circuit-announce]')?.textContent ?? '';
       expect(pill()).toBe(names.en);

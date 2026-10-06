@@ -96,7 +96,7 @@ describe('the race strip readout', () => {
   it('resolves exactly the cell whose value moved, and paints it', () => {
     strip.update(racing({ speed: 30.2 }));
     expect(tKeys()).toEqual(['hudChrome.mortarOverdrive.speed']);
-    expect(text('.mortarOverdriveHud-speed')).toBe(
+    expect(text('.mortar-overdrive-hud-speed')).toBe(
       t('hudChrome.mortarOverdrive.speed', { speed: '30' }),
     );
     vi.mocked(t).mockClear();
@@ -143,14 +143,14 @@ describe('the race strip readout', () => {
         key,
       ).toHaveLength(1);
     }
-    expect(text('.mortarOverdriveHud-reset')).not.toBe('');
+    expect(text('.mortar-overdrive-hud-reset')).not.toBe('');
     vi.mocked(t).mockClear();
     strip.update(racing({ resetLocked: true }));
     expect(tKeys()).toEqual([]);
   });
 
   it('repaints every cell in the new language after a language switch', () => {
-    const english = text('.mortarOverdriveHud-position');
+    const english = text('.mortar-overdrive-hud-position');
     // A loaded locale that spells these keys apart from English, so a cell
     // still showing English is a stale latch.
     setLanguage('zh_CN');
@@ -158,17 +158,17 @@ describe('the race strip readout', () => {
     strip.update(racing());
     const switched = t('hudChrome.mortarOverdrive.position', { position: '2', total: '4' });
     expect(switched).not.toBe(english);
-    expect(text('.mortarOverdriveHud-position')).toBe(switched);
-    expect(text('.mortarOverdriveHud-speed')).toBe(
+    expect(text('.mortar-overdrive-hud-position')).toBe(switched);
+    expect(text('.mortar-overdrive-hud-speed')).toBe(
       t('hudChrome.mortarOverdrive.speed', { speed: '24' }),
     );
-    expect(text('.mortarOverdriveHud-reset')).toBe(t('hudChrome.mortarOverdrive.reset'));
-    expect(text('.mortarOverdriveHud-phase')).toBe(t('hudChrome.mortarOverdrive.go'));
+    expect(text('.mortar-overdrive-hud-reset')).toBe(t('hudChrome.mortarOverdrive.reset'));
+    expect(text('.mortar-overdrive-hud-phase')).toBe(t('hudChrome.mortarOverdrive.go'));
   });
 
   it('writes the wrong-way alert on each rising edge, so a screen reader hears every one', () => {
     const alert = (): HTMLElement =>
-      layer.querySelector('.mortarOverdriveHud-wrong-way') as HTMLElement;
+      layer.querySelector('.mortar-overdrive-hud-wrong-way') as HTMLElement;
     const warning = t('hudChrome.mortarOverdrive.wrongWay');
     vi.mocked(t).mockClear();
     expect(alert().textContent).toBe('');
@@ -191,14 +191,16 @@ describe('the race strip readout', () => {
   it('gives the strip root no live-region role over its contents', () => {
     expect(layer.querySelector('#mortar-overdrive-hud')?.getAttribute('role')).toBeNull();
     // The two lines that do speak keep their own regions.
-    expect(layer.querySelector('.mortarOverdriveHud-wrong-way')?.getAttribute('role')).toBe(
+    expect(layer.querySelector('.mortar-overdrive-hud-wrong-way')?.getAttribute('role')).toBe(
       'alert',
     );
-    expect(layer.querySelector('.mortarOverdriveHud-limits')?.getAttribute('role')).toBe('status');
+    expect(layer.querySelector('.mortar-overdrive-hud-limits')?.getAttribute('role')).toBe(
+      'status',
+    );
   });
 
   it('arms and disarms the forfeit label only on the press and the lapse, on the injected clock', () => {
-    const forfeit = layer.querySelector('.mortarOverdriveHud-forfeit') as HTMLButtonElement;
+    const forfeit = layer.querySelector('.mortar-overdrive-hud-forfeit') as HTMLButtonElement;
     forfeit.click();
     strip.update(racing());
     expect(tKeys()).toEqual(['hudChrome.mortarOverdrive.forfeitConfirm']);

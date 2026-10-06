@@ -201,7 +201,7 @@ export const MORTAR_OVERDRIVE_BAR_SLOTS: Record<string, number> = {
  * Per-weapon Mortar Overdrive metadata, keyed by the same ability id as the table above.
  * It is deliberately separate from the `AbilityDef`, which is the shared combat
  * shape every class ability wears: how many uses a race grants is a fact about
- * the Mortar Overdrive, not about the spell.
+ * the race, not about the spell.
  */
 interface MortarOverdriveWeapon {
   /** Uses per race, never refilled. Null would be unlimited fire. */
@@ -262,7 +262,7 @@ export const MORTAR_OVERDRIVE_BOT_CLASSES: readonly PlayerClass[] = [
 
 /**
  * The kit a seated racer carries, resolved from the weapon SLOT rather than from
- * a hardcoded id. Both of the directions the Mortar Overdrive is heading (weapons picked up
+ * a hardcoded id. Both of the directions the mode is heading (weapons picked up
  * off the circuit, one signature weapon per machine) are then a different value
  * written into the slot, not a rewrite of this path.
  *

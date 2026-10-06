@@ -178,33 +178,33 @@ export class MortarOverdriveStrip {
       // below read it, and they must not be able to disagree.
       this.circuitName = mortarOverdriveCircuitName(view.circuitId);
       root.innerHTML =
-        `<div class="mortarOverdriveHud-top">` +
-        `<span class="mortarOverdriveHud-title">${esc(this.circuitName ?? t('hudChrome.mortarOverdrive.title'))}</span></div>` +
-        `<div class="mortarOverdriveHud-stats"><span class="mortarOverdriveHud-position"></span>` +
-        `<span class="mortarOverdriveHud-lap"></span><span class="mortarOverdriveHud-time"></span>` +
-        `<span class="mortarOverdriveHud-speed"></span></div>` +
-        `<div class="mortarOverdriveHud-actions">` +
+        `<div class="mortar-overdrive-hud-top">` +
+        `<span class="mortar-overdrive-hud-title">${esc(this.circuitName ?? t('hudChrome.mortarOverdrive.title'))}</span></div>` +
+        `<div class="mortar-overdrive-hud-stats"><span class="mortar-overdrive-hud-position"></span>` +
+        `<span class="mortar-overdrive-hud-lap"></span><span class="mortar-overdrive-hud-time"></span>` +
+        `<span class="mortar-overdrive-hud-speed"></span></div>` +
+        `<div class="mortar-overdrive-hud-actions">` +
         (view.canReset
-          ? `<button type="button" class="mortarOverdriveHud-reset" data-mortar-overdrive-hud-reset${view.resetLocked ? ' disabled' : ''}></button>`
+          ? `<button type="button" class="mortar-overdrive-hud-reset" data-mortar-overdrive-hud-reset${view.resetLocked ? ' disabled' : ''}></button>`
           : '') +
         (view.canForfeit
-          ? `<button type="button" class="mortarOverdriveHud-forfeit" data-mortar-overdrive-hud-forfeit></button>`
+          ? `<button type="button" class="mortar-overdrive-hud-forfeit" data-mortar-overdrive-hud-forfeit></button>`
           : '') +
         `</div>` +
-        `<div class="mortarOverdriveHud-ward" role="status" aria-live="polite"></div>` +
-        `<div class="mortarOverdriveHud-wrong-way" role="alert" aria-live="assertive"></div>` +
-        `<div class="mortarOverdriveHud-limits" role="status" aria-live="polite"></div>` +
-        `<div class="mortarOverdriveHud-phase" aria-live="polite"></div>`;
-      this.positionEl = root.querySelector('.mortarOverdriveHud-position');
-      this.lapEl = root.querySelector('.mortarOverdriveHud-lap');
-      this.timeEl = root.querySelector('.mortarOverdriveHud-time');
-      this.speedEl = root.querySelector('.mortarOverdriveHud-speed');
-      this.wardEl = root.querySelector('.mortarOverdriveHud-ward');
-      this.wrongWayEl = root.querySelector('.mortarOverdriveHud-wrong-way');
-      this.limitsEl = root.querySelector('.mortarOverdriveHud-limits');
-      this.phaseEl = root.querySelector('.mortarOverdriveHud-phase');
-      this.resetEl = root.querySelector('.mortarOverdriveHud-reset');
-      this.forfeitEl = root.querySelector('.mortarOverdriveHud-forfeit');
+        `<div class="mortar-overdrive-hud-ward" role="status" aria-live="polite"></div>` +
+        `<div class="mortar-overdrive-hud-wrong-way" role="alert" aria-live="assertive"></div>` +
+        `<div class="mortar-overdrive-hud-limits" role="status" aria-live="polite"></div>` +
+        `<div class="mortar-overdrive-hud-phase" aria-live="polite"></div>`;
+      this.positionEl = root.querySelector('.mortar-overdrive-hud-position');
+      this.lapEl = root.querySelector('.mortar-overdrive-hud-lap');
+      this.timeEl = root.querySelector('.mortar-overdrive-hud-time');
+      this.speedEl = root.querySelector('.mortar-overdrive-hud-speed');
+      this.wardEl = root.querySelector('.mortar-overdrive-hud-ward');
+      this.wrongWayEl = root.querySelector('.mortar-overdrive-hud-wrong-way');
+      this.limitsEl = root.querySelector('.mortar-overdrive-hud-limits');
+      this.phaseEl = root.querySelector('.mortar-overdrive-hud-phase');
+      this.resetEl = root.querySelector('.mortar-overdrive-hud-reset');
+      this.forfeitEl = root.querySelector('.mortar-overdrive-hud-forfeit');
       this.resetEl?.addEventListener('click', () => this.deps.reset());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
       this.forgetPaintedCells();

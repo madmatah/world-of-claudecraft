@@ -1,4 +1,4 @@
-// The Mortar Overdrive: a deterministic four-pilot vehicle race. This module owns
+// Mortar Overdrive: a deterministic four-pilot vehicle race. This module owns
 // the FIFO queue, the single instanced match, arc-length lap progress, finish
 // arbitration (public and practice races may run different lap counts),
 // straight-line Ground Blast projectiles, and the complete gameplay parenthesis
@@ -194,7 +194,7 @@ export const MORTAR_OVERDRIVE_RESET_LOCK_TICKS = 2 * TICK_RATE;
  *
  * One tick, not two seconds: automatic recovery has already charged its stop and
  * hands control straight back, so this is not a settle window. It exists because
- * every "was this driven into or teleported onto" guard in the Mortar Overdrive is written
+ * every "was this driven into or teleported onto" guard in the race is written
  * as `tickCount >= resetLockedUntilTick`, and a zero-tick lock leaves that field
  * at 0, which is the guard reading TRUE. A machine dropped on a pickup box or in
  * a patch of oil by a recovery would otherwise take it (or suffer it) on the next
@@ -236,7 +236,7 @@ export const MORTAR_OVERDRIVE_OFF_TRACK_AURA = 'mortar_overdrive_soft_verge';
  * The WARD a pickup box can grant, as a real aura on the racer.
  *
  * It is an aura and not a flag on the race's own bookkeeping (operator call,
- * 2026-08-04) for consistency with everything else the Mortar Overdrive does to a machine:
+ * 2026-08-04) for consistency with everything else the race does to a machine:
  * the off-track bands and the Ground Blast control are auras, so a pilot reads
  * every state the race put on them in the same row of the same frame, a rival who
  * TARGETS them sees it there too, and it rides the ordinary entity aura wire with

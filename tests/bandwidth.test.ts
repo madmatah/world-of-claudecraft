@@ -699,7 +699,7 @@ describe('Mortar Overdrive match-scoped interest', () => {
     const match = server.sim.mortarOverdrive.match;
     if (!match) throw new Error('match missing');
     let resends = 0;
-    let rrBytes = 0;
+    let moBytes = 0;
     let lobbyBytes = 0;
     let lobbyTicks = 0;
     while (match.phase === 'loading') {
@@ -709,7 +709,7 @@ describe('Mortar Overdrive match-scoped interest', () => {
       const mo = a.lastFrame ? JSON.parse(a.lastFrame).self?.mo : undefined;
       if (mo !== undefined) {
         resends++;
-        rrBytes += JSON.stringify(mo).length;
+        moBytes += JSON.stringify(mo).length;
         lobbyBytes = Math.max(lobbyBytes, JSON.stringify(mo.match?.loading ?? null).length);
       }
       server.sim.tick();
@@ -722,7 +722,7 @@ describe('Mortar Overdrive match-scoped interest', () => {
     expect(lobbyBytes).toBeLessThanOrEqual(64);
     // Measured at 15 sends of about 1.24 KB (a four-row readout): about 1.2 KB/s
     // for the lobby, where a per-tick ticks-left field cost twenty times that.
-    expect(rrBytes / resends).toBeLessThan(1400);
+    expect(moBytes / resends).toBeLessThan(1400);
   });
 
   it('pins the field during the racing phase', () => {

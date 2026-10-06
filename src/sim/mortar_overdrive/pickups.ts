@@ -153,7 +153,7 @@ export const mortarOverdrivePickupBoxes: (
   for (let row = 0; row < rows.length; row++) {
     const fraction = ((rows[row].s % 1) + 1) % 1;
     const point = track.pointAt(fraction * track.length);
-    // The left normal, the sign convention every lateral offset in the Mortar Overdrive is
+    // The left normal, the sign convention every lateral offset in the race is
     // written in (`MortarOverdriveProjection.lateral`, the props' `offset`).
     const normalX = -point.tz;
     const normalZ = point.tx;

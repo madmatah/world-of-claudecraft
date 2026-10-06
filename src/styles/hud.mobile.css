@@ -10325,7 +10325,7 @@
       top: max(48px, calc(env(safe-area-inset-top) + 34px));
       width: min(470px, calc(var(--app-vw, 100vw) - 108px));
     }
-    body.mobile-touch .mortarOverdriveHud-stats > span {
+    body.mobile-touch .mortar-overdrive-hud-stats > span {
       min-width: 66px;
       padding-inline: 6px;
     }
@@ -10395,16 +10395,16 @@
     body.mobile-touch .mortar-overdrive-standing-lap {
       font-size: 10px;
     }
-    body.mobile-touch .mortarOverdriveHud-phase {
+    body.mobile-touch .mortar-overdrive-hud-phase {
       font-size: 17px;
     }
     /* The strip sits top-center and the mobile action bar owns the bottom edge,
        so the forfeit control only has to clear the tap-target floor here. */
-    body.mobile-touch .mortarOverdriveHud-reset,
-    body.mobile-touch .mortarOverdriveHud-forfeit {
+    body.mobile-touch .mortar-overdrive-hud-reset,
+    body.mobile-touch .mortar-overdrive-hud-forfeit {
       min-height: 40px;
     }
-    body.mobile-touch .mortarOverdriveHud-wrong-way {
+    body.mobile-touch .mortar-overdrive-hud-wrong-way {
       font-size: 20px;
     }
     /* The pickup splash pops in the band between the strip's ward chip and the

@@ -224,7 +224,7 @@ export interface MortarOverdriveSlickInput {
 /**
  * Square of the distance from a point to a segment.
  *
- * The second copy of this in the Mortar Overdrive (the first is the pickup take test).
+ * The second copy of this in the race (the first is the pickup take test).
  * Left as a copy on purpose: two is not three, and the day a third arrives it
  * earns a home in `geometry2d.ts` rather than an import chain between two leaves
  * that otherwise share nothing.

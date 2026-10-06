@@ -2228,7 +2228,7 @@ export const pt_BR: EnTranslations = {
       "logForfeit": "You forfeited the race. {name} wins.",
       "bannerForfeit": "You forfeited the race.",
       "logForfeitRaceOn": "You forfeited the race. The field races on without you.",
-      "mobileLabel": "Racers"
+      "mobileLabel": "Overdrive"
     },
     "options": {
       "clickMoveLeft": "Clique esquerdo",

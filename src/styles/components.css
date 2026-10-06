@@ -26865,9 +26865,9 @@
   body.mortar-overdrive-race-on .tut-arrow {
     visibility: hidden;
   }
-  .mortarOverdriveHud-top,
-  .mortarOverdriveHud-stats,
-  .mortarOverdriveHud-actions {
+  .mortar-overdrive-hud-top,
+  .mortar-overdrive-hud-stats,
+  .mortar-overdrive-hud-actions {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -26876,7 +26876,7 @@
    It used to carry a gold "G" medallion on the left, which is what the 7px
    left inset and the 9px gap were for; the mark said nothing a player could
    read, so it is gone and the label is simply centred in the pill. */
-  .mortarOverdriveHud-top {
+  .mortar-overdrive-hud-top {
     margin: 0 auto;
     width: max-content;
     max-width: 100%;
@@ -26893,7 +26893,7 @@
    would grow the pill downward and push the whole readout row, plus both tap
    targets under it, down mid-race. The pill widens instead, to the strip's
    width, and then truncates. */
-  .mortarOverdriveHud-title {
+  .mortar-overdrive-hud-title {
     overflow: hidden;
     font-size: 12px;
     font-weight: 700;
@@ -27080,11 +27080,11 @@
   .mortar-overdrive-standing.me .mortar-overdrive-standing-lap {
     color: var(--mortar-overdrive-you-text);
   }
-  .mortarOverdriveHud-stats {
+  .mortar-overdrive-hud-stats {
     gap: 0;
     margin-top: 5px;
   }
-  .mortarOverdriveHud-stats > span {
+  .mortar-overdrive-hud-stats > span {
     min-width: 82px;
     padding: 5px 10px;
     border: 1px solid var(--mortar-overdrive-gold-a55);
@@ -27094,14 +27094,14 @@
     font-weight: 800;
     text-align: center;
   }
-  .mortarOverdriveHud-stats > span:first-child {
+  .mortar-overdrive-hud-stats > span:first-child {
     border-radius: 6px 0 0 6px;
   }
   /* last-OF-TYPE, not last-child: the forfeit button now closes this row. */
-  .mortarOverdriveHud-stats > span:last-of-type {
+  .mortar-overdrive-hud-stats > span:last-of-type {
     border-radius: 0 6px 6px 0;
   }
-  .mortarOverdriveHud-phase {
+  .mortar-overdrive-hud-phase {
     margin-top: 7px;
     color: var(--mortar-overdrive-highlight);
     font-family: var(--font-display, serif);
@@ -27111,7 +27111,7 @@
     text-align: center;
     text-shadow: 0 0 14px var(--mortar-overdrive-limits-gold-a99);
   }
-  .mortarOverdriveHud-actions {
+  .mortar-overdrive-hud-actions {
     gap: 8px;
     margin-top: 7px;
     pointer-events: none;
@@ -27250,7 +27250,7 @@
    around, not an event demanding a reaction. Cool blue, which nothing else in
    the Mortar Overdrive readout uses, so a glance separates it from the amber readouts and
    the red forfeit. Sized to need no mobile override, like the limits line. */
-  .mortarOverdriveHud-ward {
+  .mortar-overdrive-hud-ward {
     width: max-content;
     max-width: 100%;
     margin: 8px auto 0;
@@ -27266,7 +27266,7 @@
     text-align: center;
     text-shadow: 0 1px 3px var(--mortar-overdrive-shadow);
   }
-  .mortarOverdriveHud-wrong-way {
+  .mortar-overdrive-hud-wrong-way {
     width: max-content;
     margin: 8px auto 0;
     padding: 7px 18px;
@@ -27294,7 +27294,7 @@
    override. It never pulses: one of its two lines is already a per-second
    countdown, and the other is an explanation of something that has finished
    happening. */
-  .mortarOverdriveHud-limits {
+  .mortar-overdrive-hud-limits {
     width: max-content;
     max-width: 100%;
     margin: 8px auto 0;
@@ -27319,8 +27319,8 @@
 
    min-width is sized for the ARMED label so the two-step swap never resizes the
    row: a centred row that grew mid-race would slide the readouts sideways. */
-  .mortarOverdriveHud-reset,
-  .mortarOverdriveHud-forfeit {
+  .mortar-overdrive-hud-reset,
+  .mortar-overdrive-hud-forfeit {
     min-width: 132px;
     padding: 5px 12px;
     border: 1px solid var(--mortar-overdrive-danger-edge);
@@ -27335,35 +27335,35 @@
     cursor: pointer;
     pointer-events: auto;
   }
-  .mortarOverdriveHud-reset {
+  .mortar-overdrive-hud-reset {
     border-color: var(--mortar-overdrive-reset-edge);
     background: var(--mortar-overdrive-reset-bg-ae8);
     color: var(--mortar-overdrive-reset-text);
   }
-  .mortarOverdriveHud-reset:hover:not(:disabled) {
+  .mortar-overdrive-hud-reset:hover:not(:disabled) {
     border-color: var(--mortar-overdrive-reset-edge-hover);
     color: var(--mortar-overdrive-white);
   }
-  .mortarOverdriveHud-reset:disabled {
+  .mortar-overdrive-hud-reset:disabled {
     cursor: default;
     opacity: 0.5;
   }
-  .mortarOverdriveHud-forfeit:hover {
+  .mortar-overdrive-hud-forfeit:hover {
     border-color: var(--mortar-overdrive-forfeit-edge-hover);
     color: var(--mortar-overdrive-forfeit-text-hover);
   }
-  .mortarOverdriveHud-forfeit.armed {
+  .mortar-overdrive-hud-forfeit.armed {
     border-color: var(--mortar-overdrive-forfeit-armed-edge);
     background: var(--mortar-overdrive-forfeit-armed-bg-aec);
     color: var(--mortar-overdrive-forfeit-armed-text);
   }
-  .mortarOverdriveHud-reset:focus-visible,
-  .mortarOverdriveHud-forfeit:focus-visible {
+  .mortar-overdrive-hud-reset:focus-visible,
+  .mortar-overdrive-hud-forfeit:focus-visible {
     outline: 2px solid var(--color-border-focus);
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
-    .mortarOverdriveHud-wrong-way {
+    .mortar-overdrive-hud-wrong-way {
       animation: none;
     }
   }
