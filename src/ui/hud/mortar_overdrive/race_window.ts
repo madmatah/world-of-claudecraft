@@ -352,7 +352,7 @@ export class MortarOverdriveWindow {
       `<div class="mortar-overdrive-hero-copy">` +
       `<p class="mortar-overdrive-pitch">${esc(t('hudChrome.mortarOverdrive.pitch'))}</p>` +
       `<ul class="mortar-overdrive-promises">` +
-      `<li>${esc(t('hudChrome.mortarOverdrive.promiseCircuit'))}</li>` +
+      `<li>${esc(t('hudChrome.mortarOverdrive.promiseMortar'))}</li>` +
       `<li>${esc(t('hudChrome.mortarOverdrive.promiseSlide'))}</li>` +
       `<li>${esc(t('hudChrome.mortarOverdrive.promiseRival'))}</li>` +
       `</ul></div></div>` +

@@ -2431,11 +2431,10 @@ export const hudChromeStrings = {
     kicker: 'Evergarden Racing Society',
     title: 'Mortar Overdrive',
     close: 'Close the Mortar Overdrive window',
-    pitch:
-      'Steel through the hedges. Find the line, trust the slide, and leave every rival eating dust.',
+    pitch: 'Lob a shell, find the line, trust the slide, and leave every rival eating dust.',
     // Timeless promise chips under the pitch: no pilot counts, no lap counts.
     // Those change with circuits and formats; the feel of the race does not.
-    promiseCircuit: 'Garden circuit',
+    promiseMortar: 'Mortar shots',
     promiseSlide: 'Handbrake slides',
     promiseRival: 'Live rivals',
     // One short primer on the front screen, because the QUEUE route never

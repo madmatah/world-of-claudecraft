@@ -15719,8 +15719,8 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.title': 'Мортирный форсаж',
   'hudChrome.mortarOverdrive.close': 'Закрыть окно Мортирного форсажа',
   'hudChrome.mortarOverdrive.pitch':
-    'Сталь сквозь живые изгороди. Найди траекторию, доверься скольжению и оставь соперников в пыли.',
-  'hudChrome.mortarOverdrive.promiseCircuit': 'Садовая трасса',
+    'Пусти снаряд, найди траекторию, доверься скольжению и оставь соперников в пыли.',
+  'hudChrome.mortarOverdrive.promiseMortar': 'Выстрелы из мортиры',
   'hudChrome.mortarOverdrive.promiseSlide': 'Скольжение с ручником',
   'hudChrome.mortarOverdrive.promiseRival': 'Живые соперники',
   'hudChrome.mortarOverdrive.howToPlayTitle': 'Как играть',

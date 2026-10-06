@@ -238,7 +238,7 @@ describe('Mortar Overdrive practice setup screen', () => {
     expect(h.root.querySelector('.mortar-overdrive-emblem')).toBeNull();
     expect(h.root.querySelector('.mortar-overdrive-crest')).not.toBeNull();
     expect(h.root.textContent).toContain(t('hudChrome.mortarOverdrive.pitch'));
-    expect(h.root.textContent).toContain(t('hudChrome.mortarOverdrive.promiseCircuit'));
+    expect(h.root.textContent).toContain(t('hudChrome.mortarOverdrive.promiseMortar'));
     expect(h.root.textContent).toContain(t('hudChrome.mortarOverdrive.howToPlay'));
     expect(h.root.querySelector('.mortar-overdrive-or')).not.toBeNull();
     expect(h.root.querySelector('[data-mortar-overdrive-join]')).not.toBeNull();

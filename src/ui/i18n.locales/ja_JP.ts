@@ -15456,8 +15456,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.title': '迫撃オーバードライブ',
   'hudChrome.mortarOverdrive.close': '迫撃オーバードライブのウィンドウを閉じる',
   'hudChrome.mortarOverdrive.pitch':
-    '鉄が生け垣を突き抜ける。ラインを見つけ、スライドを信じ、ライバルを砂塵に残せ。',
-  'hudChrome.mortarOverdrive.promiseCircuit': '庭園サーキット',
+    '砲弾を放ち、ラインを見つけ、スライドを信じ、ライバルを砂塵に残せ。',
+  'hudChrome.mortarOverdrive.promiseMortar': '迫撃砲の砲撃',
   'hudChrome.mortarOverdrive.promiseSlide': 'サイドブレーキ・スライド',
   'hudChrome.mortarOverdrive.promiseRival': '生身のライバル',
   'hudChrome.mortarOverdrive.howToPlayTitle': '遊び方',

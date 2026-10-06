@@ -15413,8 +15413,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.title': '박격 오버드라이브',
   'hudChrome.mortarOverdrive.close': '박격 오버드라이브 창 닫기',
   'hudChrome.mortarOverdrive.pitch':
-    '강철이 생울타리를 가른다. 라인을 찾고, 슬라이드를 믿으며, 모든 라이벌을 먼지에 남겨라.',
-  'hudChrome.mortarOverdrive.promiseCircuit': '정원 서킷',
+    '포탄을 날리고, 라인을 찾고, 슬라이드를 믿으며, 모든 라이벌을 먼지에 남겨라.',
+  'hudChrome.mortarOverdrive.promiseMortar': '박격포 사격',
   'hudChrome.mortarOverdrive.promiseSlide': '핸드브레이크 슬라이드',
   'hudChrome.mortarOverdrive.promiseRival': '실시간 라이벌',
   'hudChrome.mortarOverdrive.howToPlayTitle': '플레이 방법',

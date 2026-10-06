@@ -14730,8 +14730,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.title': '迫擊狂飆',
   'hudChrome.mortarOverdrive.close': '關閉迫擊狂飆視窗',
   'hudChrome.mortarOverdrive.pitch':
-    '鋼鐵穿林而過。找到理想路線，相信甩尾，讓每個對手都吞你的尾塵。',
-  'hudChrome.mortarOverdrive.promiseCircuit': '花園賽道',
+    '拋出砲彈，找到理想路線，相信甩尾，讓每個對手都吞你的尾塵。',
+  'hudChrome.mortarOverdrive.promiseMortar': '迫擊砲射擊',
   'hudChrome.mortarOverdrive.promiseSlide': '手煞車甩尾',
   'hudChrome.mortarOverdrive.promiseRival': '即時對手',
   'hudChrome.mortarOverdrive.howToPlayTitle': '如何遊玩',

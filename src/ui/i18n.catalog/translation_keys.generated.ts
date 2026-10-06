@@ -12126,7 +12126,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.mortarOverdrive.practiceTierLegend'
   | 'hudChrome.mortarOverdrive.practiceTouchNote'
   | 'hudChrome.mortarOverdrive.practiceUnavailable'
-  | 'hudChrome.mortarOverdrive.promiseCircuit'
+  | 'hudChrome.mortarOverdrive.promiseMortar'
   | 'hudChrome.mortarOverdrive.promiseRival'
   | 'hudChrome.mortarOverdrive.promiseSlide'
   | 'hudChrome.mortarOverdrive.queueCardBusy'
