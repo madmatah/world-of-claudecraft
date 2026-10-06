@@ -211,8 +211,10 @@ export interface MortarOverdriveQueueSeat {
  * takes the grid and when house pilots fill the rest.
  */
 export interface MortarOverdriveQueueStart {
-  /** The queue head that takes the grid, at most a grid of them, in queue
-   *  order. Every seat past these is open, for a house pilot to take. */
+  /** The queue head, at most a grid of them, in queue order: who the grid
+   *  goes to when everyone is free to sit (a pilot still in a fight keeps
+   *  their place, and the fill seats the next one behind them meanwhile).
+   *  Every seat past these is open, for a house pilot to take. */
   seats: MortarOverdriveQueueSeat[];
   /**
    * Ticks until house pilots fill the open seats and the race starts, as of

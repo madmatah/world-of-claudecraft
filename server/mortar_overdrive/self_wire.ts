@@ -47,7 +47,7 @@ export function emitMortarOverdriveSelfKeys(
 ): void {
   // Almost every viewer is neither queued nor seated, and for all of them the
   // readout is the same value (no queue place, no heat, the realm's free
-  // practice copy and queue viability): built and stringified once per pass
+  // practice copy): built and stringified once per pass
   // through the realm-readout memo and shipped raw, like the `dfb` board (and,
   // like it, one pass stale on a broadcast that ran no tick, healed next pass).
   if (!mortarOverdriveSeatedOrQueued(sim.ctx, pid)) {

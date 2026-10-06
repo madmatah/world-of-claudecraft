@@ -130,10 +130,11 @@ export function mortarOverdriveStillToWire(
   const start = still.start;
   if (!start) return still as MortarOverdriveStillWire;
   const { startsInTicks, ...rest } = start;
-  return {
-    ...still,
-    start: { ...rest, startsAt: startsInTicks === null ? null : tick + startsInTicks },
-  };
+  // A deadline already reached (the seat lagging it, say) ships as tick 0,
+  // which every later tick decodes to zero ticks left: `tick + 0` would move
+  // with the clock and resend `mo` on every tick until the race seats.
+  const startsAt = startsInTicks === null ? null : startsInTicks > 0 ? tick + startsInTicks : 0;
+  return { ...still, start: { ...rest, startsAt } };
 }
 
 /** The absolute deadline a shipped readout carries, or null without one. A

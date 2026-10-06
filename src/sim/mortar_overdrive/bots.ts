@@ -240,7 +240,8 @@ function maybeBackfill(sim: Sim): void {
   if (at === null || sim.tickCount < at) return;
   // The PUBLIC circuit: these players queued for a real race and are getting
   // one, just with house pilots in the seats nobody claimed.
-  seatWithBots(sim, fillableWaiters(sim), MORTAR_OVERDRIVE_BACKFILL_TIER, -1);
+  const fill = fillableWaiters(sim);
+  if (fill.length > 0) seatWithBots(sim, fill, MORTAR_OVERDRIVE_BACKFILL_TIER, -1);
 }
 
 /**

@@ -71,6 +71,8 @@ import {
   type MortarOverdriveMatchClock,
   type MortarOverdriveStillInfo,
   mergeMortarOverdriveInfo,
+  mortarOverdriveStillFromWire,
+  mortarOverdriveStillToWire,
   splitMortarOverdriveInfo,
 } from '../src/sim/mortar_overdrive/readout_clock';
 import {
@@ -231,6 +233,34 @@ describe('Mortar Overdrive online parity', () => {
     }
     // The countdown moved every tick on both sides, yet `mo` never resent.
     expect(selfFields(client, 'mo')).toEqual([]);
+  });
+
+  it('ships a deadline already reached as a still value, never one that moves with the tick', () => {
+    const at = (tick: number) =>
+      mortarOverdriveStillToWire(
+        {
+          queued: true,
+          queuePosition: 1,
+          queueSize: 1,
+          start: { seats: [], startsInTicks: 0, laneBusy: false, backfill: true },
+          match: null,
+          practiceAvailable: true,
+        },
+        tick,
+      ).start?.startsAt;
+    expect(at(100)).toBe(at(160));
+    const back = mortarOverdriveStillFromWire(
+      {
+        queued: true,
+        queuePosition: 1,
+        queueSize: 1,
+        start: { seats: [], startsAt: at(100) as number, laneBusy: false, backfill: true },
+        match: null,
+        practiceAvailable: true,
+      },
+      160,
+    );
+    expect(back.start?.startsInTicks).toBe(0);
   });
 
   it('seats a Practice race against a house pilot online, and rejects a bogus tier', () => {
