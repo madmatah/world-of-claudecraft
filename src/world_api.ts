@@ -424,6 +424,8 @@ export type {
   MortarOverdriveLoadingInfo,
   MortarOverdriveMatchInfo,
   MortarOverdrivePhase,
+  MortarOverdriveQueueSeat,
+  MortarOverdriveQueueStart,
   MortarOverdriveRacerInfo,
   MortarOverdriveResult,
 } from './world_api/mortar_overdrive';

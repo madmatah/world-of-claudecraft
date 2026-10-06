@@ -3236,7 +3236,7 @@ export class ClientWorld extends MortarOverdriveWireState implements IWorld {
       this.talentMods = presentation.mods;
       this.talentSpec = presentation.mods.spec;
       this.talentRole = presentation.mods.role;
-      this.known = this.applyMortarOverdriveSelf(s, e, presentation.known);
+      this.known = this.applyMortarOverdriveSelf(s, e, presentation.known, snap.tick);
       if (this.spectateExitPending) {
         this.spectateExitPending = false;
         this.spectating = null; // own presentation rebuilt: the view is ours again

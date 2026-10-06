@@ -7,7 +7,10 @@ import {
   mortarOverdriveSeatedOrQueued,
   mortarOverdriveTracksideFor,
 } from '../../src/sim/mortar_overdrive/race';
-import { splitMortarOverdriveInfo } from '../../src/sim/mortar_overdrive/readout_clock';
+import {
+  mortarOverdriveStillToWire,
+  splitMortarOverdriveInfo,
+} from '../../src/sim/mortar_overdrive/readout_clock';
 import type { PlayerMeta, Sim } from '../../src/sim/sim';
 import type { MortarOverdriveInfo } from '../../src/world_api/mortar_overdrive';
 import {
@@ -74,12 +77,15 @@ function emitMortarOverdriveHeatKeys(
 ): void {
   // Per-tick, bounded by the race grid: at most MORTAR_OVERDRIVE_GRID_SIZE
   // standings rows, the circuit's boxes and MORTAR_OVERDRIVE_SLICK_CAP patches,
-  // plus three queue scalars (one indexOf over the realm queue). The clocks
+  // plus three queue scalars (one indexOf over the realm queue) and, while
+  // queued, the start readout (at most a grid of seats off the queue head). The clocks
   // and the speed move every racing tick, so they ride `moc` on their own:
   // `mo` then matches its last send, and is skipped, until something real
   // changes (an overtake, a box, a patch of oil).
+  // A queued viewer's start rides as its absolute deadline tick, which holds
+  // still while the deadline does, so the countdown costs `mo` nothing per tick.
   const { still, clock } = splitMortarOverdriveInfo(sim.mortarOverdriveInfoFor(pid));
-  maybe('mo', still);
+  maybe('mo', mortarOverdriveStillToWire(still, sim.tickCount));
   maybe('moc', clock);
 }
 

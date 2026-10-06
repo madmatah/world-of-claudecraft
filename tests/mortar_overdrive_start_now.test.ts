@@ -1,12 +1,15 @@
-// Start now, the backfill on demand: any queued pilot may press it, and it
-// seats the queue head (up to a grid, in queue order) on the public lane with
-// house pilots at the backfill tier in the open seats, through the backfill's
-// own seat.
+// Start now and the queue start readout. Start now is the backfill on demand:
+// any queued pilot may press it, and it seats the queue head (up to a grid, in
+// queue order) on the public lane with house pilots at the backfill tier in the
+// open seats, through the backfill's own seat. The readout tells a queued viewer
+// who takes the grid and how long until the backfill fills it, from the SAME
+// deadline the backfill seats on.
 
 import { describe, expect, it, vi } from 'vitest';
 import {
   MORTAR_OVERDRIVE_BACKFILL_TICKS,
   MORTAR_OVERDRIVE_BACKFILL_TIER,
+  mortarOverdriveBackfillAt,
 } from '../src/sim/mortar_overdrive/backfill';
 import { startMortarOverdriveNow } from '../src/sim/mortar_overdrive/bots';
 import { MORTAR_OVERDRIVE_GRID_SIZE } from '../src/sim/mortar_overdrive/layout';
@@ -102,6 +105,10 @@ describe('Mortar Overdrive Start now', () => {
     expect(spawns).not.toHaveBeenCalled();
     expect(sim.mortarOverdrive.match).toBe(running);
     expect(sim.mortarOverdrive.queue).toEqual([waiter]);
+    // The readout says why the button is refused.
+    const start = sim.mortarOverdriveInfoFor(waiter).start;
+    expect(start?.laneBusy).toBe(true);
+    expect(start?.startsInTicks).toBeNull();
   });
 
   it('refuses a queued pilot in combat with the in-combat error', () => {
@@ -147,5 +154,90 @@ describe('Mortar Overdrive Start now', () => {
     expect(startMortarOverdriveNow(sim, aster)).toBe(true);
     expect(sim.mortarOverdrive.match?.pids).not.toContain(briar);
     expect(sim.mortarOverdrive.match?.pids[0]).toBe(aster);
+  });
+});
+
+describe('Mortar Overdrive queue start readout', () => {
+  it('is absent for a viewer who is not queued', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const aster = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect('start' in sim.mortarOverdriveInfoFor(aster)).toBe(false);
+  });
+
+  it('names the queue head in order, marks the viewer, and counts down to the backfill', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const aster = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const briar = addAt(sim, 'mage', 'Briar', 9, -40);
+    sim.mortarOverdriveQueueJoin(aster);
+    for (let i = 0; i < 40; i++) sim.tick();
+    sim.mortarOverdriveQueueJoin(briar);
+    sim.tick();
+    const start = sim.mortarOverdriveInfoFor(briar).start;
+    expect(start?.seats).toEqual([
+      { name: 'Aster', you: false },
+      { name: 'Briar', you: true },
+    ]);
+    expect(start?.backfill).toBe(true);
+    expect(start?.laneBusy).toBe(false);
+    // The OLDEST waiter's clock: Briar races on Aster's deadline, not their own.
+    const joined = sim.mortarOverdrive.queuedAtTick.get(aster) as number;
+    expect(start?.startsInTicks).toBe(joined + MORTAR_OVERDRIVE_BACKFILL_TICKS - sim.tickCount);
+  });
+
+  it('announces the very tick the backfill seats the grid on', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const aster = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.mortarOverdriveQueueJoin(aster);
+    sim.tick();
+    const left = sim.mortarOverdriveInfoFor(aster).start?.startsInTicks as number;
+    for (let i = 0; i < left - 1; i++) sim.tick();
+    expect(sim.mortarOverdrive.match).toBeNull();
+    expect(sim.mortarOverdriveInfoFor(aster).start?.startsInTicks).toBe(1);
+    sim.tick();
+    expect(sim.mortarOverdrive.match?.pids[0]).toBe(aster);
+  });
+
+  it('has no clock offline, where house pilots never come on their own', () => {
+    const sim = makeWorld();
+    const aster = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.mortarOverdriveQueueJoin(aster);
+    const start = sim.mortarOverdriveInfoFor(aster).start;
+    expect(start).toEqual({
+      seats: [{ name: 'Aster', you: true }],
+      startsInTicks: null,
+      laneBusy: false,
+      backfill: false,
+    });
+  });
+
+  it('caps the seats at a grid and holds a full grid off the backfill clock', () => {
+    const sim = makeWorld({ mortarOverdriveBackfill: true });
+    const pids = ['Aster', 'Briar', 'Cass', 'Dell', 'Eryn'].map((name, i) =>
+      addAt(sim, 'warrior', name, -5 + i * 4, -40),
+    );
+    // Queue them while a race holds the lane, so the full grid stays queued.
+    const racer = addAt(sim, 'mage', 'Fen', 30, -40);
+    sim.mortarOverdriveQueueJoin(racer);
+    startMortarOverdriveNow(sim, racer);
+    for (const pid of pids) sim.mortarOverdriveQueueJoin(pid);
+    const start = sim.mortarOverdriveInfoFor(pids[4] as number).start;
+    expect(start?.seats.map((seat) => seat.name)).toEqual(['Aster', 'Briar', 'Cass', 'Dell']);
+    expect(start?.seats.some((seat) => seat.you)).toBe(false);
+    expect(start?.laneBusy).toBe(true);
+  });
+
+  it('computes the deadline from the oldest waiter and none for an empty or full grid', () => {
+    const joined = new Map([
+      [1, 100],
+      [2, 40],
+      [3, 70],
+    ]);
+    expect(mortarOverdriveBackfillAt([1, 2], joined, 200)).toBe(
+      40 + MORTAR_OVERDRIVE_BACKFILL_TICKS,
+    );
+    expect(mortarOverdriveBackfillAt([], joined, 200)).toBeNull();
+    expect(mortarOverdriveBackfillAt([1, 2, 3, 4], joined, 200)).toBeNull();
+    // A waiter with no join tick counts as joining now.
+    expect(mortarOverdriveBackfillAt([9], joined, 200)).toBe(200 + MORTAR_OVERDRIVE_BACKFILL_TICKS);
   });
 });

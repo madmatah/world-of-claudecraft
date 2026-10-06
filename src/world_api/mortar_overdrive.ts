@@ -199,10 +199,44 @@ export interface MortarOverdriveMatchInfo {
   loading?: MortarOverdriveLoadingInfo;
 }
 
+/** One seat of the grid a queued race takes: a queued human, in queue order. */
+export interface MortarOverdriveQueueSeat {
+  name: string;
+  /** This seat is the viewer's own. */
+  you: boolean;
+}
+
+/**
+ * How a queued race gets started, for the viewer while they are queued: who
+ * takes the grid and when house pilots fill the rest.
+ */
+export interface MortarOverdriveQueueStart {
+  /** The queue head that takes the grid, at most a grid of them, in queue
+   *  order. Every seat past these is open, for a house pilot to take. */
+  seats: MortarOverdriveQueueSeat[];
+  /**
+   * Ticks until house pilots fill the open seats and the race starts, as of
+   * this readout (the offline Sim's tick, the online mirror's latest
+   * snapshot). Null where nothing fills the grid on its own (no backfill on
+   * this world, or nobody free to sit) and while `laneBusy`. Online the wire
+   * carries the absolute deadline tick instead, so the queue readout is resent
+   * only when the deadline moves, and the mirror derives this from it.
+   */
+  startsInTicks: number | null;
+  /** A public race holds the one public lane: the queue starts after it ends,
+   *  and Start now is refused until then. */
+  laneBusy: boolean;
+  /** House pilots fill a short grid on their own here (the online realm).
+   *  False offline, where only Start now seats a queued race. */
+  backfill: boolean;
+}
+
 export interface MortarOverdriveInfo {
   queued: boolean;
   queuePosition: number;
   queueSize: number;
+  /** Present only while `queued`, so an idle readout pays nothing for it. */
+  start?: MortarOverdriveQueueStart;
   match: MortarOverdriveMatchInfo | null;
   /**
    * Whether a practice race can start right now. Practice runs on its own copy

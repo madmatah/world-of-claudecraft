@@ -17,8 +17,12 @@ import {
 import {
   type MortarOverdriveMatchClock,
   type MortarOverdriveStillInfo,
+  type MortarOverdriveStillWire,
   mergeMortarOverdriveInfo,
   mortarOverdriveClockOf,
+  mortarOverdriveStillFromWire,
+  mortarOverdriveTicksUntil,
+  mortarOverdriveWireStartsAt,
 } from '../../sim/mortar_overdrive/readout_clock';
 import type { ResolvedAbility } from '../../sim/sim';
 import type { Entity } from '../../sim/types';
@@ -50,26 +54,46 @@ export function idleMortarOverdriveInfo(): MortarOverdriveInfo {
   };
 }
 
+/**
+ * Apply the self keys of one snapshot at its `tick`, and return the queue
+ * start's absolute deadline the mirror holds from now on (`startsAt`, as `mo`
+ * ships it). `mo` is resent only when the readout really changes, so between
+ * sends the deadline holds still while the snapshot clock moves on: the ticks
+ * left are refreshed against every snapshot's tick, the way the offline Sim
+ * rebuilds them every tick.
+ */
 export function applyMortarOverdriveSelfWire(
   target: MortarOverdriveSelfMirrors,
   s: MortarOverdriveSelfRecord,
-): void {
+  tick: number,
+  startsAt: number | null,
+): number | null {
+  let at = startsAt;
   // Either half may arrive alone; the mirror itself carries the other one, so
   // the readout is folded back from whichever moved and what is already held.
   if (s.mo !== undefined || s.moc !== undefined) {
     const prior = target.mortarOverdriveInfo;
-    const still =
-      s.mo !== undefined
-        ? ((s.mo as MortarOverdriveStillInfo | null) ?? idleMortarOverdriveInfo())
-        : prior;
+    let still: MortarOverdriveStillInfo | MortarOverdriveInfo = prior;
+    if (s.mo !== undefined) {
+      const wire = (s.mo as MortarOverdriveStillWire | null) ?? null;
+      at = mortarOverdriveWireStartsAt(wire);
+      still = wire ? mortarOverdriveStillFromWire(wire, tick) : idleMortarOverdriveInfo();
+    }
     const clock =
       s.moc !== undefined
         ? ((s.moc as MortarOverdriveMatchClock | null) ?? null)
         : mortarOverdriveClockOf(prior.match);
     target.mortarOverdriveInfo = mergeMortarOverdriveInfo(still, clock);
   }
+  // Optional: a prototype-built mirror (the tests' bare instances) has none yet.
+  const start = target.mortarOverdriveInfo?.start;
+  if (start && at !== null && Number.isFinite(tick)) {
+    const left = mortarOverdriveTicksUntil(at, tick);
+    if (start.startsInTicks !== left) start.startsInTicks = left;
+  }
   if (s.mot !== undefined)
     target.mortarOverdriveTrackside = (s.mot as MortarOverdriveLaneView | null) ?? null;
+  return at;
 }
 
 export interface MortarOverdriveKitMirror {

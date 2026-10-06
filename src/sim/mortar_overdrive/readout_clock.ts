@@ -9,6 +9,7 @@
 import type {
   MortarOverdriveInfo,
   MortarOverdriveMatchInfo,
+  MortarOverdriveQueueStart,
 } from '../../world_api/mortar_overdrive';
 
 export type MortarOverdriveClockKey =
@@ -99,4 +100,63 @@ export function mergeMortarOverdriveInfo(
   const match = { ...still.match, ...(clock ?? IDLE_CLOCK) } as MortarOverdriveMatchInfo;
   if (clock?.wardIn === undefined) delete match.wardIn;
   return { ...still, match };
+}
+
+/**
+ * The queue start as `mo` ships it: the absolute deadline tick on the race
+ * clock rather than the ticks left, which move every tick and would resend the
+ * whole readout on every one. The mirror turns it back against each
+ * snapshot's tick.
+ */
+export type MortarOverdriveQueueStartWire = Omit<MortarOverdriveQueueStart, 'startsInTicks'> & {
+  startsAt: number | null;
+};
+
+/** The still readout as `mo` ships it. */
+export type MortarOverdriveStillWire = Omit<MortarOverdriveStillInfo, 'start'> & {
+  start?: MortarOverdriveQueueStartWire;
+};
+
+/** Ticks from `tick` until `at`, floored at zero; null with no deadline. */
+export function mortarOverdriveTicksUntil(at: number | null, tick: number): number | null {
+  return at === null ? null : Math.max(0, at - tick);
+}
+
+/** The still readout of `tick` with its queue start made absolute. */
+export function mortarOverdriveStillToWire(
+  still: MortarOverdriveStillInfo,
+  tick: number,
+): MortarOverdriveStillWire {
+  const start = still.start;
+  if (!start) return still as MortarOverdriveStillWire;
+  const { startsInTicks, ...rest } = start;
+  return {
+    ...still,
+    start: { ...rest, startsAt: startsInTicks === null ? null : tick + startsInTicks },
+  };
+}
+
+/** The absolute deadline a shipped readout carries, or null without one. A
+ *  value that is not a finite tick reads as no deadline, never as a clock. */
+export function mortarOverdriveWireStartsAt(wire: MortarOverdriveStillWire | null): number | null {
+  const at = wire?.start?.startsAt;
+  return typeof at === 'number' && Number.isFinite(at) ? at : null;
+}
+
+/** A shipped readout back in its IWorld shape, its ticks left as of `tick`. */
+export function mortarOverdriveStillFromWire(
+  wire: MortarOverdriveStillWire,
+  tick: number,
+): MortarOverdriveStillInfo {
+  const start = wire.start;
+  if (!start) return wire as MortarOverdriveStillInfo;
+  const { startsAt: _startsAt, ...rest } = start;
+  const at = mortarOverdriveWireStartsAt(wire);
+  return {
+    ...wire,
+    start: {
+      ...rest,
+      startsInTicks: Number.isFinite(tick) ? mortarOverdriveTicksUntil(at, tick) : null,
+    },
+  };
 }

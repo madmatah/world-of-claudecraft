@@ -1,8 +1,10 @@
 // When house pilots fill a short queue, as pure arithmetic over the waiters'
-// join ticks: the wait, the tier they drive at and the tick the fill lands on.
-// A leaf with no SimContext and no rng, so every reader of the deadline reads
-// ONE function and cannot drift.
+// join ticks: the wait, the tier they drive at, the tick the fill lands on and
+// the queue's start readout. A leaf with no SimContext and no rng, so the online
+// backfill (`bots.ts`), the readout the window counts down from (`race.ts`) and
+// presentation (the queue card's bar) all read ONE deadline and cannot drift.
 
+import type { MortarOverdriveQueueStart } from '../../world_api/mortar_overdrive';
 import { TICK_RATE } from '../types';
 import type { MortarOverdriveDriverTier } from './driver';
 import { MORTAR_OVERDRIVE_GRID_SIZE } from './layout';
@@ -39,4 +41,47 @@ export function mortarOverdriveBackfillAt(
     if (joinedAt !== undefined && joinedAt < oldest) oldest = joinedAt;
   }
   return oldest + MORTAR_OVERDRIVE_BACKFILL_TICKS;
+}
+
+/** What the queue readout is built from, gathered by the race module. */
+export interface MortarOverdriveQueueStartInput {
+  viewer: number;
+  queue: readonly number[];
+  /** The first queued pilots free to sit now (`mortarOverdriveSeatableWaiters`). */
+  waiters: readonly number[];
+  queuedAtTick: ReadonlyMap<number, number>;
+  now: number;
+  /** House pilots fill a short grid on their own (`cfg.mortarOverdriveBackfill`). */
+  backfill: boolean;
+  /** A public race holds the one public lane. */
+  laneBusy: boolean;
+  nameOf(pid: number): string;
+}
+
+/**
+ * The start readout of a queued viewer: the queue head that takes the grid, and
+ * how long until house pilots fill the rest. The ticks left are exact at `now`;
+ * they are null where nothing fills the grid on its own (no backfill here, or
+ * nobody free to sit) and while the lane is busy, since the fill then waits for
+ * that race to end rather than for the clock.
+ */
+export function buildMortarOverdriveQueueStart(
+  input: MortarOverdriveQueueStartInput,
+): MortarOverdriveQueueStart {
+  const seats = [];
+  const size = Math.min(input.queue.length, MORTAR_OVERDRIVE_GRID_SIZE);
+  for (let i = 0; i < size; i++) {
+    const pid = input.queue[i] as number;
+    seats.push({ name: input.nameOf(pid), you: pid === input.viewer });
+  }
+  const at =
+    input.backfill && !input.laneBusy
+      ? mortarOverdriveBackfillAt(input.waiters, input.queuedAtTick, input.now)
+      : null;
+  return {
+    seats,
+    startsInTicks: at === null ? null : Math.max(0, at - input.now),
+    laneBusy: input.laneBusy,
+    backfill: input.backfill,
+  };
 }

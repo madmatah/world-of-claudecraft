@@ -21,6 +21,7 @@ import type {
   MortarOverdriveLoadingInfo,
   MortarOverdriveMatchInfo,
   MortarOverdrivePhase,
+  MortarOverdriveQueueStart,
   MortarOverdriveRacerInfo,
   MortarOverdriveSlickInfo,
 } from '../../world_api/mortar_overdrive';
@@ -63,6 +64,7 @@ import {
   settleMortarOverdriveStrippedAuras,
   snapshotMortarOverdriveStrippedAuras,
 } from './auras';
+import { buildMortarOverdriveQueueStart } from './backfill';
 import { mortarOverdriveHeldElsewhere } from './busy';
 import { mortarOverdriveHadHumanRival } from './credit';
 import type { MortarOverdriveDriverTier } from './driver';
@@ -3335,6 +3337,7 @@ export function mortarOverdriveInfoFor(ctx: SimContext, pid: number): MortarOver
     queued: queueIndex >= 0,
     queuePosition: queueIndex >= 0 ? queueIndex + 1 : 0,
     queueSize: ctx.mortarOverdrive.queue.length,
+    ...(queueIndex >= 0 ? { start: queueStartFor(ctx, pid) } : {}),
     match: match ? matchInfoFor(ctx, match, pid) : null,
     // Practice runs on its own copy of the circuit, so nobody else's race can
     // ever block it. The only thing that can is the realm running out of copies,
@@ -3349,6 +3352,21 @@ export function mortarOverdriveInfoFor(ctx: SimContext, pid: number): MortarOver
     // fill is an affordance that lies.
     queueViable: ctx.cfg.mortarOverdriveBackfill || ctx.players.size >= MORTAR_OVERDRIVE_GRID_SIZE,
   };
+}
+
+/** A queued viewer's start readout: the grid the queue head takes and the
+ *  backfill deadline (`backfill.ts`, the same one `maybeBackfill` seats on). */
+function queueStartFor(ctx: SimContext, pid: number): MortarOverdriveQueueStart {
+  return buildMortarOverdriveQueueStart({
+    viewer: pid,
+    queue: ctx.mortarOverdrive.queue,
+    waiters: mortarOverdriveSeatableWaiters(ctx),
+    queuedAtTick: ctx.mortarOverdrive.queuedAtTick,
+    now: ctx.tickCount,
+    backfill: ctx.cfg.mortarOverdriveBackfill === true,
+    laneBusy: ctx.mortarOverdrive.match !== null,
+    nameOf: (id) => ctx.players.get(id)?.name ?? '',
+  });
 }
 
 /**

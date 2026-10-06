@@ -203,6 +203,36 @@ describe('Mortar Overdrive online parity', () => {
     expect(server.sim.mortarOverdrive.queue).toEqual([]);
   });
 
+  it('ships a queued start as an absolute deadline once, and the mirror counts down like the sim', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'mortar_overdrive_join');
+    const mirror = bareClient(session.pid);
+    const apply = (frame: unknown): void =>
+      (mirror as unknown as { applySnapshot(snap: unknown): void }).applySnapshot(frame);
+    advance(server);
+    for (const frame of client.sent.filter((f) => f.t === 'snap')) apply(frame);
+    const shipped = selfFields(client, 'mo').at(-1) as {
+      start: { startsAt: number; startsInTicks?: number; seats: unknown[] };
+    };
+    const startsIn = server.sim.mortarOverdriveInfoFor(session.pid).start?.startsInTicks as number;
+    expect(shipped.start.startsAt).toBe(server.sim.tickCount + startsIn);
+    expect(shipped.start).not.toHaveProperty('startsInTicks');
+    expect(shipped.start.seats).toEqual([{ name: 'Aster', you: true }]);
+    client.sent.length = 0;
+    const TICKS = 40;
+    for (let i = 0; i < TICKS; i++) {
+      advance(server);
+      apply(client.sent.filter((f) => f.t === 'snap').at(-1));
+      expect(mirror.mortarOverdriveInfo, `tick ${i}`).toEqual(
+        server.sim.mortarOverdriveInfoFor(session.pid),
+      );
+    }
+    // The countdown moved every tick on both sides, yet `mo` never resent.
+    expect(selfFields(client, 'mo')).toEqual([]);
+  });
+
   it('seats a Practice race against a house pilot online, and rejects a bogus tier', () => {
     const server = new GameServer();
     const client = fakeClient();

@@ -28,6 +28,8 @@ export abstract class MortarOverdriveWireState extends ReconWireState {
   mortarOverdriveInfo: MortarOverdriveInfo = idleMortarOverdriveInfo();
   mortarOverdriveTrackside: MortarOverdriveLaneView | null = null;
   private mortarOverdriveKit: MortarOverdriveKitMirror | null = null;
+  /** The queue start's absolute deadline tick, as `mo` last shipped it. */
+  private mortarOverdriveStartsAt: number | null = null;
   // Created on first use, so a prototype-built test instance latches too.
   private selfDiscontinuityLatch?: SelfPositionDiscontinuityLatch;
 
@@ -50,16 +52,23 @@ export abstract class MortarOverdriveWireState extends ReconWireState {
   }
 
   /**
-   * The Mortar Overdrive self keys in one pass: `mo` and `mot` onto their mirrors,
-   * then the `mokit` decode, returning the self known list it resolves (the
-   * Mortar Overdrive kit while seated, the class presentation otherwise).
+   * The Mortar Overdrive self keys in one pass: `mo` and `mot` onto their mirrors
+   * (the queue countdown against the snapshot's `tick`), then the `mokit` decode,
+   * returning the self known list it resolves (the Mortar Overdrive kit while
+   * seated, the class presentation otherwise).
    */
   protected applyMortarOverdriveSelf(
     s: MortarOverdriveSelfRecord & { mokit?: unknown },
     e: Pick<Entity, 'abilityCharges'> | null,
     presentationKnown: ResolvedAbility[],
+    tick: number,
   ): ResolvedAbility[] {
-    applyMortarOverdriveSelfWire(this, s);
+    this.mortarOverdriveStartsAt = applyMortarOverdriveSelfWire(
+      this,
+      s,
+      tick,
+      this.mortarOverdriveStartsAt ?? null,
+    );
     this.mortarOverdriveKit = decodeMortarOverdriveKit(this.mortarOverdriveKit, s.mokit);
     return mortarOverdriveKnownOr(this.mortarOverdriveKit, e, presentationKnown);
   }
