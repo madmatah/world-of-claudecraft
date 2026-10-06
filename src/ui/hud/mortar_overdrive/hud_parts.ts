@@ -72,7 +72,7 @@ export function mortarOverdriveUiDeps(hud: object): MortarOverdriveDeps {
     layer: () => document.getElementById('ui'),
     world: () => h.sim,
     closeOthers: () => h.closeOtherWindows('#mortar-overdrive-window'),
-    // The Mortar Overdrive's practice tutorial teaches the keys the player ACTUALLY has,
+    // Mortar Overdrive's practice tutorial teaches the keys the player ACTUALLY has,
     // so the binding lookup is resolved here (the Mortar Overdrive module never reaches
     // into the game layer's keybind profile) and the touch HUD is told to drop
     // the key column entirely.

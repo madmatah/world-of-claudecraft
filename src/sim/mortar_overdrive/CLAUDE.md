@@ -27,6 +27,10 @@ world, the server and the headless env, like the rest of `src/sim/`. Authored da
   leaf so the battleground, World PvP and duel modules can ask it without a cycle.
 - `busy.ts`: the activities a seat must never pull a player out of. `bots.ts`: the house
   pilots (practice and the dev race), driven by `driver.ts`.
+- `auras.ts`: the auras the seat wipe strips (`snapshotMortarOverdriveStrippedAuras`),
+  handed back on every return aged by the time away (`restoreMortarOverdriveStrippedAuras`;
+  a party paladin aura only while its source still owes it), plus the druid pools parked
+  at the seat. Auras are never saved, so a relog mid-race loses them like any logout.
 - `drafts.ts` + `draft_registry.ts`: the dev-only side door that makes a circuit drawn
   in the circuit editor raceable for one session (`ctx.devCommands` gated).
 
@@ -41,7 +45,10 @@ world, the server and the headless env, like the rest of `src/sim/`. Authored da
   `src/sim/colliders.ts` routes to on the band).
 - Race rules: `progress.ts` (laps), `standings.ts` (grid order), `track_limits.ts` (the
   referee), `pickups.ts` and `pickup_effects.ts` (boxes and what they give),
-  `slicks.ts` (oil), `ghost.ts` (the recovery ghost), `ground_blast.ts` (where a shot
+  `slicks.ts` (oil), `slick_contact.ts` (the slick crossing, bite and surface share the
+  server tick and the client's own-kart prediction both run), `credit.ts` (the win credit
+  rule: a win counts only against a human rival seated at the GO who finished or completed
+  a lap), `ghost.ts` (the recovery ghost), `ground_blast.ts` (where a shot
   lands and what it does), `driver.ts` (the bot's driving brain), `readout_clock.ts`
   (the per-tick half of the readout the server ships as `moc`), `zone.ts` (which world
   zone a circuit belongs to).

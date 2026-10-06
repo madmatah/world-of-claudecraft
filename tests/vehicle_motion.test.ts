@@ -66,7 +66,7 @@ const mi = (over: Partial<MoveInput> = {}): MoveInput => ({
   ...over,
 });
 
-// A pilot standing on the Mortar Overdrive's instanced floor, where the kernel's
+// A pilot standing on Mortar Overdrive's instanced floor, where the kernel's
 // horizontal step routes through PlayerMotionDeps.resolveMove and is therefore
 // stubbable without a world.
 function pilot(): Entity {

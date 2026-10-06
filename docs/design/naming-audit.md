@@ -724,11 +724,14 @@ Exact-phrase and coined-token searches against the major game wikis.
 ### Mortar Overdrive names (web-verified 2026-10-05)
 
 Exact-phrase and coined-token searches against the major game wikis and the
-storefronts. Ids stay frozen (`pvp_mortar_overdrive_wins_25`; house pilots have no id beyond
-their slot in `MORTAR_OVERDRIVE_BOT_NAMES`), so only the display strings moved.
+storefronts. The mode was renamed before it ever shipped, so its ids moved with its name; from
+this rename on they are frozen (`pvp_mortar_overdrive_wins_25`; house pilots have no id beyond
+their slot in `MORTAR_OVERDRIVE_BOT_NAMES`), and a later collision moves display strings only.
 
 | Name | Where | Verdict |
 |---|---|---|
+| Realm Racers | REJECTED: the mode's first name | Collides with "Realm Racer", an arcade racing game on Steam (TriTec Entertainment, 2025) built around racing through realms, and with a Roblox "Realm Racers Hub". Replaced everywhere, ids included, since nothing had shipped. |
+| Mortar Overdrive | the mode's name (window, guide, keybind, deed text) | KEEP. No game, mode or item of that name. "Overdrive" is a stock racing word (Asphalt Overdrive, Overdrive 1984) and "Mortar" a common noun; the pair is distinctive to neither. Other candidates checked and set aside: Burn & Blast (clear), Blast & Dash (near clear), Blast the Track (a board game "Blast Track"). |
 | Circuit Legend | REJECTED: the `pvp_mortar_overdrive_wins_25` deed name and its title | An exact racing achievement title in Circuit Superstars, in the same role (a title for racing milestones). Replaced. |
 | Overdrive Ace | the `pvp_mortar_overdrive_wins_25` deed name and its title | KEEP. No match for the exact phrase. Chosen to replace the above. |
 | Thornwake | REJECTED: the surname of the house pilot Nessa | The title of a 2026 Steam game. Replaced. |

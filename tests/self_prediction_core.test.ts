@@ -198,7 +198,7 @@ describe('self prediction core', () => {
 // The drive-aware reconcile against the REAL movement kernel on the practice
 // circuit. The "server" steps a body with stepPlayerMotion (the call the Sim's
 // movement pass makes; tests/player_motion.test.ts pins the client dep shape
-// to the live Sim for a driver) and applies its race outcomes with the Mortar Overdrive's
+// to the live Sim for a driver) and applies its race outcomes with Mortar Overdrive's
 // own numbers; the client predicts ahead through the production deck-aware
 // step and reconciles each acknowledgement.
 
@@ -266,7 +266,7 @@ function auraExpiryTick(appliedCt: number, seconds: number): number {
 
 const OFF_TRACK_AURA_SECONDS = 0.2;
 
-// The Mortar Overdrive's off-track half of the surface pass (tickTrackLimits): the band
+// Mortar Overdrive's off-track half of the surface pass (tickTrackLimits): the band
 // writes its multipliers and refreshes its slow aura, the road clears both.
 function offTrackPass(server: MotionState, inBand: boolean): void {
   const drive = server.drive as VehicleDrive;

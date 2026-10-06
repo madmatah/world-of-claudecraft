@@ -1581,7 +1581,7 @@ describe('coverage: each scenario fires its subsystem', { timeout: 90_000 }, () 
     const pair = [bumps[1].aId, bumps[1].bId].sort();
     expect(pair).not.toEqual([bumps[0].aId, bumps[0].bId].sort());
     // The box really changed hands, which is the tick the one weighted effect
-    // draw fires on; without it the digest never covers the Mortar Overdrive's draw site.
+    // draw fires on; without it the digest never covers Mortar Overdrive's draw site.
     expect(ev.some((e) => e.type === 'mortarOverdrivePickup')).toBe(true);
     // The shell really caught one machine inside the full-force core and one
     // out in the falloff band, so a falloff change moves the digest.

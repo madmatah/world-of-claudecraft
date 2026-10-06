@@ -1,6 +1,6 @@
 // The formal garden's stonework, shared by every place that needs it: the
 // tiered fountain and the weathered statue. Lifted out of garden_features.ts
-// unchanged when the Mortar Overdrive's infield needed the same two pieces, so
+// unchanged when Mortar Overdrive's infield needed the same two pieces, so
 // the Evergarden's Fountain Court and the circuit's landmark cannot drift into
 // two different fountains.
 import * as THREE from 'three';

@@ -101,7 +101,7 @@ down (the race strip rules in `src/styles/components.css`, the touch twin in
 - Known and accepted: an action-bar slot that opens a window (a tradeskill spell, a
   container) and a client-side chat command that opens one (`/who`) are not key actions, so
   the hold does not see them; the window opens under the curtain and appears when it lifts.
-- Copy: `hudChrome.mortarOverdrive.lobby*` in `src/ui/i18n.catalog/hud_chrome.ts`, plus the Mortar Overdrive's
+- Copy: `hudChrome.mortarOverdrive.lobby*` in `src/ui/i18n.catalog/hud_chrome.ts`, plus Mortar Overdrive's
   own `title`, `standingsYou`, `standingsBot` and circuit-name keys. Styles: the
   `mortar overdrive lobby` section in `src/styles/components.css`, touch rules in
   `src/styles/hud.mobile.css`.

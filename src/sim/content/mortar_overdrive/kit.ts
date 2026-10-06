@@ -1,7 +1,7 @@
 // The Mortar Overdrive class-agnostic one-button kit. It is swapped in only for
 // seated racers and resolved identically by Sim and ClientWorld.
 //
-// Also the Mortar Overdrive's data-as-code roster of house pilots: the names and cosmetic
+// Also Mortar Overdrive's data-as-code roster of house pilots: the names and cosmetic
 // classes the practice/backfill bots are drawn from. Data only; the driving
 // brain is `src/sim/mortar_overdrive/driver.ts` and the lifecycle around it is
 // `src/sim/mortar_overdrive/bots.ts`.

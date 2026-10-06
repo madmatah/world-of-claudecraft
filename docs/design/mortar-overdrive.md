@@ -286,7 +286,7 @@ warded, becomes a refill. The effects:
   `MORTAR_OVERDRIVE_SLICK_SLIP_CAP`. A ward absorbs it.
 
 Every pilot sees every patch and every taken box. The race end sweeps shells in flight, oil,
-held effects, wards and nitro. The Mortar Overdrive's own modules draw rng at exactly two sites: the
+held effects, wards and nitro. Mortar Overdrive's own modules draw rng at exactly two sites: the
 competition circuit at seat time and one value per pickup take.
 
 ## Ward and ghost
@@ -437,6 +437,6 @@ named module, never inline in the match body:
 | Net (online mirror) | `src/net/mortar_overdrive/wire_state.ts`, `mortar_overdrive/self_wire.ts`, `mortar_overdrive/drive_wire.ts`, `drive_recon_wire.ts` |
 | Render | `src/render/mortar_overdrive/scene.ts` (the renderer's entry), `mortar_overdrive/track.ts`, `mortar_overdrive/themes.ts`, `mortar_overdrive/prepare.ts`, `mortar_overdrive/prepare_core.ts`, `mortar_overdrive/circuit_prepare.ts`, and the other `src/render/mortar_overdrive/*.ts` |
 | Game | `src/game/mortar_overdrive/start_camera.ts`, `mortar_overdrive/sfx.ts`, `mortar_overdrive/draft_dev.ts`, `mortar_overdrive/client_wiring.ts` |
-| UI | `src/ui/hud/mortar_overdrive/composer.ts` (the composer), `mortar_overdrive/race_window.ts` (the window), `mortar_overdrive/strip_painter.ts` (the race strip), the standings and podium painters, their `mortar_overdrive_*_view.ts` cores, `src/ui/hud/mortar_overdrive/` (lobby curtain, event router) |
+| UI | `src/ui/hud/mortar_overdrive/composer.ts` (the composer), `mortar_overdrive/race_window.ts` (the window), `mortar_overdrive/strip_painter.ts` (the race strip), the standings and podium painters, their `*_view.ts` cores in the same directory, `src/ui/hud/mortar_overdrive/` (lobby curtain, event router) |
 | Editor | `src/editor/circuit/` |
 | Tests | `tests/mortar_overdrive_*.test.ts` (start with `mortar_overdrive_match`, `mortar_overdrive_loading_lobby`, `mortar_overdrive/bots`, `mortar_overdrive/track_limits`), `tests/editor_circuit_*.test.ts`, `tests/deeds_sites_pin.test.ts`, the `mortar_overdrive` parity scenario (`tests/parity/scenarios.ts`, golden `tests/parity/golden/mortar_overdrive.json`) |

@@ -33,7 +33,8 @@ field cues, the vehicle mix). Reads the world through `IWorld`; never mutates th
   `slicks.ts`, `pickups.ts`, `field_cues.ts`, `audio.ts` (the renderer relay for race
   events and the three-loop vehicle mix).
 - Pure cores (Three-free, in `RENDER_PURE_CORES`, driven by plain Vitests):
-  `audio_core.ts`, `daylight_core.ts`, `grass_core.ts`, `missed_pickup_core.ts`,
+  `audio_core.ts`, `contact_kick_core.ts` (the display-only bump drawn at the seen touch,
+  retired on the ack; opt-out `?contactkick=0`), `daylight_core.ts`, `grass_core.ts`, `missed_pickup_core.ts`,
   `oil_spray_core.ts`, `pickups_core.ts`, `prepare_core.ts` (when a preparation runs and
   whether it proved itself: the commitment trigger the HUD race warm also reads),
   `slicks_core.ts`, `track_core.ts`, `track_dispose_core.ts`, `upload_frame_core.ts`,

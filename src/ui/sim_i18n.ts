@@ -715,7 +715,7 @@ const baseEnTable = {
   'log.channelInterrupted': '{mechanic} is interrupted!',
   'aura.tamed': 'Tamed',
   'aura.causticSpores': 'Caustic Spores',
-  // The Mortar Overdrive's two off-track penalties (mortar_overdrive/race.ts):
+  // Mortar Overdrive's two off-track penalties (mortar_overdrive/race.ts):
   // the mown verge just off the racing surface, then the garden beyond it.
   'aura.mortarOverdriveSoftVerge': 'Soft Verge',
   'aura.mortarOverdriveGardenLawn': 'Garden Lawn',

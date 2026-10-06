@@ -6545,7 +6545,7 @@ function bankSocketRoundTrip(): Scenario {
   };
 }
 
-// Mortar Overdrive: the Mortar Overdrive's two shared-stream draw sites (the competition
+// Mortar Overdrive: Mortar Overdrive's two shared-stream draw sites (the competition
 // circuit pick when a grid seats, and the weighted pickup-effect draw when a
 // box changes hands) plus the vehicle kernel, the countdown lock, the surface
 // pass, and the forfeit-cascade classification, all inside the digest. Before

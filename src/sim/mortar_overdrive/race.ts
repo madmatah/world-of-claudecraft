@@ -1169,7 +1169,7 @@ export function mortarOverdriveStartMatch(
 /**
  * The circuit a queued race runs on: ONE draw from the competition pool.
  *
- * One of the Mortar Overdrive's two rng sites, with the pickup take's one weighted draw in
+ * One of Mortar Overdrive's two rng sites, with the pickup take's one weighted draw in
  * `tickPickups` (a race in progress also reaches the shared stream the way any
  * combat does: a Ground Blast goes through the ordinary `castAbility` path, and
  * whatever that draws for the pilot's gear is the combat system's). Where it

@@ -111,7 +111,7 @@ export function glbSize(url: string): THREE.Vector3 {
  * What a url comparison cannot see. The world ships models that are the same
  * asset under two filenames (`hex_wall.glb` and `hexn_palisade.glb` are byte for
  * byte identical), and a catalog that offers both as separate choices is
- * offering one thing twice, which is what the Mortar Overdrive's barrier kits did until a
+ * offering one thing twice, which is what Mortar Overdrive's barrier kits did until a
  * seat test caught three of them drawing one wall.
  */
 export function glbBinarySha1(url: string): string {

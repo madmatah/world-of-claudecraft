@@ -512,7 +512,7 @@ function runSolo(opts: SoloOptions): SoloRun {
           ctx.mark('blastHit');
         }
       }
-      // The Mortar Overdrive's effect clocks: the onset is the tick one is written, the
+      // Mortar Overdrive's effect clocks: the onset is the tick one is written, the
       // expiry the tick it lapses (the surface pass stops applying it).
       const progress = match.progress.get(harness.pid);
       if (progress) {

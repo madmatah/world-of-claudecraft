@@ -1,4 +1,4 @@
-// The Mortar Overdrive's SimContext bindings and tick phase, beside the coordinator
+// Mortar Overdrive's SimContext bindings and tick phase, beside the coordinator
 // (the world_quest_context.ts pattern): the host constructs ctx before assigning
 // it, so every callback reads `sim.ctx` when called, never during binding. It is
 // also the coordinator's ONE Mortar Overdrive module: every name sim.ts reaches for

@@ -3542,7 +3542,7 @@ export type AbilityEffect =
       dazeMult: number;
       dazeDuration: number;
     }
-  // The Mortar Overdrive's single mounted action. The social system owns the
+  // Mortar Overdrive's single mounted action. The social system owns the
   // straight-line shell and silently ignores casts outside an active race.
   // The Mortar Overdrive weapon slot's shot. Ground-targeted: it lands where the
   // pilot aimed, and `radius` is the blast, carried on the effect so the aiming
@@ -5369,7 +5369,7 @@ export interface Entity extends ClientMirroredEntityFields {
       // legacy sequential state, converted on the first recharge tick.
       recharges?: number[];
       // A FIXED BUDGET rather than the recharge model above: N uses granted by
-      // an activity for its duration, never refilled (the Mortar Overdrive's
+      // an activity for its duration, never refilled (Mortar Overdrive's
       // weapon slot). The recharge tick skips it entirely, and a spent-out fixed
       // pool refuses the cast as EMPTY rather than as cooling down, which the
       // action bar draws differently. It is a flag and not merely

@@ -215,7 +215,7 @@ export type MortarOverdriveCircuitProblemCode =
    * cut the inside of a corner between them.
    */
   | 'fence_blocks_racing_surface'
-  /** A fence run leaves the collision region, where the Mortar Overdrive's own
+  /** A fence run leaves the collision region, where Mortar Overdrive's own
    *  short-circuits stop applying at all. */
   | 'fence_outside_region'
   /**
@@ -231,7 +231,7 @@ export type MortarOverdriveCircuitProblemCode =
    * standing in it.
    */
   | 'prop_blocks_racing_surface'
-  /** A prop's footprint leaves the collision region, where the Mortar Overdrive's own
+  /** A prop's footprint leaves the collision region, where Mortar Overdrive's own
    *  short-circuits stop applying at all. */
   | 'prop_outside_region'
   /** A tall prop stands inside the chase camera's reach of the road. */

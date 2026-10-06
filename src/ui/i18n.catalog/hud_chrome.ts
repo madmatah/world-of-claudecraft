@@ -2518,7 +2518,7 @@ export const hudChromeStrings = {
     // no longer driving stopped.
     standingsYou: 'YOU',
     // The house-pilot marker: the game's ONE AI badge, which used to live on the
-    // retired Vale Cup team sheet and now belongs to the Mortar Overdrive's own namespace.
+    // retired Vale Cup team sheet and now belongs to Mortar Overdrive's own namespace.
     standingsBot: 'Bot',
     standingsFinished: 'Finished',
     standingsRetired: 'Out',

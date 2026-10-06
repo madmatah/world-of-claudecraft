@@ -2008,7 +2008,7 @@ export function supportHeightAt(
   // Region order matters: every instanced band sits past the dungeon
   // threshold, so the specific bands must be ruled out FIRST (the same
   // routing resolvePosition uses).
-  // The Mortar Overdrive's garden wall blocks movement but is deliberately not standable:
+  // Mortar Overdrive's garden wall blocks movement but is deliberately not standable:
   // a racer cannot mantle the perimeter out of the circuit.
   if (moCollide.isAtMortarOverdriveXZ(x, z)) return -Infinity;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return -Infinity;

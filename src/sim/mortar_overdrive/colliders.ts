@@ -1,4 +1,4 @@
-// The Mortar Overdrive's static collision. There is exactly one DERIVED wall, the
+// Mortar Overdrive's static collision. There is exactly one DERIVED wall, the
 // perimeter box, and everything inside it is drivable:
 //
 //   ..garden.. [ pond ] ..garden.. |road| ..verge.. ..garden.. ##PERIMETER##
