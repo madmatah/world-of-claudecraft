@@ -2864,9 +2864,6 @@ const UI_DOM_MODULES = [
   'src/ui/hud/mortar_overdrive/pickup_splash_controller.ts',
   // The Mortar Overdrive HUD parts' deps, moved out of hud.ts: they resolve the #ui layer.
   'src/ui/hud/mortar_overdrive/hud_parts.ts',
-  // The Mortar Overdrive window reads the focused control so a rebuild hands
-  // keyboard focus back to it.
-  'src/ui/hud/mortar_overdrive/race_window.ts',
   'src/ui/gather_node_tooltip_controller.ts',
   'src/ui/gpu_notice_toast.ts',
   'src/ui/guild_bank_log_window.ts',

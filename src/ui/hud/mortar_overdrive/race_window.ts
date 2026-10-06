@@ -7,6 +7,7 @@
 import type { IWorld, MortarOverdriveDriverTier } from '../../../world_api';
 import { markDialogRoot } from '../../dialog_root';
 import { esc } from '../../esc';
+import { focusedWithin } from '../../focus_restore';
 import { formatNumber, type TranslationKey, t } from '../../i18n';
 import type { PainterHostWriters } from '../../painter_host';
 import { svgIcon } from '../../ui_icons';
@@ -26,8 +27,8 @@ const num = (value: number): string => formatNumber(value, { maximumFractionDigi
 /** The marker attribute (`data-close`, `data-mortar-overdrive-*`) and value of
  *  the window control holding focus, or null when focus is elsewhere. */
 function focusedControl(root: HTMLElement): { name: string; value: string } | null {
-  const active = document.activeElement;
-  if (!(active instanceof HTMLElement) || !root.contains(active)) return null;
+  const active = focusedWithin(root);
+  if (!active) return null;
   for (const name of active.getAttributeNames()) {
     if (name === 'data-close' || name.startsWith('data-mortar-overdrive-')) {
       return { name, value: active.getAttribute(name) ?? '' };
