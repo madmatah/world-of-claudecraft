@@ -10319,6 +10319,15 @@
     body.mobile-touch #mortar-overdrive-window .mortar-overdrive-pitch {
       font-size: 15px;
     }
+    /* Queued, the phone opens on the start card: the pitch and the primer
+       would put it a full screen below the fold of a landscape phone. */
+    body.mobile-touch #mortar-overdrive-window .is-queued > .mortar-overdrive-hero,
+    body.mobile-touch #mortar-overdrive-window .is-queued > .mortar-overdrive-howto {
+      display: none;
+    }
+    body.mobile-touch #mortar-overdrive-window .is-queued > .mortar-overdrive-start {
+      margin-top: 4px;
+    }
     /* Wider than desktop: the stats row now carries the forfeit button too, and
        the strip must not clip it on a phone. */
     body.mobile-touch #mortar-overdrive-hud {

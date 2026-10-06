@@ -26686,6 +26686,102 @@
     letter-spacing: 0.04em;
   }
 
+  /* ---- the queue card: who takes the grid, and when the race starts ---- */
+  /* It stands where the queue status line stood, in the same queued accent on
+   its edge, and keeps the lobby's pilot-row look for the grid (the rows share
+   the lobby's rules below), so a queued pilot meets the grid they will see
+   again under the loading curtain. */
+  .mortar-overdrive-start {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 15px 0 12px;
+    padding: 12px 14px 14px;
+    border: 1px solid var(--mortar-overdrive-rule-gold-a3d);
+    border-left: 3px solid var(--mortar-overdrive-status-queued);
+    border-radius: 8px;
+    background: var(--mortar-overdrive-status-bg-ae8);
+  }
+  .mortar-overdrive-start-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .mortar-overdrive-start-title {
+    margin: 0;
+    color: var(--mortar-overdrive-kicker-gold);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .mortar-overdrive-start-clock {
+    color: var(--mortar-overdrive-status-queued-text);
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .mortar-overdrive-start-bar {
+    --bar-color: var(--mortar-overdrive-status-queued);
+    height: 6px;
+  }
+  /* The painter aims the fill at the next whole second once a second; this
+   carries it there, so the bar empties smoothly for no per-frame write, and in
+   whole-second steps under reduced motion. */
+  .mortar-overdrive-start-fill {
+    transition: width calc(1s * var(--motion-scale)) linear;
+  }
+  .mortar-overdrive-start-note {
+    margin: 0;
+    color: var(--mortar-overdrive-status-queued-text);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .mortar-overdrive-start-note:empty,
+  .mortar-overdrive-start-clock.is-off,
+  .mortar-overdrive-start-bar.is-off {
+    display: none;
+  }
+  .mortar-overdrive-start-seat.open {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--mortar-overdrive-rule-gold-a26);
+  }
+  .mortar-overdrive-start-seat.open .mortar-overdrive-start-name {
+    color: var(--mortar-overdrive-text-quiet);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .mortar-overdrive-start-solo {
+    margin: 0;
+    color: var(--mortar-overdrive-text-soft);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  #mortar-overdrive-window .mortar-overdrive-start-now {
+    margin-top: 2px;
+  }
+  /* Refused while the lane is busy, yet still focusable (aria-disabled), so it
+   borrows the .btn:disabled look explicitly. */
+  #mortar-overdrive-window .mortar-overdrive-start-now[aria-disabled="true"] {
+    filter: grayscale(1) brightness(0.7);
+    cursor: default;
+  }
+  .mortar-overdrive-start-hint {
+    margin: -4px 0 0;
+    color: var(--mortar-overdrive-text-quiet);
+    font-size: 11px;
+    line-height: 1.4;
+    text-align: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mortar-overdrive-start-fill {
+      transition: none;
+    }
+  }
+
   /* ---- the practice setup screen: pick a rival, learn the controls, go ---- */
   .mortar-overdrive-setup-intro {
     margin: 2px 0 14px;
@@ -27642,7 +27738,8 @@
     color: var(--color-text-secondary);
     font-size: 13px;
   }
-  .mortar-overdrive-lobby-pilots {
+  .mortar-overdrive-lobby-pilots,
+  .mortar-overdrive-start-seats {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -27650,7 +27747,8 @@
     padding: 0;
     list-style: none;
   }
-  .mortar-overdrive-lobby-pilot {
+  .mortar-overdrive-lobby-pilot,
+  .mortar-overdrive-start-seat {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -27659,10 +27757,12 @@
     border-radius: var(--radius-sm);
     background: var(--mortar-overdrive-gold-a0a);
   }
-  .mortar-overdrive-lobby-pilot.me {
+  .mortar-overdrive-lobby-pilot.me,
+  .mortar-overdrive-start-seat.me {
     background: var(--mortar-overdrive-gold-a1f);
   }
-  .mortar-overdrive-lobby-name {
+  .mortar-overdrive-lobby-name,
+  .mortar-overdrive-start-name {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -27671,7 +27771,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mortar-overdrive-lobby-tag {
+  .mortar-overdrive-lobby-tag,
+  .mortar-overdrive-start-tag {
     flex: 0 0 auto;
     color: var(--mortar-overdrive-gold);
     font-size: 11px;
