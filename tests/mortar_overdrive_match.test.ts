@@ -19,7 +19,6 @@ import { vehicleProfile } from '../src/sim/content/vehicles';
 import { updateDeeds } from '../src/sim/deeds';
 import { startMortarOverdriveDevRace } from '../src/sim/mortar_overdrive/bots';
 import { freshMortarOverdriveMeta } from '../src/sim/mortar_overdrive/context';
-import { MORTAR_OVERDRIVE_LOADING_MAX_TICKS } from '../src/sim/mortar_overdrive/loading';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/mortar_overdrive/ground_blast';
 import {
   MORTAR_OVERDRIVE_GRID_SIZE,
@@ -28,6 +27,7 @@ import {
   mortarOverdriveLaneOffset,
   mortarOverdrivePracticeLanes,
 } from '../src/sim/mortar_overdrive/layout';
+import { MORTAR_OVERDRIVE_LOADING_MAX_TICKS } from '../src/sim/mortar_overdrive/loading';
 import {
   MORTAR_OVERDRIVE_BUMP_EVENT_MIN_IMPACT,
   MORTAR_OVERDRIVE_BUMP_EVENT_TICKS,
