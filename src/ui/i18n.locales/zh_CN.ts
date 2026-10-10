@@ -14725,8 +14725,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.mortarOverdrive.kicker': '常青园赛车协会',
   'hudChrome.mortarOverdrive.title': '迫击狂飙',
   'hudChrome.mortarOverdrive.close': '关闭迫击狂飙窗口',
-  'hudChrome.mortarOverdrive.pitch':
-    '抛出炮弹，找到理想路线，相信甩尾，让每个对手都吞你的尾尘。',
+  'hudChrome.mortarOverdrive.pitch': '抛出炮弹，找到理想路线，相信甩尾，让每个对手都吞你的尾尘。',
   'hudChrome.mortarOverdrive.promiseMortar': '迫击炮射击',
   'hudChrome.mortarOverdrive.promiseSlide': '手刹甩尾',
   'hudChrome.mortarOverdrive.promiseRival': '实时对手',
